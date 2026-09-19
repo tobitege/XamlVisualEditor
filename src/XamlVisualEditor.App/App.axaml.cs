@@ -30,6 +30,7 @@ using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Terminal;
 using System.Threading;
+using System.Threading.Tasks;
 using DotNetTemplatesExtensionEntry = XamlVisualEditor.DotNetTemplatesExtension.DotNetTemplatesExtension;
 using DapDebuggingExtensionEntry = XamlVisualEditor.Debugging.DapExtension.DapDebuggingExtension;
 using DotNetSdkDebuggingExtensionEntry = XamlVisualEditor.Debugging.DotNetSdkExtension.DotNetSdkDebuggingExtension;
@@ -68,47 +69,90 @@ public sealed class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         // Build the DI container
+        Log.Information("Configuring application services");
         ServiceCollection services = new();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            BuiltInExtensionHost extensionHost = Services.GetRequiredService<BuiltInExtensionHost>();
-            extensionHost.ActivateAsync(CancellationToken.None).GetAwaiter().GetResult();
-
+            Log.Information("Creating the main window");
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
             MainWindow mainWindow = new(mainVm);
             desktop.MainWindow = mainWindow;
 
             MainWindowProvider windowProvider = Services.GetRequiredService<MainWindowProvider>();
             windowProvider.MainWindow = mainWindow;
-            if (Services.GetService<IWindow>() is AppWindow appWindow)
-            {
-                appWindow.SyncStatusBarItems();
-            }
-
             string? startupPath = StartupArgs.GetWorkspacePath(desktop.Args);
-            if (!string.IsNullOrWhiteSpace(startupPath))
-            {
-                Dispatcher.UIThread.Post(() => _ = mainVm.OpenFileAsync(startupPath));
-            }
+            CancellationTokenSource startupCancellation = new();
+            CancellationToken startupToken = startupCancellation.Token;
+            IServiceProvider serviceProvider = Services;
 
-            desktop.ShutdownRequested += (_, _) =>
+            desktop.Exit += (_, _) =>
             {
-                mainVm.Dispose();
+                startupCancellation.Cancel();
                 mainWindow.DataContext = null;
                 mainWindow.Content = null;
-                extensionHost.Dispose();
-                (Services as IDisposable)?.Dispose();
+                (serviceProvider as IDisposable)?.Dispose();
+                startupCancellation.Dispose();
             };
+
+            Dispatcher.UIThread.Post(() =>
+                _ = InitializeExtensionsAsync(serviceProvider, mainVm, startupPath, startupToken));
+            Log.Information("Main window created; extension activation scheduled");
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
+    private static async Task InitializeExtensionsAsync(
+        IServiceProvider services,
+        MainWindowViewModel mainVm,
+        string? startupPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Log.Information("Activating built-in extensions");
+            BuiltInExtensionHost extensionHost = services.GetRequiredService<BuiltInExtensionHost>();
+            await extensionHost.ActivateAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (services.GetService<IWindow>() is AppWindow appWindow)
+            {
+                appWindow.SyncStatusBarItems();
+            }
+
+            Log.Information("Built-in extensions activated; editor ready");
+#if DEBUG
+            services.GetRequiredService<CdpDiagnostics>().StartFromEnvironment();
+#endif
+            if (!string.IsNullOrWhiteSpace(startupPath))
+            {
+                await mainVm.OpenFileAsync(startupPath);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Log.Information("Application startup canceled during shutdown");
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Application startup failed");
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                await services.GetRequiredService<IWindow>().ShowErrorMessageAsync(
+                    $"Application startup failed: {exception.Message}", cancellationToken);
+            }
+        }
+    }
+
     private static void ConfigureServices(ServiceCollection services)
     {
+#if DEBUG
+        services.AddSingleton<CdpDiagnostics>();
+#endif
         OutputLogSinkAccessor outputLogSinkAccessor = new();
         FileLoggingSetup.ReplaceGlobalLogger(
             FileLoggingSetup.CreateLogger(new OutputPanelLogSink(outputLogSinkAccessor)));
@@ -124,6 +168,10 @@ public sealed class App : Application
         services.AddSingleton<IXamlParsingService, XamlParsingService>();
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
+        services.AddSingleton<MetadataControlCatalog>();
+        services.AddSingleton<IControlCatalog>(provider => provider.GetRequiredService<MetadataControlCatalog>());
+        services.AddSingleton<IControlCatalogUpdater>(provider => provider.GetRequiredService<MetadataControlCatalog>());
+        services.AddSingleton<IClipboardService, DesktopClipboardService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
         services.AddSingleton<IDotNetCli, DotNetCliRunner>();
         services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();

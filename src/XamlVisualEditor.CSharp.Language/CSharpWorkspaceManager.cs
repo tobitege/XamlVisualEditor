@@ -126,6 +126,13 @@ public sealed class CSharpWorkspaceManager : IDisposable
         return EnsureMsbuildWorkspaceAsync(ct);
     }
 
+    /// <summary>Gets an immutable snapshot of the initialized project workspace.</summary>
+    public async Task<Solution?> GetSolutionAsync(CancellationToken ct)
+    {
+        await EnsureMsbuildWorkspaceAsync(ct).ConfigureAwait(false);
+        lock (_gate) return _solution;
+    }
+
     private async Task EnsureMsbuildWorkspaceAsync(CancellationToken ct)
     {
         Task loadTask;

@@ -10,6 +10,7 @@
       <TextBlock Text="{CompiledBinding PanelTitle}" FontWeight="SemiBold" />
       <TextBox PlaceholderText="Search nodes..."
                Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+      <TextBlock Text="{CompiledBinding StatusText}" TextWrapping="Wrap" />
     </StackPanel>
 
     <dg:DataGrid ItemsSource="{CompiledBinding TreeModel.Model.Flattened}"

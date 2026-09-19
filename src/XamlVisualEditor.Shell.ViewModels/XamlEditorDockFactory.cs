@@ -648,6 +648,9 @@ public sealed partial class XamlEditorDockFactory : Factory
         toolDock ??= FindDockable<ToolDock>(rootDock, fallbackDockId);
         if (toolDock is not null)
         {
+            bool isBottomToolDock = string.Equals(toolDock.Id, "BottomToolDock", StringComparison.Ordinal);
+            bool wasBottomCollapsed = isBottomToolDock && toolDock.Proportion == 0;
+            double collapsedProportion = toolDock.CollapsedProportion;
             ExtensionTool tool = new(viewModel);
             int? desiredInsertIndex = null;
             if (toolDock.VisibleDockables is ObservableCollection<IDockable> dockables)
@@ -700,8 +703,13 @@ public sealed partial class XamlEditorDockFactory : Factory
                 }
             }
 
-            bool isBottomToolDock = string.Equals(toolDock.Id, "BottomToolDock", StringComparison.Ordinal);
-            if (viewModel.ActivateByDefault || (!isBottomToolDock && toolDock.ActiveDockable is null))
+            if (wasBottomCollapsed)
+            {
+                CollapseBottomToolDock(rootDock);
+                if (double.IsFinite(collapsedProportion) && collapsedProportion > 0)
+                    toolDock.CollapsedProportion = collapsedProportion;
+            }
+            else if (viewModel.ActivateByDefault || (!isBottomToolDock && toolDock.ActiveDockable is null))
             {
                 SetActiveDockable(tool);
                 SetFocusedDockable(toolDock, tool);
@@ -714,35 +722,20 @@ public sealed partial class XamlEditorDockFactory : Factory
 
     public static T? FindDockable<T>(IDockable dockable, string id) where T : class, IDockable
     {
-        if (dockable is T typed && dockable.Id == id)
-        {
-            return typed;
-        }
-
-        if (dockable is IDock dock && dock.VisibleDockables is not null)
-        {
-            foreach (IDockable child in dock.VisibleDockables)
-            {
-                T? result = FindDockable<T>(child, id);
-                if (result is not null)
-                {
-                    return result;
-                }
-            }
-        }
-
-        return null;
+        return FindDockables<T>(dockable).FirstOrDefault(candidate => candidate.Id == id);
     }
 
     public static IReadOnlyList<T> FindDockables<T>(IDockable dockable) where T : class, IDockable
     {
         List<T> results = new();
-        CollectDockables(dockable, results);
+        CollectDockables(dockable, results, new HashSet<IDockable>(ReferenceEqualityComparer.Instance));
         return results;
     }
 
-    private static void CollectDockables<T>(IDockable dockable, List<T> results) where T : class, IDockable
+    private static void CollectDockables<T>(IDockable dockable, List<T> results, HashSet<IDockable> visited)
+        where T : class, IDockable
     {
+        if (!visited.Add(dockable)) return;
         if (dockable is T typed)
         {
             results.Add(typed);
@@ -752,8 +745,23 @@ public sealed partial class XamlEditorDockFactory : Factory
         {
             foreach (IDockable child in dock.VisibleDockables)
             {
-                CollectDockables(child, results);
+                CollectDockables(child, results, visited);
             }
+        }
+        if (dockable is IRootDock root)
+        {
+            foreach (IList<IDockable>? children in new[]
+                     {
+                         root.HiddenDockables, root.LeftPinnedDockables, root.RightPinnedDockables,
+                         root.TopPinnedDockables, root.BottomPinnedDockables
+                     })
+            {
+                if (children is null) continue;
+                foreach (IDockable child in children)
+                    CollectDockables(child, results, visited);
+            }
+            if (root.PinnedDock is not null)
+                CollectDockables(root.PinnedDock, results, visited);
         }
     }
 
@@ -826,10 +834,6 @@ public sealed partial class XamlEditorDockFactory : Factory
                     {
                         _logger.LogWarning("Dock layout missing required docks. Resetting to defaults.");
                     }
-                    if (File.Exists(filePath))
-                    {
-                        File.Delete(filePath);
-                    }
                     return null;
                 }
             }
@@ -840,20 +844,6 @@ public sealed partial class XamlEditorDockFactory : Factory
             if (LogLayoutWarnings)
             {
                 _logger.LogWarning("Failed to load dock layout: {Message}", ex.Message);
-            }
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                }
-            }
-            catch (Exception deleteEx)
-            {
-                if (LogLayoutWarnings)
-                {
-                    _logger.LogWarning("Failed to delete invalid dock layout: {Message}", deleteEx.Message);
-                }
             }
             return null;
         }
@@ -903,7 +893,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         if (bottomDock is not null)
         {
             bottomDock.VisibleDockables ??= new ObservableCollection<IDockable>();
-            if (double.IsNaN(bottomDock.Proportion) || bottomDock.Proportion <= 0)
+            if (!double.IsFinite(bottomDock.Proportion) || bottomDock.Proportion < 0)
             {
                 bottomDock.Proportion = bottomHeight;
             }
@@ -911,33 +901,25 @@ public sealed partial class XamlEditorDockFactory : Factory
             {
                 bottomDock.IsEmpty = false;
             }
-            bool hasBreakpoints = bottomDock.VisibleDockables
-                .OfType<BreakpointsTool>()
-                .Any();
+            bool hasBreakpoints = FindDockables<BreakpointsTool>(rootDock).Count > 0;
             if (!hasBreakpoints)
             {
                 bottomDock.VisibleDockables.Add(new BreakpointsTool());
             }
 
-            bool hasCallStack = bottomDock.VisibleDockables
-                .OfType<CallStackTool>()
-                .Any();
+            bool hasCallStack = FindDockables<CallStackTool>(rootDock).Count > 0;
             if (!hasCallStack)
             {
                 bottomDock.VisibleDockables.Add(new CallStackTool());
             }
 
-            bool hasLocals = bottomDock.VisibleDockables
-                .OfType<LocalsTool>()
-                .Any();
+            bool hasLocals = FindDockables<LocalsTool>(rootDock).Count > 0;
             if (!hasLocals)
             {
                 bottomDock.VisibleDockables.Add(new LocalsTool());
             }
 
-            bool hasWatches = bottomDock.VisibleDockables
-                .OfType<WatchesTool>()
-                .Any();
+            bool hasWatches = FindDockables<WatchesTool>(rootDock).Count > 0;
             if (!hasWatches)
             {
                 bottomDock.VisibleDockables.Add(new WatchesTool());

@@ -1,22 +1,73 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.ToolboxExtension"
+             xmlns:views="using:XamlVisualEditor.ToolboxExtension.Views"
+             xmlns:drag="using:XamlVisualEditor.Designer.DragDrop"
              x:Class="XamlVisualEditor.ToolboxExtension.Views.ToolboxPanelView"
              x:DataType="vm:ToolboxPanelViewModel">
-  <Grid RowDefinitions="Auto,*,Auto" Margin="8" RowSpacing="8">
-    <TextBlock Text="Toolbox" FontWeight="SemiBold" />
+  <UserControl.Resources>
+    <views:ToolboxRowHeightConverter x:Key="GroupHeight" />
+    <DataTemplate x:Key="ToolboxItemTemplate" x:DataType="vm:ToolboxPanelItem">
+      <StackPanel Spacing="2" ToolTip.Tip="{CompiledBinding Description}">
+        <TextBlock Text="{CompiledBinding DisplayName}" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{CompiledBinding Subtitle}" FontSize="11" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+    </DataTemplate>
+    <DataTemplate x:Key="FilterTemplate" x:DataType="vm:ToolboxFilterOption">
+      <TextBlock Text="{CompiledBinding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding Label}" />
+    </DataTemplate>
+  </UserControl.Resources>
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="8" RowSpacing="8">
+    <StackPanel Spacing="6">
+      <TextBlock Text="Toolbox" FontWeight="SemiBold" />
+      <TextBox x:Name="ControlSearch" PlaceholderText="Search controls, libraries, categories..."
+               Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+        <ComboBox ItemsSource="{CompiledBinding Libraries}" ItemTemplate="{StaticResource FilterTemplate}"
+                  SelectedItem="{CompiledBinding SelectedLibrary, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+        <ComboBox Grid.Column="1" ItemsSource="{CompiledBinding Categories}" ItemTemplate="{StaticResource FilterTemplate}"
+                  SelectedItem="{CompiledBinding SelectedCategory, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Button Content="Reload" Command="{CompiledBinding ReloadCommand}" />
+        <Button Content="Clear filters" Command="{CompiledBinding ClearFiltersCommand}" />
+        <Button Content="Cancel" Command="{CompiledBinding CancelLoadCommand}" />
+      </StackPanel>
+      <ProgressBar IsIndeterminate="True" IsVisible="{CompiledBinding IsLoading}" Height="3" />
+    </StackPanel>
 
-    <ListBox Grid.Row="1"
-             ItemsSource="{CompiledBinding Items}"
-             SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:ToolboxPanelItem">
-          <TextBlock Text="{CompiledBinding DisplayName}" />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+    <Grid Grid.Row="1">
+      <ScrollViewer x:Name="AssemblyGroupsViewport" HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{CompiledBinding AssemblyGroups}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ToolboxAssemblyGroup">
+              <Expander Header="{CompiledBinding Header}"
+                        IsExpanded="{CompiledBinding IsExpanded, Mode=TwoWay}"
+                        ToolTip.Tip="{CompiledBinding AssemblyName}"
+                        Margin="0,0,0,8"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch">
+                <ListBox ItemsSource="{CompiledBinding Items}"
+                         drag:ToolboxDragBehavior.IsEnabled="True"
+                         SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
+                         ItemTemplate="{StaticResource ToolboxItemTemplate}"
+                         MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=ScrollViewer}, Converter={StaticResource GroupHeight}}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+              </Expander>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <TextBlock Text="No matching controls" IsVisible="{CompiledBinding NoMatches}"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
 
-    <Button Grid.Row="2"
+    <ScrollViewer Grid.Row="2" MaxHeight="80" HorizontalScrollBarVisibility="Disabled">
+      <SelectableTextBlock Text="{CompiledBinding StatusText}" TextWrapping="Wrap" FontSize="11" />
+    </ScrollViewer>
+
+    <Button Grid.Row="3"
             Content="Insert Selected"
             Command="{CompiledBinding InsertSelectedCommand}" />
   </Grid>

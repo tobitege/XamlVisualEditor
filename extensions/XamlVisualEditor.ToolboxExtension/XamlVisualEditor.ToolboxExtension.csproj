@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Designer.DragDrop\XamlVisualEditor.Designer.DragDrop.csproj" />
   </ItemGroup>
 </Project>

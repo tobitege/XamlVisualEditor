@@ -60,7 +60,7 @@ public sealed class TreeInspectorNodeViewModel : ReactiveObject
 
 public sealed class TreeInspectorGridViewModel : ReactiveObject
 {
-    private HierarchicalNode? _selectedRow;
+    private TreeInspectorNodeViewModel? _selectedRow;
     private TreeInspectorNodeViewModel? _selectedNode;
 
     public TreeInspectorGridViewModel()
@@ -80,14 +80,14 @@ public sealed class TreeInspectorGridViewModel : ReactiveObject
         Model.SetRoots(RootItems);
 
         this.WhenAnyValue(x => x.SelectedRow)
-            .Subscribe(row => SelectedNode = row?.Item as TreeInspectorNodeViewModel);
+            .Subscribe(row => SelectedNode = row);
     }
 
     public ObservableCollection<TreeInspectorNodeViewModel> RootItems { get; } = new();
 
     public HierarchicalModel Model { get; }
 
-    public HierarchicalNode? SelectedRow
+    public TreeInspectorNodeViewModel? SelectedRow
     {
         get => _selectedRow;
         set => this.RaiseAndSetIfChanged(ref _selectedRow, value);
@@ -117,8 +117,8 @@ public sealed class TreeInspectorGridViewModel : ReactiveObject
             return;
         }
 
-        Model.TryExpandToItem(node, out HierarchicalNode? found);
-        SelectedRow = found ?? Model.FindNode(node);
+        Model.TryExpandToItem(node, out _);
+        SelectedRow = node;
     }
 }
 
@@ -132,6 +132,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     private Dictionary<string, TreeInspectorNodeViewModel> _nodeIndex = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _loadCts;
     private string? _searchText;
+    private string? _statusText;
     private bool _suspendSelection;
     private string? _lastActiveDocumentPath;
     private string? _lastSelectedNodeId;
@@ -169,6 +170,12 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
 
     public TreeInspectorGridViewModel TreeModel { get; }
     public string PanelTitle => _kind == TreeKind.Visual ? "Visual Tree" : "Logical Tree";
+
+    public string? StatusText
+    {
+        get => _statusText;
+        private set => this.RaiseAndSetIfChanged(ref _statusText, value);
+    }
 
     public string? SearchText
     {
@@ -298,14 +305,18 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     {
         try
         {
+            StatusText = null;
             CancellationToken token = _loadCts?.Token ?? CancellationToken.None;
             await _designer.SelectNodeAsync(nodeId, token);
         }
         catch (OperationCanceledException)
         {
         }
-        catch
+        catch (Exception exception)
         {
+            string nodeName = _nodeIndex.TryGetValue(nodeId, out TreeInspectorNodeViewModel? node)
+                ? node.DisplayText : nodeId;
+            StatusText = $"Could not select {nodeName} in {_designer.ActiveDocumentPath}: {exception.Message}";
         }
     }
 

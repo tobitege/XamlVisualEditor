@@ -12,6 +12,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="ProDiagnostics" />
+    <PackageReference Include="Chrome.DevTools.Avalonia" Condition="'$(Configuration)' == 'Debug'" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Condition="'$(Configuration)' == 'Debug'" PrivateAssets="all" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Condition="'$(Configuration)' == 'Debug'" PrivateAssets="all" />
     <PackageReference Include="ReactiveUI.Avalonia" />
     <PackageReference Include="ProDataGrid" />
     <PackageReference Include="Avalonia.AvaloniaEdit" />

@@ -20,6 +20,7 @@ public sealed class ToolboxExtensionTests
         RecordingCommands commands = new();
         InMemoryWindow window = new();
         InMemorySettingsStore settings = new();
+        string assemblyName = Assert.IsType<string>(typeof(Avalonia.Controls.Border).Assembly.GetName().Name);
 
         await settings.UpdateAsync(
             "toolbox.catalog",
@@ -28,6 +29,7 @@ public sealed class ToolboxExtensionTests
                 new()
                 {
                     DisplayName = "Custom Border",
+                    AssemblyName = assemblyName,
                     CommandId = "toolbox.insertSelected",
                     CommandArguments = new List<string>
                     {
@@ -40,11 +42,13 @@ public sealed class ToolboxExtensionTests
             SettingsTarget.User,
             CancellationToken.None);
 
-        ToolboxPanelViewModel viewModel = new(commands, settings);
+        using ToolboxPanelViewModel viewModel = new(commands, settings);
         Assert.Single(viewModel.Items);
         Assert.Equal("Custom Border", viewModel.Items[0].DisplayName);
 
-        viewModel.SelectedItem = viewModel.Items[0];
+        ToolboxAssemblyGroup group = Assert.Single(viewModel.AssemblyGroups);
+        Assert.Equal(assemblyName, group.AssemblyName);
+        group.SelectedItem = Assert.Single(group.Items);
         await viewModel.InsertSelectedCommand.Execute().ToTask();
 
         Assert.Equal("toolbox.insertSelected", commands.LastCommandId);
@@ -52,6 +56,12 @@ public sealed class ToolboxExtensionTests
         Assert.Equal("Border", commands.LastArguments?[0] as string);
         Assert.Equal("https://github.com/avaloniaui", commands.LastArguments?[1] as string);
         Assert.Equal("11111111-1111-1111-1111-111111111111", commands.LastArguments?[2] as string);
+        viewModel.SearchText = "no matching custom entry";
+        Assert.Empty(viewModel.AssemblyGroups);
+        Assert.Null(viewModel.SelectedItem);
+        await viewModel.ClearFiltersCommand.Execute().ToTask();
+        Assert.Same(group, Assert.Single(viewModel.AssemblyGroups));
+        Assert.Same(viewModel.SelectedItem, group.SelectedItem);
     }
 
     [Fact]

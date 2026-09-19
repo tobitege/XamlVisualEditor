@@ -102,6 +102,9 @@ public sealed class ExtensionContext
     /// <summary>Gets the designer host service.</summary>
     public IDesignerHost Designer { get; }
 
+    /// <summary>Gets the workspace control catalog when the host supports visual control discovery.</summary>
+    public IControlCatalog? ControlCatalog { get; init; }
+
     /// <summary>Gets the workspace service.</summary>
     public IWorkspace Workspace { get; }
 

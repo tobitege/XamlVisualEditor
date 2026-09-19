@@ -7,6 +7,35 @@
              x:DataType="vm:PropertyEditorPanelViewModel">
   <UserControl.Resources>
     <vm:BooleanInverseConverter x:Key="BooleanInverseConverter" />
+    <DataTemplate x:Key="PropertyNameTemplate" x:DataType="vm:PropertyEntryViewModel">
+      <TextBlock Text="{CompiledBinding Name}" TextTrimming="CharacterEllipsis"
+                 VerticalAlignment="Center" Margin="4,0" Classes.local-value="{CompiledBinding IsSet}">
+        <ToolTip.Tip>
+          <StackPanel Spacing="4" MaxWidth="360">
+            <TextBlock Text="{CompiledBinding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Text="{CompiledBinding PropertyType}" TextWrapping="Wrap" />
+            <TextBlock Text="{CompiledBinding Category, StringFormat='Category: {0}'}" />
+            <TextBlock Text="{CompiledBinding IsReadOnly, StringFormat='Read-only: {0}'}" />
+          </StackPanel>
+        </ToolTip.Tip>
+      </TextBlock>
+    </DataTemplate>
+    <DataTemplate x:Key="PropertyActionsTemplate" x:DataType="vm:PropertyEntryViewModel">
+      <Button Content="..." Width="28" Height="28" Padding="0" VerticalAlignment="Center"
+              HorizontalContentAlignment="Center" ToolTip.Tip="Property actions"
+              AutomationProperties.Name="{CompiledBinding Name, StringFormat='Actions for {0}'}">
+        <Button.Flyout>
+          <MenuFlyout>
+            <MenuItem Header="Reset to style/default" Command="{CompiledBinding ResetCommand}"
+                      IsEnabled="{CompiledBinding IsSet}"
+                      ToolTip.Tip="Remove the local value and use the style or default value" />
+            <MenuItem Header="Set null" Command="{CompiledBinding SetNullCommand}"
+                      IsVisible="{CompiledBinding CanAssignNull}"
+                      ToolTip.Tip="Set an explicit local null value without removing the assignment" />
+          </MenuFlyout>
+        </Button.Flyout>
+      </Button>
+    </DataTemplate>
     <vm:PropertyEditorValueTemplateSelector x:Key="ValueEditorSelector">
       <vm:PropertyEditorValueTemplateSelector.TextEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
@@ -145,16 +174,45 @@
       </vm:PropertyEditorValueTemplateSelector.UriEditor>
       <vm:PropertyEditorValueTemplateSelector.CollectionEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
-          <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   PlaceholderText="{x:Static sys:String.Empty}"
-                   IsReadOnly="{CompiledBinding IsReadOnly}" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+            <TextBlock Text="{CompiledBinding Value}" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" ToolTip.Tip="{CompiledBinding Value}" />
+            <Button Grid.Column="1" Content="Edit..." Command="{CompiledBinding EditStructureCommand}"
+                    IsEnabled="{CompiledBinding HasStructureEditor}" Padding="6,4"
+                    ToolTip.Tip="Edit collection items" />
+          </Grid>
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.CollectionEditor>
+      <vm:PropertyEditorValueTemplateSelector.FlagsEditor>
+        <DataTemplate x:DataType="vm:PropertyEntryViewModel">
+          <Button Content="{CompiledBinding FlagSummary}"
+                  IsEnabled="{CompiledBinding IsReadOnly, Converter={StaticResource BooleanInverseConverter}}"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+            <Button.Flyout>
+              <Flyout>
+                <ScrollViewer MaxHeight="280">
+                  <ItemsControl ItemsSource="{CompiledBinding FlagOptions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:EnumFlagOptionViewModel">
+                        <CheckBox Content="{CompiledBinding Name}" IsChecked="{CompiledBinding IsChecked, Mode=TwoWay}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+        </DataTemplate>
+      </vm:PropertyEditorValueTemplateSelector.FlagsEditor>
       <vm:PropertyEditorValueTemplateSelector.TemplateEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
-          <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   PlaceholderText="{x:Static sys:String.Empty}"
-                   IsReadOnly="{CompiledBinding IsReadOnly}" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+            <TextBlock Text="{CompiledBinding Value}" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" ToolTip.Tip="{CompiledBinding Value}" />
+            <Button Grid.Column="1" Content="Edit..." Command="{CompiledBinding EditStructureCommand}"
+                    IsEnabled="{CompiledBinding HasStructureEditor}" Padding="6,4"
+                    ToolTip.Tip="Edit template content" />
+          </Grid>
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.TemplateEditor>
       <vm:PropertyEditorValueTemplateSelector.MarkupExtensionEditor>
@@ -166,24 +224,31 @@
       </vm:PropertyEditorValueTemplateSelector.MarkupExtensionEditor>
     </vm:PropertyEditorValueTemplateSelector>
   </UserControl.Resources>
+  <UserControl.Styles>
+    <Style Selector="TextBlock.local-value">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel Margin="8" LastChildFill="True">
     <StackPanel DockPanel.Dock="Top" Spacing="6">
       <TextBlock Text="Properties" FontWeight="SemiBold" />
-      <TextBlock Text="{CompiledBinding SelectedTypeName, StringFormat='Selected: {0}'}" />
+      <TextBlock Text="{CompiledBinding SelectedTypeName, StringFormat='Selected: {0}'}"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding SelectedTypeName}" />
       <TextBox PlaceholderText="Search properties..."
                Text="{CompiledBinding SearchText, Mode=TwoWay}" />
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <ToggleButton Content="Properties"
+      <WrapPanel>
+        <ToggleButton Content="Properties" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowProperties, Mode=TwoWay}" />
-        <ToggleButton Content="Events"
+        <ToggleButton Content="Events" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowProperties, Mode=TwoWay, Converter={StaticResource BooleanInverseConverter}}" />
-        <ToggleButton Content="Grouped"
+        <ToggleButton Content="Grouped" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowGroupedView, Mode=TwoWay}"
                       IsEnabled="{CompiledBinding ShowProperties}" />
-        <ToggleButton Content="Local Only"
+        <ToggleButton Content="Local Only" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowLocalValuesOnly, Mode=TwoWay}"
                       IsEnabled="{CompiledBinding ShowProperties}" />
-      </StackPanel>
+      </WrapPanel>
+      <TextBlock Text="{CompiledBinding StatusText}" TextWrapping="Wrap" />
     </StackPanel>
 
     <Grid IsVisible="{CompiledBinding ShowProperties}">
@@ -191,31 +256,18 @@
                    AutoGenerateColumns="False"
                    CanUserSortColumns="True"
                    GridLinesVisibility="None"
-                   IsReadOnly="False"
+                   HeadersVisibility="Column"
+                   IsReadOnly="True"
                    Margin="0,8,0,0"
                    IsVisible="{CompiledBinding ShowGroupedView, Converter={StaticResource BooleanInverseConverter}}">
         <dg:DataGrid.Columns>
-          <dg:DataGridTextColumn Header="Name"
-                                 Width="2*"
-                                 x:DataType="vm:PropertyEntryViewModel"
-                                 Binding="{CompiledBinding Name}" />
-          <dg:DataGridTextColumn Header="Category"
-                                 Width="1.5*"
-                                 x:DataType="vm:PropertyEntryViewModel"
-                                 Binding="{CompiledBinding Category}" />
+          <dg:DataGridTemplateColumn Header="Name" Width="*" MinWidth="90"
+                                     SortMemberPath="Name" CellTemplate="{StaticResource PropertyNameTemplate}" />
           <dg:DataGridTemplateColumn Header="Value"
-                                     Width="3*"
-                                     CellTemplate="{StaticResource ValueEditorSelector}"
-                                     CellEditingTemplate="{StaticResource ValueEditorSelector}" />
-          <dg:DataGridTextColumn Header="Type"
-                                 Width="2*"
-                                 x:DataType="vm:PropertyEntryViewModel"
-                                 Binding="{CompiledBinding PropertyType}" />
-          <dg:DataGridTextColumn Header="ReadOnly"
-                                 Width="1*"
-                                 x:DataType="vm:PropertyEntryViewModel"
-                                 Binding="{CompiledBinding IsReadOnly}"
-                                 IsReadOnly="True" />
+                                     Width="1.3*" MinWidth="105"
+                                     CellTemplate="{StaticResource ValueEditorSelector}" />
+          <dg:DataGridTemplateColumn Header="" Width="32" CanUserResize="False"
+                                     CellTemplate="{StaticResource PropertyActionsTemplate}" />
         </dg:DataGrid.Columns>
       </dg:DataGrid>
 
@@ -224,48 +276,36 @@
                    AutoGenerateColumns="False"
                    CanUserSortColumns="False"
                    GridLinesVisibility="None"
-                   IsReadOnly="False"
+                   HeadersVisibility="Column"
+                   IsReadOnly="True"
                    Margin="0,8,0,0">
         <dg:DataGrid.Columns>
-          <dg:DataGridTemplateColumn Header="Category"
-                                     Width="1.5*"
-                                     IsReadOnly="True">
-            <dg:DataGridTemplateColumn.CellTemplate>
-              <DataTemplate x:DataType="vm:PropertyRowViewModel">
-                <TextBlock Text="{CompiledBinding Property.Category}" />
-              </DataTemplate>
-            </dg:DataGridTemplateColumn.CellTemplate>
-          </dg:DataGridTemplateColumn>
           <dg:DataGridTemplateColumn Header="Name"
-                                     Width="2*"
-                                     IsReadOnly="True">
+                                     Width="*" MinWidth="90">
             <dg:DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:PropertyRowViewModel">
-                <TextBlock Text="{CompiledBinding Property.Name}" />
+                <ContentControl Content="{CompiledBinding Property}"
+                                ContentTemplate="{StaticResource PropertyNameTemplate}"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
               </DataTemplate>
             </dg:DataGridTemplateColumn.CellTemplate>
           </dg:DataGridTemplateColumn>
           <dg:DataGridTemplateColumn Header="Value"
-                                     Width="3*">
+                                     Width="1.3*" MinWidth="105">
             <dg:DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:PropertyRowViewModel">
                 <ContentControl Content="{CompiledBinding Property}"
-                                ContentTemplate="{StaticResource ValueEditorSelector}" />
+                                ContentTemplate="{StaticResource ValueEditorSelector}"
+                                HorizontalContentAlignment="Stretch" />
               </DataTemplate>
             </dg:DataGridTemplateColumn.CellTemplate>
-            <dg:DataGridTemplateColumn.CellEditingTemplate>
-              <DataTemplate x:DataType="vm:PropertyRowViewModel">
-                <ContentControl Content="{CompiledBinding Property}"
-                                ContentTemplate="{StaticResource ValueEditorSelector}" />
-              </DataTemplate>
-            </dg:DataGridTemplateColumn.CellEditingTemplate>
           </dg:DataGridTemplateColumn>
-          <dg:DataGridTemplateColumn Header="Type"
-                                     Width="2*"
-                                     IsReadOnly="True">
+          <dg:DataGridTemplateColumn Header="" Width="32" CanUserResize="False">
             <dg:DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:PropertyRowViewModel">
-                <TextBlock Text="{CompiledBinding Property.PropertyType}" />
+                <ContentControl Content="{CompiledBinding Property}"
+                                ContentTemplate="{StaticResource PropertyActionsTemplate}"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
               </DataTemplate>
             </dg:DataGridTemplateColumn.CellTemplate>
           </dg:DataGridTemplateColumn>
@@ -283,12 +323,42 @@
       <dg:DataGrid.Columns>
         <dg:DataGridTextColumn Header="Event"
                                Width="2*"
+                               IsReadOnly="True"
                                x:DataType="vm:EventEntryViewModel"
                                Binding="{CompiledBinding Name}" />
-        <dg:DataGridTextColumn Header="Handler"
-                               Width="3*"
-                               x:DataType="vm:EventEntryViewModel"
-                               Binding="{CompiledBinding HandlerName, Mode=TwoWay}" />
+        <dg:DataGridTemplateColumn Header="Handler" Width="3*" IsReadOnly="True">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:EventEntryViewModel">
+              <StackPanel Spacing="4">
+                <TextBox Text="{CompiledBinding HandlerName, Mode=TwoWay}"
+                         IsReadOnly="{CompiledBinding IsApplying}"
+                         PlaceholderText="Handler name"
+                         ToolTip.Tip="Enter or leave the field to apply; Escape to cancel. An empty field removes the assignment."
+                         KeyDown="OnEventEditorKeyDown"
+                         LostFocus="OnEventEditorLostFocus" />
+                <TextBlock Text="{CompiledBinding ValidationError}"
+                           IsVisible="{CompiledBinding HasValidationError}"
+                           TextWrapping="Wrap" />
+              </StackPanel>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Definition" Width="Auto" IsReadOnly="True">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:EventEntryViewModel">
+              <Button Content="Open" Command="{CompiledBinding NavigateCommand}"
+                      ToolTip.Tip="Validate the assignment and open the C# handler definition" />
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Clear" Width="Auto" IsReadOnly="True">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:EventEntryViewModel">
+              <Button Content="Clear" Command="{CompiledBinding ResetCommand}"
+                      ToolTip.Tip="Remove the event handler assignment" />
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
       </dg:DataGrid.Columns>
     </dg:DataGrid>
   </DockPanel>

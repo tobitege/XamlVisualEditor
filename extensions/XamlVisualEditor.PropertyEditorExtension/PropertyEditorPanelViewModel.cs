@@ -73,6 +73,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     };
     private string? _value;
     private string? _committedValue;
+    private bool _committedHasLocalValue;
     private bool _isSet;
     private bool? _boolValue;
     private double? _numberValue;
@@ -80,6 +81,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     private Color? _colorValue;
     private IBrush? _brushPreview;
     private bool _isUpdating;
+    private string? _validationError;
 
     public PropertyEntryViewModel(
         string nodeId,
@@ -93,7 +95,14 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         bool isAttached,
         string? ownerType,
         IReadOnlyList<string>? enumOptions,
-        PropertyEditorDescriptor? descriptor)
+        PropertyEditorDescriptor? descriptor,
+        bool isCollection = false,
+        bool isFlagsEnum = false,
+        bool isSignedEnum = true,
+        IReadOnlyDictionary<string, ulong>? enumValues = null,
+        bool hasLocalValue = false,
+        bool isTemplate = false,
+        bool canAssignNull = false)
     {
         NodeId = nodeId;
         Name = name;
@@ -105,16 +114,48 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         IsAttached = isAttached;
         OwnerType = ownerType;
         Descriptor = descriptor;
+        IsCollection = isCollection;
+        IsTemplate = isTemplate;
+        CanAssignNull = canAssignNull && !isReadOnly;
+        IsFlagsEnum = isFlagsEnum && enumValues is { Count: > 0 };
+        IsSignedEnum = isSignedEnum;
+        FlagOptions = IsFlagsEnum
+            ? enumValues!.Select(value => new EnumFlagOptionViewModel(value.Key, value.Value, SetFlag)).ToArray()
+            : Array.Empty<EnumFlagOptionViewModel>();
         IReadOnlyList<string>? resolvedEnumOptions = descriptor?.EnumOptions ?? enumOptions ?? ResolveWellKnownEnumOptions(name);
         EnumOptions = resolvedEnumOptions;
         BrushPresets = descriptor?.BrushPresets;
-        EditorKind = GetEditorKind(name, propertyType, resolvedEnumOptions, descriptor);
+        EditorKind = descriptor?.Kind ?? (isTemplate ? PropertyEditorKind.Template
+            : isCollection ? PropertyEditorKind.Collection : GetEditorKind(name, propertyType, resolvedEnumOptions, null));
         SetValueInternal(value);
         _committedValue = _value;
-        ApplyPresetCommand = ReactiveCommand.Create<string?>(preset => Value = preset);
+        _committedHasLocalValue = hasLocalValue || _value is not null;
+        IsSet = _committedHasLocalValue;
+        CommitCommand = ReactiveCommand.Create(() => CommitRequested?.Invoke());
+        CancelEditCommand = ReactiveCommand.Create(() =>
+        {
+            Value = _committedValue;
+            IsSet = _committedHasLocalValue;
+            ValidationError = null;
+            EditCanceled?.Invoke();
+        });
+        ApplyPresetCommand = ReactiveCommand.Create<string?>(preset =>
+        {
+            Value = preset;
+            CommitRequested?.Invoke();
+        });
+        ResetCommand = ReactiveCommand.Create(
+            () => { Value = null; ResetRequested?.Invoke(); CommitRequested?.Invoke(); },
+            this.WhenAnyValue(x => x.IsSet));
+        SetNullCommand = ReactiveCommand.Create(
+            () => { NullRequested?.Invoke(); CommitRequested?.Invoke(); },
+            Observable.Return(CanAssignNull));
     }
 
     public string NodeId { get; }
+    public bool CanAssignNull { get; }
+    public ReactiveCommand<Unit, Unit> SetNullCommand { get; }
+    public event Action? NullRequested;
     public string Name { get; }
     public string PropertyType { get; }
     public bool IsReadOnly { get; }
@@ -125,9 +166,35 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public string? OwnerType { get; }
     public PropertyEditorDescriptor? Descriptor { get; }
     public PropertyEditorKind EditorKind { get; }
+    public bool IsCollection { get; }
+    public bool IsTemplate { get; }
+    public bool IsFlagsEnum { get; }
+    public bool IsSignedEnum { get; }
+    public IReadOnlyList<EnumFlagOptionViewModel> FlagOptions { get; }
+    public string FlagSummary => Value ?? DefaultValue ?? "Default";
     public IReadOnlyList<string>? EnumOptions { get; }
     public IReadOnlyList<string>? BrushPresets { get; }
     public ReactiveCommand<string?, Unit> ApplyPresetCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetCommand { get; }
+    public ReactiveCommand<Unit, Unit> CommitCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelEditCommand { get; }
+    public event Action? CommitRequested;
+    public event Action? ResetRequested;
+    public event Action? EditCanceled;
+    public ReactiveCommand<Unit, Unit>? EditStructureCommand { get; set; }
+    public bool HasStructureEditor => EditStructureCommand is not null;
+
+    public string? ValidationError
+    {
+        get => _validationError;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _validationError, value);
+            this.RaisePropertyChanged(nameof(HasValidationError));
+        }
+    }
+    public bool HasValidationError => !string.IsNullOrEmpty(ValidationError);
+    public bool IsExpression => Value?.TrimStart() is { } text && text.StartsWith('{') && !text.StartsWith("{}", StringComparison.Ordinal);
 
     public string? Value
     {
@@ -162,6 +229,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             }
 
             SetValueInternal(value.HasValue ? value.Value.ToString() : null);
+            CommitRequested?.Invoke();
         }
     }
 
@@ -190,6 +258,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             }
 
             SetValueInternal(value);
+            CommitRequested?.Invoke();
         }
     }
 
@@ -204,6 +273,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             }
 
             SetValueInternal(value?.ToString());
+            CommitRequested?.Invoke();
         }
     }
 
@@ -216,6 +286,17 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public void MarkCommitted(string? value)
     {
         _committedValue = value;
+        _committedHasLocalValue = IsSet;
+    }
+
+    public void UpdateSourceValue(string? value, bool hasLocalValue, bool preserveDraft)
+    {
+        _committedValue = value;
+        _committedHasLocalValue = hasLocalValue || value is not null;
+        if (preserveDraft) return;
+        SetValueInternal(value);
+        IsSet = _committedHasLocalValue;
+        ValidationError = null;
     }
 
     private void SetValueInternal(string? value)
@@ -225,7 +306,8 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         {
             _value = value;
             this.RaisePropertyChanged(nameof(Value));
-            IsSet = !string.IsNullOrWhiteSpace(value);
+            this.RaisePropertyChanged(nameof(IsExpression));
+            IsSet = value is not null;
 
             if (bool.TryParse(value, out bool parsedBool))
             {
@@ -246,6 +328,10 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             }
 
             _enumValue = FindEnumValue(EnumOptions, value);
+            ulong flags = ReadFlagBits(value ?? DefaultValue);
+            foreach (EnumFlagOptionViewModel option in FlagOptions)
+                option.Refresh(option.Bits == 0 ? flags == 0 : (flags & option.Bits) == option.Bits);
+            this.RaisePropertyChanged(nameof(FlagSummary));
 
             if (Color.TryParse(value, out Color parsedColor))
             {
@@ -267,6 +353,47 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         {
             _isUpdating = false;
         }
+    }
+
+    private void SetFlag(EnumFlagOptionViewModel option, bool isChecked)
+    {
+        if (_isUpdating || IsReadOnly) return;
+        ulong current = ReadFlagBits(Value ?? DefaultValue);
+        ulong flags = option.Bits == 0 && isChecked ? 0
+            : isChecked ? current | option.Bits : current & ~option.Bits;
+        SetValueInternal(FormatFlags(flags));
+        CommitRequested?.Invoke();
+    }
+
+    private ulong ReadFlagBits(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        if (ulong.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out ulong unsigned)) return unsigned;
+        if (IsSignedEnum && long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long signed))
+            return unchecked((ulong)signed);
+        ulong result = 0;
+        foreach (string name in value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            EnumFlagOptionViewModel? option = FlagOptions.FirstOrDefault(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (option is not null) result |= option.Bits;
+        }
+        return result;
+    }
+
+    private string FormatFlags(ulong flags)
+    {
+        EnumFlagOptionViewModel? exact = FlagOptions.FirstOrDefault(option => option.Bits == flags);
+        if (exact is not null) return exact.Name;
+        ulong remaining = flags;
+        List<string> names = new();
+        foreach (EnumFlagOptionViewModel option in FlagOptions.Where(option => option.Bits != 0).OrderByDescending(option => option.Bits))
+        {
+            if ((remaining & option.Bits) != option.Bits) continue;
+            names.Add(option.Name);
+            remaining &= ~option.Bits;
+        }
+        if (remaining == 0 && names.Count > 0) return string.Join(", ", names);
+        return IsSignedEnum ? unchecked((long)flags).ToString(CultureInfo.InvariantCulture) : flags.ToString(CultureInfo.InvariantCulture);
     }
 
     private static PropertyEditorKind GetEditorKind(
@@ -754,7 +881,8 @@ public sealed class EventEntryViewModel : ReactiveObject
 {
     private string? _handlerName;
     private string? _committedHandler;
-    private bool _isUpdating;
+    private string? _validationError;
+    private bool _isApplying;
 
     public EventEntryViewModel(string nodeId, string name, string? handlerName, string? description)
     {
@@ -763,6 +891,22 @@ public sealed class EventEntryViewModel : ReactiveObject
         Description = description;
         _handlerName = handlerName;
         _committedHandler = handlerName;
+        IObservable<bool> canEdit = this.WhenAnyValue(entry => entry.IsApplying).Select(applying => !applying);
+        CommitCommand = ReactiveCommand.Create(() => CommitRequested?.Invoke(), canEdit);
+        CancelEditCommand = ReactiveCommand.Create(() =>
+        {
+            RestoreCommitted();
+            ValidationError = null;
+            EditCanceled?.Invoke();
+        }, canEdit);
+        ResetCommand = ReactiveCommand.Create(() =>
+        {
+            HandlerName = null;
+            CommitRequested?.Invoke();
+        }, canEdit);
+        NavigateCommand = ReactiveCommand.Create(() => NavigateRequested?.Invoke(),
+            this.WhenAnyValue(entry => entry.HandlerName, entry => entry.IsApplying,
+                (handler, applying) => !applying && !string.IsNullOrWhiteSpace(handler)));
     }
 
     public string NodeId { get; }
@@ -772,16 +916,33 @@ public sealed class EventEntryViewModel : ReactiveObject
     public string? HandlerName
     {
         get => _handlerName;
+        set => this.RaiseAndSetIfChanged(ref _handlerName, value);
+    }
+
+    public bool IsApplying
+    {
+        get => _isApplying;
+        internal set => this.RaiseAndSetIfChanged(ref _isApplying, value);
+    }
+
+    public string? ValidationError
+    {
+        get => _validationError;
         set
         {
-            if (_isUpdating)
-            {
-                return;
-            }
-
-            this.RaiseAndSetIfChanged(ref _handlerName, value);
+            this.RaiseAndSetIfChanged(ref _validationError, value);
+            this.RaisePropertyChanged(nameof(HasValidationError));
         }
     }
+
+    public bool HasValidationError => !string.IsNullOrEmpty(ValidationError);
+    public ReactiveCommand<Unit, Unit> CommitCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelEditCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetCommand { get; }
+    public ReactiveCommand<Unit, Unit> NavigateCommand { get; }
+    public event Action? CommitRequested;
+    public event Action? EditCanceled;
+    public event Action? NavigateRequested;
 
     public string? CommittedHandler => _committedHandler;
 
@@ -790,18 +951,17 @@ public sealed class EventEntryViewModel : ReactiveObject
         _committedHandler = value;
     }
 
-    public void RestoreCommitted()
+    public void UpdateSourceValue(string? value, bool preserveDraft)
     {
-        _isUpdating = true;
-        try
+        _committedHandler = value;
+        if (!preserveDraft)
         {
-            HandlerName = _committedHandler;
-        }
-        finally
-        {
-            _isUpdating = false;
+            HandlerName = value;
+            ValidationError = null;
         }
     }
+
+    public void RestoreCommitted() => HandlerName = _committedHandler;
 }
 
 public sealed class PropertyRowViewModel
@@ -843,10 +1003,20 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     private readonly ObservableCollection<PropertyEntryViewModel> _properties = new();
     private readonly ObservableCollection<PropertyRowViewModel> _groupedRows = new();
     private readonly ObservableCollection<EventEntryViewModel> _events = new();
+    private readonly Dictionary<string, PendingPropertyValue> _pendingPropertyValues = new(StringComparer.Ordinal);
+    private sealed record PendingPropertyValue(string DocumentPath, string? Value, string? Error,
+        bool ForceReset = false, bool ForceNull = false);
+    private readonly Dictionary<string, PendingPropertyCommit> _propertyCommits = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _propertyCommitGate = new(1, 1);
+    private sealed record PendingPropertyCommit(CancellationTokenSource Cancellation, PendingPropertyValue Draft);
+    private bool _isDisposed;
+    private readonly Dictionary<string, PendingEventHandler> _pendingEventHandlers = new(StringComparer.Ordinal);
+    private sealed record PendingEventHandler(string DocumentPath, string? Value, string? Error);
     private CancellationTokenSource? _loadCts;
     private string? _selectedTypeName;
     private string? _selectedNodeId;
     private string? _searchText;
+    private string? _statusText;
     private int _suspendUpdates;
     private bool _showProperties = true;
     private bool _showGroupedView = true;
@@ -884,6 +1054,13 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         {
             Filter = FilterEvent
         };
+        if (designer is IDesignerDocumentNotifications notifications)
+        {
+            EventHandler<DesignerDocumentChangedEventArgs> changed = (_, args) =>
+                RunBackground(HandleDocumentChangedAsync(args.DocumentPath, CancellationToken.None));
+            notifications.DocumentChanged += changed;
+            _disposables.Add(Disposable.Create(() => notifications.DocumentChanged -= changed));
+        }
 
         _disposables.Add(this.WhenAnyValue(x => x.SearchText)
             .Subscribe(_ =>
@@ -930,6 +1107,8 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     public DataGridCollectionView PropertiesView { get; }
     public DataGridCollectionView GroupedPropertiesView { get; }
     public DataGridCollectionView EventsView { get; }
+    public Interaction<PropertyStructureEditorViewModel, Unit> EditStructureInteraction { get; } = new();
+    public string? StatusText { get => _statusText; private set => this.RaiseAndSetIfChanged(ref _statusText, value); }
 
     public string? SelectedTypeName
     {
@@ -1027,8 +1206,10 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
+        bool selectionChanged = !string.Equals(_lastSelectionKey, selectionKey, StringComparison.Ordinal);
         _lastSelectionKey = selectionKey;
 
+        if (_isDisposed) return;
         CancellationTokenSource? previous = _loadCts;
         _loadCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         previous?.Cancel();
@@ -1044,16 +1225,25 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 SelectedTypeName = null;
                 ClearProperties();
                 ClearEvents();
+                StatusText = null;
                 return;
             }
 
             DesignerNodeSummary node = selectedNodes[0];
             SelectedNodeId = node.NodeId;
             SelectedTypeName = node.TypeName;
+            if (selectionChanged)
+            {
+                ClearProperties();
+                ClearEvents();
+                StatusText = "Loading properties and events...";
+            }
 
             Task<IReadOnlyList<DesignerPropertyInfo>> propertiesTask = _designer.GetPropertiesAsync(node.NodeId, token);
             Task<IReadOnlyList<DesignerEventInfo>> eventsTask = _designer.GetEventsAsync(node.NodeId, token);
             await Task.WhenAll(propertiesTask, eventsTask);
+            token.ThrowIfCancellationRequested();
+            if (_isDisposed) return;
             IReadOnlyList<DesignerPropertyInfo> properties = propertiesTask.Result;
             IReadOnlyList<DesignerEventInfo> events = eventsTask.Result;
 
@@ -1062,12 +1252,20 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             PropertiesView.Refresh();
             EventsView.Refresh();
             RequestGroupedRefresh();
+            PropertyEntryViewModel? propertyError = _properties.FirstOrDefault(entry => entry.HasValidationError);
+            EventEntryViewModel? eventError = _events.FirstOrDefault(entry => entry.HasValidationError);
+            StatusText = propertyError is not null ? $"{propertyError.Name}: {propertyError.ValidationError}"
+                : eventError is not null ? $"{eventError.Name}: {eventError.ValidationError}" : null;
         }
         catch (OperationCanceledException)
         {
         }
-        catch
+        catch (Exception exception)
         {
+            if (token.IsCancellationRequested || _isDisposed) return;
+            ClearProperties();
+            ClearEvents();
+            StatusText = $"Cannot inspect {SelectedTypeName ?? "selection"} in {_lastActiveDocumentPath}: {exception.Message}";
         }
         finally
         {
@@ -1077,6 +1275,12 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     public void Dispose()
     {
+        _isDisposed = true;
+        foreach (PendingPropertyCommit commit in _propertyCommits.Values.ToArray())
+        {
+            commit.Cancellation.Cancel();
+        }
+
         _loadCts?.Cancel();
         _loadCts?.Dispose();
         _entrySubscriptions.Dispose();
@@ -1120,8 +1324,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 && CanReusePropertyEntry(reused, node.NodeId, property))
             {
                 existing.Remove(propertyKey);
-                reused.Value = property.Value;
-                reused.MarkCommitted(property.Value);
+                reused.UpdateSourceValue(property.Value, property.HasLocalValue, _pendingPropertyValues.ContainsKey(GetDraftKey(reused)));
                 ordered.Add(reused);
                 continue;
             }
@@ -1171,14 +1374,15 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 && CanReuseEventEntry(reused, node.NodeId, evt))
             {
                 existing.Remove(evt.Name);
-                reused.HandlerName = evt.HandlerName;
-                reused.MarkCommitted(evt.HandlerName);
+                UpdateEventSource(reused, evt.HandlerName);
                 ordered.Add(reused);
                 continue;
             }
 
             structureChanged = true;
-            ordered.Add(new EventEntryViewModel(node.NodeId, evt.Name, evt.HandlerName, evt.Description));
+            EventEntryViewModel created = new(node.NodeId, evt.Name, evt.HandlerName, evt.Description);
+            UpdateEventSource(created, evt.HandlerName);
+            ordered.Add(created);
         }
 
         if (existing.Count > 0 || !AreSameEntrySequence(_events, ordered))
@@ -1203,7 +1407,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     private PropertyEntryViewModel CreatePropertyEntry(string nodeId, DesignerPropertyInfo property)
     {
-        return new PropertyEntryViewModel(
+        PropertyEntryViewModel entry = new(
             nodeId,
             property.Name,
             property.PropertyType,
@@ -1215,7 +1419,40 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             property.IsAttached,
             property.OwnerType,
             property.EnumOptions,
-            ResolveDescriptor(property.Name, property.PropertyType));
+            ResolveDescriptor(property.Name, property.PropertyType),
+            property.IsCollection,
+            property.IsFlagsEnum,
+            property.IsSignedEnum,
+            property.EnumValues,
+            property.HasLocalValue,
+            property.IsTemplate,
+            property.CanAssignNull);
+        if (_designer is IDesignerStructureHost && entry.EditorKind is PropertyEditorKind.Collection or PropertyEditorKind.Template)
+            entry.EditStructureCommand = ReactiveCommand.CreateFromTask(() => OpenStructureEditorAsync(entry));
+        if (_pendingPropertyValues.TryGetValue(GetDraftKey(entry), out PendingPropertyValue? draft))
+        {
+            entry.Value = draft.Value;
+            entry.ValidationError = draft.Error;
+        }
+        return entry;
+    }
+
+    private async Task OpenStructureEditorAsync(PropertyEntryViewModel entry)
+    {
+        try
+        {
+            StatusText = null;
+            if (_designer is not IDesignerStructureHost host) return;
+            CancellationToken token = _loadCts?.Token ?? CancellationToken.None;
+            DesignerPropertyStructure snapshot = await host.OpenPropertyStructureAsync(entry.NodeId, entry.Name, token);
+            token.ThrowIfCancellationRequested();
+            using PropertyStructureEditorViewModel editor = new(host, snapshot);
+            await EditStructureInteraction.Handle(editor);
+            IReadOnlyList<DesignerNodeSummary> selection = await _designer.GetSelectedNodesAsync(CancellationToken.None);
+            await UpdateSelectionAsync(selection, CancellationToken.None, forceReload: true);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception) { StatusText = exception.Message; }
     }
 
     private static bool CanReusePropertyEntry(PropertyEntryViewModel entry, string nodeId, DesignerPropertyInfo property)
@@ -1225,6 +1462,14 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             && string.Equals(entry.PropertyType, property.PropertyType, StringComparison.OrdinalIgnoreCase)
             && entry.IsReadOnly == property.IsReadOnly
             && entry.IsAttached == property.IsAttached
+            && entry.IsCollection == property.IsCollection
+            && entry.IsTemplate == property.IsTemplate
+            && entry.CanAssignNull == (property.CanAssignNull && !property.IsReadOnly)
+            && entry.IsFlagsEnum == property.IsFlagsEnum
+            && entry.IsSignedEnum == property.IsSignedEnum
+            && (property.EnumValues is null ? entry.FlagOptions.Count == 0
+                : entry.FlagOptions.Count == property.EnumValues.Count
+                    && entry.FlagOptions.All(option => property.EnumValues.TryGetValue(option.Name, out ulong bits) && bits == option.Bits))
             && string.Equals(entry.OwnerType, property.OwnerType, StringComparison.OrdinalIgnoreCase)
             && string.Equals(entry.Category, property.Category ?? "Misc", StringComparison.OrdinalIgnoreCase);
     }
@@ -1273,12 +1518,60 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     private void HookPropertyEntry(PropertyEntryViewModel entry)
     {
+        void CancelPendingCommit()
+        {
+            if (_propertyCommits.TryGetValue(GetDraftKey(entry), out PendingPropertyCommit? commit))
+            {
+                commit.Cancellation.Cancel();
+            }
+        }
+
+        _entrySubscriptions.Add(entry.CancelEditCommand.Subscribe(_ => CancelPendingCommit()));
+        _entrySubscriptions.Add(entry.WhenAnyValue(item => item.Value)
+            .Skip(1)
+            .DistinctUntilChanged()
+            .Where(_ => _suspendUpdates == 0)
+            .Subscribe(_ => CancelPendingCommit()));
+
+        void SetNull()
+        {
+            if (!entry.CanAssignNull || string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath)) return;
+            CancelPendingCommit();
+            _pendingPropertyValues[GetDraftKey(entry)] = new PendingPropertyValue(
+                _designer.ActiveDocumentPath, entry.Value, null, ForceNull: true);
+            entry.ValidationError = null;
+        }
+
+        entry.NullRequested += SetNull;
+        _entrySubscriptions.Add(Disposable.Create(() => entry.NullRequested -= SetNull));
+
+        string documentPath = _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;
+        void Commit() => RunBackground(ApplyPropertyChangeAsync(entry, entry.Value));
+        void Cancel()
+        {
+            _pendingPropertyValues.Remove(GetDraftKey(entry));
+            StatusText = null;
+        }
+        void Reset() => _pendingPropertyValues[GetDraftKey(entry)] = new(documentPath, null, null, ForceReset: true);
+        entry.CommitRequested += Commit;
+        entry.EditCanceled += Cancel;
+        entry.ResetRequested += Reset;
+        _entrySubscriptions.Add(Disposable.Create(() =>
+        {
+            entry.CommitRequested -= Commit;
+            entry.EditCanceled -= Cancel;
+            entry.ResetRequested -= Reset;
+        }));
         IDisposable subscription = entry.WhenAnyValue(x => x.Value)
             .Skip(1)
             .DistinctUntilChanged()
             .Subscribe(value =>
             {
-                RunBackground(ApplyPropertyChangeAsync(entry, value));
+                if (_suspendUpdates == 0)
+                {
+                    entry.ValidationError = null;
+                    _pendingPropertyValues[GetDraftKey(entry)] = new(documentPath, value, null);
+                }
                 if (!string.IsNullOrWhiteSpace(SearchText))
                 {
                     PropertiesView.Refresh();
@@ -1302,6 +1595,21 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         _entrySubscriptions.Add(setSubscription);
     }
 
+    private void UpdateEventSource(EventEntryViewModel entry, string? handlerName)
+    {
+        if (_pendingEventHandlers.TryGetValue(GetEventDraftKey(entry), out PendingEventHandler? draft) &&
+            string.Equals(draft.DocumentPath, _designer.ActiveDocumentPath, StringComparison.OrdinalIgnoreCase))
+        {
+            entry.UpdateSourceValue(handlerName, preserveDraft: true);
+            entry.HandlerName = draft.Value;
+            entry.ValidationError = draft.Error;
+        }
+        else
+        {
+            entry.UpdateSourceValue(handlerName, preserveDraft: false);
+        }
+    }
+
     private void HookEventEntry(EventEntryViewModel entry)
     {
         IDisposable subscription = entry.WhenAnyValue(x => x.HandlerName)
@@ -1309,134 +1617,254 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             .DistinctUntilChanged()
             .Subscribe(value =>
             {
-                RunBackground(ApplyEventChangeAsync(entry, value));
+                if (_suspendUpdates > 0 || string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
+                {
+                    return;
+                }
+
+                _pendingEventHandlers[GetEventDraftKey(entry)] = new PendingEventHandler(_designer.ActiveDocumentPath, value, null);
+                entry.ValidationError = null;
                 if (!string.IsNullOrWhiteSpace(SearchText))
                 {
                     EventsView.Refresh();
                 }
             });
         _eventSubscriptions.Add(subscription);
+
+        void Commit() => RunBackground(ApplyEventChangeAsync(entry, entry.HandlerName));
+        void Navigate() => RunBackground(NavigateEventHandlerAsync(entry));
+        void Cancel()
+        {
+            _pendingEventHandlers.Remove(GetEventDraftKey(entry));
+            StatusText = null;
+        }
+
+        entry.CommitRequested += Commit;
+        entry.EditCanceled += Cancel;
+        entry.NavigateRequested += Navigate;
+        _eventSubscriptions.Add(Disposable.Create(() =>
+        {
+            entry.CommitRequested -= Commit;
+            entry.EditCanceled -= Cancel;
+            entry.NavigateRequested -= Navigate;
+        }));
     }
 
     private async Task ApplyPropertyChangeAsync(PropertyEntryViewModel entry, string? value)
     {
-        if (_suspendUpdates > 0 || entry.IsReadOnly)
+        string key = GetDraftKey(entry);
+        if (_isDisposed || !_pendingPropertyValues.TryGetValue(key, out PendingPropertyValue? draft) ||
+            entry.IsReadOnly && !draft.ForceReset)
         {
             return;
         }
 
-        if (string.Equals(entry.CommittedValue, value, StringComparison.Ordinal))
+        if (!draft.ForceReset && !draft.ForceNull && string.Equals(entry.CommittedValue, value, StringComparison.Ordinal))
         {
+            _pendingPropertyValues.Remove(key);
+            entry.ValidationError = null;
             return;
         }
 
-        string? nodeId = SelectedNodeId;
-        if (string.IsNullOrWhiteSpace(nodeId) || !string.Equals(nodeId, entry.NodeId, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(_designer.ActiveDocumentPath, draft.DocumentPath, StringComparison.OrdinalIgnoreCase))
         {
+            SetPropertyError(entry, draft, "The document changed before this value was applied. The draft is retained.");
             return;
         }
 
-        CancellationTokenSource? cts = _loadCts;
-        if (cts is null)
+        if (_propertyCommits.TryGetValue(key, out PendingPropertyCommit? previous))
         {
-            return;
+            if (ReferenceEquals(previous.Draft, draft))
+            {
+                return;
+            }
+
+            previous.Cancellation.Cancel();
         }
 
-        CancellationToken token = cts.Token;
-        IDesignerTransaction transaction = _designer.BeginTransaction($"Set {entry.Name}");
+        using CancellationTokenSource cancellation = new();
+        PendingPropertyCommit commit = new(cancellation, draft);
+        _propertyCommits[key] = commit;
+        bool enteredGate = false;
         try
         {
-            bool applied = await _designer.SetPropertyAsync(nodeId, entry.Name, value, token);
-            if (applied)
+            await _propertyCommitGate.WaitAsync(cancellation.Token);
+            enteredGate = true;
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (_isDisposed || !string.Equals(_designer.ActiveDocumentPath, draft.DocumentPath, StringComparison.OrdinalIgnoreCase))
             {
-                entry.MarkCommitted(value);
-                await transaction.CommitAsync(token);
+                throw new InvalidOperationException("The document changed before this value was applied. The draft is retained.");
+            }
+
+            string? committedValue = draft.ForceReset ? null : value;
+            bool applied;
+            if (draft.ForceNull && !draft.ForceReset)
+            {
+                if (_designer is not IDesignerPropertyValueHost valueHost)
+                {
+                    throw new InvalidOperationException("The designer host does not support explicit null values.");
+                }
+
+                committedValue = await valueHost.SetPropertyNullAsync(entry.NodeId, entry.Name, cancellation.Token);
+                applied = true;
             }
             else
             {
-                await transaction.RollbackAsync(token);
-                RestoreEntryValue(entry);
+                applied = await _designer.SetPropertyAsync(entry.NodeId, entry.Name, committedValue, cancellation.Token);
             }
+
+            if (!applied) throw new InvalidOperationException("The value could not be applied to this property.");
+            entry.MarkCommitted(committedValue);
+            if (_pendingPropertyValues.TryGetValue(key, out PendingPropertyValue? current) && ReferenceEquals(current, draft))
+            {
+                _suspendUpdates++;
+                try { entry.UpdateSourceValue(committedValue, committedValue is not null, false); }
+                finally { _suspendUpdates--; }
+                entry.ValidationError = null;
+                _pendingPropertyValues.Remove(key);
+            }
+
+            StatusText = null;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
         }
-        catch
+        catch (Exception exception)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
-            RestoreEntryValue(entry);
+            if (_pendingPropertyValues.TryGetValue(key, out PendingPropertyValue? current) && ReferenceEquals(current, draft))
+            {
+                SetPropertyError(entry, draft, exception.Message);
+            }
+            else
+            {
+                StatusText = $"{entry.Name}: {exception.Message}";
+            }
         }
         finally
         {
-            transaction.Dispose();
+            if (_propertyCommits.TryGetValue(key, out PendingPropertyCommit? current) && ReferenceEquals(current, commit))
+            {
+                _propertyCommits.Remove(key);
+            }
+
+            if (enteredGate)
+            {
+                _propertyCommitGate.Release();
+            }
         }
+    }
+
+    private static string GetDraftKey(PropertyEntryViewModel entry) =>
+        entry.NodeId + "|" + BuildPropertyEntryKey(entry.Name, entry.OwnerType);
+
+    private void SetPropertyError(PropertyEntryViewModel entry, PendingPropertyValue draft, string message)
+    {
+        entry.ValidationError = message;
+        _pendingPropertyValues[GetDraftKey(entry)] = draft with { Value = entry.Value, Error = message };
+        StatusText = $"{entry.Name}: {message}";
     }
 
     private async Task ApplyEventChangeAsync(EventEntryViewModel entry, string? value)
     {
-        if (_suspendUpdates > 0)
+        string key = GetEventDraftKey(entry);
+        if (_suspendUpdates > 0 || entry.IsApplying ||
+            !_pendingEventHandlers.TryGetValue(key, out PendingEventHandler? draft))
         {
             return;
         }
 
-        if (string.Equals(entry.CommittedHandler, value, StringComparison.Ordinal))
+        if (!string.Equals(_designer.ActiveDocumentPath, draft.DocumentPath, StringComparison.OrdinalIgnoreCase))
         {
+            SetEventError(entry, draft, "The document changed before the handler was applied. The draft is retained.");
             return;
         }
 
-        string? nodeId = SelectedNodeId;
-        if (string.IsNullOrWhiteSpace(nodeId) || !string.Equals(nodeId, entry.NodeId, StringComparison.OrdinalIgnoreCase))
+        string? handlerName = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (string.Equals(entry.CommittedHandler, handlerName, StringComparison.Ordinal))
         {
+            entry.HandlerName = handlerName;
+            entry.ValidationError = null;
+            _pendingEventHandlers.Remove(key);
             return;
         }
 
-        CancellationTokenSource? cts = _loadCts;
-        if (cts is null)
-        {
-            return;
-        }
-
-        CancellationToken token = cts.Token;
-        IDesignerTransaction transaction = _designer.BeginTransaction($"Set {entry.Name}");
+        CancellationToken token = _loadCts?.Token ?? CancellationToken.None;
+        entry.IsApplying = true;
         try
         {
-            bool applied = await _designer.SetPropertyAsync(nodeId, entry.Name, value, token);
-            if (applied)
+            if (_designer is not IDesignerEventHost eventHost)
             {
-                entry.MarkCommitted(value);
-                await transaction.CommitAsync(token);
+                throw new InvalidOperationException("The designer host does not support validated event assignments.");
             }
-            else
+
+            bool applied = await eventHost.SetEventHandlerAsync(entry.NodeId, entry.Name, handlerName, token);
+            if (!applied)
             {
-                await transaction.RollbackAsync(token);
-                entry.RestoreCommitted();
+                throw new InvalidOperationException("The handler could not be assigned to this event.");
             }
+
+            entry.MarkCommitted(handlerName);
+            if (_pendingEventHandlers.TryGetValue(key, out PendingEventHandler? current) && ReferenceEquals(current, draft))
+            {
+                entry.HandlerName = handlerName;
+                entry.ValidationError = null;
+                _pendingEventHandlers.Remove(key);
+            }
+
+            StatusText = null;
         }
         catch (OperationCanceledException)
         {
+            SetEventError(entry, draft, "The handler change was canceled. The draft is retained.");
         }
-        catch
+        catch (Exception exception)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
-            entry.RestoreCommitted();
+            SetEventError(entry, draft, exception.Message);
         }
         finally
         {
-            transaction.Dispose();
+            entry.IsApplying = false;
         }
     }
 
-    private void RestoreEntryValue(PropertyEntryViewModel entry)
+    private async Task NavigateEventHandlerAsync(EventEntryViewModel entry)
     {
-        _suspendUpdates++;
+        await ApplyEventChangeAsync(entry, entry.HandlerName);
+        if (entry.IsApplying || entry.HasValidationError || _pendingEventHandlers.ContainsKey(GetEventDraftKey(entry)) ||
+            string.IsNullOrWhiteSpace(entry.CommittedHandler))
+        {
+            return;
+        }
+
+        entry.IsApplying = true;
         try
         {
-            entry.Value = entry.CommittedValue;
+            if (_designer is not IDesignerEventHost eventHost ||
+                !await eventHost.NavigateToEventHandlerAsync(entry.NodeId, entry.Name, _loadCts?.Token ?? CancellationToken.None))
+            {
+                throw new InvalidOperationException("The handler definition could not be opened.");
+            }
+
+            StatusText = null;
+        }
+        catch (Exception exception)
+        {
+            entry.ValidationError = exception.Message;
+            StatusText = $"{entry.Name}: {exception.Message}";
         }
         finally
         {
-            _suspendUpdates = Math.Max(0, _suspendUpdates - 1);
+            entry.IsApplying = false;
         }
+    }
+
+    private static string GetEventDraftKey(EventEntryViewModel entry) => entry.NodeId + "|" + entry.Name;
+
+    private void SetEventError(EventEntryViewModel entry, PendingEventHandler draft, string message)
+    {
+        entry.ValidationError = message;
+        _pendingEventHandlers[GetEventDraftKey(entry)] = draft with { Value = entry.HandlerName, Error = message };
+        StatusText = $"{entry.Name}: {message}";
     }
 
     private bool FilterProperty(object? item)
@@ -1479,7 +1907,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         if (!ShowLocalValuesOnly)
         {
             Dictionary<string, List<PropertyEntryViewModel>> categories = new(StringComparer.OrdinalIgnoreCase);
-            foreach (PropertyEntryViewModel entry in filtered)
+            foreach (PropertyEntryViewModel entry in filtered.Where(entry => !entry.IsSet))
             {
                 string category = string.IsNullOrWhiteSpace(entry.Category) ? "Misc" : entry.Category;
                 if (!categories.TryGetValue(category, out List<PropertyEntryViewModel>? list))

@@ -39,7 +39,9 @@ public sealed class ToolboxDropHandler
         string typeName,
         string defaultXaml,
         IDesignItem? targetItem,
-        DropPosition position)
+        DropPosition position,
+        string xmlNamespace = "https://github.com/avaloniaui",
+        ITypeMetadataService? metadata = null)
     {
         if (targetItem is not DesignItem designItem)
         {
@@ -49,41 +51,17 @@ public sealed class ToolboxDropHandler
         MutableAstObjectNode newNode = new()
         {
             TypeName = typeName,
-            XmlNamespace = "https://github.com/avaloniaui"
+            XmlNamespace = xmlNamespace
         };
 
-        MutableAstObjectNode parentNode = designItem.AstNode;
-
-        switch (position)
-        {
-            case DropPosition.Inside:
-                parentNode.Children.Add(newNode);
-                break;
-
-            case DropPosition.Before:
-                if (designItem.Parent is DesignItem parentItem)
-                {
-                    int index = parentItem.AstNode.Children.IndexOf(designItem.AstNode);
-                    if (index >= 0)
-                    {
-                        parentItem.AstNode.Children.Insert(index, newNode);
-                    }
-                }
-                break;
-
-            case DropPosition.After:
-                if (designItem.Parent is DesignItem parentItem2)
-                {
-                    int index = parentItem2.AstNode.Children.IndexOf(designItem.AstNode);
-                    if (index >= 0)
-                    {
-                        parentItem2.AstNode.Children.Insert(index + 1, newNode);
-                    }
-                }
-                break;
-        }
-
-        return newNode;
+        LayoutEditService editor = new(metadata);
+        if (position == DropPosition.Inside)
+            return editor.TryInsert(designItem.AstNode, newNode, out _) ? newNode : null;
+        MutableAstObjectNode? parent = LayoutEditService.GetParent(designItem.AstNode);
+        if (parent is null) return null;
+        int index = editor.GetChildren(parent).ToList().IndexOf(designItem.AstNode);
+        if (index < 0) return null;
+        return editor.TryInsert(parent, newNode, out _, index + (position == DropPosition.After ? 1 : 0)) ? newNode : null;
     }
 }
 
@@ -95,78 +73,20 @@ public sealed class SurfaceDropHandler
     /// <summary>
     /// Moves a design item to a new position relative to a target.
     /// </summary>
-    public bool Move(IDesignItem source, IDesignItem target, DropPosition position)
+    public bool Move(IDesignItem source, IDesignItem target, DropPosition position, ITypeMetadataService? metadata = null)
     {
         if (source is not DesignItem sourceItem || target is not DesignItem targetItem)
         {
             return false;
         }
 
-        // Prevent dropping onto self or descendant
-        if (IsDescendantOf(targetItem, sourceItem))
-        {
-            return false;
-        }
-
-        // For Before/After, verify the target has a parent before removing source
-        if (position is DropPosition.Before or DropPosition.After && targetItem.Parent is not DesignItem)
-        {
-            return false;
-        }
-
-        // Remove from current parent
-        MutableAstNode sourceNode = sourceItem.AstNode;
-        if (sourceItem.Parent is DesignItem currentParent)
-        {
-            currentParent.AstNode.Children.Remove(sourceNode);
-            currentParent.RemoveChild(sourceItem);
-        }
-
-        // Add to new position
-        switch (position)
-        {
-            case DropPosition.Inside:
-                targetItem.AstNode.Children.Add(sourceNode);
-                break;
-
-            case DropPosition.Before:
-                if (targetItem.Parent is DesignItem newParent)
-                {
-                    int index = newParent.AstNode.Children.IndexOf(targetItem.AstNode);
-                    if (index >= 0)
-                    {
-                        newParent.AstNode.Children.Insert(index, sourceNode);
-                    }
-                }
-                break;
-
-            case DropPosition.After:
-                if (targetItem.Parent is DesignItem newParent2)
-                {
-                    int index = newParent2.AstNode.Children.IndexOf(targetItem.AstNode);
-                    if (index >= 0)
-                    {
-                        newParent2.AstNode.Children.Insert(index + 1, sourceNode);
-                    }
-                }
-                break;
-        }
-
+        LayoutEditService editor = new(metadata);
+        DesignItem? newParent = position == DropPosition.Inside ? targetItem : targetItem.Parent as DesignItem;
+        if (newParent is null || !editor.TryMoveRelative(sourceItem.AstNode, targetItem.AstNode, position, out _)) return false;
+        if (sourceItem.Parent is DesignItem previousParent) previousParent.RemoveChild(sourceItem);
+        int index = editor.GetChildren(newParent.AstNode).OfType<MutableAstObjectNode>().ToList().IndexOf(sourceItem.AstNode);
+        newParent.InsertChild(Math.Clamp(index, 0, newParent.Children.Count), sourceItem);
         return true;
-    }
-
-    private static bool IsDescendantOf(IDesignItem potentialDescendant, IDesignItem ancestor)
-    {
-        IDesignItem? current = potentialDescendant;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, ancestor))
-            {
-                return true;
-            }
-            current = current.Parent;
-        }
-        return false;
     }
 }
 
@@ -178,7 +98,8 @@ public sealed class TreeDropHandler
     /// <summary>
     /// Moves a node in the AST based on tree view drag-and-drop.
     /// </summary>
-    public bool MoveNode(Guid sourceNodeId, Guid targetNodeId, DropPosition position, AstNodeMap nodeMap)
+    public bool MoveNode(Guid sourceNodeId, Guid targetNodeId, DropPosition position, AstNodeMap nodeMap,
+        ITypeMetadataService? metadata = null)
     {
         MutableAstNode? sourceNode = nodeMap.FindById(sourceNodeId);
         MutableAstNode? targetNode = nodeMap.FindById(targetNodeId);
@@ -189,49 +110,6 @@ public sealed class TreeDropHandler
             return false;
         }
 
-        // For Before/After positions, verify target has a valid parent before removing source
-        if (position is DropPosition.Before or DropPosition.After &&
-            target.Parent is not MutableAstObjectNode)
-        {
-            return false;
-        }
-
-        // Remove source from current parent
-        if (source.Parent is MutableAstObjectNode currentParent)
-        {
-            currentParent.Children.Remove(source);
-        }
-
-        // Insert at new position
-        switch (position)
-        {
-            case DropPosition.Inside:
-                target.Children.Add(source);
-                break;
-
-            case DropPosition.Before:
-                if (target.Parent is MutableAstObjectNode newParent)
-                {
-                    int index = newParent.Children.IndexOf(target);
-                    if (index >= 0)
-                    {
-                        newParent.Children.Insert(index, source);
-                    }
-                }
-                break;
-
-            case DropPosition.After:
-                if (target.Parent is MutableAstObjectNode newParent2)
-                {
-                    int index = newParent2.Children.IndexOf(target);
-                    if (index >= 0)
-                    {
-                        newParent2.Children.Insert(index + 1, source);
-                    }
-                }
-                break;
-        }
-
-        return true;
+        return new LayoutEditService(metadata).TryMoveRelative(source, target, position, out _);
     }
 }

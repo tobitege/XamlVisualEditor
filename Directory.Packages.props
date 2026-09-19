@@ -4,16 +4,18 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Avalonia -->
-    <PackageVersion Include="Avalonia" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Remote.Protocol" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Skia" Version="12.1.1" />
+    <PackageVersion Include="Avalonia" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Remote.Protocol" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.2" />
     <PackageVersion Include="ProDiagnostics" Version="12.1.0.4" />
     <PackageVersion Include="ProDataGrid" Version="12.1.0.4" />
-    <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.1" />
+    <PackageVersion Include="Chrome.DevTools.Avalonia" Version="0.1.0-preview.33" />
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.2" />
     <!-- AvaloniaEdit -->
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
@@ -34,6 +36,7 @@
     <PackageVersion Include="Microsoft.Build.Framework" Version="18.3.3" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.9.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />

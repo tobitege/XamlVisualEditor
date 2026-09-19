@@ -210,7 +210,11 @@ public sealed class ControlFactory
 
     private Control? InstantiateControl(MutableAstObjectNode astNode)
     {
-        if (TryCreateBuiltInControl(astNode.TypeName, out Control? builtIn))
+        TypeMetadata? type = _metadata?.GetType(astNode.XmlNamespace, astNode.TypeName);
+        bool isStandardControl = type?.IsStandardControl
+            ?? (string.IsNullOrEmpty(astNode.XmlNamespace)
+                || string.Equals(astNode.XmlNamespace, "https://github.com/avaloniaui", StringComparison.Ordinal));
+        if (isStandardControl && TryCreateBuiltInControl(type?.Name ?? astNode.TypeName, out Control? builtIn))
         {
             return builtIn;
         }
@@ -480,8 +484,7 @@ public sealed class ControlFactory
             return null;
         }
 
-        TypeMetadata? meta = _metadata.GetType(xmlNamespace, typeName)
-            ?? _metadata.GetType(string.Empty, typeName);
+        TypeMetadata? meta = _metadata.GetType(xmlNamespace, typeName);
         if (meta is null)
         {
             return null;

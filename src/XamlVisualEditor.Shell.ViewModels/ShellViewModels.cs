@@ -12,6 +12,7 @@ using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Xml.Linq;
 using System.Diagnostics;
@@ -611,6 +612,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
     public TextDocumentViewModel(string filePath, ILanguageIntellisenseRegistry? languageRegistry = null)
     {
         FilePath = filePath;
+        TrackDocumentHistory();
         LanguageId = GetLanguageIdForFile(filePath);
         _languageService = languageRegistry?.GetService(filePath, LanguageId);
         _documentSyncService = _languageService as ILanguageDocumentSync;
@@ -620,7 +622,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             h => Document.TextChanged += h,
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
-            .Subscribe(_ => IsModified = true);
+            .Subscribe(_ => UpdateFileModifiedState());
         _disposables.Add(textChangedSubscription);
 
         IDisposable diagnosticsSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
@@ -719,7 +721,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             return;
         }
 
-        string text = await System.IO.File.ReadAllTextAsync(FilePath);
+        string text = await ReadDocumentFileAsync();
         _suppressTextChanged = true;
         try
         {
@@ -738,8 +740,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
     private async System.Threading.Tasks.Task SaveAsync()
     {
-        await System.IO.File.WriteAllTextAsync(FilePath, Document.Text);
-        IsModified = false;
+        await SaveDocumentFileAsync();
     }
 
     public void Dispose()
@@ -962,22 +963,46 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             return;
         }
 
+        TextEdit[] orderedEdits = edits.OrderByDescending(edit => edit.Offset).ToArray();
+        int previousOffset = -1;
+        foreach (TextEdit edit in orderedEdits)
+        {
+            ArgumentNullException.ThrowIfNull(edit.NewText);
+            if (edit.Offset < 0 || edit.Length < 0 || edit.Offset > Document.TextLength - edit.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(edits), "A text edit is outside the document.");
+            }
+
+            if (previousOffset >= 0 && (edit.Offset == previousOffset || edit.Offset + edit.Length > previousOffset))
+            {
+                throw new ArgumentException("Text edits must not overlap or share a starting offset.", nameof(edits));
+            }
+
+            previousOffset = edit.Offset;
+        }
+
         _suppressTextChanged = true;
         try
         {
-            foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
+            Document.BeginUpdate();
+            try
             {
-                int offset = Math.Clamp(edit.Offset, 0, Document.TextLength);
-                int length = Math.Clamp(edit.Length, 0, Document.TextLength - offset);
-                Document.Replace(offset, length, edit.NewText);
+                foreach (TextEdit edit in orderedEdits)
+                {
+                    Document.Replace(edit.Offset, edit.Length, edit.NewText);
+                }
+            }
+            finally
+            {
+                Document.EndUpdate();
             }
         }
         finally
         {
             _suppressTextChanged = false;
+            UpdateFileModifiedState();
         }
 
-        IsModified = true;
         _ = RefreshDiagnosticsAsync();
         _ = NotifyDocumentChangedAsync();
     }
@@ -2092,6 +2117,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly IWorkspaceService? _workspaceService;
     private readonly IWorkspaceInfoUpdater? _workspaceInfoUpdater;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly IControlCatalogUpdater? _controlCatalogUpdater;
+    private readonly IClipboardService? _clipboardService;
     private readonly IDotNetCli _dotNetCli;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
@@ -2564,6 +2591,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private ReactiveCommand<Unit, Unit> CutCommand { get; }
     private ReactiveCommand<Unit, Unit> CopyCommand { get; }
     private ReactiveCommand<Unit, Unit> PasteCommand { get; }
+    private ReactiveCommand<Unit, Unit> DuplicateCommand { get; }
     private ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     private ReactiveCommand<Unit, Unit> SelectAllCommand { get; }
     private ReactiveCommand<Unit, Unit> RenameSymbolCommand { get; }
@@ -2630,11 +2658,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null,
         ISystemIconService? systemIconService = null,
-        IDotNetCli? dotNetCli = null)
+        IDotNetCli? dotNetCli = null,
+        IControlCatalogUpdater? controlCatalogUpdater = null,
+        IClipboardService? clipboardService = null)
     {
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
         _metadataService = metadataService;
+        _controlCatalogUpdater = controlCatalogUpdater;
+        _clipboardService = clipboardService;
         _dotNetCli = dotNetCli ?? new DotNetCliRunner();
         _languageRegistry = languageRegistry;
         _debuggerRegistry = debuggerRegistry ?? new DebuggerServiceRegistry();
@@ -2714,7 +2746,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DockFactory = new XamlEditorDockFactory(
             this,
             _loggerFactory?.CreateLogger<XamlEditorDockFactory>());
-        IRootDock layout = DockFactory.LoadLayout() ?? DockFactory.CreateDefaultLayout();
+        IRootDock? persistedLayout = DockFactory.LoadLayout();
+        IRootDock layout = persistedLayout ?? DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
         DockFactory.EnsureOwnerReferences(layout);
@@ -2758,7 +2791,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         RefreshExtensionContributions();
         UpdateFileNewMenuEntries();
         SyncExtensionDockables();
-        DockFactory.CollapseBottomToolDock(DockLayout);
+        if (persistedLayout is null) DockFactory.CollapseBottomToolDock(DockLayout);
 
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
@@ -2768,14 +2801,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IObservable<bool> hasTextDoc = this.WhenAnyValue(x => x.ActiveTextDocument).Select(d => d is not null);
         IObservable<bool> hasEditableDoc = hasDesignerDoc.CombineLatest(hasTextDoc, (designer, text) => designer || text);
         IObservable<bool> hasDesignerSelection = ObserveDesignerDocumentState(
-            doc => doc.SelectedNodeId is not null,
-            doc => doc.WhenAnyValue(x => x.SelectedNodeId).Select(_ => Unit.Default));
+            doc => doc.SelectionSource == SyncSource.CodeEditor
+                ? doc.CodeEditor.SelectionLength > 0 : doc.SelectedNodeId is not null,
+            doc => doc.WhenAnyValue(x => x.SelectedNodeId, x => x.SelectionSource).Select(_ => Unit.Default),
+            doc => doc.CodeEditor.WhenAnyValue(x => x.SelectionLength).Select(_ => Unit.Default));
         IObservable<bool> canUndoDesigner = ObserveDesignerDocumentState(
             doc => doc.SyncEngine.UndoRedo.CanUndo,
-            doc => doc.SyncEngine.SyncEvents.Select(_ => Unit.Default));
+            doc => Observable.FromEvent(
+                handler => doc.SyncEngine.UndoRedo.StateChanged += handler,
+                handler => doc.SyncEngine.UndoRedo.StateChanged -= handler));
         IObservable<bool> canRedoDesigner = ObserveDesignerDocumentState(
             doc => doc.SyncEngine.UndoRedo.CanRedo,
-            doc => doc.SyncEngine.SyncEvents.Select(_ => Unit.Default));
+            doc => Observable.FromEvent(
+                handler => doc.SyncEngine.UndoRedo.StateChanged += handler,
+                handler => doc.SyncEngine.UndoRedo.StateChanged -= handler));
         IObservable<bool> hasTextSelection = ObserveTextDocumentState(
             doc => GetTextSelectionLength(doc) > 0,
             doc => doc.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength).Select(_ => Unit.Default));
@@ -2807,7 +2846,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IObservable<bool> canRedoEdit = canRedoDesigner.CombineLatest(canRedoText, (designer, text) => designer || text);
         IObservable<bool> canCutOrCopy = hasDesignerSelection.CombineLatest(hasTextSelection, (designer, text) => designer || text);
         IObservable<bool> canDeleteEdit = hasDesignerSelection.CombineLatest(canDeleteText, (designer, text) => designer || text);
-        IObservable<bool> canPasteEdit = hasEditableDoc.CombineLatest(hasClipboardText, (editable, clipboard) => editable && clipboard);
+        IObservable<bool> canPasteEdit = hasEditableDoc.CombineLatest(hasClipboardText,
+            (editable, clipboard) => editable && (_clipboardService is not null || clipboard));
         SaveDocumentCommand = ReactiveCommand.CreateFromTask(SaveActiveDocumentAsync, hasActiveDoc);
         SaveAllCommand = ReactiveCommand.CreateFromTask(SaveAllAsync);
         ExitCommand = ReactiveCommand.Create(() =>
@@ -2858,7 +2898,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         WorkspaceSymbolsCommand = ReactiveCommand.CreateFromTask(ShowWorkspaceSymbolsAsync, hasTextDoc);
 
         // Edit commands
-        UndoCommand = ReactiveCommand.Create(() =>
+        UndoCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
             if (ActiveDesignerDocument is not null)
             {
@@ -2866,10 +2906,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            ActiveTextDocument?.Document.UndoStack.Undo();
-        }, canUndoEdit);
+                ActiveTextDocument?.Undo();
+        }), canUndoEdit);
 
-        RedoCommand = ReactiveCommand.Create(() =>
+        RedoCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
             if (ActiveDesignerDocument is not null)
             {
@@ -2877,124 +2917,58 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            ActiveTextDocument?.Document.UndoStack.Redo();
-        }, canRedoEdit);
+                ActiveTextDocument?.Redo();
+        }), canRedoEdit);
 
-        CutCommand = ReactiveCommand.Create(() =>
+        CutCommand = ReactiveCommand.CreateFromTask(
+            () => RunClipboardEditAsync(() => CopySelectionAsync(cut: true)), canCutOrCopy);
+        CopyCommand = ReactiveCommand.CreateFromTask(
+            () => RunClipboardEditAsync(() => CopySelectionAsync(cut: false)), canCutOrCopy);
+        PasteCommand = ReactiveCommand.CreateFromTask(
+            () => RunClipboardEditAsync(PasteSelectionAsync), canPasteEdit);
+        DuplicateCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
-            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument is not { } document) return;
+            DesignerSelectionEditor editor = new(document.SyncEngine, _metadataService);
+            ApplyDesignerSelection(document, editor.Duplicate(GetSelectedObjects(document)));
+        }), hasDesignerSelection);
+        DeleteCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
+        {
+            if (ActiveDesignerDocument is { } document)
             {
-                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
-                if (node?.Parent is MutableAstObjectNode parent)
+                if (document.SelectionSource == SyncSource.CodeEditor)
                 {
-                    XamlSerializationService ser = new();
-                    MutableAstDocument tempDoc = new() { Root = node };
-                    SetClipboardText(ser.Serialize(tempDoc));
-                    parent.Children.Remove(node);
-                    ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
-                    ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
-                        ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                    int start = Math.Clamp(document.CodeEditor.SelectionStart, 0, document.CodeEditor.Document.TextLength);
+                    int length = Math.Clamp(document.CodeEditor.SelectionLength, 0, document.CodeEditor.Document.TextLength - start);
+                    if (length > 0) document.CodeEditor.Document.Remove(start, length);
+                    document.CodeEditor.SelectionLength = 0;
+                    document.CodeEditor.CaretOffset = start;
                     return;
                 }
+                new DesignerSelectionEditor(document.SyncEngine, _metadataService).Delete(GetSelectedObjects(document));
+                ApplyDesignerSelection(document, Array.Empty<MutableAstObjectNode>());
+                return;
             }
-
-            if (ActiveTextDocument is not null && TryGetSelectedText(ActiveTextDocument, out string selectedText))
-            {
-                SetClipboardText(selectedText);
-                ReplaceTextSelection(ActiveTextDocument, string.Empty);
-            }
-        }, canCutOrCopy);
-
-        CopyCommand = ReactiveCommand.Create(() =>
+            if (ActiveTextDocument is { } textDocument) DeleteTextSelectionOrCharacter(textDocument);
+        }), canDeleteEdit);
+        SelectAllCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
-            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument is { } document)
             {
-                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
-                if (node is not null)
+                if (document.SelectionSource == SyncSource.CodeEditor)
                 {
-                    XamlSerializationService ser = new();
-                    MutableAstDocument tempDoc = new() { Root = node };
-                    SetClipboardText(ser.Serialize(tempDoc));
+                    document.CodeEditor.SelectAll();
                     return;
                 }
-            }
-
-            if (ActiveTextDocument is not null && TryGetSelectedText(ActiveTextDocument, out string selectedText))
-            {
-                SetClipboardText(selectedText);
-            }
-        }, canCutOrCopy);
-
-        PasteCommand = ReactiveCommand.Create(() =>
-        {
-            if (string.IsNullOrEmpty(_clipboard))
-            {
+                MutableAstObjectNode? selected = GetSelectedObjects(document).FirstOrDefault();
+                MutableAstObjectNode? parent = selected is null ? null : LayoutEditService.GetParent(selected);
+                parent ??= document.SyncEngine.CurrentDocument?.Root;
+                if (parent is not null)
+                    ApplyDesignerSelection(document, new LayoutEditService(_metadataService).GetChildren(parent).OfType<MutableAstObjectNode>().ToArray());
                 return;
             }
-
-            if (ActiveDesignerDocument is not null)
-            {
-                // Parse the clipboard XAML and add to selected parent or root
-                XamlParsingService parser = new();
-                ParseResult result = parser.Parse(_clipboard);
-                if (result.Document is MutableAstDocument pastedDoc && pastedDoc.Root is not null)
-                {
-                    MutableAstObjectNode? parent = null;
-                    if (ActiveDesignerDocument.SelectedNodeId is { } selId)
-                    {
-                        parent = ActiveDesignerDocument.NodeMap.FindById(selId) as MutableAstObjectNode;
-                    }
-
-                    parent ??= ActiveDesignerDocument.SyncEngine.CurrentDocument?.Root;
-
-                    if (parent is not null)
-                    {
-                        parent.Children.Add(pastedDoc.Root);
-                        ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
-                            ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
-                    }
-                }
-
-                return;
-            }
-
-            if (ActiveTextDocument is not null)
-            {
-                ReplaceTextSelection(ActiveTextDocument, _clipboard);
-            }
-        }, canPasteEdit);
-
-        DeleteCommand = ReactiveCommand.Create(() =>
-        {
-            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
-            {
-                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
-                if (node?.Parent is MutableAstObjectNode parent)
-                {
-                    parent.Children.Remove(node);
-                    ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
-                    ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
-                        ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
-                    return;
-                }
-            }
-
-            if (ActiveTextDocument is not null)
-            {
-                DeleteTextSelectionOrCharacter(ActiveTextDocument);
-            }
-        }, canDeleteEdit);
-
-        SelectAllCommand = ReactiveCommand.Create(() =>
-        {
-            if (ActiveDesignerDocument is not null)
-            {
-                ActiveDesignerDocument.CodeEditor.SelectAll();
-                return;
-            }
-
             SelectAllText(ActiveTextDocument);
-        }, hasEditableDoc);
+        }), hasEditableDoc);
 
         // View commands
         ToggleBreakpointsCommand = ReactiveCommand.Create(() =>
@@ -3386,6 +3360,158 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Select(_ => Unit.Default);
     }
 
+    private void ConfigureDesignerCommands(DesignerDocumentViewModel document)
+    {
+        document.DesignSurface.CutCommand = CutCommand;
+        document.DesignSurface.CopyCommand = CopyCommand;
+        document.DesignSurface.PasteCommand = PasteCommand;
+        document.DesignSurface.DuplicateCommand = DuplicateCommand;
+        document.DesignSurface.DeleteSelectedCommand = DeleteCommand;
+        document.DesignSurface.SelectAllCommand = SelectAllCommand;
+        IObservable<bool> hasMultipleSelection = Observable.FromEvent<IReadOnlyList<IDesignItem>>(
+            handler => document.DesignSurface.Selection.SelectionChanged += handler,
+            handler => document.DesignSurface.Selection.SelectionChanged -= handler)
+            .Select(items => items.Count >= 2).StartWith(false);
+        foreach (DesignerLayoutOperation operation in Enum.GetValues<DesignerLayoutOperation>())
+        {
+            string title = DesignerLayoutEditor.Title(operation);
+            ReactiveCommand<Unit, Unit> command = ReactiveCommand.Create(() => RunDesignerEdit(() =>
+            {
+                new DesignerLayoutEditor(document).Apply(operation);
+                StatusText = title;
+            }), hasMultipleSelection);
+            document.DesignSurface.LayoutActions.Add(new DesignerLayoutAction(title,
+                "Canvas uses the primary selection or selection extent. Grid uses its cells; existing definitions remain unchanged. StackPanel distribution changes shared spacing and requires all children.", command));
+        }
+    }
+
+    private static IReadOnlyList<MutableAstObjectNode> GetSelectedObjects(DesignerDocumentViewModel document)
+    {
+        MutableAstObjectNode[] selected = document.DesignSurface.Selection.SelectedItems.OfType<DesignItem>()
+            .Select(item => document.NodeMap.FindById(item.AstNodeId)).OfType<MutableAstObjectNode>().ToArray();
+        if (selected.Length > 0) return selected;
+        return document.SelectedNodeId is { } id && document.NodeMap.FindById(id) is MutableAstObjectNode node
+            ? new[] { node } : Array.Empty<MutableAstObjectNode>();
+    }
+
+    private static void ApplyDesignerSelection(DesignerDocumentViewModel document, IReadOnlyList<MutableAstObjectNode> nodes)
+    {
+        document.SetSelectedNode(nodes.FirstOrDefault()?.Id, SyncSource.DesignSurface);
+        document.DesignSurface.RequestSelection(nodes.Select(node => node.Id));
+    }
+
+    private void RunDesignerEdit(Action action)
+    {
+        try { action(); }
+        catch (Exception exception)
+        {
+            StatusText = exception.Message;
+            _logger.LogWarning(exception, "Designer edit failed");
+        }
+    }
+
+    private async Task RunClipboardEditAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception exception)
+        {
+            StatusText = exception.Message;
+            _logger.LogWarning(exception, "Clipboard edit failed");
+        }
+    }
+
+    private async Task WriteClipboardAsync(string text)
+    {
+        if (_clipboardService is not null) await _clipboardService.SetTextAsync(text);
+        SetClipboardText(text);
+    }
+
+    private async Task CopySelectionAsync(bool cut)
+    {
+        DesignerDocumentViewModel? designer = ActiveDesignerDocument;
+        if (designer is not null && designer.SelectionSource != SyncSource.CodeEditor)
+        {
+            DesignerSelectionEditor editor = new(designer.SyncEngine, _metadataService);
+            IReadOnlyList<MutableAstObjectNode> nodes = editor.SelectionRoots(GetSelectedObjects(designer));
+            if (nodes.Count == 0) return;
+            if (cut && nodes.Any(node => LayoutEditService.GetParent(node) is null))
+                throw new InvalidOperationException("The document root cannot be cut.");
+            string? source = designer.SyncEngine.CurrentText;
+            await WriteClipboardAsync(editor.Copy(nodes));
+            if (!cut) return;
+            if (!ReferenceEquals(ActiveDesignerDocument, designer) || designer.SyncEngine.CurrentText != source
+                || designer.SelectionSource == SyncSource.CodeEditor
+                || !editor.SelectionRoots(GetSelectedObjects(designer)).Select(node => node.Id).SequenceEqual(nodes.Select(node => node.Id)))
+                throw new InvalidOperationException("Cut canceled because the document or selection changed.");
+            editor.Delete(nodes);
+            ApplyDesignerSelection(designer, Array.Empty<MutableAstObjectNode>());
+            return;
+        }
+
+        TextDocumentViewModel? text = ActiveTextDocument;
+        var buffer = designer?.CodeEditor.Document ?? text?.Document;
+        if (buffer is null) return;
+        int start = Math.Clamp(designer?.CodeEditor.SelectionStart ?? text!.SelectionStart, 0, buffer.TextLength);
+        int length = Math.Clamp(designer?.CodeEditor.SelectionLength ?? text!.SelectionLength, 0, buffer.TextLength - start);
+        if (length == 0) return;
+        string original = buffer.Text;
+        var active = ActiveDocument;
+        await WriteClipboardAsync(buffer.GetText(start, length));
+        if (!cut) return;
+        if (!ReferenceEquals(ActiveDocument, active) || buffer.Text != original
+            || (designer?.CodeEditor.SelectionStart ?? text!.SelectionStart) != start
+            || (designer?.CodeEditor.SelectionLength ?? text!.SelectionLength) != length
+            || designer is not null && designer.SelectionSource != SyncSource.CodeEditor)
+            throw new InvalidOperationException("Cut canceled because the document or selection changed.");
+        buffer.Remove(start, length);
+        if (designer is not null)
+        {
+            designer.CodeEditor.SelectionLength = 0;
+            designer.CodeEditor.CaretOffset = start;
+        }
+        else
+        {
+            text!.SelectionLength = 0;
+            text.CaretOffset = start;
+        }
+    }
+
+    private async Task PasteSelectionAsync()
+    {
+        var active = ActiveDocument;
+        DesignerDocumentViewModel? designer = ActiveDesignerDocument;
+        TextDocumentViewModel? text = ActiveTextDocument;
+        bool visual = designer is not null && designer.SelectionSource != SyncSource.CodeEditor;
+        var buffer = designer?.CodeEditor.Document ?? text?.Document;
+        if (buffer is null) return;
+        string original = buffer.Text;
+        int start = Math.Clamp(designer?.CodeEditor.SelectionStart ?? text!.SelectionStart, 0, buffer.TextLength);
+        int length = Math.Clamp(designer?.CodeEditor.SelectionLength ?? text!.SelectionLength, 0, buffer.TextLength - start);
+        Guid? selectedId = designer?.SelectedNodeId;
+        string? clipboard = _clipboardService is null ? _clipboard : await _clipboardService.GetTextAsync();
+        if (string.IsNullOrEmpty(clipboard)) return;
+        if (!ReferenceEquals(ActiveDocument, active) || buffer.Text != original
+            || visual != (designer is not null && designer.SelectionSource != SyncSource.CodeEditor)
+            || visual && designer!.SelectedNodeId != selectedId
+            || !visual && ((designer?.CodeEditor.SelectionStart ?? text!.SelectionStart) != start
+                || (designer?.CodeEditor.SelectionLength ?? text!.SelectionLength) != length))
+            throw new InvalidOperationException("Paste canceled because the document or selection changed.");
+        if (visual)
+        {
+            MutableAstObjectNode? selected = selectedId is { } id ? designer!.NodeMap.FindById(id) as MutableAstObjectNode : null;
+            DesignerSelectionEditor editor = new(designer!.SyncEngine, _metadataService);
+            ApplyDesignerSelection(designer, editor.Paste(clipboard, selected));
+        }
+        else if (designer is not null)
+        {
+            buffer.Replace(start, length, clipboard);
+            designer.CodeEditor.SelectionStart = start + clipboard.Length;
+            designer.CodeEditor.SelectionLength = 0;
+            designer.CodeEditor.CaretOffset = start + clipboard.Length;
+        }
+        else ReplaceTextSelection(text!, clipboard);
+    }
+
     private void SetClipboardText(string? text)
     {
         if (string.Equals(_clipboard, text, StringComparison.Ordinal))
@@ -3516,6 +3642,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             _languageRegistry);
         doc.StartPreviewerCommand = StartPreviewerCommand;
         doc.Breakpoints = Breakpoints;
+        ConfigureDesignerCommands(doc);
         Documents.Add(doc);
         ActiveDocument = doc;
         AddDocumentToDock(doc);
@@ -4733,6 +4860,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             "editing.cut" => CutCommand,
             "editing.copy" => CopyCommand,
             "editing.paste" => PasteCommand,
+            "editing.duplicate" => DuplicateCommand,
             "editing.delete" => DeleteCommand,
             "editing.selectAll" => SelectAllCommand,
             "navigation.renameSymbol" => RenameSymbolCommand,
@@ -4928,7 +5056,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         foreach (ExtensionTool tool in XamlEditorDockFactory.FindDockables<ExtensionTool>(DockLayout))
         {
-            if (string.IsNullOrWhiteSpace(tool.ViewId) || !_extensionViews.ContainsKey(tool.ViewId))
+            if (string.IsNullOrWhiteSpace(tool.ViewId))
             {
                 if (tool.Owner is IDock dock && dock.VisibleDockables is not null)
                 {
@@ -4982,10 +5110,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (outputTool.Owner is IDock dock && dock.VisibleDockables is not null)
-        {
-            dock.VisibleDockables.Remove(outputTool);
-        }
+        DockFactory.CloseDockable(outputTool);
 
         IsOutputVisible = false;
     }
@@ -6476,6 +6601,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         _workspace = null;
+        _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
         _workspacePath = folderPath;
         _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
         HasWorkspace = false;
@@ -6573,6 +6699,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 _languageRegistry);
             designer.StartPreviewerCommand = StartPreviewerCommand;
             designer.Breakpoints = Breakpoints;
+            ConfigureDesignerCommands(designer);
             Documents.Add(designer);
             ActiveDocument = designer;
             AddDocumentToDock(designer);
@@ -6811,6 +6938,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             _workspace = workspace;
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
             _workspacePath = workspacePath;
             _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
             HasWorkspace = true;
@@ -6846,6 +6974,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 UpdateWorkspaceDesignThemes(workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
             }
+
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(assemblySet.All);
 
             if (_languageRegistry is not null)
             {
@@ -7719,6 +7849,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 UpdateWorkspaceDesignThemes(_workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
             }
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(assemblySet.All);
             LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
             StatusText = $"dotnet {displayCommand} completed";
         }

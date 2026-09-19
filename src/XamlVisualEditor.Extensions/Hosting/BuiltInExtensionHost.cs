@@ -35,6 +35,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly ITerminalBridge _terminal;
     private readonly IExtensionViewHost _viewHost;
     private readonly ISettings _settings;
+    private readonly IControlCatalog? _controlCatalog;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
 
@@ -66,7 +67,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         IPropertyEditorRegistry propertyEditors,
         ITerminalBridge terminal,
         IExtensionViewHost viewHost,
-        ISettings settings)
+        ISettings settings,
+        IControlCatalog? controlCatalog = null)
     {
         _extensions = extensions;
         _commands = commands;
@@ -96,6 +98,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _terminal = terminal;
         _viewHost = viewHost;
         _settings = settings;
+        _controlCatalog = controlCatalog;
     }
 
     public async Task ActivateAsync(CancellationToken cancellationToken)
@@ -108,8 +111,9 @@ public sealed class BuiltInExtensionHost : IDisposable
         _activated = true;
         foreach (IXveExtension extension in _extensions)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ExtensionContext context = CreateContext(extension);
-            await extension.ActivateAsync(context, cancellationToken).ConfigureAwait(false);
+            await extension.ActivateAsync(context, cancellationToken);
         }
     }
 
@@ -170,7 +174,10 @@ public sealed class BuiltInExtensionHost : IDisposable
             _settings,
             storage,
             logger,
-            subscriptions);
+            subscriptions)
+        {
+            ControlCatalog = _controlCatalog
+        };
     }
 
     private static string ResolveExtensionId(IXveExtension extension)

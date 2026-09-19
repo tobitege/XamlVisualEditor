@@ -9,9 +9,10 @@ public sealed class ToolboxExtension : IXveExtension
     private const string ToolboxViewId = "toolbox.panel";
     private const string ToggleViewCommandId = "toolbox.toggleView";
 
-    public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
+    public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
-        ToolboxPanelViewModel viewModel = new(context.Commands, context.Settings);
+        ToolboxPanelViewModel viewModel = new(context.Commands, context.Settings, context.ControlCatalog);
+        context.Subscriptions.Add(viewModel);
 
         context.Subscriptions.Add(context.Commands.Register(InsertButtonCommandId, _ => InsertButtonAsync(context, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(InsertSelectedCommandId, commandContext =>
@@ -82,7 +83,10 @@ public sealed class ToolboxExtension : IXveExtension
                     20)
             }));
 
-        return Task.CompletedTask;
+        if (context.ControlCatalog is not null)
+        {
+            await viewModel.ReloadAsync(cancellationToken);
+        }
     }
 
     private static async Task InsertButtonAsync(ExtensionContext context, CancellationToken cancellationToken)

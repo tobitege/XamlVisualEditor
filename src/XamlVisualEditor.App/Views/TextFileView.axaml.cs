@@ -39,9 +39,48 @@ public sealed partial class TextFileView : UserControl
     public TextFileView()
     {
         InitializeComponent();
+        AddHandler(KeyDownEvent, OnHistoryKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Loaded += OnLoaded;
         DataContextChanged += OnDataContextChanged;
         DetachedFromLogicalTree += OnDetachedFromLogicalTree;
+    }
+
+    private void OnHistoryKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || DataContext is not TextDocumentViewModel document)
+        {
+            return;
+        }
+
+        KeyModifiers modifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        bool undo = e.Key == Key.Z && e.KeyModifiers == modifier;
+        bool redo = e.Key == Key.Z && e.KeyModifiers == (modifier | KeyModifiers.Shift) ||
+                    !OperatingSystem.IsMacOS() && e.Key == Key.Y && e.KeyModifiers == modifier;
+        if (!undo && !redo)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        try
+        {
+            if (redo)
+            {
+                document.Redo();
+            }
+            else
+            {
+                document.Undo();
+            }
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Warning(exception, "Document history replay failed");
+            if (TopLevel.GetTopLevel(this)?.DataContext is MainWindowViewModel shell)
+            {
+                shell.StatusText = exception.Message;
+            }
+        }
     }
 
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)

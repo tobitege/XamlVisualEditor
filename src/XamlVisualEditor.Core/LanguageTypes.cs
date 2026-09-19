@@ -93,6 +93,9 @@ public sealed class LanguageDocumentEdit
     /// <summary>Gets the file path for the document.</summary>
     public required string FilePath { get; init; }
 
+    /// <summary>Gets the document text against which these edits were calculated, when supplied.</summary>
+    public string? ExpectedText { get; init; }
+
     /// <summary>Gets the text edits for the document.</summary>
     public required IReadOnlyList<TextEdit> Edits { get; init; }
 }

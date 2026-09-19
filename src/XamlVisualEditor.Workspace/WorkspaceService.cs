@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -1044,8 +1044,12 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 /// </summary>
 public sealed class TypeMetadataService : ITypeMetadataService
 {
-    private readonly Dictionary<string, TypeMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TypeMetadata> _cache = new(StringComparer.Ordinal);
+    private readonly object _catalogGate = new();
+    private readonly Dictionary<string, string> _registeredAssemblyPaths = new(StringComparer.OrdinalIgnoreCase);
+    private Lazy<IReadOnlyList<TypeMetadata>>? _typeCatalog;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, Type[]> _exportedTypesCache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Assembly, FieldInfo[]> _attachedPropertyFieldsCache = new();
     private readonly List<System.Reflection.Assembly> _loadedAssemblies = new();
     private readonly HashSet<string> _loadedAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<TypeMetadataService> _logger;
@@ -1082,16 +1086,20 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public TypeMetadata? GetType(string xmlNamespace, string typeName)
     {
-        TypeMetadata? cached = GetTypeMetadata(typeName);
-        if (cached is not null)
-        {
-            return cached;
-        }
+        TypeMetadata? catalogType = GetAvailableTypes(xmlNamespace).FirstOrDefault(type =>
+            string.Equals(type.Name, typeName, StringComparison.Ordinal)
+            || string.Equals(type.FullName, typeName, StringComparison.Ordinal));
+        if (catalogType is not null) return catalogType;
 
         if (TryResolveType(xmlNamespace, typeName, out Type? resolved))
         {
+            string key = resolved!.Assembly.FullName + "|" + resolved.FullName;
+            if (_cache.TryGetValue(key, out TypeMetadata? cached))
+            {
+                return cached;
+            }
             TypeMetadata meta = BuildMetadata(resolved!);
-            _cache[resolved!.FullName ?? resolved.Name] = meta;
+            _cache[key] = meta;
             return meta;
         }
 
@@ -1101,44 +1109,53 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null)
     {
+        IReadOnlyList<TypeMetadata> types = GetTypeCatalog();
         if (string.IsNullOrWhiteSpace(xmlNamespace))
         {
-            return Array.Empty<TypeMetadata>();
+            return types;
         }
 
-        List<TypeMetadata> results = new();
-        if (_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
+        if (TryParseClrNamespace(xmlNamespace, out string? clrNamespace, out string? assemblyName))
         {
-            foreach (XmlnsDefinition mapping in mappings)
-            {
-                foreach (System.Reflection.Assembly asm in _loadedAssemblies)
-                {
-                    string? asmName = asm.GetName().Name;
-                    if (!string.Equals(asmName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    foreach (Type type in GetExportedTypesCached(asm))
-                    {
-                        if (!string.Equals(type.Namespace, mapping.ClrNamespace, StringComparison.Ordinal))
-                        {
-                            continue;
-                        }
-
-                        results.Add(BuildMetadata(type));
-                    }
-                }
-            }
+            return types.Where(type => string.Equals(type.ClrNamespace, clrNamespace, StringComparison.Ordinal)
+                && (string.IsNullOrEmpty(assemblyName)
+                    || string.Equals(type.AssemblyName, assemblyName, StringComparison.OrdinalIgnoreCase))).ToArray();
         }
 
-        return results;
+        XmlnsDefinition[] mappings;
+        lock (_catalogGate)
+        {
+            mappings = _xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? definitions)
+                ? definitions.ToArray()
+                : Array.Empty<XmlnsDefinition>();
+        }
+        return types.Where(type => mappings.Any(mapping =>
+            string.Equals(type.AssemblyName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(type.ClrNamespace, mapping.ClrNamespace, StringComparison.Ordinal))).ToArray();
+    }
+
+    private IReadOnlyList<TypeMetadata> GetTypeCatalog()
+    {
+        Lazy<IReadOnlyList<TypeMetadata>> catalog;
+        lock (_catalogGate)
+        {
+            if (_typeCatalog is null)
+            {
+                string[] paths = _loadedAssemblies.Where(assembly => !assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
+                    .Select(assembly => assembly.Location).Concat(_registeredAssemblyPaths.Values)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                _typeCatalog = new Lazy<IReadOnlyList<TypeMetadata>>(() =>
+                    AssemblyTypeCatalog.Read(paths, message => _logger.LogWarning("{CatalogError}", message)));
+            }
+            catalog = _typeCatalog;
+        }
+        return catalog.Value;
     }
 
     /// <inheritdoc />
     public IReadOnlyList<PropertyMetadata> GetProperties(TypeMetadata type)
     {
-        Type? clrType = FindClrType(type.FullName);
+        Type? clrType = ResolveClrType(type);
         if (clrType is null)
         {
             return Array.Empty<PropertyMetadata>();
@@ -1215,7 +1232,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public IReadOnlyList<EventMetadata> GetEvents(TypeMetadata type)
     {
-        Type? clrType = FindClrType(type.FullName);
+        Type? clrType = ResolveClrType(type);
         if (clrType is null)
         {
             return Array.Empty<EventMetadata>();
@@ -1246,6 +1263,10 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// </summary>
     public TypeMetadata? GetTypeMetadata(string fullTypeName)
     {
+        TypeMetadata? catalogType = GetTypeCatalog().FirstOrDefault(type =>
+            string.Equals(type.FullName, fullTypeName, StringComparison.Ordinal));
+        if (catalogType is not null) return catalogType;
+
         if (_cache.TryGetValue(fullTypeName, out TypeMetadata? cached))
         {
             return cached;
@@ -1266,23 +1287,34 @@ public sealed class TypeMetadataService : ITypeMetadataService
     }
 
     /// <summary>
-    /// Loads an assembly for metadata lookup.
+    /// Registers assembly metadata without loading project code into the editor process.
     /// </summary>
     public void LoadAssembly(string assemblyPath)
     {
-        if (!ShouldLoadAssembly(assemblyPath, out _))
+        if (!ShouldLoadAssembly(assemblyPath, out string? assemblyName) || assemblyName is null)
         {
             return;
         }
 
         try
         {
-            System.Reflection.Assembly asm = AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
-            AddAssembly(asm);
+            var namespaces = AssemblyTypeCatalog.ReadXmlnsDefinitions(assemblyPath);
+            lock (_catalogGate)
+            {
+                if (!_registeredAssemblyPaths.TryAdd(assemblyName, assemblyPath)) return;
+                foreach (var (xmlNamespace, clrNamespace) in namespaces)
+                {
+                    if (!_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
+                        _xmlnsMappings[xmlNamespace] = mappings = new();
+                    XmlnsDefinition mapping = new(xmlNamespace, clrNamespace, assemblyName);
+                    if (!mappings.Contains(mapping)) mappings.Add(mapping);
+                }
+                _typeCatalog = null;
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("Failed to load assembly '{Path}': {Message}", assemblyPath, ex.Message);
+            _logger.LogWarning("Failed to read assembly metadata '{Path}': {Message}", assemblyPath, ex.Message);
         }
     }
 
@@ -1341,21 +1373,6 @@ public sealed class TypeMetadataService : ITypeMetadataService
             return false;
         }
 
-        if (_loadedAssemblyNames.Contains(assemblyName))
-        {
-            if (TryGetLoadedAssembly(assemblyName, out System.Reflection.Assembly? loaded) &&
-                !string.IsNullOrWhiteSpace(loaded?.Location) &&
-                !string.Equals(loaded.Location, assemblyPath, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning(
-                    "Assembly '{Name}' already loaded from '{LoadedPath}'. Skipping '{Path}'.",
-                    assemblyName,
-                    loaded.Location,
-                    assemblyPath);
-            }
-            return false;
-        }
-
         return true;
     }
 
@@ -1384,6 +1401,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public Type? ResolveClrType(TypeMetadata type)
     {
+        EnsureAssemblyLoaded(type.AssemblyName);
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
             if (!string.IsNullOrWhiteSpace(type.AssemblyName))
@@ -1402,6 +1420,24 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
 
         return null;
+    }
+
+    private void EnsureAssemblyLoaded(string? assemblyName)
+    {
+        string? assemblyPath;
+        lock (_catalogGate)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyName) || _loadedAssemblyNames.Contains(assemblyName)
+                || !_registeredAssemblyPaths.TryGetValue(assemblyName, out assemblyPath)) return;
+        }
+        try
+        {
+            AddAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to load requested designer assembly '{Path}'", assemblyPath);
+        }
     }
 
     private Type? FindClrType(string fullTypeName)
@@ -1428,7 +1464,16 @@ public sealed class TypeMetadataService : ITypeMetadataService
             Name = type.Name,
             XmlNamespace = $"clr-namespace:{clrNamespace};assembly={assemblyName}",
             ClrNamespace = clrNamespace,
-            AssemblyName = assemblyName
+            AssemblyName = assemblyName,
+            IsControl = typeof(Control).IsAssignableFrom(type),
+            IsStyle = typeof(Avalonia.Styling.Styles).IsAssignableFrom(type),
+            IsStandardControl = type.Assembly == typeof(Control).Assembly,
+            IsPanel = typeof(Panel).IsAssignableFrom(type),
+            IsContentControl = typeof(ContentControl).IsAssignableFrom(type),
+            IsItemsControl = typeof(ItemsControl).IsAssignableFrom(type),
+            IsTopLevel = typeof(TopLevel).IsAssignableFrom(type),
+            IsInstantiable = type.IsPublic && !type.IsAbstract && !type.ContainsGenericParameters
+                && type.GetConstructor(Type.EmptyTypes) is not null
         };
     }
 
@@ -1440,13 +1485,17 @@ public sealed class TypeMetadataService : ITypeMetadataService
     private void AddAssembly(System.Reflection.Assembly asm)
     {
         string? name = asm.GetName().Name;
-        if (string.IsNullOrWhiteSpace(name) || !_loadedAssemblyNames.Add(name))
+        lock (_catalogGate)
         {
-            return;
-        }
+            if (string.IsNullOrWhiteSpace(name) || !_loadedAssemblyNames.Add(name))
+            {
+                return;
+            }
 
-        _loadedAssemblies.Add(asm);
-        AddXmlnsDefinitions(asm);
+            _loadedAssemblies.Add(asm);
+            AddXmlnsDefinitions(asm);
+            _typeCatalog = null;
+        }
     }
 
     private void AddXmlnsDefinitions(System.Reflection.Assembly asm)
@@ -1561,67 +1610,42 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
-            Type[] types;
-            try
+            foreach (FieldInfo field in GetAttachedPropertyFieldsCached(asm))
             {
-                types = asm.GetTypes();
-            }
-            catch
-            {
-                continue;
-            }
-
-            foreach (Type type in types)
-            {
-                if (type.ContainsGenericParameters)
+                try
                 {
-                    continue;
-                }
-
-                foreach (System.Reflection.FieldInfo field in type.GetFields(
-                    System.Reflection.BindingFlags.Public |
-                    System.Reflection.BindingFlags.Static |
-                    System.Reflection.BindingFlags.FlattenHierarchy))
-                {
-                    try
-                    {
-                        if (!typeof(Avalonia.AvaloniaProperty).IsAssignableFrom(field.FieldType))
-                        {
-                            continue;
-                        }
-
-                        Avalonia.AvaloniaProperty? prop = field.GetValue(null) as Avalonia.AvaloniaProperty;
-                        if (prop is null || !prop.IsAttached)
-                        {
-                            continue;
-                        }
-
-                        string name = $"{type.Name}.{prop.Name}";
-                        if (!seen.Add(name))
-                        {
-                            continue;
-                        }
-
-                        (string category, string? description) = GetCategoryAndDescription(field);
-
-                        attached.Add(new PropertyMetadata
-                        {
-                            Name = name,
-                            TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
-                            Kind = MapValueKind(prop.PropertyType),
-                            IsReadOnly = prop.IsReadOnly,
-                            DefaultValue = TryGetDefaultValue(prop, type),
-                            ClrType = prop.PropertyType,
-                            IsAttached = true,
-                            OwnerType = type.FullName,
-                            Category = category,
-                            Description = description
-                        });
-                    }
-                    catch
+                    Avalonia.AvaloniaProperty? prop = field.GetValue(null) as Avalonia.AvaloniaProperty;
+                    if (prop is null || !prop.IsAttached)
                     {
                         continue;
                     }
+
+                    Type type = field.DeclaringType!;
+                    string name = $"{type.Name}.{prop.Name}";
+                    if (!seen.Add(name))
+                    {
+                        continue;
+                    }
+
+                    (string category, string? description) = GetCategoryAndDescription(field);
+
+                    attached.Add(new PropertyMetadata
+                    {
+                        Name = name,
+                        TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
+                        Kind = MapValueKind(prop.PropertyType),
+                        IsReadOnly = prop.IsReadOnly,
+                        DefaultValue = TryGetDefaultValue(prop, type),
+                        ClrType = prop.PropertyType,
+                        IsAttached = true,
+                        OwnerType = type.FullName,
+                        Category = category,
+                        Description = description
+                    });
+                }
+                catch
+                {
+                    continue;
                 }
             }
         }
@@ -1629,17 +1653,63 @@ public sealed class TypeMetadataService : ITypeMetadataService
         return attached;
     }
 
+    private FieldInfo[] GetAttachedPropertyFieldsCached(Assembly assembly)
+    {
+        return _attachedPropertyFieldsCache.GetOrAdd(assembly, asm =>
+        {
+            List<FieldInfo> fields = new();
+            try
+            {
+                if (asm.IsDynamic || string.IsNullOrWhiteSpace(asm.Location))
+                {
+                    return Array.Empty<FieldInfo>();
+                }
+
+                using FileStream stream = File.OpenRead(asm.Location);
+                foreach (AttachedPropertyField candidate in AttachedPropertyDiscovery.Read(stream))
+                {
+                    if (!TryGetTypeSafe(asm, candidate.OwnerTypeName, out Type? owner))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        FieldInfo? field = owner!.GetField(candidate.FieldName,
+                            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+                        if (field is not null && typeof(AvaloniaProperty).IsAssignableFrom(field.FieldType))
+                        {
+                            fields.Add(field);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to resolve property field '{Owner}.{Field}': {Message}",
+                            candidate.OwnerTypeName, candidate.FieldName, ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to read attached-property metadata from '{Assembly}': {Message}",
+                    asm.FullName, ex.Message);
+            }
+
+            return fields.ToArray();
+        });
+    }
+
     private static object? TryGetDefaultValue(Avalonia.AvaloniaProperty prop, Type ownerType)
     {
         try
         {
-            System.Reflection.MethodInfo? getDefault = prop.GetType().GetMethod("GetDefaultValue");
+            System.Reflection.MethodInfo? getDefault = prop.GetType().GetMethod("GetDefaultValue", new[] { typeof(Type) });
             if (getDefault is not null)
             {
                 return getDefault.Invoke(prop, new object?[] { ownerType });
             }
 
-            System.Reflection.MethodInfo? getMetadata = prop.GetType().GetMethod("GetMetadata");
+            System.Reflection.MethodInfo? getMetadata = prop.GetType().GetMethod("GetMetadata", new[] { typeof(Type) });
             if (getMetadata is not null)
             {
                 object? metadata = getMetadata.Invoke(prop, new object?[] { ownerType });
@@ -1844,6 +1914,11 @@ public sealed class TypeMetadataService : ITypeMetadataService
                     return true;
                 }
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(xmlNamespace))
+        {
+            return false;
         }
 
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)

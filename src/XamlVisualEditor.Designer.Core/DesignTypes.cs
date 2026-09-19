@@ -14,6 +14,8 @@ using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.Designer.Core;
 
+public sealed record DesignerLayoutAction(string Title, string Description, ReactiveCommand<Unit, Unit> Command);
+
 /// <summary>
 /// Concrete implementation of <see cref="IDesignItem"/> that bridges
 /// an AST node to its instantiated Avalonia control.
@@ -111,6 +113,13 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
     {
         child.Parent = this;
         _children.Add(child);
+    }
+
+    /// <summary>Inserts a child at its logical content position.</summary>
+    public void InsertChild(int index, DesignItem child)
+    {
+        child.Parent = this;
+        _children.Insert(index, child);
     }
 
     /// <summary>
@@ -443,11 +452,22 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// Command to reset zoom.
     /// </summary>
     public ReactiveCommand<Unit, Unit> ResetZoomCommand { get; }
+    public ReactiveCommand<Unit, Unit> SelectNextControlCommand { get; }
+    public ReactiveCommand<Unit, Unit> SelectPreviousControlCommand { get; }
+    public ReactiveCommand<Unit, Unit> SelectParentControlCommand { get; }
 
     /// <summary>
-    /// Command to delete the selected items.
+    /// Document commands supplied by the shell's transactional editing path.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> DeleteSelectedCommand { get; }
+    public ReactiveCommand<Unit, Unit>? DeleteSelectedCommand { get; set; }
+    public ReactiveCommand<Unit, Unit>? CutCommand { get; set; }
+    public ReactiveCommand<Unit, Unit>? CopyCommand { get; set; }
+    public ReactiveCommand<Unit, Unit>? PasteCommand { get; set; }
+    public ReactiveCommand<Unit, Unit>? DuplicateCommand { get; set; }
+    public ReactiveCommand<Unit, Unit>? SelectAllCommand { get; set; }
+    public ObservableCollection<DesignerLayoutAction> LayoutActions { get; } = new();
+
+    private IReadOnlyList<Guid>? _requestedSelection;
 
     /// <summary>
     /// Fires when the design surface needs to rebuild (e.g., after AST changes).
@@ -459,7 +479,9 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         ZoomInCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom * 1.1, 0.1, 8.0); });
         ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom / 1.1, 0.1, 8.0); });
         ResetZoomCommand = ReactiveCommand.Create(() => { Zoom = 1.0; });
-        DeleteSelectedCommand = ReactiveCommand.Create(DeleteSelected);
+        SelectNextControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: false));
+        SelectPreviousControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: true));
+        SelectParentControlCommand = ReactiveCommand.Create(SelectParentControl);
     }
 
     /// <summary>
@@ -501,6 +523,32 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         }
     }
 
+    /// <summary>Restores a selection without treating it as a new user selection.</summary>
+    public void SelectNodesFromSync(IEnumerable<Guid> nodeIds)
+    {
+        using (BeginSelectionSync())
+        {
+            Selection.ClearSelection();
+            foreach (Guid id in nodeIds)
+                if (_itemMap.TryGetValue(id, out DesignItem? item)) Selection.Select(item, addToSelection: true);
+        }
+    }
+
+    /// <summary>Selects newly inserted elements after their controls have been created.</summary>
+    public void RequestSelection(IEnumerable<Guid> nodeIds)
+    {
+        _requestedSelection = nodeIds.Distinct().ToArray();
+        RequestRebuild();
+    }
+
+    /// <summary>Consumes the pending selection for the next completed surface rebuild.</summary>
+    public IReadOnlyList<Guid>? TakeRequestedSelection()
+    {
+        IReadOnlyList<Guid>? selection = _requestedSelection;
+        _requestedSelection = null;
+        return selection;
+    }
+
     /// <summary>
     /// Clears the selection while marking the change as synced.
     /// </summary>
@@ -526,19 +574,44 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         RebuildRequested?.Invoke();
     }
 
-    private void DeleteSelected()
+    private void NavigateSelection(bool backwards)
     {
-        // Delete selected items from the AST
-        IReadOnlyList<IDesignItem> selected = Selection.SelectedItems;
-        foreach (IDesignItem item in selected.ToList())
+        MutableAstObjectNode? root = _itemMap.Values.FirstOrDefault(item => item.AstNode.Parent is null)?.AstNode;
+        if (root is null) return;
+        Dictionary<Guid, DesignItem> visible = new();
+        foreach (var pair in _controlMap)
+            if (pair.Key.IsEffectivelyVisible) visible.TryAdd(pair.Value.AstNodeId, pair.Value);
+        List<DesignItem> ordered = new();
+        Stack<MutableAstNode> pending = new();
+        pending.Push(root);
+        while (pending.TryPop(out MutableAstNode? node))
         {
-            if (item is DesignItem di && di.AstNode.Parent is MutableAstObjectNode parentObj)
+            if (node is MutableAstPropertyNode property && property.Value is { } value) { pending.Push(value); continue; }
+            if (node is not MutableAstObjectNode element) continue;
+            if (visible.TryGetValue(element.Id, out DesignItem? item)) ordered.Add(item);
+            for (int index = element.Children.Count - 1; index >= 0; index--) pending.Push(element.Children[index]);
+            for (int index = element.Properties.Count - 1; index >= 0; index--) pending.Push(element.Properties[index]);
+        }
+        if (ordered.Count == 0) return;
+        Guid? selectedId = (Selection.PrimarySelection as DesignItem)?.AstNodeId;
+        int selected = ordered.FindIndex(item => item.AstNodeId == selectedId);
+        int next = selected < 0 ? (backwards ? ordered.Count - 1 : 0)
+            : (selected + (backwards ? -1 : 1) + ordered.Count) % ordered.Count;
+        Selection.Select(ordered[next]);
+    }
+
+    private void SelectParentControl()
+    {
+        if (Selection.PrimarySelection is DesignItem selected)
+        {
+            for (MutableAstNode? parent = selected.AstNode.Parent; parent is not null; parent = parent.Parent)
             {
-                parentObj.Children.Remove(di.AstNode);
+                if (!_itemMap.TryGetValue(parent.Id, out DesignItem? item)) continue;
+                Selection.Select(item);
+                return;
             }
         }
         Selection.ClearSelection();
-        RequestRebuild();
     }
 
     private sealed partial class SelectionSyncScope : IDisposable

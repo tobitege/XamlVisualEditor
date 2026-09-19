@@ -29,7 +29,7 @@ public sealed class XamlParsingService : IXamlParsingService
 
         try
         {
-            XDocument xDoc = XDocument.Parse(xamlText, LoadOptions.SetLineInfo);
+            XDocument xDoc = XDocument.Parse(xamlText, LoadOptions.SetLineInfo | LoadOptions.PreserveWhitespace);
 
             if (xDoc.Root is null)
             {
@@ -52,6 +52,7 @@ public sealed class XamlParsingService : IXamlParsingService
             MutableAstDocument document = new();
             MutableAstObjectNode root = ConvertElement(xDoc.Root, document, diagnostics);
             document.Root = root;
+            ReadDocumentTrivia(xDoc, document);
             document.NodeMap.RegisterTree(root);
 
             // Extract namespace declarations from root
@@ -107,13 +108,15 @@ public sealed class XamlParsingService : IXamlParsingService
         MutableAstDocument document,
         List<XamlDiagnostic> diagnostics)
     {
-        RegisterNamespaceAliases(element, document);
+        if (element.Parent is null) RegisterNamespaceAliases(element, document);
 
         MutableAstObjectNode node = new()
         {
             TypeName = element.Name.LocalName,
             XmlNamespace = element.Name.NamespaceName
         };
+        ReadLocalNamespaces(element, node.NamespaceAliases);
+        bool preserveWhitespace = PreservesWhitespace(element);
 
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
         {
@@ -148,6 +151,7 @@ public sealed class XamlParsingService : IXamlParsingService
             MutableAstPropertyNode propNode = new()
             {
                 PropertyName = propName,
+                XmlNamespace = attr.Name.NamespaceName,
                 Value = new MutableAstTextNode { Text = attr.Value }
             };
 
@@ -161,28 +165,40 @@ public sealed class XamlParsingService : IXamlParsingService
         }
 
         // Convert child elements
+        List<XmlTrivia> pendingTrivia = new();
         foreach (XNode child in element.Nodes())
         {
             switch (child)
             {
+                case XComment comment:
+                    pendingTrivia.Add(new XmlTrivia(null, comment.Value));
+                    break;
+                case XProcessingInstruction instruction:
+                    pendingTrivia.Add(new XmlTrivia(instruction.Target, instruction.Data));
+                    break;
                 case XElement childElement:
                     // Check if this is a property element (TypeName.PropertyName)
                     if (childElement.Name.LocalName.Contains('.'))
                     {
-                        ConvertPropertyElement(childElement, node, document, diagnostics);
+                        MutableAstPropertyNode property = ConvertPropertyElement(childElement, node, document, diagnostics);
+                        property.LeadingTrivia.AddRange(pendingTrivia);
                     }
                     else
                     {
                         MutableAstObjectNode childNode = ConvertElement(childElement, document, diagnostics);
+                        childNode.LeadingTrivia.AddRange(pendingTrivia);
                         node.Children.Add(childNode);
                     }
+                    pendingTrivia.Clear();
                     break;
 
-                case XText textNode when !string.IsNullOrWhiteSpace(textNode.Value):
+                case XText textNode when preserveWhitespace || !string.IsNullOrWhiteSpace(textNode.Value):
                     MutableAstTextNode textAstNode = new()
                     {
-                        Text = textNode.Value.Trim()
+                        Text = textNode.Value
                     };
+                    textAstNode.LeadingTrivia.AddRange(pendingTrivia);
+                    pendingTrivia.Clear();
                     if (textNode is IXmlLineInfo textLineInfo && textLineInfo.HasLineInfo())
                     {
                         textAstNode.Line = textLineInfo.LineNumber;
@@ -192,6 +208,8 @@ public sealed class XamlParsingService : IXamlParsingService
                     break;
             }
         }
+
+        node.TrailingTrivia.AddRange(pendingTrivia);
 
         // Estimate EndLine from the last XNode or by counting newlines in element.ToString().
         // The last child node's line info gives us a lower bound, then add 1 for the closing tag.
@@ -217,7 +235,7 @@ public sealed class XamlParsingService : IXamlParsingService
         return node;
     }
 
-    private static void ConvertPropertyElement(
+    private static MutableAstPropertyNode ConvertPropertyElement(
         XElement element,
         MutableAstObjectNode parentNode,
         MutableAstDocument document,
@@ -227,8 +245,13 @@ public sealed class XamlParsingService : IXamlParsingService
 
         MutableAstPropertyNode propNode = new()
         {
-            PropertyName = propName
+            PropertyName = propName,
+            XmlNamespace = element.Name.NamespaceName,
+            IsPropertyElement = true,
+            XmlSpace = element.Attribute(XNamespace.Xml + "space")?.Value
         };
+        ReadLocalNamespaces(element, propNode.NamespaceAliases);
+        bool preserveWhitespace = PreservesWhitespace(element);
 
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
         {
@@ -236,13 +259,26 @@ public sealed class XamlParsingService : IXamlParsingService
             propNode.Column = lineInfo.LinePosition;
         }
 
-        // If single child element, use as value; otherwise create container
-        List<XElement> childElements = element.Elements().ToList();
-        if (childElements.Count == 1)
+        List<MutableAstNode> values = new();
+        List<XmlTrivia> pendingTrivia = new();
+        foreach (XNode child in element.Nodes())
         {
-            propNode.Value = ConvertElement(childElements[0], document, diagnostics);
+            if (child is XComment comment) { pendingTrivia.Add(new XmlTrivia(null, comment.Value)); continue; }
+            if (child is XProcessingInstruction instruction) { pendingTrivia.Add(new XmlTrivia(instruction.Target, instruction.Data)); continue; }
+            MutableAstNode? value = child switch
+            {
+                XElement childElement => ConvertElement(childElement, document, diagnostics),
+                XText text when preserveWhitespace || !string.IsNullOrWhiteSpace(text.Value) => new MutableAstTextNode { Text = text.Value },
+                _ => null
+            };
+            if (value is null) continue;
+            value.LeadingTrivia.AddRange(pendingTrivia);
+            pendingTrivia.Clear();
+            values.Add(value);
         }
-        else if (childElements.Count > 1)
+        propNode.TrailingTrivia.AddRange(pendingTrivia);
+        if (values.Count == 1) propNode.Value = values[0];
+        else if (values.Count > 1)
         {
             // Multiple children — create container node
             MutableAstObjectNode container = new()
@@ -250,23 +286,42 @@ public sealed class XamlParsingService : IXamlParsingService
                 TypeName = "__PropertyElementChildren__",
                 XmlNamespace = element.Name.NamespaceName
             };
-            foreach (XElement child in childElements)
-            {
-                container.Children.Add(ConvertElement(child, document, diagnostics));
-            }
+            foreach (MutableAstNode value in values) container.Children.Add(value);
             propNode.Value = container;
         }
         else
         {
-            // Text content
-            string text = element.Value.Trim();
-            if (!string.IsNullOrEmpty(text))
-            {
-                propNode.Value = new MutableAstTextNode { Text = text };
-            }
+            propNode.Value = new MutableAstTextNode { Text = string.Empty };
         }
 
         parentNode.Properties.Add(propNode);
+        return propNode;
+    }
+
+    private static bool PreservesWhitespace(XElement element)
+    {
+        foreach (XElement ancestor in element.AncestorsAndSelf())
+            if (ancestor.Attribute(XNamespace.Xml + "space") is { } directive)
+                return directive.Value == "preserve";
+        return false;
+    }
+
+    private static void ReadDocumentTrivia(XDocument xml, MutableAstDocument document)
+    {
+        bool beforeRoot = true;
+        foreach (XNode node in xml.Nodes())
+        {
+            if (ReferenceEquals(node, xml.Root)) { beforeRoot = false; continue; }
+            XmlTrivia? trivia = node switch
+            {
+                XComment comment => new XmlTrivia(null, comment.Value),
+                XProcessingInstruction instruction => new XmlTrivia(instruction.Target, instruction.Data),
+                _ => null
+            };
+            if (trivia is null) continue;
+            if (beforeRoot) document.Root!.LeadingTrivia.Add(trivia);
+            else document.TrailingTrivia.Add(trivia);
+        }
     }
 
     private static MutableAstDocument? TryTolerantParse(
@@ -286,7 +341,7 @@ public sealed class XamlParsingService : IXamlParsingService
             string repaired = TryRepairUnclosedTags(xamlText);
             try
             {
-                XDocument repairedDoc = XDocument.Parse(repaired, LoadOptions.SetLineInfo);
+                XDocument repairedDoc = XDocument.Parse(repaired, LoadOptions.SetLineInfo | LoadOptions.PreserveWhitespace);
                 if (repairedDoc.Root is not null)
                 {
                     diagnostics.Add(new XamlDiagnostic
@@ -301,6 +356,7 @@ public sealed class XamlParsingService : IXamlParsingService
                     MutableAstDocument document = new();
                     MutableAstObjectNode root = ConvertElement(repairedDoc.Root, document, diagnostics);
                     document.Root = root;
+                    ReadDocumentTrivia(repairedDoc, document);
                     document.NodeMap.RegisterTree(root);
                     ExtractNamespaces(repairedDoc.Root, document);
                     return document;
@@ -317,7 +373,7 @@ public sealed class XamlParsingService : IXamlParsingService
             {
                 try
                 {
-                    XDocument truncatedDoc = XDocument.Parse(truncated, LoadOptions.SetLineInfo);
+                    XDocument truncatedDoc = XDocument.Parse(truncated, LoadOptions.SetLineInfo | LoadOptions.PreserveWhitespace);
                     if (truncatedDoc.Root is not null)
                     {
                         diagnostics.Add(new XamlDiagnostic
@@ -332,6 +388,7 @@ public sealed class XamlParsingService : IXamlParsingService
                         MutableAstDocument document = new();
                         MutableAstObjectNode root = ConvertElement(truncatedDoc.Root, document, diagnostics);
                         document.Root = root;
+                        ReadDocumentTrivia(truncatedDoc, document);
                         document.NodeMap.RegisterTree(root);
                         ExtractNamespaces(truncatedDoc.Root, document);
                         return document;
@@ -495,6 +552,15 @@ public sealed class XamlParsingService : IXamlParsingService
             {
                 document.NamespaceAliases[prefix] = attr.Value;
             }
+        }
+    }
+
+    private static void ReadLocalNamespaces(XElement element, IDictionary<string, string> aliases)
+    {
+        foreach (XAttribute attribute in element.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
+        {
+            string prefix = attribute.Name.LocalName == "xmlns" ? string.Empty : attribute.Name.LocalName;
+            aliases[prefix] = attribute.Value;
         }
     }
 

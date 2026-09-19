@@ -52,6 +52,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private ScrollViewer? _scrollViewer;
     private Border? _surfaceBorder;
     private int _appliedWorkspaceThemeVersion = -1;
+    private Control? _workspaceThemeTarget;
     private readonly List<IStyle> _workspaceThemeStyles = new();
     private readonly List<IResourceProvider> _workspaceThemeResources = new();
     private RulerControl? _horizontalRuler;
@@ -59,6 +60,9 @@ public sealed partial class DesignSurfaceView : UserControl
     private IDesignItem? _hoveredItem;
     private DragState? _dragState;
     private MarqueeState? _marqueeState;
+    private Guid? _marqueeScopeId;
+    private IPointer? _selectionPointer;
+    private Guid[] _selectionBeforePointerDown = Array.Empty<Guid>();
     private bool _isSpaceDown;
     private bool _isPanning;
     private Point _panStart;
@@ -71,6 +75,18 @@ public sealed partial class DesignSurfaceView : UserControl
     public DesignSurfaceView()
     {
         InitializeComponent();
+        Focusable = true;
+        AddHandler(PointerPressedEvent, (_, args) =>
+        {
+            if (_currentVm?.IsEditMode != true) return;
+            if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _selectionPointer = args.Pointer;
+                _selectionBeforePointerDown = _currentVm.Selection.SelectedItems.OfType<DesignItem>()
+                    .Select(item => item.AstNodeId).ToArray();
+            }
+            Focus();
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         _openDefinitionMenuItem = new MenuItem { Header = "Open Definition" };
         _openDefinitionMenuItem.Click += OnOpenDefinitionClick;
@@ -114,6 +130,8 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)
     {
+        CancelDragState();
+        if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
         if (_topLevel is null)
         {
             return;
@@ -144,6 +162,7 @@ public sealed partial class DesignSurfaceView : UserControl
             true);
         if (_canvas is not null)
         {
+            if (_canvas.Background is null) _canvas.SetCurrentValue(Panel.BackgroundProperty, Avalonia.Media.Brushes.Transparent);
             _canvas.PointerPressed += OnCanvasPointerPressed;
             _canvas.PointerMoved += OnCanvasPointerMoved;
             _canvas.PointerReleased += OnCanvasPointerReleased;
@@ -186,6 +205,31 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _currentVm = DataContext as DesignSurfaceViewModel;
 
+        _surfaceContextMenu.Items.Clear();
+        AddEditMenuItem("Cut", _currentVm?.CutCommand, Key.X);
+        AddEditMenuItem("Copy", _currentVm?.CopyCommand, Key.C);
+        AddEditMenuItem("Paste", _currentVm?.PasteCommand, Key.V);
+        AddEditMenuItem("Duplicate", _currentVm?.DuplicateCommand, Key.D);
+        _surfaceContextMenu.Items.Add(new MenuItem
+        {
+            Header = "Delete", Command = _currentVm?.DeleteSelectedCommand,
+            InputGesture = new KeyGesture(Key.Delete)
+        });
+        AddEditMenuItem("Select All", _currentVm?.SelectAllCommand, Key.A);
+        MenuItem layoutMenu = new() { Header = "Layout" };
+        if (_currentVm is not null)
+        {
+            foreach (DesignerLayoutAction action in _currentVm.LayoutActions)
+            {
+                MenuItem item = new() { Header = action.Title, Command = action.Command };
+                ToolTip.SetTip(item, action.Description);
+                layoutMenu.Items.Add(item);
+            }
+        }
+        _surfaceContextMenu.Items.Add(layoutMenu);
+        _surfaceContextMenu.Items.Add(new Separator());
+        _surfaceContextMenu.Items.Add(_openDefinitionMenuItem);
+
         if (_currentVm is not null)
         {
             _currentVm.RebuildRequested += OnRebuildRequested;
@@ -208,6 +252,14 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         UpdateNavigateMenuState();
+    }
+
+    private void AddEditMenuItem(string header, ICommand? command, Key key)
+    {
+        _surfaceContextMenu.Items.Add(new MenuItem
+        {
+            Header = header, Command = command, InputGesture = new KeyGesture(key, KeyModifiers.Control)
+        });
     }
 
     private void OnSelectionChanged(IReadOnlyList<IDesignItem> selected)
@@ -405,7 +457,14 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Space)
+        if (e.Handled || (!IsKeyboardFocusWithin && _dragState is null && _marqueeState is null)) return;
+        if (e.Key == Key.Escape && _dragState is not null)
+        {
+            CancelDragState();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Space && _currentVm?.IsEditMode == true)
         {
             _isSpaceDown = true;
             UpdatePanCursor();
@@ -425,6 +484,45 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (!_currentVm.IsEditMode)
         {
+            return;
+        }
+
+        if (e.Key == Key.Tab && e.KeyModifiers is KeyModifiers.None or KeyModifiers.Shift)
+        {
+            ICommand navigation = e.KeyModifiers == KeyModifiers.Shift
+                ? _currentVm.SelectPreviousControlCommand : _currentVm.SelectNextControlCommand;
+            navigation.Execute(null);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Escape)
+        {
+            if (_marqueeState is not null)
+            {
+                _marqueeState = null;
+                _selectionPointer?.Capture(null);
+                _adornerLayer?.ClearAll();
+                _currentVm.SelectNodesFromSync(_selectionBeforePointerDown);
+                UpdateSelectedNode((_currentVm.Selection.PrimarySelection as DesignItem)?.AstNodeId);
+            }
+            else ((ICommand)_currentVm.SelectParentControlCommand).Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        ICommand? editCommand = e.KeyModifiers == KeyModifiers.Control ? e.Key switch
+        {
+            Key.X => _currentVm.CutCommand,
+            Key.C => _currentVm.CopyCommand,
+            Key.V => _currentVm.PasteCommand,
+            Key.D => _currentVm.DuplicateCommand,
+            Key.A => _currentVm.SelectAllCommand,
+            _ => null
+        } : e.Key == Key.Delete && e.KeyModifiers == KeyModifiers.None ? _currentVm.DeleteSelectedCommand : null;
+        if (editCommand is not null)
+        {
+            e.Handled = true;
+            if (editCommand.CanExecute(null)) editCommand.Execute(null);
             return;
         }
 
@@ -487,7 +585,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnKeyUp(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Space)
+        if (e.Key != Key.Space || !_isSpaceDown)
         {
             return;
         }
@@ -800,103 +898,65 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        if (_currentVm is null || !_currentVm.IsEditMode)
-        {
-            return;
-        }
-
-        if (!e.DataTransfer.Contains(DesignerDataFormats.ToolboxItem))
-        {
-            return;
-        }
-
-        e.DragEffects = DragDropEffects.Copy;
+        ToolboxDropPlan? plan = ResolveToolboxDrop(e);
+        e.DragEffects = plan is null ? DragDropEffects.None : DragDropEffects.Copy;
+        _adornerLayer?.UpdateDropTarget(plan?.Target?.GetBoundsRelativeTo(GetSurfaceRoot()), DropPosition.Inside);
         e.Handled = true;
     }
 
     private void OnDrop(object? sender, DragEventArgs e)
     {
-        if (_currentVm is null || !_currentVm.IsEditMode)
-        {
-            return;
-        }
-
-        if (!e.DataTransfer.Contains(DesignerDataFormats.ToolboxItem))
-        {
-            return;
-        }
-
-        string? typeName = e.DataTransfer.TryGetValue(DesignerDataFormats.ToolboxItem);
-        if (string.IsNullOrWhiteSpace(typeName))
-        {
-            return;
-        }
-
-        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
-        if (docVm is null)
-        {
-            return;
-        }
-
-        MutableAstDocument? doc = docVm.SyncEngine.CurrentDocument;
-        if (doc?.Root is null)
-        {
-            return;
-        }
-
-        UpdateCanvasSizeFromRoot(docVm, doc.Root);
-
-        UpdateCanvasSizeFromRoot(docVm, doc.Root);
-
-        // Create a new AST node for the dropped control
-        MutableAstObjectNode newNode = new()
-        {
-            TypeName = typeName,
-            XmlNamespace = "https://github.com/avaloniaui"
-        };
-
-        // Add to root or the first panel-like child
-        MutableAstObjectNode targetParent = FindBestDropTarget(doc.Root);
-        targetParent.Children.Add(newNode);
-
-        // Notify the sync engine that the AST changed (from design surface)
-        docVm.SyncEngine.NotifyAstChanged(doc, SyncSource.DesignSurface);
-
+        ToolboxDropPlan? plan = ResolveToolboxDrop(e);
+        DesignerDocumentViewModel? document = FindDocumentViewModel();
+        _adornerLayer?.UpdateDropTarget(null, null);
+        if (plan is null || document?.SyncEngine.CanEditAst != true) return;
+        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Insert " + plan.Node.TypeName);
+        if (!new LayoutEditService(document.MetadataService).TryInsert(plan.Parent, plan.Node, out _, plan.Index, plan.Placement)) return;
+        edit.Commit();
+        document.SetSelectedNode(plan.Node.Id, SyncSource.DesignSurface);
+        e.DragEffects = DragDropEffects.Copy;
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Finds the best parent node to drop a new control into.
-    /// Prefers the first Panel/Grid/StackPanel/DockPanel child of the root,
-    /// otherwise falls back to the root itself.
-    /// </summary>
-    private static MutableAstObjectNode FindBestDropTarget(MutableAstObjectNode root)
+    private ToolboxDropPlan? ResolveToolboxDrop(DragEventArgs args)
     {
-        // Check root's children for layout panels
-        foreach (MutableAstNode child in root.Children)
+        DesignerDocumentViewModel? document = FindDocumentViewModel();
+        if (_currentVm?.IsEditMode != true || _canvas is null || _rootControl is null
+            || document?.SyncEngine.CanEditAst != true || document.SyncEngine.CurrentDocument?.Root is not { } root
+            || !ToolboxDragData.TryParse(args.DataTransfer.TryGetValue(DesignerDataFormats.ToolboxItem), out ToolboxDragData? payload)) return null;
+        MutableAstObjectNode node = new() { TypeName = payload!.TypeName, XmlNamespace = payload.XmlNamespace };
+        Control? hit = ControlFactory.HitTest(_rootControl, args.GetPosition(_rootControl));
+        DesignItem? hovered = hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) ? item : null;
+        LayoutEditService editor = new(document.MetadataService);
+        MutableAstObjectNode? parent = hovered is not null && editor.CanInsert(hovered.AstNode, node, out _)
+            ? hovered.AstNode : editor.FindInsertionParent(root, hovered?.AstNode, node);
+        if (parent is null) return null;
+        DesignItem? target = _currentVm.ControlMap.Values.FirstOrDefault(candidate => candidate.AstNodeId == parent.Id);
+        Control? visual = target?.VisualElement;
+        Point position = args.GetPosition(visual ?? _canvas);
+        LayoutPlacement? placement = null;
+        int? insertion = null;
+        if (visual is Canvas) placement = new LayoutPlacement(position.X, position.Y);
+        if (visual is Grid grid) placement = new LayoutPlacement(Row: FindGridIndex(grid.RowDefinitions, position.Y, grid.Bounds.Height),
+            Column: FindGridIndex(grid.ColumnDefinitions, position.X, grid.Bounds.Width));
+        if (visual is StackPanel stack)
         {
-            if (child is MutableAstObjectNode objChild &&
-                IsLayoutPanel(objChild.TypeName))
+            insertion = 0;
+            foreach (Control child in stack.Children)
             {
-                return objChild;
+                if (!_currentVm.ControlMap.ContainsKey(child)) continue;
+                double cursor = stack.Orientation == Orientation.Vertical ? position.Y : position.X;
+                double center = stack.Orientation == Orientation.Vertical
+                    ? child.Bounds.Center.Y : child.Bounds.Center.X;
+                if (cursor < center) break;
+                insertion++;
             }
         }
-
-        // If root itself is a layout panel, use it
-        if (IsLayoutPanel(root.TypeName))
-        {
-            return root;
-        }
-
-        // Default: add to root (e.g., UserControl)
-        return root;
+        return new ToolboxDropPlan(parent, node, placement, insertion, target);
     }
 
-    private static bool IsLayoutPanel(string typeName)
-    {
-        return typeName is "Grid" or "StackPanel" or "DockPanel" or "WrapPanel"
-            or "Canvas" or "Panel" or "UniformGrid" or "RelativePanel";
-    }
+    private sealed record ToolboxDropPlan(MutableAstObjectNode Parent, MutableAstObjectNode Node,
+        LayoutPlacement? Placement, int? Index, DesignItem? Target);
 
     private void ExecuteRebuild()
     {
@@ -924,8 +984,6 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _zoomSurface ??= this.FindControl<Control>("ZoomSurface");
 
-        canvas.Children.Clear();
-
         // Walk up to find the DesignerDocumentViewModel that owns the SyncEngine & ControlFactory
         DesignerDocumentViewModel? docVm = FindDocumentViewModel();
         if (docVm is null)
@@ -948,17 +1006,29 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        Control? tree = docVm.ControlFactory.CreateControlTree(doc.Root);
-        if (tree is null)
+        RuntimeDesignRenderResult renderedDocument;
+        Control tree;
+        try
         {
+            renderedDocument = RenderRuntimeDocument(docVm, doc);
+            tree = CreateRuntimeSurface(renderedDocument, docVm.MetadataService);
+        }
+        catch (Exception exception)
+        {
+            ShowRuntimeRenderFailure(canvas, docVm, exception);
             return;
         }
 
         ApplyDesignModeProperties(tree);
-        ApplyWorkspaceThemes(canvas);
-
+        if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
+        canvas.Children.Clear();
+        _renderFailurePanel = null;
         canvas.Children.Add(tree);
         _rootControl = tree;
+        _runtimeRenderedDocument = renderedDocument;
+        _runtimeDocumentOwner = docVm;
+        UpdateCanvasSizeFromRoot(docVm, doc.Root);
+        tree.UpdateLayout();
 
         ApplyEditMode();
 
@@ -975,26 +1045,30 @@ public sealed partial class DesignSurfaceView : UserControl
         // Build design item maps for selection sync
         Dictionary<Guid, DesignItem> itemMap = new();
         Dictionary<Control, DesignItem> controlMap = new();
-        DesignItem rootItem = BuildDesignItemTree(doc.Root, tree, itemMap, controlMap);
+        DesignItem rootItem = BuildDesignItemTree(doc.Root, tree, renderedDocument.GetControlNodeIds(tree), itemMap, controlMap);
         _currentVm?.SetDesignTree(rootItem, itemMap, controlMap);
+        tree.LayoutUpdated += OnRuntimeLayoutUpdated;
 
         if (_currentVm is not null)
         {
             Guid? selectedId = docVm.SelectedNodeId;
-            if (selectedId is not null)
+            IReadOnlyList<Guid>? requested = _currentVm.TakeRequestedSelection();
+            if (requested is not null)
+            {
+                _currentVm.SelectNodesFromSync(requested);
+            }
+            else if (docVm.SelectionSource != SyncSource.CodeEditor && selectedId is { } primaryId
+                && selectedIds is { Count: > 1 } && selectedIds.Contains(primaryId))
+            {
+                _currentVm.SelectNodesFromSync(selectedIds);
+            }
+            else if (selectedId is not null)
             {
                 _currentVm.SelectByAstNodeIdFromSync(selectedId.Value);
             }
             else if (selectedIds is { Count: > 0 })
             {
-                _currentVm.Selection.ClearSelection();
-                foreach (Guid id in selectedIds)
-                {
-                    if (_currentVm.ItemMap.TryGetValue(id, out DesignItem? item) && item is not null)
-                    {
-                        _currentVm.Selection.Select(item, addToSelection: true);
-                    }
-                }
+                _currentVm.SelectNodesFromSync(selectedIds);
             }
         }
     }
@@ -1134,19 +1208,19 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        Focus();
-
         if (TryStartPan(e))
         {
+            Focus();
             e.Handled = true;
             return;
         }
 
-        if (!_currentVm.IsEditMode)
+        if (!_currentVm.IsEditMode || FindDocumentViewModel()?.SyncEngine.CanEditAst != true)
         {
             return;
         }
 
+        Focus();
         PointerPoint pointInfo = e.GetCurrentPoint(_canvas);
         if (!pointInfo.Properties.IsLeftButtonPressed)
         {
@@ -1158,7 +1232,7 @@ public sealed partial class DesignSurfaceView : UserControl
             ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(e.GetPosition(_adornerLayer));
             if (handle is not null && _currentVm.Selection.PrimarySelection is DesignItem primary)
             {
-                StartResize(primary, handle, e.GetPosition(_canvas));
+                StartResize(primary, handle, e.GetPosition(_canvas), e.Pointer);
                 e.Pointer.Capture(_canvas);
                 e.Handled = true;
                 return;
@@ -1168,7 +1242,18 @@ public sealed partial class DesignSurfaceView : UserControl
         Point canvasPoint = e.GetPosition(_canvas);
         Point rootPoint = e.GetPosition(_rootControl);
         Control? hit = ControlFactory.HitTest(_rootControl, rootPoint);
-        if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
+        DesignItem? item = null;
+        Control? mappedHit = null;
+        if (hit is not null)
+        {
+            foreach (Control candidate in new[] { hit }.Concat(hit.GetVisualAncestors().OfType<Control>()))
+            {
+                if (!_currentVm.ControlMap.TryGetValue(candidate, out item)) continue;
+                mappedHit = candidate;
+                break;
+            }
+        }
+        if (item is not null)
         {
             ApplySelection(item, e.KeyModifiers);
             UpdateSelectedNode(item.AstNodeId);
@@ -1183,7 +1268,14 @@ public sealed partial class DesignSurfaceView : UserControl
                 e.Handled = true;
                 return;
             }
-            StartDrag(item, canvasPoint);
+            if (mappedHit is Panel && !e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+            {
+                StartMarquee(canvasPoint, e.KeyModifiers, item.AstNodeId);
+                e.Pointer.Capture(_canvas);
+                e.Handled = true;
+                return;
+            }
+            StartDrag(item, canvasPoint, e.Pointer);
             e.Pointer.Capture(_canvas);
             e.Handled = true;
             return;
@@ -1299,8 +1391,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        CommitDragState();
-        _dragState = null;
+        CancelDragState();
     }
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
@@ -1416,8 +1507,9 @@ public sealed partial class DesignSurfaceView : UserControl
         }
     }
 
-    private void StartMarquee(Point startPoint, KeyModifiers modifiers)
+    private void StartMarquee(Point startPoint, KeyModifiers modifiers, Guid? scopeId = null)
     {
+        _marqueeScopeId = scopeId ?? FindDocumentViewModel()?.SyncEngine.CurrentDocument?.Root?.Id;
         _marqueeState = new MarqueeState
         {
             StartPoint = startPoint,
@@ -1448,22 +1540,24 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         Rect box = GetMarqueeRect(_marqueeState.StartPoint, _marqueeState.CurrentPoint);
-
-        if (!_marqueeState.Additive)
+        if (box.Width < 4 && box.Height < 4)
         {
-            _currentVm.Selection.ClearSelection();
+            _adornerLayer?.UpdateSelectionBox(null);
+            return;
         }
 
-        Control? surfaceRoot = GetSurfaceRoot();
+        List<Guid> selected = _marqueeState.Additive ? _selectionBeforePointerDown.ToList() : new();
         foreach (DesignItem item in _currentVm.ItemMap.Values)
         {
-            Rect bounds = item.GetBoundsRelativeTo(surfaceRoot);
+            if (LayoutEditService.GetParent(item.AstNode)?.Id != _marqueeScopeId) continue;
+            Rect bounds = item.GetBoundsRelativeTo(_canvas);
             if (bounds.Intersects(box))
             {
-                _currentVm.Selection.Select(item, addToSelection: true);
+                selected.Add(item.AstNodeId);
             }
         }
-
+        _currentVm.SelectNodesFromSync(selected);
+        UpdateSelectedNode((_currentVm.Selection.PrimarySelection as DesignItem)?.AstNodeId);
         _adornerLayer?.UpdateSelectionBox(null);
     }
 
@@ -1483,6 +1577,9 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        DesignerDocumentViewModel? document = FindDocumentViewModel();
+        if (document?.SyncEngine.CanEditAst != true) return;
+        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Move selection");
         bool changed = false;
         foreach (IDesignItem item in _currentVm.Selection.SelectedItems)
         {
@@ -1494,11 +1591,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (changed)
         {
-            DesignerDocumentViewModel? docVm = FindDocumentViewModel();
-            if (docVm?.SyncEngine.CurrentDocument is not null)
-            {
-                docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
-            }
+            edit.Commit();
         }
     }
 
@@ -1523,7 +1616,7 @@ public sealed partial class DesignSurfaceView : UserControl
             }
             else if (dy > 0)
             {
-                row = Math.Min(grid.RowDefinitions.Count - 1, row + 1);
+                row = Math.Min(Math.Max(1, grid.RowDefinitions.Count) - 1, row + 1);
             }
 
             if (dx < 0)
@@ -1532,7 +1625,7 @@ public sealed partial class DesignSurfaceView : UserControl
             }
             else if (dx > 0)
             {
-                column = Math.Min(grid.ColumnDefinitions.Count - 1, column + 1);
+                column = Math.Min(Math.Max(1, grid.ColumnDefinitions.Count) - 1, column + 1);
             }
 
             SetAttachedInt(item, "Grid.Row", row);
@@ -1592,12 +1685,14 @@ public sealed partial class DesignSurfaceView : UserControl
             return false;
         }
 
-        if (item.Parent is not DesignItem parent)
+        MutableAstObjectNode? parent = LayoutEditService.GetParent(item.AstNode);
+        if (parent is null)
         {
             return false;
         }
 
-        ObservableCollection<MutableAstNode> siblings = parent.AstNode.Children;
+        LayoutEditService editor = new(FindDocumentViewModel()?.MetadataService);
+        List<MutableAstObjectNode> siblings = editor.GetChildren(parent).OfType<MutableAstObjectNode>().ToList();
         int index = siblings.IndexOf(item.AstNode);
         if (index < 0)
         {
@@ -1610,12 +1705,15 @@ public sealed partial class DesignSurfaceView : UserControl
             return false;
         }
 
-        siblings.Move(index, nextIndex);
-        return true;
+        return editor.TryMoveRelative(item.AstNode, siblings[nextIndex],
+            offset < 0 ? DropPosition.Before : DropPosition.After, out _);
     }
 
     private void ResizeSelection(DesignItem primary, double deltaWidth, double deltaHeight)
     {
+        DesignerDocumentViewModel? document = FindDocumentViewModel();
+        if (document?.SyncEngine.CanEditAst != true) return;
+        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Resize selection");
         double width = GetPropertyDouble(primary, "Width");
         double height = GetPropertyDouble(primary, "Height");
 
@@ -1625,11 +1723,7 @@ public sealed partial class DesignSurfaceView : UserControl
         SetPropertyDouble(primary, "Width", width);
         SetPropertyDouble(primary, "Height", height);
 
-        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
-        if (docVm?.SyncEngine.CurrentDocument is not null)
-        {
-            docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
-        }
+        edit.Commit();
     }
 
     private void UpdateHover(Point surfacePoint)
@@ -1665,11 +1759,12 @@ public sealed partial class DesignSurfaceView : UserControl
         UpdateSpacingGuidesForSelection();
     }
 
-    private void StartDrag(DesignItem item, Point startPoint)
+    private void StartDrag(DesignItem item, Point startPoint, IPointer pointer)
     {
         DragState state = new()
         {
             Item = item,
+            Pointer = pointer,
             StartPoint = startPoint,
             LastPoint = startPoint,
             Mode = GetDragMode(item),
@@ -1699,11 +1794,12 @@ public sealed partial class DesignSurfaceView : UserControl
         _dragState = state;
     }
 
-    private void StartResize(DesignItem item, ResizeHandle handle, Point startPoint)
+    private void StartResize(DesignItem item, ResizeHandle handle, Point startPoint, IPointer pointer)
     {
         _dragState = new DragState
         {
             Item = item,
+            Pointer = pointer,
             StartPoint = startPoint,
             LastPoint = startPoint,
             Mode = DragMode.Resize,
@@ -1716,6 +1812,11 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void UpdateDragState(Point currentPoint)
     {
+        if (_dragState?.Transaction?.IsCompleted == true)
+        {
+            CancelDragState();
+            return;
+        }
         if (_dragState is null || _currentVm is null)
         {
             return;
@@ -1727,6 +1828,11 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (!_dragState.HasMoved)
+        {
+            _dragState.Transaction = FindDocumentViewModel()?.SyncEngine.BeginEditTransaction(
+                _dragState.Mode == DragMode.Resize ? "Resize selection" : "Move selection");
+        }
         _dragState.HasMoved = true;
         _dragState.LastPoint = currentPoint;
 
@@ -1760,12 +1866,13 @@ public sealed partial class DesignSurfaceView : UserControl
         DesignerDocumentViewModel? docVm = FindDocumentViewModel();
         if (docVm is null)
         {
+            CancelDragState();
             return;
         }
 
         if (_dragState.Mode == DragMode.Reorder && _dragState.DropTarget is DesignItem target && _dragState.DropPosition.HasValue)
         {
-            bool moved = _surfaceDropHandler.Move(_dragState.Item, target, _dragState.DropPosition.Value);
+            bool moved = _surfaceDropHandler.Move(_dragState.Item, target, _dragState.DropPosition.Value, docVm.MetadataService);
             if (moved && docVm.SyncEngine.CurrentDocument is not null)
             {
                 docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
@@ -1776,6 +1883,20 @@ public sealed partial class DesignSurfaceView : UserControl
             docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
         }
 
+        _dragState.Transaction?.Commit();
+
+        _adornerLayer?.UpdateDropTarget(null, null);
+        _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
+        _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+        RefreshSelectionAdorners();
+    }
+
+    private void CancelDragState()
+    {
+        DragState? state = _dragState;
+        _dragState = null;
+        state?.Transaction?.Rollback();
+        state?.Pointer?.Capture(null);
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
         _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
@@ -2724,6 +2845,8 @@ public sealed partial class DesignSurfaceView : UserControl
     private sealed class DragState
     {
         public required DesignItem Item { get; init; }
+        public IPointer? Pointer { get; init; }
+        public XamlVisualEditor.Sync.DocumentEditTransaction? Transaction { get; set; }
         public required Point StartPoint { get; init; }
         public required Rect StartBounds { get; init; }
         public required DragMode Mode { get; init; }
@@ -2756,123 +2879,103 @@ public sealed partial class DesignSurfaceView : UserControl
     private static DesignItem BuildDesignItemTree(
         MutableAstObjectNode astNode,
         Control control,
+        IReadOnlyDictionary<Control, Guid> identities,
         Dictionary<Guid, DesignItem> itemMap,
         Dictionary<Control, DesignItem> controlMap)
     {
-        DesignItem item = new(astNode, control);
-        itemMap[astNode.Id] = item;
-        controlMap[control] = item;
-
-        if (control is Panel panel)
+        Dictionary<Guid, MutableAstObjectNode> nodes = new();
+        Stack<MutableAstNode> pending = new();
+        pending.Push(astNode);
+        while (pending.TryPop(out MutableAstNode? node))
         {
-            List<MutableAstObjectNode> astChildren = astNode.Children
-                .OfType<MutableAstObjectNode>()
-                .ToList();
-
-            int count = Math.Min(astChildren.Count, panel.Children.Count);
-            for (int i = 0; i < count; i++)
+            if (node is MutableAstPropertyNode property && property.Value is { } value)
             {
-                if (panel.Children[i] is Control childControl)
-                {
-                    DesignItem childItem = BuildDesignItemTree(astChildren[i], childControl, itemMap, controlMap);
-                    item.AddChild(childItem);
-                }
+                pending.Push(value);
+                continue;
             }
-        }
-        else if (control is Decorator decorator && decorator.Child is Control decoratorChild)
-        {
-            MutableAstObjectNode? astChild = astNode.Children.OfType<MutableAstObjectNode>().FirstOrDefault();
-            if (astChild is not null)
-            {
-                DesignItem childItem = BuildDesignItemTree(astChild, decoratorChild, itemMap, controlMap);
-                item.AddChild(childItem);
-            }
-        }
-        else if (control is ContentControl contentControl && contentControl.Content is Control contentChild)
-        {
-            MutableAstObjectNode? astChild = astNode.Children.OfType<MutableAstObjectNode>().FirstOrDefault();
-            if (astChild is not null)
-            {
-                DesignItem childItem = BuildDesignItemTree(astChild, contentChild, itemMap, controlMap);
-                item.AddChild(childItem);
-            }
-        }
-        else if (control is ItemsControl itemsControl)
-        {
-            List<MutableAstObjectNode> astChildren = astNode.Children
-                .OfType<MutableAstObjectNode>()
-                .ToList();
-
-            IList? items = itemsControl.ItemsSource as IList;
-            if (items is not null)
-            {
-                int count = Math.Min(astChildren.Count, items.Count);
-                for (int i = 0; i < count; i++)
-                {
-                    if (items[i] is Control childControl)
-                    {
-                        DesignItem childItem = BuildDesignItemTree(astChildren[i], childControl, itemMap, controlMap);
-                        item.AddChild(childItem);
-                    }
-                }
-            }
+            if (node is not MutableAstObjectNode element) continue;
+            nodes[element.Id] = element;
+            foreach (MutableAstPropertyNode member in element.Properties) pending.Push(member);
+            foreach (MutableAstNode child in element.Children) pending.Push(child);
         }
 
-        return item;
+        foreach (var identity in identities)
+        {
+            if (!nodes.TryGetValue(identity.Value, out MutableAstObjectNode? node)) continue;
+            DesignItem item = new(node, identity.Key);
+            controlMap[identity.Key] = item;
+            itemMap.TryAdd(node.Id, item);
+        }
+        if (!controlMap.TryGetValue(control, out DesignItem? rootItem))
+        {
+            rootItem = new DesignItem(astNode, control);
+            controlMap[control] = rootItem;
+            itemMap[astNode.Id] = rootItem;
+        }
+
+        foreach (var pair in controlMap)
+        {
+            if (ReferenceEquals(pair.Value, rootItem)) continue;
+            DesignItem? parent = null;
+            foreach (Control ancestor in pair.Key.GetVisualAncestors().OfType<Control>())
+            {
+                if (controlMap.TryGetValue(ancestor, out parent)) break;
+            }
+            for (MutableAstNode? ancestor = pair.Value.AstNode.Parent; parent is null && ancestor is not null; ancestor = ancestor.Parent)
+                itemMap.TryGetValue(ancestor.Id, out parent);
+            (parent ?? rootItem).AddChild(pair.Value);
+        }
+        return rootItem;
     }
 
-    // Applies the workspace application's themes and resource includes to the design
-    // canvas so instantiated third-party controls (workspace assemblies) find their
-    // control themes and DynamicResource brushes.
-    private void ApplyWorkspaceThemes(Panel canvas)
+    // Window style lookup starts at the Window, not at the editor canvas hosting its content.
+    private void ApplyWorkspaceThemes(Control target, XamlVisualEditor.Core.Interfaces.ITypeMetadataService? metadata)
     {
-        if (_appliedWorkspaceThemeVersion == WorkspaceDesignThemeRegistry.Version)
+        if (ReferenceEquals(_workspaceThemeTarget, target)
+            && _appliedWorkspaceThemeVersion == WorkspaceDesignThemeRegistry.Version)
         {
             return;
         }
 
         foreach (IStyle style in _workspaceThemeStyles)
         {
-            canvas.Styles.Remove(style);
+            _workspaceThemeTarget?.Styles.Remove(style);
         }
 
         foreach (IResourceProvider provider in _workspaceThemeResources)
         {
-            canvas.Resources.MergedDictionaries.Remove(provider);
+            _workspaceThemeTarget?.Resources.MergedDictionaries.Remove(provider);
         }
 
         _workspaceThemeStyles.Clear();
         _workspaceThemeResources.Clear();
+        _workspaceThemeTarget = target;
 
         foreach (Func<IResourceProvider?> factory in WorkspaceDesignThemeRegistry.ResourceFactories)
         {
-            try
+            if (factory() is { } provider)
             {
-                if (factory() is { } provider)
-                {
-                    canvas.Resources.MergedDictionaries.Add(provider);
-                    _workspaceThemeResources.Add(provider);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Workspace design resource include failed");
+                target.Resources.MergedDictionaries.Add(provider);
+                _workspaceThemeResources.Add(provider);
             }
         }
 
         foreach (Func<IStyle?> factory in WorkspaceDesignThemeRegistry.StyleFactories)
         {
-            try
+            if (factory() is { } style)
             {
-                if (factory() is { } style)
-                {
-                    canvas.Styles.Add(style);
-                    _workspaceThemeStyles.Add(style);
-                }
+                target.Styles.Add(style);
+                _workspaceThemeStyles.Add(style);
             }
-            catch (Exception ex)
+        }
+
+        if (WorkspaceDesignThemeRegistry.StyleFactories.Count == 0 && metadata is not null)
+        {
+            foreach (IStyle style in LibraryDesignThemeLoader.CreateStyles(target, metadata,
+                         message => Log.Information("{DesignThemeDiagnostic}", message)))
             {
-                Log.Warning(ex, "Workspace design style failed");
+                target.Styles.Add(style);
+                _workspaceThemeStyles.Add(style);
             }
         }
 
@@ -2898,7 +3001,7 @@ public sealed partial class DesignSurfaceView : UserControl
             control.DataContext = control.GetValue(Design.DataContextProperty);
         }
 
-        if (control.GetValue(Design.DesignStyleProperty) is { } designStyle)
+        if (control.GetValue(Design.DesignStyleProperty) is { } designStyle && !control.Styles.Contains(designStyle))
         {
             control.Styles.Add(designStyle);
         }

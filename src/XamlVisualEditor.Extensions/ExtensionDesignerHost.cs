@@ -27,7 +27,7 @@ public interface IDesignerHost
     /// <summary>Gets available events for a node.</summary>
     Task<IReadOnlyList<DesignerEventInfo>> GetEventsAsync(string nodeId, CancellationToken cancellationToken);
 
-    /// <summary>Sets a property value for a node.</summary>
+    /// <summary>Sets a property in one atomic edit after asynchronous preparation. Null removes the local value; empty strings and whitespace are preserved.</summary>
     Task<bool> SetPropertyAsync(string nodeId, string propertyName, string? value, CancellationToken cancellationToken);
 
     /// <summary>Inserts a new element under the specified parent, selected node, or document root.</summary>
@@ -55,6 +55,13 @@ public interface IDesignerHost
 
     /// <summary>Begins an edit transaction scope.</summary>
     IDesignerTransaction BeginTransaction(string name);
+}
+
+/// <summary>Provides information about active designer document changes.</summary>
+public interface IDesignerDocumentNotifications
+{
+    /// <summary>Raised after the active document's content changes, including undo and redo.</summary>
+    event EventHandler<DesignerDocumentChangedEventArgs>? DocumentChanged;
 }
 
 /// <summary>Provides information about active designer document changes.</summary>
@@ -102,7 +109,16 @@ public sealed record DesignerPropertyInfo(
     string? DefaultValue,
     bool IsAttached,
     string? OwnerType,
-    IReadOnlyList<string>? EnumOptions);
+    IReadOnlyList<string>? EnumOptions)
+{
+    public bool IsCollection { get; init; }
+    public bool IsTemplate { get; init; }
+    public bool CanAssignNull { get; init; }
+    public bool HasLocalValue { get; init; }
+    public bool IsFlagsEnum { get; init; }
+    public bool IsSignedEnum { get; init; } = true;
+    public IReadOnlyDictionary<string, ulong>? EnumValues { get; init; }
+}
 
 /// <summary>Describes an event available on a designer node.</summary>
 public sealed record DesignerEventInfo(

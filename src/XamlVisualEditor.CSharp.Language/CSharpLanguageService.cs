@@ -15,7 +15,8 @@ namespace XamlVisualEditor.CSharp.Language;
 /// <summary>
 /// Roslyn-based C# language service.
 /// </summary>
-public sealed class CSharpLanguageService : ILanguageIntellisenseService, ILanguageWorkspaceWarmup, IDisposable
+public sealed partial class CSharpLanguageService : ILanguageIntellisenseService, ILanguageWorkspaceWarmup,
+    IDesignerCodeBehindRefactoringService, IDisposable
 {
     private readonly CSharpWorkspaceManager _workspaceManager;
 
@@ -50,6 +51,22 @@ public sealed class CSharpLanguageService : ILanguageIntellisenseService, ILangu
     public Task WarmWorkspaceAsync(CancellationToken ct = default)
     {
         return _workspaceManager.WarmWorkspaceAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<LanguageWorkspaceEdit?> PrepareControlRenameAsync(DesignerCodeBehindRenameRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        Solution solution = await _workspaceManager.GetSolutionAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Load the owning project before refactoring control names.");
+        foreach (var openDocument in request.OpenDocumentTexts)
+            foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(openDocument.Key))
+                solution = solution.WithDocumentText(id, SourceText.From(openDocument.Value));
+        Project project = solution.Projects.SingleOrDefault(candidate =>
+            FileSystemPathComparison.Equals(candidate.FilePath, request.ProjectPath))
+            ?? throw new InvalidOperationException("The control's owning project is not loaded.");
+        return await DesignerCodeBehindRenamePlanner.CreateAsync(project, request.ClassName,
+            request.OldName, request.NewName, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(

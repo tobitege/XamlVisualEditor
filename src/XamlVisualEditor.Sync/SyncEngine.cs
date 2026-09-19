@@ -28,6 +28,10 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     private volatile bool _isSyncing;
     private volatile bool _isDisposed;
     private string _lastKnownText = string.Empty;
+    private string _synchronizedAst = string.Empty;
+    private DocumentSnapshot? _checkpoint;
+    private EditGroup? _editGroup;
+    private IReadOnlyList<XamlDiagnostic> _diagnostics = Array.Empty<XamlDiagnostic>();
 
     /// <summary>
     /// Creates a new sync engine with the specified parsing and serialization services.
@@ -79,6 +83,10 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// </summary>
     public string? CurrentText => string.IsNullOrEmpty(_lastKnownText) ? null : _lastKnownText;
 
+    /// <summary>Gets whether a visual edit can safely modify the current AST.</summary>
+    public bool CanEditAst => !_isDisposed && _document?.Root is not null
+        && !_diagnostics.Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
     /// <inheritdoc />
     public event Action<SyncEvent>? SyncCompleted;
 
@@ -90,16 +98,20 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// <inheritdoc />
     public Task LoadAsync(string xamlText, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        if (_editGroup is not null) _editGroup.Completed = true;
+        _editGroup = null;
+        _undoRedo.Clear();
         ParseResult result = _parser.Parse(xamlText, new XamlParserOptions
         {
             UseTolerantParser = false
         });
 
-        if (result.Document is MutableAstDocument doc)
-        {
-            SetDocument(doc);
-            _lastKnownText = xamlText;
-        }
+        SetDocument(result.Document as MutableAstDocument);
+        _diagnostics = result.Diagnostics;
+        _lastKnownText = xamlText;
+        _synchronizedAst = _document is null ? string.Empty : _serializer.Serialize(_document);
+        _checkpoint = CaptureSnapshot();
 
         return Task.CompletedTask;
     }
@@ -107,19 +119,17 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// <inheritdoc />
     public Task<string> SaveAsync(CancellationToken ct = default)
     {
-        if (_document is null)
-        {
-            return Task.FromResult(string.Empty);
-        }
-
-        string text = _serializer.Serialize(_document);
-        _lastKnownText = text;
-        return Task.FromResult(text);
+        ct.ThrowIfCancellationRequested();
+        if (_editGroup is not null) throw new InvalidOperationException("Finish or cancel the current edit before saving.");
+        CommitUndoBatch("Edit");
+        return Task.FromResult(_lastKnownText);
     }
 
     /// <inheritdoc />
     public void NotifyTextChanged(string newText, SyncSource source)
     {
+        if (_isSyncing || _isDisposed) return;
+        if (_editGroup is not null) RollbackEdit(_editGroup);
         lock (_syncLock)
         {
             if (_isSyncing || _isDisposed) return;
@@ -134,22 +144,12 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 UseTolerantParser = true
             });
 
-            if (result.Document is MutableAstDocument newDoc)
-            {
-                SetDocument(newDoc);
-                _lastKnownText = newText;
-
-                SyncEvent syncEvent = new()
-                {
-                    Source = source,
-                    Changes = Array.Empty<AstChange>(),
-                    UpdatedText = newText,
-                    Diagnostics = result.Diagnostics
-                };
-
-                SyncCompleted?.Invoke(syncEvent);
-                _syncSubject.OnNext(syncEvent);
-            }
+            SetDocument(result.Document as MutableAstDocument);
+            _lastKnownText = newText;
+            _diagnostics = result.Diagnostics;
+            _synchronizedAst = _document is null ? string.Empty : _serializer.Serialize(_document);
+            RecordSnapshot("Edit XAML");
+            Publish(source, Array.Empty<AstChange>());
         }
         finally
         {
@@ -183,7 +183,6 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 TextContentChanged => "Edit text",
                 _ => "Edit"
             };
-            _undoRedo.CommitBatch(description);
 
             // Serialize the current AST to text
             if (_document is not null)
@@ -194,6 +193,9 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 // Apply edits to get new text
                 string newText = ApplyEdits(_lastKnownText, edits);
                 _lastKnownText = newText;
+                _synchronizedAst = _serializer.Serialize(_document);
+                RecordSnapshot(description);
+                RefreshNodeMap();
 
                 SyncEvent syncEvent = new()
                 {
@@ -241,14 +243,14 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 SetDocument(document);
             }
 
-            string newText = _serializer.Serialize(document);
-            _lastKnownText = newText;
+            SynchronizeAst();
+            RecordSnapshot("Edit");
 
             SyncEvent syncEvent = new()
             {
                 Source = source,
                 Changes = Array.Empty<AstChange>(),
-                UpdatedText = newText,
+                UpdatedText = _lastKnownText,
                 Diagnostics = Array.Empty<XamlDiagnostic>()
             };
 
@@ -264,7 +266,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         }
     }
 
-    private void SetDocument(MutableAstDocument doc)
+    private void SetDocument(MutableAstDocument? doc)
     {
         if (_document is not null)
         {
@@ -272,13 +274,13 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         }
 
         _document = doc;
-        _document.Changed += OnDocumentChanged;
+        if (_document is not null) _document.Changed += OnDocumentChanged;
 
         // Clear stale entries and register all nodes in the node map
         if (_nodeMap is not null)
         {
             _nodeMap.Clear();
-            if (doc.Root is not null)
+            if (doc?.Root is not null)
             {
                 _nodeMap.RegisterTree(doc.Root);
             }
@@ -288,7 +290,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     private void OnDocumentChanged(AstChange change)
     {
         // Record changes for undo/redo when not replaying undo/redo
-        _undoRedo.RecordChange(change);
+        if (!_isSyncing) _undoRedo.RecordChange(change);
     }
 
     /// <summary>
@@ -296,127 +298,214 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// </summary>
     public void CommitUndoBatch(string description)
     {
-        _undoRedo.CommitBatch(description);
+        lock (_syncLock)
+        {
+            if (_isDisposed || _isSyncing || _editGroup is not null) return;
+            _isSyncing = true;
+        }
+        try
+        {
+            SynchronizeAst();
+            if (RecordSnapshot(description)) Publish(SyncSource.DesignSurface, Array.Empty<AstChange>());
+        }
+        finally
+        {
+            _isSyncing = false;
+        }
+    }
+
+    /// <summary>Begins an atomic edit. Nested scopes share one checkpoint and undo entry.</summary>
+    public DocumentEditTransaction BeginEditTransaction(string description, SyncSource source = SyncSource.DesignSurface)
+    {
+        if (_isDisposed) throw new ObjectDisposedException(nameof(SyncEngine));
+        if (!CanEditAst) throw new InvalidOperationException("Resolve XAML errors before editing the designer.");
+        if (_editGroup is null)
+        {
+            CommitUndoBatch("Edit");
+            _editGroup = new EditGroup(_checkpoint!, description, source);
+        }
+        EditGroup group = _editGroup;
+        group.Depth++;
+        return new DocumentEditTransaction(() => CommitEdit(group), () => RollbackEdit(group), () => group.Completed,
+            change =>
+            {
+                if (change.Before == change.After) return;
+                if (group.CompanionChanges.Any(existing => FileSystemPathComparison.Equals(existing.TargetId, change.TargetId)))
+                    throw new InvalidOperationException($"The related document '{change.TargetId}' is already part of this edit.");
+                group.CompanionChanges.Add(change);
+            });
     }
 
     /// <summary>
-    /// Performs an undo operation: reverts the last committed batch of changes
-    /// by re-serializing the AST after applying inverse changes.
+    /// Restores the complete document checkpoint before the last committed operation.
     /// </summary>
-    public void Undo()
+    public void Undo(DocumentCompanionChange requiredChange)
     {
-        IReadOnlyList<AstChange>? inverseChanges = _undoRedo.Undo();
-        if (inverseChanges is null || _document is null)
+        if (!_undoRedo.CanUndoCompanion(requiredChange))
         {
-            return;
+            throw new InvalidOperationException("Undo later designer changes before undoing this refactoring.");
         }
 
-        ApplyChangesToAst(inverseChanges);
-        ResyncFromAst(SyncSource.CodeEditor);
+        Undo();
+    }
+
+    public void Redo(DocumentCompanionChange requiredChange)
+    {
+        if (!_undoRedo.CanRedoCompanion(requiredChange))
+        {
+            throw new InvalidOperationException("Redo earlier designer changes before redoing this refactoring.");
+        }
+
+        Redo();
+    }
+
+    public void Undo()
+    {
+        if (_editGroup is not null)
+        {
+            RollbackEdit(_editGroup);
+            return;
+        }
+        _undoRedo.Undo(snapshot => RestoreSnapshot(snapshot, SyncSource.CodeEditor));
     }
 
     /// <summary>
-    /// Performs a redo operation: re-applies the last undone batch of changes.
+    /// Restores the complete document checkpoint after the last undone operation.
     /// </summary>
     public void Redo()
     {
-        IReadOnlyList<AstChange>? changes = _undoRedo.Redo();
-        if (changes is null || _document is null)
-        {
-            return;
-        }
-
-        ApplyChangesToAst(changes);
-        ResyncFromAst(SyncSource.CodeEditor);
+        if (_editGroup is not null) return;
+        _undoRedo.Redo(snapshot => RestoreSnapshot(snapshot, SyncSource.CodeEditor));
     }
 
-    private void ApplyChangesToAst(IReadOnlyList<AstChange> changes)
-    {
-        if (_document is null || _nodeMap is null) return;
-
-        foreach (AstChange change in changes)
-        {
-            switch (change)
-            {
-                case PropertyValueChanged pvc:
-                {
-                    MutableAstNode? node = _nodeMap.FindById(pvc.NodeId);
-                    if (node is MutableAstObjectNode objNode)
-                    {
-                        objNode.SetPropertyValue(pvc.PropertyName, pvc.NewValue);
-                    }
-                    break;
-                }
-                case TextContentChanged tcc:
-                {
-                    MutableAstNode? node = _nodeMap.FindById(tcc.NodeId);
-                    if (node is MutableAstTextNode textNode)
-                    {
-                        textNode.Text = tcc.NewText;
-                    }
-                    break;
-                }
-                case NodeAdded added:
-                {
-                    MutableAstNode? parent = _nodeMap.FindById(added.ParentId);
-                    if (parent is MutableAstObjectNode parentObj)
-                    {
-                        // Re-create a placeholder node with the original ID.
-                        // In a full implementation the node would be deserialized from a snapshot.
-                        MutableAstObjectNode newNode = new() { TypeName = added.NodeTypeName };
-                        int index = Math.Min(added.Index, parentObj.Children.Count);
-                        parentObj.Children.Insert(index, newNode);
-                        _nodeMap.Register(newNode);
-                    }
-                    break;
-                }
-                case NodeRemoved removed:
-                {
-                    MutableAstNode? parent = _nodeMap.FindById(removed.ParentId);
-                    if (parent is MutableAstObjectNode parentObj && removed.Index < parentObj.Children.Count)
-                    {
-                        MutableAstNode child = parentObj.Children[removed.Index];
-                        parentObj.Children.RemoveAt(removed.Index);
-                        _nodeMap.Unregister(child.Id);
-                    }
-                    break;
-                }
-                case NodeMoved moved:
-                {
-                    MutableAstNode? oldParent = _nodeMap.FindById(moved.OldParentId);
-                    MutableAstNode? newParent = _nodeMap.FindById(moved.NewParentId);
-                    MutableAstNode? movedNode = _nodeMap.FindById(moved.NodeId);
-                    if (oldParent is MutableAstObjectNode oldParentObj &&
-                        newParent is MutableAstObjectNode newParentObj &&
-                        movedNode is not null)
-                    {
-                        oldParentObj.Children.Remove(movedNode);
-                        int index = Math.Min(moved.NewIndex, newParentObj.Children.Count);
-                        newParentObj.Children.Insert(index, movedNode);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    private void ResyncFromAst(SyncSource source)
+    private void SynchronizeAst()
     {
         if (_document is null) return;
+        string canonical = _serializer.Serialize(_document);
+        if (!string.Equals(canonical, _synchronizedAst, StringComparison.Ordinal))
+        {
+            _lastKnownText = canonical;
+        }
+        _synchronizedAst = canonical;
+        RefreshNodeMap();
+    }
 
-        string newText = _serializer.Serialize(_document);
-        _lastKnownText = newText;
+    private void RefreshNodeMap()
+    {
+        if (_nodeMap is null) return;
+        _nodeMap.Clear();
+        if (_document?.Root is not null) _nodeMap.RegisterTree(_document.Root);
+    }
 
+    private DocumentSnapshot CaptureSnapshot()
+    {
+        return new DocumentSnapshot(_lastKnownText, _synchronizedAst,
+            _document is null ? System.Collections.Immutable.ImmutableDictionary<string, Guid>.Empty
+                : AstNodeIdentities.Capture(_document, _checkpoint?.NodeIdentities));
+    }
+
+    private bool RecordSnapshot(string description)
+    {
+        if (_editGroup is not null) return false;
+        DocumentSnapshot after = CaptureSnapshot();
+        DocumentSnapshot before = _checkpoint ?? new DocumentSnapshot(string.Empty, string.Empty,
+            System.Collections.Immutable.ImmutableDictionary<string, Guid>.Empty);
+        _checkpoint = after;
+        return _undoRedo.CommitSnapshot(description, before, after);
+    }
+
+    private void RestoreSnapshot(DocumentSnapshot snapshot, SyncSource source)
+    {
+        _isSyncing = true;
+        try
+        {
+            ParseResult parsed = _parser.Parse(snapshot.Text, new XamlParserOptions { UseTolerantParser = true });
+            MutableAstDocument? document = parsed.Document as MutableAstDocument;
+            if (document is not null) AstNodeIdentities.Restore(document, snapshot.NodeIdentities);
+            SetDocument(document);
+            _lastKnownText = snapshot.Text;
+            _synchronizedAst = snapshot.CanonicalText;
+            _checkpoint = snapshot;
+            _diagnostics = parsed.Diagnostics;
+            _pendingChanges.Clear();
+            _undoRedo.DiscardPendingChanges();
+            Publish(source, Array.Empty<AstChange>());
+        }
+        finally
+        {
+            _isSyncing = false;
+        }
+    }
+
+    private void CommitEdit(EditGroup group)
+    {
+        if (group.Completed || !ReferenceEquals(_editGroup, group)) return;
+        if (--group.Depth > 0) return;
+        _isSyncing = true;
+        bool companionsApplied = false;
+        try
+        {
+            SynchronizeAst();
+            DocumentSnapshot after = CaptureSnapshot();
+            DocumentCompanionChange.ApplyAll(group.CompanionChanges, forward: true);
+            companionsApplied = true;
+            _undoRedo.CommitSnapshot(group.Description, group.Before, after, group.CompanionChanges);
+            _checkpoint = after;
+            group.Completed = true;
+            _editGroup = null;
+            Publish(group.Source, Array.Empty<AstChange>());
+        }
+        catch (Exception failure) when (!group.Completed)
+        {
+            group.Completed = true;
+            _editGroup = null;
+            List<Exception> errors = new() { failure };
+            if (companionsApplied)
+            {
+                try { DocumentCompanionChange.ApplyAll(group.CompanionChanges, forward: false); }
+                catch (Exception rollbackFailure) { errors.Add(rollbackFailure); }
+            }
+            try { RestoreSnapshot(group.Before, group.Source); }
+            catch (Exception rollbackFailure) { errors.Add(rollbackFailure); }
+            if (errors.Count > 1) throw new AggregateException("The grouped edit could not be fully restored.", errors);
+            throw;
+        }
+        finally
+        {
+            _isSyncing = false;
+        }
+    }
+
+    private void RollbackEdit(EditGroup group)
+    {
+        if (group.Completed || !ReferenceEquals(_editGroup, group)) return;
+        group.Completed = true;
+        _editGroup = null;
+        RestoreSnapshot(group.Before, group.Source);
+    }
+
+    private void Publish(SyncSource source, IReadOnlyList<AstChange> changes)
+    {
         SyncEvent syncEvent = new()
         {
             Source = source,
-            Changes = Array.Empty<AstChange>(),
-            UpdatedText = newText,
-            Diagnostics = Array.Empty<XamlDiagnostic>()
+            Changes = changes,
+            UpdatedText = _lastKnownText,
+            Diagnostics = _diagnostics
         };
 
         SyncCompleted?.Invoke(syncEvent);
         _syncSubject.OnNext(syncEvent);
+    }
+
+    private sealed class EditGroup(DocumentSnapshot before, string description, SyncSource source)
+    {
+        public DocumentSnapshot Before { get; } = before;
+        public string Description { get; } = description;
+        public SyncSource Source { get; } = source;
+        public int Depth { get; set; }
+        public bool Completed { get; set; }
+        public List<DocumentCompanionChange> CompanionChanges { get; } = new();
     }
 
     private static string ApplyEdits(string text, IReadOnlyList<TextEdit> edits)
@@ -444,6 +533,9 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
             if (_isDisposed) return;
             _isDisposed = true;
         }
+
+        if (_editGroup is not null) _editGroup.Completed = true;
+        _editGroup = null;
 
         if (_document is not null)
         {

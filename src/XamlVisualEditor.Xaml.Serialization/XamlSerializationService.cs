@@ -1,4 +1,5 @@
 using System.Text;
+using System.Xml.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
@@ -21,6 +22,7 @@ public sealed class XamlSerializationService : IXamlSerializationService
         options ??= new SerializationOptions();
         StringBuilder sb = new(4096);
         SerializeNode(mutableDoc.Root, mutableDoc.NamespaceAliases, sb, 0, options, isRoot: true);
+        SerializeTrivia(mutableDoc.TrailingTrivia, sb, 0, options);
         return sb.ToString();
     }
 
@@ -75,12 +77,15 @@ public sealed class XamlSerializationService : IXamlSerializationService
         StringBuilder sb,
         int depth,
         SerializationOptions options,
-        bool isRoot = false)
+        bool isRoot = false,
+        bool inline = false,
+        bool preserveWhitespace = false)
     {
+        SerializeTrivia(node.LeadingTrivia, sb, depth, options, inline);
         switch (node)
         {
             case MutableAstObjectNode objectNode:
-                SerializeObjectNode(objectNode, namespaces, sb, depth, options, isRoot);
+                SerializeObjectNode(objectNode, namespaces, sb, depth, options, isRoot, inline, preserveWhitespace);
                 break;
             case MutableAstTextNode textNode:
                 sb.Append(EscapeXmlText(textNode.Text));
@@ -94,33 +99,32 @@ public sealed class XamlSerializationService : IXamlSerializationService
         StringBuilder sb,
         int depth,
         SerializationOptions options,
-        bool isRoot)
+        bool isRoot,
+        bool inline,
+        bool preserveWhitespace)
     {
-        string indent = GetIndent(depth, options);
-        string prefix = GetPrefix(node.XmlNamespace, namespaces);
+        Dictionary<string, string> inherited = namespaces;
+        namespaces = new Dictionary<string, string>(inherited, StringComparer.Ordinal);
+        foreach (var alias in node.NamespaceAliases) namespaces[alias.Key] = alias.Value;
+        if (node.Properties.FirstOrDefault(property => property.PropertyName == "xml:space"
+                || property.XmlNamespace == XNamespace.Xml.NamespaceName && LocalName(property.PropertyName) == "space")
+                ?.Value is MutableAstTextNode directive)
+            preserveWhitespace = directive.Text == "preserve";
+        bool inlineContent = inline || preserveWhitespace || node.Children.Any(child => child is MutableAstTextNode);
+        string indent = inline ? string.Empty : GetIndent(depth, options);
+        string prefix = EnsurePrefix(node.XmlNamespace, namespaces);
         string tagName = string.IsNullOrEmpty(prefix) ? node.TypeName : $"{prefix}:{node.TypeName}";
+        foreach (MutableAstPropertyNode property in node.Properties)
+        {
+            if (IsAttributeProperty(property) && !string.IsNullOrEmpty(property.XmlNamespace))
+                EnsurePrefix(property.XmlNamespace, namespaces, requirePrefix: true);
+        }
 
         sb.Append(indent);
         sb.Append('<');
         sb.Append(tagName);
 
-        // Write namespace declarations on root element
-        if (isRoot)
-        {
-            foreach (KeyValuePair<string, string> ns in namespaces)
-            {
-                sb.AppendLine();
-                sb.Append(GetIndent(depth + 1, options));
-                if (string.IsNullOrEmpty(ns.Key))
-                {
-                    sb.Append($"xmlns=\"{EscapeXmlAttribute(ns.Value)}\"");
-                }
-                else
-                {
-                    sb.Append($"xmlns:{ns.Key}=\"{EscapeXmlAttribute(ns.Value)}\"");
-                }
-            }
-        }
+        WriteNamespaces(namespaces, inherited, sb, depth, options, isRoot);
 
         // Write attribute properties
         List<MutableAstPropertyNode> attributeProps = new();
@@ -160,82 +164,155 @@ public sealed class XamlSerializationService : IXamlSerializationService
             string value = prop.Value is MutableAstTextNode textNode ? textNode.Text : "";
             sb.AppendLine();
             sb.Append(GetIndent(depth + 1, options));
-            sb.Append($"{prop.PropertyName}=\"{EscapeXmlAttribute(value)}\"");
+            string propertyName = prop.PropertyName;
+            if (!string.IsNullOrEmpty(prop.XmlNamespace))
+            {
+                string attributePrefix = EnsurePrefix(prop.XmlNamespace, namespaces, requirePrefix: true);
+                propertyName = attributePrefix + ":" + LocalName(propertyName);
+            }
+            sb.Append($"{propertyName}=\"{EscapeXmlAttribute(value)}\"");
         }
 
-        bool hasContent = node.Children.Count > 0 || elementProps.Count > 0;
+        bool hasContent = node.Children.Count > 0 || elementProps.Count > 0 || node.TrailingTrivia.Count > 0;
 
         if (!hasContent)
         {
             sb.Append(" />");
-            sb.AppendLine();
+            if (!inline) sb.AppendLine();
         }
         else
         {
             sb.Append('>');
-            sb.AppendLine();
+            if (!inlineContent) sb.AppendLine();
 
             // Write property element children
             foreach (MutableAstPropertyNode prop in elementProps)
             {
-                SerializePropertyElement(prop, tagName, namespaces, sb, depth + 1, options);
+                SerializePropertyElement(prop, node.TypeName, node.XmlNamespace, namespaces, sb, depth + 1, options,
+                    inlineContent, preserveWhitespace);
             }
 
             // Write child elements
             foreach (MutableAstNode child in node.Children)
             {
-                SerializeNode(child, namespaces, sb, depth + 1, options);
+                SerializeNode(child, namespaces, sb, depth + 1, options,
+                    inline: inlineContent, preserveWhitespace: preserveWhitespace);
             }
 
-            sb.Append(indent);
+            SerializeTrivia(node.TrailingTrivia, sb, depth + 1, options, inlineContent);
+            if (!inlineContent) sb.Append(indent);
             sb.Append($"</{tagName}>");
-            sb.AppendLine();
+            if (!inline) sb.AppendLine();
         }
     }
 
     private void SerializePropertyElement(
         MutableAstPropertyNode prop,
         string parentTagName,
+        string parentNamespace,
         Dictionary<string, string> namespaces,
         StringBuilder sb,
         int depth,
-        SerializationOptions options)
+        SerializationOptions options,
+        bool inline,
+        bool preserveWhitespace)
     {
-        string indent = GetIndent(depth, options);
-        string elementName = prop.PropertyName.Contains('.')
-            ? prop.PropertyName
-            : $"{parentTagName}.{prop.PropertyName}";
+        SerializeTrivia(prop.LeadingTrivia, sb, depth, options, inline);
+        if (prop.XmlSpace is not null) preserveWhitespace = prop.XmlSpace == "preserve";
+        bool inlineContent = inline || preserveWhitespace || prop.Value is MutableAstTextNode
+            || prop.Value is MutableAstObjectNode { TypeName: "__PropertyElementChildren__" } textCollection
+                && textCollection.Children.Any(child => child is MutableAstTextNode);
+        Dictionary<string, string> inherited = namespaces;
+        namespaces = new Dictionary<string, string>(inherited, StringComparer.Ordinal);
+        foreach (var alias in prop.NamespaceAliases) namespaces[alias.Key] = alias.Value;
+        string propertyNamespace = string.IsNullOrEmpty(prop.XmlNamespace) ? parentNamespace : prop.XmlNamespace;
+        string prefix = EnsurePrefix(propertyNamespace, namespaces);
+        string indent = inline ? string.Empty : GetIndent(depth, options);
+        string localName = LocalName(prop.PropertyName);
+        string elementName = localName.Contains('.') ? localName : $"{parentTagName}.{localName}";
+        if (!string.IsNullOrEmpty(prefix)) elementName = prefix + ":" + elementName;
 
         sb.Append(indent);
-        sb.Append($"<{elementName}>");
-        sb.AppendLine();
+        sb.Append($"<{elementName}");
+        WriteNamespaces(namespaces, inherited, sb, depth, options, false);
+        if (prop.XmlSpace is not null) sb.Append($" xml:space=\"{EscapeXmlAttribute(prop.XmlSpace)}\"");
+        sb.Append('>');
+        if (!inlineContent) sb.AppendLine();
 
-        if (prop.Value is not null)
+        if (prop.Value is MutableAstObjectNode { TypeName: "__PropertyElementChildren__" } collection)
         {
-            SerializeNode(prop.Value, namespaces, sb, depth + 1, options);
+            foreach (MutableAstNode child in collection.Children)
+                SerializeNode(child, namespaces, sb, depth + 1, options,
+                    inline: inlineContent, preserveWhitespace: preserveWhitespace);
+        }
+        else if (prop.Value is not null)
+        {
+            SerializeNode(prop.Value, namespaces, sb, depth + 1, options,
+                inline: inlineContent, preserveWhitespace: preserveWhitespace);
         }
 
-        sb.Append(indent);
+        SerializeTrivia(prop.TrailingTrivia, sb, depth + 1, options, inlineContent);
+        if (!inlineContent) sb.Append(indent);
         sb.Append($"</{elementName}>");
-        sb.AppendLine();
+        if (!inline) sb.AppendLine();
     }
 
     private static bool IsAttributeProperty(MutableAstPropertyNode prop)
     {
-        // A property is serialized as an attribute if its value is a simple text node
-        return prop.Value is MutableAstTextNode;
+        return !prop.IsPropertyElement && prop.Value is MutableAstTextNode;
     }
 
-    private static string GetPrefix(string xmlNamespace, Dictionary<string, string> namespaces)
+    private static void SerializeTrivia(IEnumerable<XmlTrivia> trivia, StringBuilder output, int depth, SerializationOptions options,
+        bool inline = false)
     {
+        foreach (XmlTrivia item in trivia)
+        {
+            XNode xml = item.Target is null ? new XComment(item.Content) : new XProcessingInstruction(item.Target, item.Content);
+            if (!inline) output.Append(GetIndent(depth, options));
+            output.Append(xml.ToString(SaveOptions.DisableFormatting));
+            if (!inline) output.AppendLine();
+        }
+    }
+
+    private static string EnsurePrefix(string xmlNamespace, Dictionary<string, string> namespaces, bool requirePrefix = false)
+    {
+        if (xmlNamespace == XNamespace.Xml.NamespaceName) return "xml";
+        if (string.IsNullOrEmpty(xmlNamespace))
+        {
+            if (namespaces.ContainsKey(string.Empty)) namespaces[string.Empty] = string.Empty;
+            return string.Empty;
+        }
         foreach (KeyValuePair<string, string> kvp in namespaces)
         {
-            if (kvp.Value == xmlNamespace)
+            if (kvp.Value == xmlNamespace && (!requirePrefix || !string.IsNullOrEmpty(kvp.Key)))
             {
                 return kvp.Key;
             }
         }
-        return string.Empty;
+        if (!requirePrefix && !namespaces.ContainsKey(string.Empty))
+        {
+            namespaces[string.Empty] = xmlNamespace;
+            return string.Empty;
+        }
+        string prefix = "ns1";
+        for (int index = 2; namespaces.ContainsKey(prefix); index++) prefix = "ns" + index;
+        namespaces[prefix] = xmlNamespace;
+        return prefix;
+    }
+
+    private static string LocalName(string name) => name[(name.IndexOf(':') + 1)..];
+
+    private static void WriteNamespaces(Dictionary<string, string> namespaces, Dictionary<string, string> inherited,
+        StringBuilder output, int depth, SerializationOptions options, bool all)
+    {
+        foreach (var alias in namespaces)
+        {
+            if (!all && inherited.TryGetValue(alias.Key, out string? previous) && previous == alias.Value) continue;
+            output.AppendLine();
+            output.Append(GetIndent(depth + 1, options));
+            string name = string.IsNullOrEmpty(alias.Key) ? "xmlns" : "xmlns:" + alias.Key;
+            output.Append($"{name}=\"{EscapeXmlAttribute(alias.Value)}\"");
+        }
     }
 
     private static string GetIndent(int depth, SerializationOptions options)
@@ -248,7 +325,8 @@ public sealed class XamlSerializationService : IXamlSerializationService
         return text
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
-            .Replace(">", "&gt;");
+            .Replace(">", "&gt;")
+            .Replace("\r", "&#xD;");
     }
 
     private static string EscapeXmlAttribute(string value)
@@ -257,7 +335,10 @@ public sealed class XamlSerializationService : IXamlSerializationService
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")
-            .Replace("\"", "&quot;");
+            .Replace("\"", "&quot;")
+            .Replace("\t", "&#x9;")
+            .Replace("\n", "&#xA;")
+            .Replace("\r", "&#xD;");
     }
 
     /// <summary>

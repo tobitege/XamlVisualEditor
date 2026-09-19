@@ -99,7 +99,8 @@ public sealed partial class ToolboxView : UserControl
         _isDragging = true;
 
         DataTransfer data = new();
-        data.Add(DataTransferItem.Create(DesignerDataFormats.ToolboxItem, _dragCandidate.TypeName));
+        data.Add(DataTransferItem.Create(DesignerDataFormats.ToolboxItem,
+            new ToolboxDragData(_dragCandidate.TypeName, _dragCandidate.XmlNamespace).Serialize()));
         await DragDrop.DoDragDropAsync(_dragTriggerEvent, data, DragDropEffects.Copy);
 
         e.Pointer.Capture(null);

@@ -8,46 +8,156 @@
   <UserControl.Resources>
     <views:ToolboxRowHeightConverter x:Key="GroupHeight" />
     <DataTemplate x:Key="ToolboxItemTemplate" x:DataType="vm:ToolboxPanelItem">
-      <StackPanel Spacing="2" ToolTip.Tip="{CompiledBinding Description}">
-        <TextBlock Text="{CompiledBinding DisplayName}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Text="{CompiledBinding Subtitle}" FontSize="11" Opacity="0.7" TextTrimming="CharacterEllipsis" />
-      </StackPanel>
+      <TextBlock Text="{CompiledBinding DisplayName}" TextTrimming="CharacterEllipsis"
+                 VerticalAlignment="Center" ToolTip.Tip="{CompiledBinding Description}" />
+    </DataTemplate>
+    <DataTemplate x:Key="AssemblyFavoriteTemplate" x:DataType="vm:ToolboxAssemblyGroup">
+      <ToggleButton Content="{CompiledBinding FavoriteGlyph}" IsChecked="{CompiledBinding IsFavorite, Mode=TwoWay}"
+                    IsVisible="{CompiledBinding CanFavorite}" IsEnabled="{CompiledBinding CanEditPreferences}"
+                    Width="24" Height="24" MinWidth="24" MinHeight="24" Padding="0" FontSize="16"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    ToolTip.Tip="{CompiledBinding FavoriteToolTip}"
+                    AutomationProperties.Name="{CompiledBinding DisplayName, StringFormat='Favorite {0}'}" />
     </DataTemplate>
     <DataTemplate x:Key="FilterTemplate" x:DataType="vm:ToolboxFilterOption">
       <TextBlock Text="{CompiledBinding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding Label}" />
     </DataTemplate>
+    <ControlTheme x:Key="AssemblyExpanderTheme" TargetType="Expander"
+                  BasedOn="{StaticResource {x:Type Expander}}">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <StackPanel>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" x:DataType="vm:ToolboxAssemblyGroup">
+              <ToggleButton x:Name="PART_toggle" Theme="{StaticResource {x:Type Button}}"
+                            IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
+                            IsEnabled="{CompiledBinding CanEditPreferences}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Center" Padding="6,2" MinHeight="32"
+                            AutomationProperties.Name="{TemplateBinding Header}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                  <ContentPresenter Content="{TemplateBinding Header}"
+                                    ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                    VerticalAlignment="Center" />
+                  <PathIcon Grid.Column="1" Classes="assembly-chevron" Width="12" Height="8"
+                            Data="M 0,0 L 5,5 L 10,0 L 11,1 L 5,7 L -1,1 Z"
+                            VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
+                </Grid>
+              </ToggleButton>
+              <ContentControl Grid.Column="1" Content="{Binding}"
+                              ContentTemplate="{StaticResource AssemblyFavoriteTemplate}"
+                              IsVisible="{CompiledBinding CanFavorite}" VerticalAlignment="Center" />
+            </Grid>
+            <ContentPresenter x:Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              IsVisible="{TemplateBinding IsExpanded}" Padding="{TemplateBinding Padding}"
+                              HorizontalContentAlignment="Stretch" />
+          </StackPanel>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
   </UserControl.Resources>
-  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="8" RowSpacing="8">
-    <StackPanel Spacing="6">
+  <UserControl.Styles>
+    <Style Selector="Button"><Setter Property="Padding" Value="6,3" /><Setter Property="MinHeight" Value="28" /></Style>
+    <Style Selector="TextBox"><Setter Property="Padding" Value="6,3" /><Setter Property="MinHeight" Value="28" /></Style>
+    <Style Selector="ComboBox"><Setter Property="Padding" Value="6,2" /><Setter Property="MinHeight" Value="28" /></Style>
+    <Style Selector="CheckBox"><Setter Property="MinHeight" Value="26" /><Setter Property="Padding" Value="2" /></Style>
+    <Style Selector="ListBoxItem"><Setter Property="Padding" Value="6,2" /><Setter Property="MinHeight" Value="24" /></Style>
+    <Style Selector="Expander:expanded /template/ PathIcon.assembly-chevron">
+      <Setter Property="RenderTransform"><RotateTransform Angle="180" /></Setter>
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="6" RowSpacing="4">
+    <StackPanel Spacing="4">
       <TextBlock Text="Toolbox" FontWeight="SemiBold" />
-      <TextBox x:Name="ControlSearch" PlaceholderText="Search controls, libraries, categories..."
-               Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+        <TextBox x:Name="ControlSearch" PlaceholderText="Search controls..."
+                 ToolTip.Tip="Search controls, namespaces, assemblies and categories"
+                 Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+        <Button Grid.Column="1" Content="Assemblies" ToolTip.Tip="{CompiledBinding AssemblyFilterSummary}">
+          <Button.Flyout>
+            <Flyout>
+              <StackPanel Width="320" Spacing="6" IsEnabled="{CompiledBinding CanEditAssemblyPreferences}">
+                <TextBlock Text="Assemblies in this workspace" FontWeight="SemiBold" />
+                <TextBlock Text="{CompiledBinding AssemblyFilterSummary}" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Button Content="Show all" Command="{CompiledBinding ShowAllAssembliesCommand}" />
+                  <Button Content="Hide all" Command="{CompiledBinding HideAllAssembliesCommand}" />
+                </StackPanel>
+                <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl ItemsSource="{CompiledBinding AssemblyChoices}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ToolboxAssemblyGroup">
+                        <DockPanel>
+                          <ContentControl DockPanel.Dock="Right" Content="{Binding}"
+                                          ContentTemplate="{StaticResource AssemblyFavoriteTemplate}" />
+                          <CheckBox IsChecked="{CompiledBinding IsIncluded, Mode=TwoWay}">
+                            <TextBlock Text="{CompiledBinding CatalogHeader}" TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{CompiledBinding AssemblyName}" />
+                          </CheckBox>
+                        </DockPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+      </Grid>
       <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
         <ComboBox ItemsSource="{CompiledBinding Libraries}" ItemTemplate="{StaticResource FilterTemplate}"
                   SelectedItem="{CompiledBinding SelectedLibrary, Mode=TwoWay}" HorizontalAlignment="Stretch" />
         <ComboBox Grid.Column="1" ItemsSource="{CompiledBinding Categories}" ItemTemplate="{StaticResource FilterTemplate}"
                   SelectedItem="{CompiledBinding SelectedCategory, Mode=TwoWay}" HorizontalAlignment="Stretch" />
       </Grid>
-      <StackPanel Orientation="Horizontal" Spacing="4">
-        <Button Content="Reload" Command="{CompiledBinding ReloadCommand}" />
-        <Button Content="Clear filters" Command="{CompiledBinding ClearFiltersCommand}" />
-        <Button Content="Cancel" Command="{CompiledBinding CancelLoadCommand}" />
-      </StackPanel>
+      <WrapPanel>
+        <Button Content="Reload" Command="{CompiledBinding ReloadCommand}" Margin="0,0,4,0" />
+        <Button Content="Clear filters" Command="{CompiledBinding ClearFiltersCommand}" Margin="0,0,4,0" />
+        <Button Content="Cancel" Command="{CompiledBinding CancelLoadCommand}"
+                Height="26" MinHeight="26" Margin="0,0,4,0" />
+        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <Button Command="{CompiledBinding CollapseAllCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                  ToolTip.Tip="Collapse all" AutomationProperties.Name="Collapse all assemblies">
+            <PathIcon Width="12" Height="12"
+                      Data="M 0,5 L 5,0 L 10,5 L 8.6,6.4 L 5,2.8 L 1.4,6.4 Z M 0,11 L 5,6 L 10,11 L 8.6,12.4 L 5,8.8 L 1.4,12.4 Z" />
+          </Button>
+          <Button Command="{CompiledBinding ExpandAllCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                  ToolTip.Tip="Expand all" AutomationProperties.Name="Expand all assemblies">
+            <PathIcon Width="12" Height="12"
+                      Data="M 0,1.4 L 1.4,0 L 5,3.6 L 8.6,0 L 10,1.4 L 5,6.4 Z M 0,7.4 L 1.4,6 L 5,9.6 L 8.6,6 L 10,7.4 L 5,12.4 Z" />
+          </Button>
+        </StackPanel>
+      </WrapPanel>
+      <TextBlock Text="{CompiledBinding PreferenceError}" TextWrapping="Wrap" FontSize="11" />
       <ProgressBar IsIndeterminate="True" IsVisible="{CompiledBinding IsLoading}" Height="3" />
     </StackPanel>
 
     <Grid Grid.Row="1">
-      <ScrollViewer x:Name="AssemblyGroupsViewport" HorizontalScrollBarVisibility="Disabled">
+      <ScrollViewer x:Name="AssemblyGroupsViewport" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
         <ItemsControl ItemsSource="{CompiledBinding AssemblyGroups}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="2" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:ToolboxAssemblyGroup">
-              <Expander Header="{CompiledBinding Header}"
+              <Expander Header="{CompiledBinding Header}" Theme="{StaticResource AssemblyExpanderTheme}"
                         IsExpanded="{CompiledBinding IsExpanded, Mode=TwoWay}"
                         ToolTip.Tip="{CompiledBinding AssemblyName}"
-                        Margin="0,0,0,8"
+                        Margin="0" Padding="6,2" MinHeight="0"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch">
+                <Expander.HeaderTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </Expander.HeaderTemplate>
                 <ListBox ItemsSource="{CompiledBinding Items}"
+                         Padding="0" BorderThickness="0"
                          drag:ToolboxDragBehavior.IsEnabled="True"
                          SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
                          ItemTemplate="{StaticResource ToolboxItemTemplate}"

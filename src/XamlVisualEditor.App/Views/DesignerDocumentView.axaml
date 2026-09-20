@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:ad="using:XamlVisualEditor.Designer.Adorners"
              x:Class="XamlVisualEditor.App.Views.DesignerDocumentView"
              x:Name="Root"
              x:DataType="vm:DesignerDocumentViewModel">
@@ -13,7 +14,12 @@
                 Padding="4,2"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                 BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal" Spacing="2">
+            <WrapPanel Orientation="Horizontal">
+                <WrapPanel.Styles>
+                    <Style Selector="WrapPanel > :is(Control)">
+                        <Setter Property="Margin" Value="1,1" />
+                    </Style>
+                </WrapPanel.Styles>
                 <RadioButton Content="Split" GroupName="ViewMode"
                              IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
                              Padding="12,4"
@@ -31,17 +37,27 @@
                               Padding="12,4"
                               FontSize="12" />
                 <Separator Margin="6,0" />
-                <RadioButton Content="Split V" GroupName="SplitDirection"
+                <RadioButton Theme="{StaticResource {x:Type ToggleButton}}"
+                              GroupName="SplitDirection" ToolTip.Tip="Top/bottom"
+                              AutomationProperties.Name="Split horizontally: top/bottom"
                               IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitVertical}}"
                               IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
-                              Padding="12,4"
-                              FontSize="12" />
-                <RadioButton Content="Split H" GroupName="SplitDirection"
+                              Width="28" Height="28" Padding="4"
+                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                    <PathIcon Width="16" Height="16"
+                              Data="M 0,0 H 16 V 16 H 0 Z M 2,2 V 7 H 14 V 2 Z M 2,9 V 14 H 14 V 9 Z" />
+                </RadioButton>
+                <RadioButton Theme="{StaticResource {x:Type ToggleButton}}"
+                              GroupName="SplitDirection" ToolTip.Tip="Side by side"
+                              AutomationProperties.Name="Split vertically: side by side"
                               IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitHorizontal}}"
                               IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
-                              Padding="12,4"
-                              FontSize="12" />
-            </StackPanel>
+                              Width="28" Height="28" Padding="4"
+                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                    <PathIcon Width="16" Height="16"
+                              Data="M 0,0 H 16 V 16 H 0 Z M 2,2 V 14 H 7 V 2 Z M 9,2 V 14 H 14 V 2 Z" />
+                </RadioButton>
+            </WrapPanel>
         </Border>
 
         <Grid v:SplitterLayoutBehavior.PersistenceKey="DesignerDocument">
@@ -85,13 +101,28 @@
                     <Border IsVisible="{CompiledBinding UseExternalPreviewer, Converter={x:Static BoolConverters.Not}}">
                         <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
                     </Border>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollBarVisibility="Auto"
-                                  IsVisible="{CompiledBinding UseExternalPreviewer}">
-                        <v:PreviewerSurfaceControl Session="{CompiledBinding PreviewerSession}"
-                                                   HorizontalAlignment="Left"
-                                                   VerticalAlignment="Top" />
-                    </ScrollViewer>
+                    <DockPanel IsVisible="{CompiledBinding UseExternalPreviewer}">
+                        <v:DesignerViewportToolbar DockPanel.Dock="Top" DataContext="{CompiledBinding DesignSurface}"
+                                                   IsExternalPreviewer="True" FitRequested="OnPreviewerFit" SelectionRequested="OnPreviewerSelection" />
+                        <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
+                            <Border Width="24" Height="24" Background="#252526"
+                                    IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
+                            <ad:RulerControl x:Name="ExternalHorizontalRuler" Grid.Column="1" Height="24"
+                                             Orientation="Horizontal" Zoom="{CompiledBinding DesignSurface.Zoom}"
+                                             Guides="{CompiledBinding DesignSurface.VerticalGuides}"
+                                             IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
+                            <ad:RulerControl x:Name="ExternalVerticalRuler" Grid.Row="1" Width="24"
+                                             Orientation="Vertical" Zoom="{CompiledBinding DesignSurface.Zoom}"
+                                             Guides="{CompiledBinding DesignSurface.HorizontalGuides}"
+                                             IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
+                            <ScrollViewer x:Name="PreviewerViewport" Grid.Row="1" Grid.Column="1"
+                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <v:PreviewerSurfaceControl x:Name="ExternalPreviewSurface" Session="{CompiledBinding PreviewerSession}"
+                                                           Document="{CompiledBinding}"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Top" />
+                            </ScrollViewer>
+                        </Grid>
+                    </DockPanel>
                 </Grid>
             </Border>
 

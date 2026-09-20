@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Microsoft.Extensions.Logging;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -425,45 +426,22 @@ public sealed class ControlFactory
     /// </summary>
     public static Control? HitTest(Control root, Point point)
     {
-        // Check children in reverse order (topmost first)
-        if (root is Panel panel)
-        {
-            for (int i = panel.Children.Count - 1; i >= 0; i--)
-            {
-                if (panel.Children[i] is Control child)
-                {
-                    Rect childBounds = child.Bounds;
-                    if (childBounds.Contains(point))
-                    {
-                        Point childPoint = point - childBounds.Position;
-                        Control? result = HitTest(child, childPoint);
-                        return result ?? child;
-                    }
-                }
-            }
-        }
-        else if (root is Decorator decorator && decorator.Child is Control decoratorChild)
-        {
-            Rect childBounds = decoratorChild.Bounds;
-            if (childBounds.Contains(point))
-            {
-                Point childPoint = point - childBounds.Position;
-                Control? result = HitTest(decoratorChild, childPoint);
-                return result ?? decoratorChild;
-            }
-        }
-        else if (root is ContentControl cc && cc.Content is Control content)
-        {
-            Rect contentBounds = content.Bounds;
-            if (contentBounds.Contains(point))
-            {
-                Point contentPoint = point - contentBounds.Position;
-                Control? result = HitTest(content, contentPoint);
-                return result ?? content;
-            }
-        }
+        return HitVisual(root, point);
 
-        return root.Bounds.Contains(point) ? root : null;
+        static Control? HitVisual(Visual visual, Point position)
+        {
+            if (!visual.IsVisible) return null;
+            bool inside = new Rect(visual.Bounds.Size).Contains(position);
+            if (visual.ClipToBounds && !inside || visual.Clip is { } clip && !clip.FillContains(position)) return null;
+
+            // Edit mode disables native input, but the rendered controls must remain selectable.
+            foreach (Visual child in visual.GetVisualChildren().OrderBy(child => child.ZIndex).Reverse())
+            {
+                if (visual.TranslatePoint(position, child) is { } childPoint && HitVisual(child, childPoint) is { } hit)
+                    return hit;
+            }
+            return inside ? visual as Control : null;
+        }
     }
 
     private Control? TryCreateCustomControl(MutableAstObjectNode astNode)

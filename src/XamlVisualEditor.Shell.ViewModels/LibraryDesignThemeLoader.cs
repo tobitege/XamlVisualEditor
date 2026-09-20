@@ -23,6 +23,7 @@ public static class LibraryDesignThemeLoader
     public static IReadOnlyList<IStyle> CreateStyles(Control root, ITypeMetadataService metadata,
         Action<string> reportDiagnostic)
     {
+        HashSet<string> configuredAssemblies = ConfiguredStyleAssemblies(root.Styles);
         List<Assembly> assemblies = new();
         HashSet<Assembly> seen = new();
         foreach (Control control in new[] { root }.Concat(root.GetLogicalDescendants().OfType<Control>()))
@@ -43,6 +44,7 @@ public static class LibraryDesignThemeLoader
         foreach (Assembly assembly in assemblies)
         {
             string? assemblyName = assembly.GetName().Name;
+            if (assemblyName is not null && configuredAssemblies.Contains(assemblyName)) continue;
             TypeMetadata[] candidates = providers.Where(type =>
                 string.Equals(type.AssemblyName, assemblyName, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (candidates.Length == 1)
@@ -70,5 +72,26 @@ public static class LibraryDesignThemeLoader
             }
         }
         return styles;
+    }
+
+    private static HashSet<string> ConfiguredStyleAssemblies(IEnumerable<IStyle> roots)
+    {
+        HashSet<string> assemblies = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<IStyle> visited = new(ReferenceEqualityComparer.Instance);
+        Stack<IStyle> pending = new(roots);
+        while (pending.TryPop(out IStyle? style))
+        {
+            if (!visited.Add(style)) continue;
+            if (style.GetType().Assembly.GetName().Name is { } assemblyName) assemblies.Add(assemblyName);
+            if (style is StyleInclude include)
+            {
+                if (include.Source is { IsAbsoluteUri: true } source && source.Scheme == "avares")
+                    assemblies.Add(source.Host);
+                if (include.Loaded is { } loaded) pending.Push(loaded);
+            }
+            if (style is IEnumerable<IStyle> children)
+                foreach (IStyle child in children) pending.Push(child);
+        }
+        return assemblies;
     }
 }

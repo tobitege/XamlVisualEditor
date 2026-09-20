@@ -4,9 +4,12 @@ using System.Linq;
 using System.Reflection;
 using System.Reactive.Linq;
 using System.Threading;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using XamlVisualEditor.Core;
@@ -38,17 +41,7 @@ public sealed class RuntimeDesignRenderer
         cancellationToken.ThrowIfCancellationRequested();
         MutableAstObjectNode source = document.Root
             ?? throw new InvalidOperationException("The document has no root element to render.");
-
-        MutableAstObjectNode copy = AstNodeCloner.Clone(source);
-        MutableAstDocument preview = new() { Root = copy };
-        foreach (var declaration in document.NamespaceAliases)
-            preview.NamespaceAliases[declaration.Key] = declaration.Value;
-
-        string prefix = ChooseIdentityPrefix(document);
-        preview.NamespaceAliases[prefix] = IdentityNamespace;
-        copy.NamespaceAliases[prefix] = IdentityNamespace;
-        Dictionary<Guid, string> sourceTypes = new();
-        AddDesignMetadata(source, copy, prefix, sourceTypes, cancellationToken);
+        (MutableAstDocument preview, Dictionary<Guid, string> sourceTypes) = PrepareDocument(document, cancellationToken);
 
         RuntimeRenderRecovery recovery = new(preview, sourceTypes, IdentityNamespace);
         object loaded;
@@ -80,6 +73,8 @@ public sealed class RuntimeDesignRenderer
             }
         }
 
+        if (loaded is not Control && FindPreviewControl(preview.Root!) is not null)
+            loaded = CreateExplicitPreview(loaded) ?? loaded;
         if (loaded is not Control root)
             throw new InvalidOperationException($"{baseUri}: {source.TypeName} does not produce a Control. Select a design preview for this document.");
         if (cancellationToken.IsCancellationRequested)
@@ -87,7 +82,114 @@ public sealed class RuntimeDesignRenderer
             if (root is Window window) window.Close();
             cancellationToken.ThrowIfCancellationRequested();
         }
+        ApplyDesignProperties(root);
         return new RuntimeDesignRenderResult(root, baseUri, sourceTypes, recovery.Diagnostics.ToArray());
+    }
+
+    /// <summary>Creates a preview-only copy with stable source IDs and no code-behind event handlers.</summary>
+    public string PrepareXaml(MutableAstDocument document, CancellationToken cancellationToken = default,
+        ThemeVariant? themeVariant = null, DesignerThemeRequest? themeRequest = null)
+    {
+        (MutableAstDocument preview, _) = PrepareDocument(document, cancellationToken);
+        if (themeVariant is not null && themeVariant != ThemeVariant.Default
+            && FindPreviewControl(preview.Root!) is { } themeRoot)
+        {
+            string prefix = preview.NamespaceAliases.First(alias => alias.Value == IdentityNamespace).Key;
+            themeRoot.Properties.Add(new MutableAstPropertyNode
+            {
+                PropertyName = prefix + ":DesignPreviewSettings.ThemeVariant",
+                XmlNamespace = IdentityNamespace,
+                Value = new MutableAstTextNode { Text = themeVariant.Key.ToString()! }
+            });
+        }
+        if (themeRequest is not null && FindPreviewControl(preview.Root!) is { } providerRoot)
+        {
+            string prefix = preview.NamespaceAliases.First(alias => alias.Value == IdentityNamespace).Key;
+            providerRoot.Properties.Add(new MutableAstPropertyNode
+            {
+                PropertyName = prefix + ":" + DesignerThemeProtocol.PropertyName,
+                XmlNamespace = IdentityNamespace,
+                Value = new MutableAstTextNode { Text = "{}" + System.Text.Json.JsonSerializer.Serialize(themeRequest) }
+            });
+        }
+        return _serializer.Serialize(preview);
+    }
+
+    private static Control? CreateExplicitPreview(object source)
+    {
+        switch (source)
+        {
+            case ResourceDictionary resources:
+                Control? resourcePreview = Design.GetPreviewWith(resources);
+                resourcePreview?.Resources.MergedDictionaries.Add(resources);
+                return resourcePreview;
+            case IStyle style:
+                Control? stylePreview = Design.GetPreviewWith(style);
+                stylePreview?.Styles.Add(style);
+                return stylePreview;
+            case IDataTemplate template when Design.GetPreviewWith(template) is ContentControl templatePreview:
+                templatePreview.ContentTemplate = template;
+                if (!templatePreview.IsSet(Design.DataContextProperty) && templatePreview.IsSet(StyledElement.DataContextProperty))
+                    templatePreview.Content = templatePreview.DataContext;
+                return templatePreview;
+            default:
+                return null;
+        }
+    }
+
+    private static MutableAstObjectNode? FindPreviewControl(MutableAstObjectNode root)
+    {
+        static bool IsControl(MutableAstObjectNode node) => node.Properties.Any(property =>
+            property.XmlNamespace == IdentityNamespace && LocalName(property.PropertyName) == "DesignNodeIdentity.NodeId");
+
+        static MutableAstObjectNode? FindControl(MutableAstObjectNode node)
+        {
+            if (IsControl(node)) return node;
+            foreach (MutableAstObjectNode child in node.Children.OfType<MutableAstObjectNode>()
+                .Concat(node.Properties.Select(property => property.Value).OfType<MutableAstObjectNode>()))
+                if (FindControl(child) is { } control) return control;
+            return null;
+        }
+
+        if (IsControl(root)) return root;
+        return root.Properties.FirstOrDefault(property => LocalName(property.PropertyName) == "Design.PreviewWith")
+            ?.Value is MutableAstObjectNode preview ? FindControl(preview) : null;
+    }
+
+    private (MutableAstDocument Preview, Dictionary<Guid, string> SourceTypes) PrepareDocument(
+        MutableAstDocument document, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        MutableAstObjectNode source = document.Root
+            ?? throw new InvalidOperationException("The document has no root element to render.");
+        MutableAstObjectNode copy = AstNodeCloner.Clone(source);
+        MutableAstDocument preview = new() { Root = copy };
+        foreach (var declaration in document.NamespaceAliases)
+            preview.NamespaceAliases[declaration.Key] = declaration.Value;
+        string prefix = ChooseIdentityPrefix(document);
+        preview.NamespaceAliases[prefix] = IdentityNamespace;
+        copy.NamespaceAliases[prefix] = IdentityNamespace;
+        Dictionary<Guid, string> sourceTypes = new();
+        AddDesignMetadata(source, copy, prefix, sourceTypes, cancellationToken);
+        if (sourceTypes.ContainsKey(source.Id))
+            copy.Properties.Add(new MutableAstPropertyNode
+            {
+                PropertyName = prefix + ":DesignNodeIdentity.RenderId",
+                XmlNamespace = IdentityNamespace,
+                Value = new MutableAstTextNode { Text = Guid.NewGuid().ToString("D") }
+            });
+        return (preview, sourceTypes);
+    }
+
+    private static void ApplyDesignProperties(Control root)
+    {
+        if (root.IsSet(Design.WidthProperty)) root.Bind(Control.WidthProperty, root[!Design.WidthProperty]);
+        if (root.IsSet(Design.HeightProperty)) root.Bind(Control.HeightProperty, root[!Design.HeightProperty]);
+        if (root.IsSet(Design.DataContextProperty)) root.Bind(Control.DataContextProperty, root[!Design.DataContextProperty]);
+        if (root.IsSet(Design.DesignStyleProperty) && Design.GetDesignStyle(root) is { } style)
+        {
+            root.Styles.Add(style);
+        }
     }
 
     private void AddDesignMetadata(MutableAstObjectNode source, MutableAstObjectNode copy, string prefix,

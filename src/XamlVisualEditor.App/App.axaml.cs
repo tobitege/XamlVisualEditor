@@ -64,6 +64,7 @@ public sealed class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        DialogAppearance.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -256,6 +257,8 @@ public sealed class App : Application
             ExtensionPackagePaths.GetStateFilePath()));
         services.AddSingleton<IExtensionUpdateService, ExtensionUpdateService>();
         services.AddSingleton<IExtensionManager, ExtensionManager>();
+        services.AddSingleton<Func<string, IExtensionStorage>>(_ =>
+            extensionId => new FileExtensionStorage(extensionId));
         services.AddSingleton<BuiltInExtensionHost>();
         services.AddSingleton<IXveExtension, AcpExtensionEntry>();
         services.AddSingleton<IXveExtension, GitExtensionEntry>();

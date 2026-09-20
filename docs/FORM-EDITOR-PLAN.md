@@ -48,6 +48,8 @@ Beim Parent-Wechsel werden nicht mehr passende Layoutwerte in derselben Undo-Tra
 
 Die Bibliotheksunterstützung wird mit einer separaten generischen Testbibliothek geprüft. Produktspezifische Bibliotheken dienen als zusätzlicher Integrationsnachweis außerhalb der öffentlichen Quellen und Tests. Ein bekannter Controlname darf nicht die Bedingung dafür sein, dass eine Eigenschaft oder ein Container funktioniert.
 
+Der [Designzeit-Vertrag fuer Controlbibliotheken](DESIGN-TIME-CONTROLS.md) beschreibt Vorschauwerte, Konstruktion und die Abgrenzung zum prozessweiten Designmodus.
+
 ## Eigenschaften und Ressourcen
 
 Das Eigenschaftenfenster benötigt passende Editoren für Zahlen, boolesche und nullable Werte, Enum/Flags, Farben und Brushes, Thickness, CornerRadius, Point/Size/Rect und GridLength. Lokale Werte, Stylewerte und Defaults müssen erkennbar sein.
@@ -72,7 +74,7 @@ Typentdeckung und Instanziierung trennen. Die Toolbox darf nicht zum Auflisten j
 - `TypeMetadataService.GetAvailableTypes` liest einen Assembly-übergreifenden PE-Typkatalog einschließlich Vererbung, Konstruierbarkeit und Designzeit-Metadaten. XML-, CLR- und `using:`-Namespaces werden unterstützt. `MetadataControlCatalog` beschränkt Drittanbieter-Einträge auf die Projekt-Assemblies und wird beim Workspacewechsel aktualisiert.
 - `ControlFactory` berücksichtigt bei der Control-Erzeugung die tatsächliche Typidentität statt allein den kurzen Namen. Die einzelnen Property-/Attached-Property-Behandlungen bleiben gegen tatsächliches Avalonia-Rendering zu prüfen.
 - Die aktive Eigenschaftenansicht liegt in `XamlVisualEditor.PropertyEditorExtension`; die gleichnamige Bibliothekskomponente ist nicht alleiniger Maßstab für das Verhalten der Oberfläche.
-- Die aktiven Collection- und Template-Editoren in `PropertyEditorPanelView.axaml` sind Textfelder. Strukturelle Bearbeitung ist damit noch nicht nachgewiesen.
+- Die aktive Eigenschaftenansicht öffnet strukturelle Collection- und Template-Editoren. Grid-Definitionen können mit Auto-, Pixel- und Sternmaßen bearbeitet werden; Zellzuordnungen und Spans werden beim Ändern der Definitionen gemeinsam angepasst. Die vollständige Abnahme aller Collection- und Template-Arten bleibt erforderlich.
 
 Diese Befunde bestimmen die ersten Arbeitspakete. Sie ersetzen keine vollständige Bestandsaufnahme und keinen praktischen Bediennachweis.
 
@@ -88,6 +90,8 @@ Die Wiederherstellung erfolgt über vollständige Dokument-Checkpoints mit stabi
 
 `DesignerTransactionWorkflowTests` prüft für Canvas, Grid und StackPanel einen kombinierten Struktur-/Eigenschaftseingriff mit Löschen eines Teilbaums, Undo/Redo, Abbruch, Speicherung und erneutem Öffnen. Bindings, Ressourcen und Identitäten werden dabei verglichen. Ein zusätzlicher Ablauf erhält unvollständigen XAML-Code beim Speichern und verhindert dessen Überschreiben durch visuelle Eingriffe. Die verbleibende Quelltreue bei normalen Serialisierungsänderungen sowie die sichtbare Bedienung sind damit noch nicht vollständig abgenommen.
 
+Der Attributablauf in derselben Testsuite vergleicht den vollständigen Text vor und nach einer lokalen Änderung. Er umfasst Kommentare, Processing Instructions, Bindings, Ressourcenverweise, Templates, Anführungszeichen und LF-/CRLF-Zeilenumbrüche sowie Undo/Redo, Speicherung und erneutes Öffnen. Änderungen an `xml:space` werden zusätzlich gegen das erneut geparste Dokumentmodell geprüft. Strukturänderungen verwenden weiterhin teilweise die vollständige Serialisierung; dieser Nachweis ersetzt deshalb keine vollständige Quelltreue bei strukturellen Eingriffen.
+
 ### 2. Durchgängige Bedienung aller drei Layoutarten
 
 Je ein vollständiges Canvas-, Grid- und StackPanel-Formular visuell erstellen und bearbeiten. Einfügen, Auswahl, Verschieben, Größenänderung, Parent-Wechsel und Reihenfolge mit Maus und Tastatur umsetzen. Die drei Layoutarten werden gemeinsam abgenommen.
@@ -100,7 +104,18 @@ Toolbox-Drags transportieren Typ und Namespace. Die Designfläche ermittelt das 
 
 Controls aus dem aktiven Projekt und seinen Abhängigkeiten in der Toolbox anbieten. Typidentität, Namespace-Ergänzung, Vererbung, Themes und Inhaltsmodelle prüfen. Den kompletten Ablauf aus Arbeitspaket 2 mit Controls einer externen Bibliothek wiederholen.
 
-- [ ] Toolbox-Controls nach Assembly in eigenen Expandern gruppieren, statt sämtliche Drittanbieter-Controls in einem gemeinsamen Block anzuzeigen. Gruppen und Controls jeweils alphabetisch sortieren. Die Gruppen erhalten verständliche Bibliotheksnamen, beispielsweise eine Sektion "Flowery.NET" für deren Controls.
+Bibliotheksspezifische Vorschau-Themes über Extensions:
+
+- [ ] Eine allgemeine Theme-Provider-Schnittstelle im Extension-SDK bereitstellen. Der XVE-Kern enthält keine Abhängigkeit auf eine konkrete Control-Bibliothek oder deren Theme-Manager. Bibliotheks- und projektspezifische Adapter bleiben außerhalb des XVE-Kerns.
+- [ ] Eine kompakte, XVE-eigene Theme-ComboBox in der Designer-/Previewer-Toolbar anbieten. Sie zeigt die vom Provider gelieferten Theme-Namen und verwendet ein Standard-Control, kein Theme-Auswahl-Control einer Fremdbibliothek. Die Auswahl bleibt bei schmaler Toolbar durch gemeinsames Umbrechen erreichbar; vollständige Namen bleiben erkennbar.
+- [ ] Den Theme-Katalog aus dem initialisierten Zielkontext beziehen, einschließlich projektspezifisch registrierter Themes. Bei mehreren Providern Herkunft und gleichnamige Themes eindeutig darstellen. Stabile Provider- und Theme-IDs verwenden, nicht die Anzeigenamen als Schlüssel.
+- [ ] Bibliotheksspezifische Theme-Anwendung im isolierten Previewer mit den Abhängigkeiten des geladenen Projekts ausführen. Der Wechsel verändert weder das XVE-Editor-Theme noch den AXAML-Quelltext. Die allgemeine Hell-/Dunkel-Variante und eine Bibliothekspalette in der Oberfläche klar unterscheiden.
+- [ ] Die gewählte Provider-/Theme-Kombination pro Workspace persistieren und beim erneuten Öffnen wiederherstellen. Eine Auswahl für den Projektstandard anbieten; nicht mehr verfügbare Provider oder Themes verständlich melden, statt unbemerkt ein anderes Theme anzuwenden.
+- [ ] Namensauswahl, Theme-Wechsel, Wiederherstellung und Dokument-/Workspace-Wechsel mit echten gerenderten Controls prüfen. Fensterlose UserControls und explizite Design.PreviewWith-Vorschauen einbeziehen; Auswahl und Zoom im Designer erhalten.
+
+- [x] Toolbox-Controls nach Assembly in eigenen Expandern gruppieren, statt sämtliche Drittanbieter-Controls in einem gemeinsamen Block anzuzeigen. Gruppen und Controls jeweils alphabetisch sortieren. Die Gruppen erhalten verständliche Bibliotheksnamen, beispielsweise eine Sektion "Flowery.NET" für deren Controls.
+
+`LibraryThemeWorkflowTests` führt den Anwendungstheme-Pfad mit echten Controls einer generischen Bibliothek aus. Der Ablauf prüft Inline-Ressourcen, konfigurierte Theme-Objekte, geerbte Controls, `Application.DataTemplates` und den Vorrang formularlokaler Styles und Templates. Deklarative Styles und Ressourcen werden pro Vorschau als gemeinsamer AXAML-Kontext erzeugt. Das ist kein Nachweis für beliebige programmatische Anwendungsinitialisierung oder prozessweite Designmodus-Abhängigkeiten.
 
 ### 4. Struktur-, Ressourcen- und Eventeditoren
 
@@ -128,11 +143,56 @@ Gezielte Integrationstests belegen Modell und Persistenz. Headless-Tests verwend
 
 ## Toolbox, Oberflächendichte und Diagnose
 
-- [ ] **Assembly-Filter je Workspace:** Der Benutzer kann die angezeigten Assemblies über eine Mehrfachauswahl mit Checkboxen festlegen. Die Auswahl wird je Workspace gespeichert und beim erneuten Öffnen wiederhergestellt. Suche und Assembly-Filter wirken gemeinsam; neu verfügbare oder vorübergehend fehlende Assemblies dürfen gespeicherte Auswahlen nicht verlieren.
-- [ ] **Favoriten für Drittanbieter-Assemblies:** Jede Drittanbieter-Sektion erhält eine direkt bedienbare Favoriten-Markierung, beispielsweise einen Stern. Favorisierte Assemblies stehen zusammen vor den übrigen Drittanbieter-Assemblies; innerhalb beider Gruppen bleibt die alphabetische Sortierung erhalten. Favoriten werden gespeichert und umgehen den Assembly-Filter nicht.
-- [ ] **Kompakte Toolbox-Einträge:** Vertikales Padding, Zeilenhöhe und Zwischenräume reduzieren. Informationen, die bereits im Assembly-Gruppenkopf stehen, nicht in jeder Control-Zeile wiederholen; zusätzliche Metadaten bei Bedarf als Tooltip anbieten. Auswahl, Fokus und Einfügeaktion bleiben eindeutig erkennbar und per Tastatur bedienbar.
-- [ ] **Zustand der unteren Docks wiederherstellen:** Alle unteren Docks, einschließlich Output, Breakpoints und LSP Settings, behalten ihren zuletzt gewählten angehefteten, automatisch ausgeblendeten beziehungsweise aufgeklappten Zustand über einen Neustart. Ein geschlossenes Dock mit inaktivem Pin bleibt als Reiter am unteren Rand und öffnet sich nicht selbstständig. Vorhandene Layout-Persistenz prüfen und ergänzen; insbesondere darf LSP Settings einen wiederhergestellten geschlossenen Zustand nicht beim Start überschreiben.
+- [x] **Assembly-Filter je Workspace:** Der Benutzer kann die angezeigten Assemblies über eine Mehrfachauswahl mit Checkboxen festlegen. Die Auswahl wird je Workspace gespeichert und beim erneuten Öffnen wiederhergestellt. Suche und Assembly-Filter wirken gemeinsam; neu verfügbare oder vorübergehend fehlende Assemblies dürfen gespeicherte Auswahlen nicht verlieren.
+- [x] **Favoriten für Drittanbieter-Assemblies:** Jede Drittanbieter-Sektion erhält eine direkt bedienbare Favoriten-Markierung, beispielsweise einen Stern. Favorisierte Assemblies stehen zusammen vor den übrigen Drittanbieter-Assemblies; innerhalb beider Gruppen bleibt die alphabetische Sortierung erhalten. Favoriten werden gespeichert und umgehen den Assembly-Filter nicht.
+- [x] **Kompakte Toolbox-Einträge:** Vertikales Padding, Zeilenhöhe und Zwischenräume reduzieren. Informationen, die bereits im Assembly-Gruppenkopf stehen, nicht in jeder Control-Zeile wiederholen; zusätzliche Metadaten bei Bedarf als Tooltip anbieten. Auswahl, Fokus und Einfügeaktion bleiben eindeutig erkennbar und per Tastatur bedienbar.
+- [x] **Zustand der unteren Docks wiederherstellen:** Alle unteren Docks, einschließlich Output, Breakpoints und LSP Settings, behalten ihren zuletzt gewählten angehefteten, automatisch ausgeblendeten beziehungsweise aufgeklappten Zustand über einen Neustart. Ein geschlossenes Dock mit inaktivem Pin bleibt als Reiter am unteren Rand und öffnet sich nicht selbstständig. Vorhandene Layout-Persistenz prüfen und ergänzen; insbesondere darf LSP Settings einen wiederhergestellten geschlossenen Zustand nicht beim Start überschreiben.
 - [ ] **Lade- und Renderfehler im Problems-Dock:** Den bestehenden Diagnoseweg prüfen. Nicht gefundene Assemblies, nicht auflösbare Typen und vergleichbare Lade- oder Renderfehler mit Datei, betroffenem Element und Ursache im Problems-Dock anzeigen, statt den visuellen Designer mit Fehlermeldungen oder Fehler-Controls zu füllen. Soweit möglich zur betroffenen XAML-Stelle navigieren. Eine erhaltene letzte gültige Vorschau darf nur zum selben Dokument gehören und muss als veraltet erkennbar sein; nach der Fehlerbehebung verschwinden überholte Diagnosen.
 - [ ] **Kompakte Editoroberfläche insgesamt:** Padding, Mindesthöhen und Abstände in den vorhandenen Docks, Listen, Baumansichten, Toolbars, Menüs und Dialogen nach gemeinsamen Regeln reduzieren. Ziel sind weniger unnötiges Scrollen und eine bessere Nutzung schmaler Docks, nicht eine allgemeine Verkleinerung der Schrift. Bedienbarkeit, Fokusdarstellung und Fehlermeldungen erhalten. Diese Dichteanpassung betrifft die Editoroberfläche, nicht die Layoutmaße, Styles oder Themes der bearbeiteten Formulare und ihrer gerenderten Vorschau.
 
 Die Abnahme umfasst Workspace-Wechsel und Neustart für Filter, Favoriten und Dock-Zustände, schmale Dock-Breiten für die kompakte Darstellung sowie einen tatsächlich ausgelösten Assembly- oder Typauflösungsfehler für die Problems-Anzeige. Bereits vorhandene Implementierung gilt erst nach diesem Nachweis als erledigt.
+
+### Lesbarkeit auf Full-HD-Bildschirmen
+
+- [ ] Das gesamte Editorfenster bleibt bei 1920 x 1080 Pixeln mit 100 % und 125 % Skalierung lesbar und bedienbar, unabhängig von der Auflösung des Entwicklungsmonitors.
+- [ ] Die Schrift nicht verkleinern, um Platzprobleme zu verdecken. Toolbars umbrechen oder kompakte, beschriftete beziehungsweise mit Tooltip erklärte Aktionen verwenden; wesentliche Bedienelemente nicht abschneiden.
+- [ ] Scrollbars belegen ihren eigenen Platz und überdecken weder Zellinhalte noch Aktionen. Schmale Docks, Suchfelder, Kontextmenüs, Dialoge und Statusanzeigen gehören zur Abnahme.
+- [ ] Entwurf, XAML und Eigenschaften müssen auch auf Full HD praktisch gemeinsam nutzbar bleiben. Automatisch ausgeblendete Docks und Split-Anordnung dürfen Platz schaffen, aber keine Funktionen unzugänglich machen.
+
+## Designer-Toolbar und Visual Tree
+
+- [x] Vorhandene Layoutbefehle zusätzlich als kompakte Toolbar anbieten: links, horizontal zentriert, rechts, oben, vertikal zentriert und unten ausrichten; horizontal und vertikal verteilen; gleiche Breite und gleiche Höhe.
+- [x] PathIcons mit Tooltips und zugänglichen Namen verwenden. Die Toolbar nutzt dieselben Befehle und Undo-Transaktionen wie das Kontextmenü und bricht bei wenig Platz um.
+- [x] Alle zehn Toolbaraktionen im laufenden Editor mit gemeinsamer Auswahl von Standard- und Fremdcontrols im Grid bedienen. Jede Aktion mit einem Undo quelltextgetreu zurücknehmen; Redo am Ausrichtungsbefehl prüfen.
+- [x] Alle Toolbaraktionen auch in Canvas und StackPanel am laufenden Editor prüfen, einschließlich Hauptauswahl, ungültiger Auswahl, Undo/Redo und Speichern.
+- [x] Toolbaränderungen nach Speichern und erneutem Öffnen des Dokuments prüfen.
+- [x] Spalten im Visual Tree manuell verstellbar machen und mit geringerem Einzug sowie kompakteren Abständen mehr Platz für Typ- und Controlnamen schaffen.
+- [x] Spaltengrenzen im laufenden Editor per Maus verschieben und die Änderung der tatsächlichen Spaltenbreiten prüfen.
+- [ ] Doppelklick zur Größenanpassung und Lesbarkeit tiefer Hierarchien in einem schmalen Dock prüfen.
+
+## Automation-IDs und isolierter Design-Host
+
+- [x] In den Settings der Zeichenfläche eine standardmäßig ausgeschaltete Option für automatische `AutomationProperties.AutomationId` anbieten. Neue Controls und Kopien erhalten bei Bedarf dokumentweit eindeutige IDs; bestehende Controls bleiben unverändert.
+- [x] Standard- und Fremdcontrols, Duplizieren, Speichern/Wiederöffnen sowie gemeinsame Undo-Schritte für Einfügen und ID-Vergabe prüfen.
+- [x] Das Settings-Popup und das Eingabefeld für den Canvas-Abstand so bemessen, dass Zahlenwert und Pfeiltasten gleichzeitig sichtbar bleiben.
+- [x] Previewer-Prozess und Transport-Session gemeinsam verwalten; parallele Startanforderungen zusammenführen und Ersatz-Sessions vor veralteten Beendigungsereignissen schützen.
+- [x] Projektassembly-Metadaten ohne Laden der Assembly in den Editorprozess lesen.
+- [x] Gemessene Controlpositionen aus dem isolierten Host mit stabilen AST-IDs und einer Kennung des gerenderten Dokumentstands übertragen und prüfen.
+- [x] Die Klickauswahl im Previewer mit dem Dokumentmodell verbinden; Laufzeitinstanzen unterscheiden und Skalierung, Clipping sowie veraltete Hostdaten berücksichtigen.
+- [x] Eigenschaften im Properties-Dock ohne lokale Control-Instanz über den Panel-Workflow bearbeiten; Nullable-/Flags-Werte, Zurücksetzen, Templates, Validierung, Undo/Redo und die Diagnoseanzeige beim Rendererwechsel prüfen.
+- [x] Unter Windows per CDP ein fensterloses UserControl mit Standard-Button und Flowery-Button im externen Host prüfen: Klickauswahl, Größenänderung, Grid-Zellwechsel, unveränderten Quelltext während des Ziehens und exaktes Undo/Redo. Der lokale Control-Cache bleibt dabei leer.
+- [ ] Die native Abnahme auf weitere konkrete Formulare, direkte Eingaben im Properties-Dock, Canvas-/StackPanel-Gesten sowie komplexe Control- und Theme-Konfigurationen ausweiten.
+- [ ] Diese Hostdaten für Auswahl, Adorner und Bearbeitung verwenden, ohne die fremden Controls zusätzlich im Editorprozess zu instanziieren.
+- [x] Beim Einfügen neuer XAML-Blöcke die vorhandene Zeilenendekonvention erhalten; keine CRLF-Blöcke in LF-Dokumente einsetzen.
+
+## Verbleibende Arbeit
+
+Diese Liste konkretisiert offene Punkte der obigen Anforderungen; sie ersetzt oder verkleinert den Abnahmesatz nicht.
+
+- [ ] Unberührte Quellbereiche auch bei strukturellen Änderungen erhalten; der gezielte Attributpfad deckt dies noch nicht vollständig ab.
+- [ ] Den isolierten Designzeit-Host durchgängig mit der visuellen Bearbeitung verbinden, soweit Controls einen prozessweiten Designmodus oder eine eigene Anwendungsinitialisierung benötigen.
+- [ ] Die vollständigen Maus- und Tastaturabläufe für Canvas, Grid und StackPanel mit Standard- und Fremdcontrols in der Desktop-Anwendung abnehmen.
+- [ ] Collections, Tabs, Menüs, Spalten, Templates und Ressourcen einschließlich Fehlerkorrektur im tatsächlichen Eigenschaften-Dock vollständig abnehmen.
+- [ ] Die neue Problems-Anzeige einschließlich Navigation, Fehlerbehebung und Session-Wechsel im Desktop prüfen.
+- [ ] Die gemeinsame Oberflächendichte in schmalen Docks, Menüs und Dialogen sowie beim Monitor- und DPI-Wechsel prüfen.
+- [ ] Bedienbarkeit, Fortschritt, Abbruch und nutzbare Dokumentgrößen auf der Zielmaschine messen und die belegten Grenzen festhalten.

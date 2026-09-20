@@ -13,11 +13,13 @@ using Avalonia.VisualTree;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.PropertyEditorExtension;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Workspace;
+using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Serialization;
 using EditorFeatures = XamlVisualEditor.TestControls.EditorFeatures;
 using PropertyFixtureControl = XamlVisualEditor.TestControls.PropertyFixtureControl;
@@ -28,9 +30,11 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class PropertyEditingWorkflowTests
 {
     [AvaloniaTheory(Timeout = 30000)]
-    [InlineData("library:PropertyFixtureControl")]
-    [InlineData("CheckBox")]
-    public async Task Inspector_edits_empty_reset_nullable_flags_and_invalid_drafts_and_tracks_undo(string propertyOwner)
+    [InlineData("library:PropertyFixtureControl", false)]
+    [InlineData("CheckBox", false)]
+    [InlineData("library:PropertyFixtureControl", true)]
+    [InlineData("CheckBox", true)]
+    public async Task Inspector_edits_empty_reset_nullable_flags_and_invalid_drafts_and_tracks_undo(string propertyOwner, bool externalPreviewer)
     {
         string xaml = """
             <library:PropertyFixtureControl xmlns="https://github.com/avaloniaui"
@@ -52,11 +56,19 @@ public sealed class PropertyEditingWorkflowTests
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         metadata.LoadAssembly(typeof(PropertyFixtureControl).Assembly.Location);
-        using DesignerDocumentViewModel document = new(path, metadata);
+        using DesignerDocumentViewModel document = new(path, metadata) { UseExternalPreviewer = externalPreviewer };
         await document.LoadAsync();
         using MainWindowViewModel main = new(metadataService: metadata);
         main.Documents.Add(document);
         main.ActiveDocument = document;
+        if (externalPreviewer)
+        {
+            MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
+            DesignItem remote = new(root) { HostInstanceId = 1, HostBounds = new Avalonia.Rect(0, 0, 200, 100) };
+            document.DesignSurface.SetDesignTree(remote,
+                new System.Collections.Generic.Dictionary<Guid, DesignItem> { [root.Id] = remote },
+                new System.Collections.Generic.Dictionary<Control, DesignItem>());
+        }
         document.SetSelectedNode(document.SyncEngine.CurrentDocument!.Root!.Id, SyncSource.TreeView);
         using ShellDesignerHost host = new(main);
         using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry());
@@ -127,6 +139,28 @@ public sealed class PropertyEditingWorkflowTests
         Assert.Equal("Caption", (string?)Assert.Single(saved.Descendants(), element => element.Name.LocalName == "Binding").Attribute("Path"));
         Assert.Equal(ownerName + ".Template", Assert.Single(saved.Descendants(), element => element.Name.LocalName.EndsWith(".Template", StringComparison.Ordinal)).Name.LocalName);
         Assert.Contains(saved.DescendantNodes().OfType<XComment>(), comment => comment.Value == "template note");
+        if (externalPreviewer)
+        {
+            Assert.Empty(document.DesignSurface.ControlMap);
+            Assert.Null(document.DesignSurface.RootItem?.VisualElement);
+            Assert.Equal("CornflowerBlue", (string?)Assert.Single(saved.Descendants(), element => element.Name.LocalName == "Border").Attribute("Background"));
+            document.DesignSurface.AutoGenerateAutomationIds = true;
+            string parentId = document.SyncEngine.CurrentDocument.Root.Id.ToString("D");
+            string? insertedId = await host.InsertElementAsync("Button", "https://github.com/avaloniaui", parentId, CancellationToken.None);
+            Assert.NotNull(insertedId);
+            MutableAstObjectNode inserted = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(Guid.Parse(insertedId)));
+            Assert.Equal("Button_1", inserted.GetPropertyValue("AutomationProperties.AutomationId"));
+            string? wrapperId = await host.WrapNodeAsync(insertedId, "Grid", "https://github.com/avaloniaui", CancellationToken.None);
+            Assert.NotNull(wrapperId);
+            MutableAstObjectNode wrapper = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(Guid.Parse(wrapperId)));
+            Assert.Equal("Grid_1", wrapper.GetPropertyValue("AutomationProperties.AutomationId"));
+            Assert.Equal("Button_1", inserted.GetPropertyValue("AutomationProperties.AutomationId"));
+            document.SyncEngine.Undo();
+            Assert.Null(document.NodeMap.FindById(Guid.Parse(wrapperId)));
+            Assert.NotNull(document.NodeMap.FindById(Guid.Parse(insertedId)));
+            Assert.Empty(document.DesignSurface.ControlMap);
+            return;
+        }
         RuntimeDesignRenderResult rendered = new RuntimeDesignRenderer(metadata).Render(document.SyncEngine.CurrentDocument,
             new Uri(path), typeof(PropertyFixtureControl).Assembly);
         Assert.Empty(rendered.Diagnostics);
@@ -134,6 +168,66 @@ public sealed class PropertyEditingWorkflowTests
         control.ApplyTemplate();
         Border border = Assert.Single(control.GetVisualChildren().OfType<Border>());
         Assert.Equal(Colors.CornflowerBlue, Assert.IsAssignableFrom<ISolidColorBrush>(border.Background).Color);
+    }
+
+    [AvaloniaFact]
+    public async Task ExternalPreviewSuppressesInactiveLocalRenderErrorsButKeepsSyntaxAndHostErrors()
+    {
+        using DesignerDocumentViewModel document = new("RendererDiagnostics.axaml");
+        await document.SyncEngine.LoadAsync("<UserControl xmlns=\"https://github.com/avaloniaui\" />");
+        await FlushAsync();
+        document.SetRuntimeRenderFailure(new InvalidOperationException("Local renderer failed."));
+        Assert.Contains(document.Diagnostics, diagnostic => diagnostic.Source == "Designer");
+        document.UseExternalPreviewer = true;
+        await FlushAsync();
+        Assert.DoesNotContain(document.Diagnostics, diagnostic => diagnostic.Source == "Designer");
+        using PreviewerTcpSession session = new(document.FilePath, log: null);
+        document.PreviewerSession = session;
+        session.ReportError("External renderer failed.");
+        await FlushAsync();
+        Assert.Contains(document.Diagnostics, diagnostic => diagnostic.Source == "Previewer");
+        document.UseExternalPreviewer = false;
+        await FlushAsync();
+        Assert.Contains(document.Diagnostics, diagnostic => diagnostic.Source == "Designer");
+        document.UseExternalPreviewer = true;
+        document.SyncEngine.NotifyTextChanged("<UserControl", SyncSource.CodeEditor);
+        await document.SyncEngine.SaveAsync();
+        await FlushAsync();
+        Assert.Contains(document.Diagnostics, diagnostic => diagnostic.Source == "XAML");
+        Assert.Contains(document.Diagnostics, diagnostic => diagnostic.Source == "Previewer");
+        Assert.DoesNotContain(document.Diagnostics, diagnostic => diagnostic.Source == "Designer");
+    }
+
+    [AvaloniaFact]
+    public async Task RejectedGestureKeepsItsDiagnosticAfterRollbackAndClearsItAfterAnEdit()
+    {
+        const string xaml = "<Canvas xmlns=\"https://github.com/avaloniaui\"><Button Canvas.Left=\"10\" Canvas.Top=\"{Binding Position}\" /></Canvas>";
+        using DesignerDocumentViewModel document = new("GestureDiagnostics.axaml") { UseExternalPreviewer = true };
+        await document.SyncEngine.LoadAsync(xaml);
+        await FlushAsync();
+        MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
+        MutableAstObjectNode button = Assert.IsType<MutableAstObjectNode>(Assert.Single(root.Children));
+        document.SetSelectedNode(button.Id, SyncSource.DesignSurface);
+        DesignerHostSnapshot tree = new(Guid.NewGuid(), 200, 100, new[]
+        {
+            new DesignerHostNode(root.Id, 1, null, "Canvas", null, 0, 0, 200, 100, true, Layout: new() { Kind = "Canvas" }),
+            new DesignerHostNode(button.Id, 2, 1, "Button", null, 10, 20, 80, 30, true, Layout: new() { CanvasLeft = 10, CanvasTop = 20 })
+        });
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new PreviewerGeometryEditor(document, tree).Nudge(new[] { new DesignItem(button) { HostInstanceId = 2 } }, 1, 1));
+        document.SetDesignerInteractionError(error);
+        await FlushAsync();
+        Assert.Contains(document.Diagnostics, diagnostic => diagnostic.Code == "XVE_EDIT" && diagnostic.Message.Contains("Canvas.Top", StringComparison.Ordinal));
+        Assert.Equal(xaml, document.SyncEngine.GetCurrentText());
+        Assert.Equal(0, document.SyncEngine.UndoRedo.UndoCount);
+        button = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(button.Id));
+        using (DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Change content"))
+        {
+            button.SetPropertyValue("Content", "Updated");
+            edit.Commit();
+        }
+        await FlushAsync();
+        Assert.DoesNotContain(document.Diagnostics, diagnostic => diagnostic.Code == "XVE_EDIT");
     }
 
     private static async Task FlushAsync() =>

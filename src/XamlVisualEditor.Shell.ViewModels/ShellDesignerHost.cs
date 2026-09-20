@@ -327,7 +327,7 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
             XmlNamespace = xmlNamespace
         };
 
-        LayoutEditService editor = new(document.MetadataService);
+        LayoutEditService editor = new(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds);
         MutableAstObjectNode? parent;
         if (!string.IsNullOrWhiteSpace(parentNodeId))
         {
@@ -413,7 +413,8 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
         };
 
         using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Wrap with {wrapperTypeName}");
-        if (!new LayoutEditService(document.MetadataService).TryWrap(node, wrapper, out string? error))
+        if (!new LayoutEditService(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds)
+            .TryWrap(node, wrapper, out string? error))
             throw new InvalidOperationException(error);
 
         edit.Commit();

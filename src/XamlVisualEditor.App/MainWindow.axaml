@@ -25,17 +25,18 @@
     <DockPanel>
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
+            <Menu.Styles>
+                <Style Selector="MenuItem.extension-menu MenuItem"
+                       x:DataType="vm:ExtensionMenuItemViewModel">
+                    <Setter Property="Header" Value="{CompiledBinding Title}" />
+                    <Setter Property="IsEnabled" Value="{CompiledBinding IsEnabled}" />
+                    <Setter Property="Command" Value="{CompiledBinding Command}" />
+                    <Setter Property="InputGesture" Value="{CompiledBinding InputGesture}" />
+                </Style>
+            </Menu.Styles>
             <MenuItem Header="_File">
-                <MenuItem Header="_New" ItemsSource="{CompiledBinding FileNewMenuEntries}">
-                    <MenuItem.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                            <MenuItem Header="{CompiledBinding Title}"
-                                      IsEnabled="{CompiledBinding IsEnabled}"
-                                      Command="{CompiledBinding Command}"
-                                      InputGesture="{CompiledBinding InputGesture}" />
-                        </DataTemplate>
-                    </MenuItem.ItemTemplate>
-                </MenuItem>
+                <MenuItem Header="_New" ItemsSource="{CompiledBinding FileNewMenuEntries}"
+                          Classes="extension-menu" />
                 <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
                 <MenuItem Header="Open _Recent" ItemsSource="{CompiledBinding RecentFiles}">
                     <MenuItem.ItemTemplate>
@@ -56,16 +57,8 @@
                 </MenuItem>
                 <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
                 <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />
-                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding FileMenuItems}">
-                    <MenuItem.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                            <MenuItem Header="{CompiledBinding Title}"
-                                      IsEnabled="{CompiledBinding IsEnabled}"
-                                      Command="{CompiledBinding Command}"
-                                      InputGesture="{CompiledBinding InputGesture}" />
-                        </DataTemplate>
-                    </MenuItem.ItemTemplate>
-                </MenuItem>
+                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding FileMenuItems}"
+                          Classes="extension-menu" />
                 <Separator />
                 <MenuItem Header="Save _Mode">
                     <MenuItem Header="_Auto Save"
@@ -84,27 +77,11 @@
                 <Separator />
                 <MenuItem Header="E_xit" Command="{CompiledBinding ExitCommand}" InputGesture="Alt+F4" />
             </MenuItem>
-            <MenuItem Header="_Edit" ItemsSource="{CompiledBinding EditMenuItems}">
-                <MenuItem.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                        <MenuItem Header="{CompiledBinding Title}"
-                                  IsEnabled="{CompiledBinding IsEnabled}"
-                                  Command="{CompiledBinding Command}"
-                                  InputGesture="{CompiledBinding InputGesture}" />
-                    </DataTemplate>
-                </MenuItem.ItemTemplate>
-            </MenuItem>
+            <MenuItem Header="_Edit" ItemsSource="{CompiledBinding EditMenuItems}"
+                      Classes="extension-menu" />
             <MenuItem Header="_View">
-                <MenuItem Header="_Panels" ItemsSource="{CompiledBinding ViewMenuItems}">
-                    <MenuItem.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                            <MenuItem Header="{CompiledBinding Title}"
-                                      IsEnabled="{CompiledBinding IsEnabled}"
-                                      Command="{CompiledBinding Command}"
-                                      InputGesture="{CompiledBinding InputGesture}" />
-                        </DataTemplate>
-                    </MenuItem.ItemTemplate>
-                </MenuItem>
+                <MenuItem Header="_Panels" ItemsSource="{CompiledBinding ViewMenuItems}"
+                          Classes="extension-menu" />
                 <Separator />
                 <MenuItem Header="_Extensions Manager" Command="{CompiledBinding ToggleExtensionsManagerCommand}" />
                 <Separator />
@@ -112,16 +89,8 @@
                 <Separator />
                 <MenuItem Header="Reset _Layout" Command="{CompiledBinding ResetLayoutCommand}" />
             </MenuItem>
-            <MenuItem Header="_Debug" ItemsSource="{CompiledBinding DebugMenuItems}">
-                <MenuItem.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                        <MenuItem Header="{CompiledBinding Title}"
-                                  IsEnabled="{CompiledBinding IsEnabled}"
-                                  Command="{CompiledBinding Command}"
-                                  InputGesture="{CompiledBinding InputGesture}" />
-                    </DataTemplate>
-                </MenuItem.ItemTemplate>
-            </MenuItem>
+            <MenuItem Header="_Debug" ItemsSource="{CompiledBinding DebugMenuItems}"
+                      Classes="extension-menu" />
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Previewer">
                     <MenuItem Header="_Start" Command="{CompiledBinding StartPreviewerCommand}" InputGesture="Ctrl+Alt+P" />
@@ -129,37 +98,13 @@
                 <Separator />
                 <MenuItem Header="Command _Palette..." Command="{CompiledBinding ShowCommandPaletteCommand}" InputGesture="Ctrl+Shift+P" />
                 <Separator />
-                <MenuItem Header="_Workspace" ItemsSource="{CompiledBinding WorkspaceMenuItems}">
-                    <MenuItem.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                            <MenuItem Header="{CompiledBinding Title}"
-                                      IsEnabled="{CompiledBinding IsEnabled}"
-                                      Command="{CompiledBinding Command}"
-                                      InputGesture="{CompiledBinding InputGesture}" />
-                        </DataTemplate>
-                    </MenuItem.ItemTemplate>
-                </MenuItem>
-                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ToolsMenuItems}">
-                    <MenuItem.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                            <MenuItem Header="{CompiledBinding Title}"
-                                      IsEnabled="{CompiledBinding IsEnabled}"
-                                      Command="{CompiledBinding Command}"
-                                      InputGesture="{CompiledBinding InputGesture}" />
-                        </DataTemplate>
-                    </MenuItem.ItemTemplate>
-                </MenuItem>
+                <MenuItem Header="_Workspace" ItemsSource="{CompiledBinding WorkspaceMenuItems}"
+                          Classes="extension-menu" />
+                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ToolsMenuItems}"
+                          Classes="extension-menu" />
             </MenuItem>
-            <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ExtensionMenuItems}">
-                <MenuItem.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                        <MenuItem Header="{CompiledBinding Title}"
-                                  IsEnabled="{CompiledBinding IsEnabled}"
-                                  Command="{CompiledBinding Command}"
-                                  InputGesture="{CompiledBinding InputGesture}" />
-                    </DataTemplate>
-                </MenuItem.ItemTemplate>
-            </MenuItem>
+            <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ExtensionMenuItems}"
+                      Classes="extension-menu" />
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Command="{CompiledBinding AboutCommand}" />
             </MenuItem>

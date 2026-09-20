@@ -9,7 +9,14 @@ public sealed class DesignNodeIdentity : AvaloniaObject
     public static readonly AttachedProperty<string?> NodeIdProperty =
         AvaloniaProperty.RegisterAttached<DesignNodeIdentity, Control, string?>("NodeId");
 
+    public static readonly AttachedProperty<string?> RenderIdProperty =
+        AvaloniaProperty.RegisterAttached<DesignNodeIdentity, Control, string?>("RenderId");
+
     public static string? GetNodeId(Control control) => control.GetValue(NodeIdProperty);
 
     public static void SetNodeId(Control control, string? value) => control.SetValue(NodeIdProperty, value);
+
+    public static string? GetRenderId(Control control) => control.GetValue(RenderIdProperty);
+
+    public static void SetRenderId(Control control, string? value) => control.SetValue(RenderIdProperty, value);
 }

@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 
 namespace XamlVisualEditor.Designer.Adorners;
 
@@ -21,11 +22,11 @@ public sealed class RulerControl : Control
 {
     private const double MinTickSpacing = 8.0;
     private const double GuideHitThreshold = 6.0;
-    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#252526"));
-    private static readonly IBrush TickBrush = new SolidColorBrush(Color.Parse("#8B8B8B"));
+    private static readonly IBrush BackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#252526"));
+    private static readonly IBrush TickBrush = new ImmutableSolidColorBrush(Color.Parse("#8B8B8B"));
     private static readonly IBrush LabelBrush = Brushes.White;
-    private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.FromArgb(60, 0, 120, 215));
-    private static readonly IBrush GuideBrush = new SolidColorBrush(Color.Parse("#3FA9F5"));
+    private static readonly IBrush SelectionBrush = new ImmutableSolidColorBrush(Color.FromArgb(60, 0, 120, 215));
+    private static readonly IBrush GuideBrush = new ImmutableSolidColorBrush(Color.Parse("#3FA9F5"));
 
     private int _dragGuideIndex = -1;
     private bool _isDragging;
@@ -119,7 +120,7 @@ public sealed class RulerControl : Control
     {
         base.Render(context);
 
-        context.DrawRectangle(BackgroundBrush, null, Bounds);
+        context.DrawRectangle(BackgroundBrush, null, new Rect(Bounds.Size));
 
         double length = Orientation == RulerOrientation.Horizontal ? Bounds.Width : Bounds.Height;
         double thickness = Orientation == RulerOrientation.Horizontal ? Bounds.Height : Bounds.Width;

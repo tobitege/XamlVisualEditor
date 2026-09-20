@@ -20,7 +20,7 @@ public sealed partial class DesignSurfaceView
 {
     private RuntimeDesignRenderResult? _runtimeRenderedDocument;
     private DesignerDocumentViewModel? _runtimeDocumentOwner;
-    private Border? _renderFailurePanel;
+    private bool _runtimeRenderFailed;
 
     private static RuntimeDesignRenderResult RenderRuntimeDocument(DesignerDocumentViewModel document, MutableAstDocument source)
     {
@@ -56,7 +56,6 @@ public sealed partial class DesignSurfaceView
         try
         {
             ApplyWorkspaceThemes(window, metadata);
-            ApplyDesignModeProperties(window);
             return new DesignWindowContentHost(window);
         }
         catch
@@ -68,31 +67,40 @@ public sealed partial class DesignSurfaceView
 
     private void ShowRuntimeRenderFailure(Panel canvas, DesignerDocumentViewModel document, Exception exception)
     {
-        Log.Error(exception, "Designer rendering failed for {DocumentPath}", document.FilePath);
-        if (_renderFailurePanel is not null) canvas.Children.Remove(_renderFailurePanel);
-        _renderFailurePanel = new Border
+        bool empty = string.IsNullOrWhiteSpace(document.SyncEngine.CurrentText);
+        if (!empty) Log.Error(exception, "Designer rendering failed for {DocumentPath}", document.FilePath);
+        bool keepPrevious = !empty && ReferenceEquals(_runtimeDocumentOwner, document)
+            && _rootControl is not null && _runtimeRenderedDocument is not null;
+        if (!keepPrevious)
         {
-            Background = Brushes.DarkRed, Padding = new Thickness(12), MaxHeight = 200,
-            HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top,
-            Child = new ScrollViewer
-            {
-                Content = new TextBlock
-                {
-                    Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap,
-                    Text = $"Render failed: {document.FilePath}\n{exception.Message}\n"
-                        + "The preview is not editable. Check the document and its project dependencies; details are in the application log."
-                }
-            }
-        };
-        canvas.Children.Add(_renderFailurePanel);
+            if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
+            canvas.Children.Clear();
+            _rootControl = null;
+            _runtimeRenderedDocument = null;
+            _runtimeDocumentOwner = document;
+        }
+        else SetPreviewHitTest(_rootControl!, false);
+        _runtimeRenderFailed = true;
+        canvas.ContextMenu = null;
+        document.SetRuntimeRenderFailure(exception);
+        SetPreviewStatus(empty ? "Add a root control to preview this document."
+            : keepPrevious ? "Preview out of date and not editable. See Problems for rendering errors."
+            : "Preview unavailable. See Problems for rendering errors.");
         _adornerLayer?.ClearAll();
         _currentVm?.SetDesignTree(null, new Dictionary<Guid, DesignItem>(), new Dictionary<Control, DesignItem>());
         _currentVm?.ClearSelectionFromSync();
     }
 
+    private void SetPreviewStatus(string? message)
+    {
+        if (this.FindControl<TextBlock>("PreviewStatusText") is not { } status) return;
+        status.Text = message;
+        status.IsVisible = !string.IsNullOrWhiteSpace(message);
+    }
+
     private void OnRuntimeLayoutUpdated(object? sender, EventArgs args)
     {
-        if (_renderFailurePanel is not null || _currentVm is null || _rootControl is null
+        if (_runtimeDocumentOwner?.UseExternalPreviewer == true || _runtimeRenderFailed || _currentVm is null || _rootControl is null
             || _runtimeRenderedDocument is null || _runtimeDocumentOwner?.SyncEngine.CurrentDocument?.Root is not { } root
             || !ReferenceEquals(_runtimeDocumentOwner.DesignSurface, _currentVm)) return;
         IReadOnlyDictionary<Control, Guid> identities = _runtimeRenderedDocument.GetControlNodeIds(_rootControl);

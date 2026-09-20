@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -30,10 +32,20 @@ public sealed class DiagnosticsChannelViewModel
     public string DisplayName { get; }
 }
 
+internal readonly record struct DiagnosticIdentity(string FilePath, LanguageTextRange Range,
+    DiagnosticSeverity Severity, string? Code, string? Source, string Message)
+{
+    public static DiagnosticIdentity From(LanguageDiagnostic diagnostic) => new(
+        diagnostic.FilePath, diagnostic.Range, diagnostic.Severity, diagnostic.Code,
+        string.IsNullOrWhiteSpace(diagnostic.Source) ? null : diagnostic.Source, diagnostic.Message);
+}
+
 public sealed class DiagnosticEntryViewModel
 {
-    public DiagnosticEntryViewModel(LanguageDiagnostic diagnostic)
+    public DiagnosticEntryViewModel(LanguageDiagnostic diagnostic, DateTimeOffset firstSeen)
     {
+        Identity = DiagnosticIdentity.From(diagnostic);
+        FirstSeen = firstSeen;
         Severity = diagnostic.Severity;
         Message = diagnostic.Message;
         FilePath = diagnostic.FilePath;
@@ -45,8 +57,15 @@ public sealed class DiagnosticEntryViewModel
     }
 
     public DiagnosticSeverity Severity { get; }
+    internal DiagnosticIdentity Identity { get; }
+    public DateTimeOffset FirstSeen { get; }
+    public string FirstSeenTime => FirstSeen.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+    public string FirstSeenDetails => FirstSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
+    public string Tooltip => $"{Message}{Environment.NewLine}First seen: {FirstSeenDetails}";
     public string Message { get; }
+    public string Summary => Message.ReplaceLineEndings(" ");
     public string FilePath { get; }
+    public string Location => string.IsNullOrWhiteSpace(FilePath) ? "Workspace" : $"{Path.GetFileName(FilePath)}:{Line}:{Column}";
     public int Line { get; }
     public int Column { get; }
     public string? Code { get; }
@@ -82,27 +101,30 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     private const string AllChannelsId = "all";
     private readonly IDiagnosticsService _diagnostics;
     private readonly IEditorServices _editor;
+    private readonly TimeProvider _timeProvider;
+    private readonly Dictionary<DiagnosticIdentity, DateTimeOffset> _firstSeen = new();
     private readonly CompositeDisposable _disposables = new();
     private readonly CompositeDisposable _groupDisposables = new();
     private readonly ObservableCollection<DiagnosticsChannelViewModel> _channels = new();
     private readonly ObservableCollection<DiagnosticEntryViewModel> _entries = new();
     private readonly ObservableCollection<object> _rootItems = new();
-    private readonly Dictionary<string, IReadOnlyList<LanguageDiagnostic>> _diagnosticsByChannel = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _expandedGroups = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _collapsedGroups = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<DiagnosticsDocumentSnapshot> _latestSnapshots = Array.Empty<DiagnosticsDocumentSnapshot>();
     private DiagnosticsChannelViewModel? _selectedChannel;
     private DiagnosticEntryViewModel? _selectedDiagnostic;
-    private HierarchicalNode? _selectedRow;
+    private object? _selectedRow;
     private object? _selectedItem;
     private string? _searchText;
     private string _selectedSeverity = "All";
     private string _selectedGroupBy = "File";
+    private bool _showFirstSeen;
     private CancellationTokenSource? _loadCts;
 
-    public ProblemsPanelViewModel(IDiagnosticsService diagnostics, IEditorServices editor)
+    public ProblemsPanelViewModel(IDiagnosticsService diagnostics, IEditorServices editor, TimeProvider? timeProvider = null)
     {
         _diagnostics = diagnostics;
         _editor = editor;
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         ChannelsView = new DataGridCollectionView(_channels);
 
@@ -148,15 +170,17 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         _disposables.Add(this.WhenAnyValue(x => x.SelectedRow)
             .Subscribe(row =>
             {
-                SelectedItem = row?.Item;
-                SelectedDiagnostic = row?.Item as DiagnosticEntryViewModel;
+                SelectedItem = row is HierarchicalNode node ? node.Item : row;
+                SelectedDiagnostic = SelectedItem as DiagnosticEntryViewModel;
             }));
 
         RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync);
 
         IObservable<bool> hasSelection = this.WhenAnyValue(x => x.SelectedDiagnostic)
             .Select(entry => entry is not null);
-        OpenLocationCommand = ReactiveCommand.CreateFromTask(OpenSelectedAsync, hasSelection);
+        IObservable<bool> canNavigate = this.WhenAnyValue(x => x.SelectedDiagnostic)
+            .Select(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.FilePath));
+        OpenLocationCommand = ReactiveCommand.CreateFromTask(OpenSelectedAsync, canNavigate);
 
         ClearCommand = ReactiveCommand.Create(ClearDiagnostics);
         CopySelectedCommand = ReactiveCommand.CreateFromTask(CopySelectedAsync, hasSelection);
@@ -204,7 +228,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         set => this.RaiseAndSetIfChanged(ref _selectedChannel, value);
     }
 
-    public HierarchicalNode? SelectedRow
+    public object? SelectedRow
     {
         get => _selectedRow;
         set => this.RaiseAndSetIfChanged(ref _selectedRow, value);
@@ -240,6 +264,12 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         set => this.RaiseAndSetIfChanged(ref _searchText, value);
     }
 
+    public bool ShowFirstSeen
+    {
+        get => _showFirstSeen;
+        set => this.RaiseAndSetIfChanged(ref _showFirstSeen, value);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await RefreshChannelsAsync(cancellationToken);
@@ -271,26 +301,23 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         }
     }
 
-    public void HandleDiagnosticsPublished(string channelId, IReadOnlyList<LanguageDiagnostic> diagnostics)
-    {
-        _diagnosticsByChannel[channelId] = diagnostics;
-        RebuildGroups();
-    }
-
     public void HandleSnapshotsPublished(IReadOnlyList<DiagnosticsDocumentSnapshot> snapshots)
     {
+        _loadCts?.Cancel();
         _latestSnapshots = snapshots;
         UpdateEntriesFromSnapshots();
     }
 
     public async Task<bool> NavigateToRelativeAsync(int delta, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (delta == 0)
         {
             return false;
         }
 
-        List<DiagnosticEntryViewModel> filtered = GetFilteredEntries();
+        List<DiagnosticEntryViewModel> filtered = GetFilteredEntries()
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.FilePath)).ToList();
         if (filtered.Count == 0)
         {
             return false;
@@ -315,8 +342,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         }
 
         DiagnosticEntryViewModel next = filtered[nextIndex];
-        SelectedDiagnostic = next;
-        SelectedRow = Model.FindNode(next);
+        if (!SelectEntry(next)) return false;
 
         LanguageLocation location = new()
         {
@@ -324,8 +350,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             Range = next.Range
         };
 
-        await _editor.OpenLocationAsync(location, cancellationToken).ConfigureAwait(false);
-        return true;
+        return await _editor.OpenLocationAsync(location, cancellationToken).ConfigureAwait(false);
     }
 
     public void Dispose()
@@ -354,31 +379,54 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     private async Task LoadChannelAsync(DiagnosticsChannelViewModel channel)
     {
         CancellationTokenSource? previous = _loadCts;
-        _loadCts = new CancellationTokenSource();
+        CancellationTokenSource current = new();
+        _loadCts = current;
         previous?.Cancel();
         previous?.Dispose();
 
-        CancellationToken token = _loadCts.Token;
+        CancellationToken token = current.Token;
         string? channelId = string.Equals(channel.Id, AllChannelsId, StringComparison.OrdinalIgnoreCase)
             ? null
             : channel.Id;
 
-        IReadOnlyList<DiagnosticsDocumentSnapshot> snapshots = await _diagnostics.GetDiagnosticsSnapshotAsync(
-            new DiagnosticsQuery(null, channelId),
-            token);
-        _latestSnapshots = snapshots;
-        UpdateEntriesFromSnapshots();
+        try
+        {
+            IReadOnlyList<DiagnosticsDocumentSnapshot> snapshots = await _diagnostics.GetDiagnosticsSnapshotAsync(
+                new DiagnosticsQuery(null, channelId), token);
+            if (token.IsCancellationRequested || !ReferenceEquals(_loadCts, current)) return;
+            _latestSnapshots = snapshots;
+            UpdateEntriesFromSnapshots(channelId);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 
-    private void UpdateEntriesFromSnapshots()
+    private void UpdateEntriesFromSnapshots(string? channelId = null)
     {
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        HashSet<DiagnosticIdentity> present = new();
         _entries.Clear();
         foreach (DiagnosticsDocumentSnapshot snapshot in _latestSnapshots)
         {
             foreach (LanguageDiagnostic diagnostic in snapshot.Diagnostics)
             {
-                _entries.Add(new DiagnosticEntryViewModel(diagnostic));
+                DiagnosticIdentity identity = DiagnosticIdentity.From(diagnostic);
+                present.Add(identity);
+                if (!_firstSeen.TryGetValue(identity, out DateTimeOffset firstSeen))
+                {
+                    firstSeen = now;
+                    _firstSeen.Add(identity, firstSeen);
+                }
+                _entries.Add(new DiagnosticEntryViewModel(diagnostic, firstSeen));
             }
+        }
+
+        foreach (DiagnosticIdentity identity in _firstSeen.Keys.Where(identity =>
+            !present.Contains(identity) && (channelId is null ||
+                string.Equals(GetChannelId(identity.Source), channelId, StringComparison.OrdinalIgnoreCase))).ToArray())
+        {
+            _firstSeen.Remove(identity);
         }
 
         RebuildGroups();
@@ -386,21 +434,26 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
 
     private void ClearDiagnostics()
     {
+        _loadCts?.Cancel();
+        _latestSnapshots = Array.Empty<DiagnosticsDocumentSnapshot>();
+        _groupDisposables.Clear();
         _entries.Clear();
         _rootItems.Clear();
+        Model.Refresh();
         SelectedDiagnostic = null;
         SelectedRow = null;
     }
 
     private void RebuildGroups()
     {
-        string? selectedKey = SelectedDiagnostic is null ? null : BuildDiagnosticKey(SelectedDiagnostic);
+        DiagnosticIdentity? selectedKey = SelectedDiagnostic?.Identity;
         _groupDisposables.Clear();
         _rootItems.Clear();
 
         List<DiagnosticEntryViewModel> filtered = GetFilteredEntries();
         if (filtered.Count == 0)
         {
+            Model.Refresh();
             SelectedDiagnostic = null;
             SelectedRow = null;
             return;
@@ -424,14 +477,25 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
 
         Model.Refresh();
 
-        if (!string.IsNullOrWhiteSpace(selectedKey))
+        SelectedRow = null;
+        if (selectedKey is DiagnosticIdentity identity)
         {
-            DiagnosticEntryViewModel? found = FindEntryByKey(_rootItems, selectedKey);
+            DiagnosticEntryViewModel? found = FindEntryByKey(_rootItems, identity);
             if (found is not null)
             {
-                SelectedRow = Model.FindNode(found);
+                SelectEntry(found);
             }
         }
+    }
+
+    private bool SelectEntry(DiagnosticEntryViewModel entry)
+    {
+        ProblemsGroupViewModel? group = _rootItems.OfType<ProblemsGroupViewModel>()
+            .FirstOrDefault(candidate => candidate.Items.Contains(entry));
+        if (group is not null) Model.Expand(new[] { group });
+        if (!Model.TryExpandToItem(entry, out HierarchicalNode? node)) return false;
+        SelectedRow = node;
+        return true;
     }
 
     private void BuildFileGroups(List<DiagnosticEntryViewModel> filtered)
@@ -442,10 +506,10 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             string key = $"file:{entry.FilePath}";
             if (!groups.TryGetValue(key, out ProblemsGroupViewModel? group))
             {
-                string title = Path.GetFileName(entry.FilePath);
+                string title = string.IsNullOrWhiteSpace(entry.FilePath) ? "Workspace" : Path.GetFileName(entry.FilePath);
                 group = new ProblemsGroupViewModel(key, title)
                 {
-                    IsExpanded = _expandedGroups.Contains(key)
+                    IsExpanded = !_collapsedGroups.Contains(key)
                 };
                 TrackGroupExpansion(group);
                 groups[key] = group;
@@ -467,7 +531,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             {
                 group = new ProblemsGroupViewModel(key, channelId)
                 {
-                    IsExpanded = _expandedGroups.Contains(key)
+                    IsExpanded = !_collapsedGroups.Contains(key)
                 };
                 TrackGroupExpansion(group);
                 groups[key] = group;
@@ -489,11 +553,11 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     {
         if (isExpanded)
         {
-            _expandedGroups.Add(key);
+            _collapsedGroups.Remove(key);
         }
         else
         {
-            _expandedGroups.Remove(key);
+            _collapsedGroups.Add(key);
         }
     }
 
@@ -530,7 +594,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
 
     private async Task OpenSelectedAsync()
     {
-        if (SelectedDiagnostic is null)
+        if (SelectedDiagnostic is null || string.IsNullOrWhiteSpace(SelectedDiagnostic.FilePath))
         {
             return;
         }
@@ -595,16 +659,11 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         return string.IsNullOrWhiteSpace(source) ? "default" : source;
     }
 
-    private static string BuildDiagnosticKey(DiagnosticEntryViewModel entry)
-    {
-        return $"{entry.FilePath}:{entry.Line}:{entry.Column}:{entry.Message}";
-    }
-
-    private static DiagnosticEntryViewModel? FindEntryByKey(IEnumerable<object> roots, string key)
+    private static DiagnosticEntryViewModel? FindEntryByKey(IEnumerable<object> roots, DiagnosticIdentity key)
     {
         foreach (object root in roots)
         {
-            if (root is DiagnosticEntryViewModel entry && BuildDiagnosticKey(entry) == key)
+            if (root is DiagnosticEntryViewModel entry && entry.Identity == key)
             {
                 return entry;
             }
@@ -613,7 +672,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             {
                 foreach (DiagnosticEntryViewModel child in group.Items)
                 {
-                    if (BuildDiagnosticKey(child) == key)
+                    if (child.Identity == key)
                     {
                         return child;
                     }

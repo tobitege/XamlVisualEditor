@@ -34,6 +34,7 @@ public sealed class DesignAdornerLayer : Control
     private IReadOnlyList<SpacingGuide> _spacingGuides = Array.Empty<SpacingGuide>();
     private DropPosition? _dropPosition;
     private Rect? _dropTargetBounds;
+    private LayoutDropIndicator? _dropIndicator;
     private bool _showMarginPadding;
     private bool _showAlignmentGuides = true;
     private bool _showGuides = true;
@@ -160,8 +161,18 @@ public sealed class DesignAdornerLayer : Control
     /// </summary>
     public void UpdateDropTarget(Rect? targetBounds, DropPosition? position)
     {
+        _dropIndicator = null;
         _dropTargetBounds = targetBounds;
         _dropPosition = position;
+        InvalidateVisual();
+    }
+
+    /// <summary>Updates a measured cell or insertion line without a source mutation.</summary>
+    public void UpdateDropIndicator(LayoutDropIndicator? indicator)
+    {
+        _dropIndicator = indicator;
+        _dropTargetBounds = null;
+        _dropPosition = null;
         InvalidateVisual();
     }
 
@@ -267,6 +278,7 @@ public sealed class DesignAdornerLayer : Control
         {
             _dropTargetAdorner.Render(context, _dropTargetBounds.Value, _dropPosition.Value);
         }
+        if (_dropIndicator is { } indicator) _dropTargetAdorner.Render(context, indicator);
 
         // 9. Marquee selection box
         if (_selectionBox.HasValue)

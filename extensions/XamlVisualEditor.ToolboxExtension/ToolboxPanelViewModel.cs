@@ -73,6 +73,8 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
     private readonly ToolboxPanelViewModel _owner;
     private IReadOnlyList<ToolboxPanelItem> _items = Array.Empty<ToolboxPanelItem>();
     private bool _isExpanded = true;
+    private int _catalogCount;
+    private bool _canFavorite;
 
     internal ToolboxAssemblyGroup(ToolboxPanelViewModel owner, string assemblyName)
     {
@@ -84,12 +86,56 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
     public string DisplayName => string.IsNullOrEmpty(AssemblyName) ? "Custom entries" : AssemblyName;
     public string Header => $"{DisplayName} ({Items.Count})";
     public IReadOnlyList<ToolboxPanelItem> Items => _items;
+    public string CatalogHeader => $"{DisplayName} ({_catalogCount})";
+    public bool CanFavorite => _canFavorite;
+    public bool CanEditPreferences => _owner.CanEditAssemblyPreferences;
+    public string FavoriteGlyph => IsFavorite ? "\u2605" : "\u2606";
+    public string FavoriteToolTip => IsFavorite ? "Remove assembly from favorites" : "Keep this assembly with favorites at the top";
+
+    public bool IsIncluded
+    {
+        get => _owner.IsAssemblyIncluded(AssemblyName);
+        set => _owner.SetAssemblyIncluded(this, value);
+    }
+
+    public bool IsFavorite
+    {
+        get => CanFavorite && _owner.IsAssemblyFavorite(AssemblyName);
+        set => _owner.SetAssemblyFavorite(this, value);
+    }
+
+    internal void UpdateCatalogInfo(int count, bool canFavorite)
+    {
+        if (_catalogCount != count)
+        {
+            _catalogCount = count;
+            this.RaisePropertyChanged(nameof(CatalogHeader));
+        }
+        if (_canFavorite != canFavorite)
+        {
+            _canFavorite = canFavorite;
+            this.RaisePropertyChanged(nameof(CanFavorite));
+        }
+        NotifyPreferencesChanged();
+    }
+
+    internal void NotifyPreferencesChanged()
+    {
+        this.RaisePropertyChanged(nameof(IsIncluded));
+        this.RaisePropertyChanged(nameof(IsFavorite));
+        this.RaisePropertyChanged(nameof(FavoriteGlyph));
+        this.RaisePropertyChanged(nameof(FavoriteToolTip));
+        this.RaisePropertyChanged(nameof(CanEditPreferences));
+    }
 
     public bool IsExpanded
     {
         get => _isExpanded;
-        set => this.RaiseAndSetIfChanged(ref _isExpanded, value);
+        set => _owner.SetAssemblyExpanded(this, value);
     }
+
+    internal void ApplyExpandedState(bool expanded) =>
+        this.RaiseAndSetIfChanged(ref _isExpanded, expanded, nameof(IsExpanded));
 
     public ToolboxPanelItem? SelectedItem
     {
@@ -129,7 +175,7 @@ public sealed class ToolboxCatalogEntry
     public bool? IsStandardControl { get; set; }
 }
 
-public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
+public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly ICommands _commands;
     private readonly ISettings _settings;
@@ -153,18 +199,23 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private const string DefaultInsertCommandId = "toolbox.insertSelected";
 
     public ToolboxPanelViewModel(ICommands commands, ISettings settings,
-        IControlCatalog? catalog = null, IScheduler? uiScheduler = null)
+        IControlCatalog? catalog = null, IScheduler? uiScheduler = null,
+        IWorkspaceInfo? workspaceInfo = null, IExtensionStorage? storage = null)
     {
         _commands = commands;
         _settings = settings;
         _catalog = catalog;
         _uiScheduler = uiScheduler ?? RxSchedulers.MainThreadScheduler;
+        _workspaceInfo = workspaceInfo;
+        _preferenceStorage = storage;
+        _preferencesReady = storage is null;
+        if (_workspaceInfo is not null) _workspaceInfo.WorkspaceChanged += OnPreferencesWorkspaceChanged;
 
         ReplaceItems(TryLoadCatalogFromSettings());
         StatusText = catalog is null ? "No project control catalog is available in this host." : "Control catalog not loaded yet.";
 
-        IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.IsLoading,
-            (item, loading) => item is not null && !loading);
+        IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.IsLoading, x => x.CanEditAssemblyPreferences,
+            (item, loading, ready) => item is not null && !loading && ready);
         InsertSelectedCommand = ReactiveCommand.CreateFromTask(InsertSelectedAsync, canInsert);
         ReloadCommand = ReactiveCommand.CreateFromTask(() => ReloadAsync(),
             this.WhenAnyValue(x => x.IsLoading).Select(loading => !loading));
@@ -175,7 +226,16 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
             SearchText = string.Empty;
             SelectedLibrary = _allLibraries;
             SelectedCategory = _allCategories;
+            SetAllAssembliesIncluded(true);
         });
+        ShowAllAssembliesCommand = ReactiveCommand.Create(() => SetAllAssembliesIncluded(true),
+            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+        HideAllAssembliesCommand = ReactiveCommand.Create(() => SetAllAssembliesIncluded(false),
+            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+        CollapseAllCommand = ReactiveCommand.Create(() => SetAllGroupsExpanded(false),
+            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+        ExpandAllCommand = ReactiveCommand.Create(() => SetAllGroupsExpanded(true),
+            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
         if (_catalog is not null)
         {
             _catalog.Changed += OnCatalogChanged;
@@ -240,6 +300,7 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
         {
             this.RaiseAndSetIfChanged(ref _isLoading, value);
             this.RaisePropertyChanged(nameof(NoMatches));
+            NotifyPreferenceAvailability();
         }
     }
 
@@ -294,6 +355,22 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     /// <summary>Restores the unfiltered catalog.</summary>
     public ReactiveCommand<Unit, Unit> ClearFiltersCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> CollapseAllCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ExpandAllCommand { get; }
+
+    private void SetAllGroupsExpanded(bool expanded)
+    {
+        if (!CanEditAssemblyPreferences) return;
+        bool changed = false;
+        foreach (ToolboxAssemblyGroup group in AssemblyGroups)
+        {
+            group.ApplyExpandedState(expanded);
+            changed |= expanded ? _collapsedAssemblies.Remove(group.AssemblyName) : _collapsedAssemblies.Add(group.AssemblyName);
+        }
+        if (changed) SaveCollapsedAssemblies();
+    }
 
     private async Task InsertSelectedAsync()
     {
@@ -389,6 +466,7 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        DisposeAssemblyPreferences();
         Interlocked.Increment(ref _reloadVersion);
         if (_catalog is not null) _catalog.Changed -= OnCatalogChanged;
         _loadCancellation?.Cancel();
@@ -396,6 +474,10 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
         ReloadCommand.Dispose();
         CancelLoadCommand.Dispose();
         ClearFiltersCommand.Dispose();
+        ShowAllAssembliesCommand.Dispose();
+        HideAllAssembliesCommand.Dispose();
+        CollapseAllCommand.Dispose();
+        ExpandAllCommand.Dispose();
     }
 
     private void ReplaceItems(IEnumerable<ToolboxPanelItem> items)
@@ -440,6 +522,7 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private void ApplyFilter()
     {
         if (_updatingFilters) return;
+        RefreshAssemblyChoices();
         ToolboxPanelItem? selected = SelectedItem;
         string[] terms = (SearchText ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         _updatingGroups = true;
@@ -449,6 +532,7 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
             ThirdPartyItems.Clear();
             foreach (ToolboxPanelItem item in Items)
             {
+                if (!IsAssemblyIncluded(item.AssemblyName)) continue;
                 if (SelectedLibrary?.Value is { } library && item.AssemblyName != library) continue;
                 if (SelectedCategory?.Value is { } category && item.Category != category) continue;
                 if (!terms.All(term => item.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
@@ -456,12 +540,6 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
                     || item.AssemblyName.Contains(term, StringComparison.OrdinalIgnoreCase)
                     || item.Category.Contains(term, StringComparison.OrdinalIgnoreCase))) continue;
                 (item.IsStandardControl ? StandardItems : ThirdPartyItems).Add(item);
-            }
-
-            HashSet<string> availableAssemblies = Items.Select(item => item.AssemblyName).ToHashSet(StringComparer.Ordinal);
-            foreach (string obsolete in _assemblyGroups.Keys.Where(key => !availableAssemblies.Contains(key)).ToArray())
-            {
-                _assemblyGroups.Remove(obsolete);
             }
 
             ToolboxPanelItem[] visibleItems = StandardItems.Concat(ThirdPartyItems).ToArray();
@@ -479,18 +557,15 @@ public sealed class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 visibleGroups.Add(group);
             }
 
-            visibleGroups = visibleGroups.OrderBy(group => group.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            visibleGroups = visibleGroups.OrderByDescending(group => group.IsFavorite)
+                .ThenBy(group => group.DisplayName, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(group => group.AssemblyName, StringComparer.Ordinal).ToList();
             foreach (ToolboxAssemblyGroup hidden in _assemblyGroups.Values.Except(visibleGroups))
             {
                 hidden.UpdateItems(Array.Empty<ToolboxPanelItem>());
             }
 
-            if (!AssemblyGroups.SequenceEqual(visibleGroups))
-            {
-                AssemblyGroups.Clear();
-                foreach (ToolboxAssemblyGroup group in visibleGroups) AssemblyGroups.Add(group);
-            }
+            SynchronizeGroups(AssemblyGroups, visibleGroups);
 
             SelectedItem = visibleItems.FirstOrDefault(item => selected is not null
                 && item.AssemblyName == selected.AssemblyName && item.FullName == selected.FullName

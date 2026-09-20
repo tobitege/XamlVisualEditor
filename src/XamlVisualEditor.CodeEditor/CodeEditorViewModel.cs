@@ -205,6 +205,15 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public ReactiveCommand<Unit, Unit> DecreaseFontSizeCommand { get; }
 
+    private bool _hasPendingTextChanges;
+
+    /// <summary>Gets whether typed changes still need to enter the shared document history.</summary>
+    public bool HasPendingTextChanges
+    {
+        get => _hasPendingTextChanges;
+        private set => this.RaiseAndSetIfChanged(ref _hasPendingTextChanges, value);
+    }
+
     public CodeEditorViewModel(
         string filePath,
         SyncEngine syncEngine,
@@ -228,9 +237,26 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         XamlParsingService parsingService = new();
         _semanticLanguageService = new XamlLanguageService(_completionRegistry, parsingService, metadata);
 
+        IObservable<Unit> historyChanges = Observable.FromEvent(
+            handler => _syncEngine.UndoRedo.StateChanged += handler,
+            handler => _syncEngine.UndoRedo.StateChanged -= handler);
+        IObservable<Unit> commandState = Observable.Merge(historyChanges,
+                this.WhenAnyValue(editor => editor.HasPendingTextChanges).Select(_ => Unit.Default))
+            .ObserveOn(RxSchedulers.MainThreadScheduler);
+
         TriggerCompletionCommand = ReactiveCommand.Create(TriggerCompletion);
-        UndoCommand = ReactiveCommand.Create(() => Document.UndoStack.Undo());
-        RedoCommand = ReactiveCommand.Create(() => Document.UndoStack.Redo());
+        UndoCommand = ReactiveCommand.Create(() =>
+        {
+            FlushPendingTextChanges();
+            _syncEngine.Undo();
+        }, commandState.Select(_ => HasPendingTextChanges || _syncEngine.UndoRedo.CanUndo).DistinctUntilChanged());
+        RedoCommand = ReactiveCommand.Create(() =>
+        {
+            FlushPendingTextChanges();
+            _syncEngine.Redo();
+        }, commandState.Select(_ => !HasPendingTextChanges && _syncEngine.UndoRedo.CanRedo).DistinctUntilChanged());
+        _disposables.Add(UndoCommand);
+        _disposables.Add(RedoCommand);
         FormatDocumentCommand = ReactiveCommand.Create(FormatDocument);
         IncreaseFontSizeCommand = ReactiveCommand.Create(() => { FontSize = Math.Min(FontSize + 2, 48); });
         DecreaseFontSizeCommand = ReactiveCommand.Create(() => { FontSize = Math.Max(FontSize - 2, 8); });
@@ -240,9 +266,10 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
                 h => Document.TextChanged += h,
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
+            .Do(_ => HasPendingTextChanges = true)
             .Throttle(TimeSpan.FromMilliseconds(300))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => OnTextChanged());
+            .Subscribe(_ => FlushPendingTextChanges());
         _disposables.Add(textChangedSubscription);
 
         IDisposable semanticTokensSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
@@ -264,7 +291,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
 
         // Subscribe to sync events to receive AST→text updates
         IDisposable syncSubscription = _syncEngine.SyncEvents
-            .Where(e => e.Source == SyncSource.DesignSurface || e.Source == SyncSource.Collaboration)
+            .Where(e => e.Source != SyncSource.CodeEditor)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(OnSyncEvent);
         _disposables.Add(syncSubscription);
@@ -293,6 +320,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void SetTextSilently(string text)
     {
+        HasPendingTextChanges = false;
         _suppressTextChanged = true;
         try
         {
@@ -372,8 +400,16 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         return offset;
     }
 
-    private void OnTextChanged()
+    /// <summary>
+    /// Commits pending typing before saving, replaying history, or leaving the editor.
+    /// </summary>
+    public void FlushPendingTextChanges()
     {
+        if (!HasPendingTextChanges)
+        {
+            return;
+        }
+
         IsModified = true;
 
         string text = Document.Text;
@@ -382,11 +418,19 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         _syncEngine.CommitUndoBatch("Text edit");
 
         _syncEngine.NotifyTextChanged(text, SyncSource.CodeEditor);
+        HasPendingTextChanges = false;
     }
 
     private void OnSyncEvent(SyncEvent syncEvent)
     {
-        if (syncEvent.XamlText is not null)
+        if (HasPendingTextChanges || !string.Equals(syncEvent.XamlText,
+                _syncEngine.CurrentText ?? string.Empty, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (syncEvent.XamlText is not null &&
+            !string.Equals(Document.Text, syncEvent.XamlText, StringComparison.Ordinal))
         {
             int caretOffset = CaretOffset;
             SetTextSilently(syncEvent.XamlText);

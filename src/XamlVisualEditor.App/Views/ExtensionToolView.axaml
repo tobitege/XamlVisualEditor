@@ -4,7 +4,8 @@
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
              x:Class="XamlVisualEditor.App.Views.ExtensionToolView"
-             x:DataType="shell:ExtensionTool">
+             x:DataType="shell:ExtensionTool"
+             ClipToBounds="True">
   <ContentControl Content="{CompiledBinding ExtensionViewModel}">
     <ContentControl.DataTemplates>
       <DataTemplate x:DataType="vm:ExtensionTreeViewModel">

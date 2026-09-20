@@ -1,0 +1,43 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The class belongs only to editor chrome, never to a rendered document. -->
+    <Style Selector=".editor-chrome .editor-toolbar > :is(Control)">
+        <Setter Property="Margin" Value="0,0,4,2" />
+    </Style>
+
+    <Style Selector=".editor-chrome :is(Button)">
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="26" />
+    </Style>
+
+    <Style Selector=".editor-chrome TextBox, .editor-chrome ComboBox, .editor-chrome NumericUpDown">
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="MinHeight" Value="26" />
+    </Style>
+
+    <Style Selector=".editor-chrome CheckBox, .editor-chrome RadioButton">
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="MinHeight" Value="22" />
+    </Style>
+
+    <Style Selector=".editor-chrome ListBoxItem, .editor-chrome TreeViewItem">
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+
+    <Style Selector=".editor-chrome MenuItem, .editor-chrome TabItem">
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+
+    <Style Selector=".editor-chrome DataGridCell, .editor-chrome DataGridColumnHeader">
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector=".editor-chrome DataGridRow">
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+</Styles>

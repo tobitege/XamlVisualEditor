@@ -27,10 +27,14 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
         <TreeView Grid.Row="3" ItemsSource="{CompiledBinding Roots}" SelectedItem="{CompiledBinding SelectedNode, Mode=TwoWay}">
-          <TreeView.Styles><Style Selector="TreeViewItem"><Setter Property="IsExpanded" Value="True" /></Style></TreeView.Styles>
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem" x:DataType="vm:StructureNodeViewModel">
+              <Setter Property="IsExpanded" Value="{CompiledBinding IsExpanded, Mode=TwoWay}" />
+            </Style>
+          </TreeView.Styles>
           <TreeView.ItemTemplate>
             <TreeDataTemplate x:DataType="vm:StructureNodeViewModel" ItemsSource="{CompiledBinding Children}">
-              <TextBlock Text="{CompiledBinding Label}" />
+              <TextBlock Text="{CompiledBinding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding Label}" />
             </TreeDataTemplate>
           </TreeView.ItemTemplate>
         </TreeView>

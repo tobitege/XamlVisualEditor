@@ -143,6 +143,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 throw new InvalidOperationException("This property accepts only one value. Use a container for multiple children.");
             if (property.Elements().Any() && property.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value)))
                 throw new InvalidOperationException("A scalar expression cannot be mixed with object elements.");
+            ValidateStructureValues(document, property);
 
             XElement owner = new(XName.Get(node.TypeName[(node.TypeName.IndexOf(':') + 1)..], node.XmlNamespace), property);
             foreach (XAttribute declaration in property.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
@@ -172,6 +173,95 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 change();
             edit.Commit();
         });
+    }
+
+    private static void ValidateStructureValues(DesignerDocumentViewModel document, XElement root)
+    {
+        if (document.MetadataService is not { } metadata) return;
+        Dictionary<XName, IReadOnlyList<PropertyMetadata>> declarations = new();
+
+        PropertyMetadata? FindDeclaration(XElement element, XName name)
+        {
+            string propertyName = name.LocalName;
+            string typeName = element.Name.LocalName;
+            int separator = propertyName.LastIndexOf('.');
+            if (separator >= 0)
+            {
+                typeName = propertyName[..separator];
+                propertyName = propertyName[(separator + 1)..];
+            }
+            else if (name.Namespace != XNamespace.None) return null;
+
+            XNamespace xmlNamespace = name.Namespace == XNamespace.None ? element.Name.Namespace : name.Namespace;
+            XName typeKey = xmlNamespace + typeName;
+            if (!declarations.TryGetValue(typeKey, out IReadOnlyList<PropertyMetadata>? properties))
+            {
+                TypeMetadata? type = metadata.GetType(typeKey.NamespaceName, typeKey.LocalName);
+                properties = type is null ? Array.Empty<PropertyMetadata>() : metadata.GetProperties(type);
+                declarations.Add(typeKey, properties);
+            }
+            return properties.FirstOrDefault(property => property.Name == propertyName);
+        }
+
+        void Validate(XElement element, XName name, string value)
+        {
+            PropertyMetadata? declaration = FindDeclaration(element, name);
+            if (declaration is null) return;
+            try { PropertyValueValidator.Validate(declaration, value); }
+            catch (ArgumentException exception)
+            {
+                string member = name.LocalName.Contains('.') ? name.LocalName : element.Name.LocalName + "." + name.LocalName;
+                throw new InvalidOperationException($"{member}: {exception.Message}", exception);
+            }
+        }
+
+        void ValidateObject(XElement member, Type declaredType, XElement value)
+        {
+            TypeMetadata? description = metadata.GetType(value.Name.NamespaceName, value.Name.LocalName);
+            Type? valueType = description is null ? null : metadata.ResolveClrType(description);
+            if (valueType is null || declaredType.IsAssignableFrom(valueType)) return;
+
+            Type[] contracts = declaredType == typeof(string) ? Array.Empty<Type>() : declaredType.GetInterfaces().Append(declaredType).ToArray();
+            Type? dictionary = contracts.FirstOrDefault(type => type.IsGenericType &&
+                (type.GetGenericTypeDefinition() == typeof(IDictionary<,>) || type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+            Type? collection = contracts.FirstOrDefault(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ICollection<>))
+                ?? contracts.FirstOrDefault(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+            Type? itemType = dictionary?.GetGenericArguments()[1] ?? collection?.GetGenericArguments()[0];
+            if (itemType is null && declaredType != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(declaredType)) return;
+            Type expectedType = itemType ?? declaredType;
+            expectedType = Nullable.GetUnderlyingType(expectedType) ?? expectedType;
+            if (expectedType.IsAssignableFrom(valueType)) return;
+
+            // Factories and bindings provide the eventual value; do not execute them in the editor.
+            if (typeof(Avalonia.Data.BindingBase).IsAssignableFrom(valueType)
+                || valueType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance).Any(method =>
+                {
+                    if (method.Name != "ProvideValue" || method.ContainsGenericParameters || method.ReturnType == typeof(void)) return false;
+                    var parameters = method.GetParameters();
+                    return parameters.Length == 0 || (parameters.Length == 1 && parameters[0].ParameterType == typeof(IServiceProvider));
+                })) return;
+            if (System.ComponentModel.TypeDescriptor.GetConverter(expectedType).CanConvertFrom(valueType)) return;
+            const System.Reflection.BindingFlags conversionFlags = System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy;
+            if (valueType.GetMethods(conversionFlags).Concat(expectedType.GetMethods(conversionFlags)).Any(method =>
+                method.Name == "op_Implicit" && !method.ContainsGenericParameters && expectedType.IsAssignableFrom(method.ReturnType)
+                && method.GetParameters() is { Length: 1 } parameters && parameters[0].ParameterType.IsAssignableFrom(valueType))) return;
+
+            throw new InvalidOperationException($"{member.Name.LocalName} requires {expectedType.Name}, not {valueType.Name}.");
+        }
+
+        foreach (XElement element in root.DescendantsAndSelf())
+        {
+            if (element.Name.LocalName.Contains('.'))
+            {
+                if (!element.HasElements) Validate(element, element.Name, element.Value);
+                else if (FindDeclaration(element, element.Name)?.ClrType is { } declaredType)
+                    foreach (XElement value in element.Elements()) ValidateObject(element, declaredType, value);
+                continue;
+            }
+            foreach (XAttribute attribute in element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration))
+                Validate(element, attribute.Name, attribute.Value);
+        }
     }
 
     private static DesignerGridAxis GetGridDefinitionAxis(TypeMetadata type) =>

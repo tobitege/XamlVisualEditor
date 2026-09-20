@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Reactive;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -9,9 +10,11 @@ using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Dock.Avalonia.Themes.Fluent;
 using ReactiveUI;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
 
@@ -362,7 +365,9 @@ public sealed partial class MainWindow : Window
             KeyBinding binding = new()
             {
                 Gesture = gesture,
-                Command = entry.Command
+                Command = entry.CommandId is "editing.undo" or "editing.redo" or "editing.cut" or "editing.copy"
+                    or "editing.paste" or "editing.delete" or "editing.selectAll" or "editing.duplicate"
+                    ? new FocusAwareEditingCommand(this, entry.Command) : entry.Command
             };
 
             KeyBindings.Add(binding);
@@ -378,6 +383,31 @@ public sealed partial class MainWindow : Window
         }
 
         _extensionKeyBindings.Clear();
+    }
+
+    private sealed class FocusAwareEditingCommand(Window window, ICommand command) : ICommand
+    {
+        public event EventHandler? CanExecuteChanged
+        {
+            add => command.CanExecuteChanged += value;
+            remove => command.CanExecuteChanged -= value;
+        }
+
+        public bool CanExecute(object? parameter)
+        {
+            for (Visual? visual = window.FocusManager?.GetFocusedElement() as Visual; visual is not null; visual = visual.GetVisualParent())
+            {
+                if (visual is TextBox or AvaloniaEdit.TextEditor
+                    or PreviewerSurfaceControl { Document.DesignSurface.IsEditMode: false }
+                    or DesignSurfaceView { DataContext: DesignSurfaceViewModel { IsEditMode: false } }) return false;
+            }
+            return command.CanExecute(parameter);
+        }
+
+        public void Execute(object? parameter)
+        {
+            if (CanExecute(parameter)) command.Execute(parameter);
+        }
     }
 
     private static bool TryParseKeyGesture(string value, out KeyGesture? gesture)

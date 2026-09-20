@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using System.Reactive.Concurrency;
 using ReactiveUI;
+using ReactiveUI.Avalonia;
 using ReactiveUI.Builder;
 
 namespace XamlVisualEditor.Tests.UI;
@@ -20,8 +20,7 @@ internal static class ReactiveUiBootstrap
             .WithCoreServices()
             .BuildApp();
 
-        // Upstream tests relied on RxApp's inline scheduling; keep that behavior
-        // deterministic instead of depending on the platform scheduler.
-        RxSchedulers.MainThreadScheduler = CurrentThreadScheduler.Instance;
+        // UI-bound command notifications must return to the Avalonia dispatcher.
+        RxSchedulers.MainThreadScheduler = AvaloniaScheduler.Instance;
     }
 }

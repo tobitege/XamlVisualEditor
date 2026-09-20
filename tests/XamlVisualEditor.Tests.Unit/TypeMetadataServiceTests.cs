@@ -15,6 +15,7 @@ namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class TypeMetadataServiceTests
 {
+    private static bool s_regularPropertyOwnerInitialized;
     [Fact]
     public void GetAvailableNamespaces_IncludesAvaloniaNamespaceAfterLoad()
     {
@@ -88,6 +89,10 @@ public sealed class TypeMetadataServiceTests
         Assert.Equal("ready", property.DefaultValue);
         Assert.Equal("Test properties", property.Category);
         Assert.Equal("A custom attached hint.", property.Description);
+        PropertyMetadata alias = Assert.Single(service.GetProperties(type), p => p.Name == "AliasedAttachedOwner.Note");
+        Assert.True(alias.IsAttached);
+        Assert.Equal("aliased", alias.DefaultValue);
+        Assert.False(s_regularPropertyOwnerInitialized);
     }
 
     [Fact]
@@ -144,6 +149,47 @@ public sealed class TypeMetadataServiceTests
             assembly => assembly.GetName().Name is "MissingDependency" or "PropertyDiscoveryFixture");
     }
 
+    [Theory]
+    [InlineData("https://github.com/avaloniaui")]
+    [InlineData("clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls")]
+    public void RepeatedTypeLookups_DoNotReallocateNamespaceCatalogs(string xmlNamespace)
+    {
+        TypeMetadataService service = new();
+        TypeMetadata expected = Assert.IsType<TypeMetadata>(service.GetType(xmlNamespace, "Button"));
+        Assert.Same(expected, service.GetType(xmlNamespace, "Avalonia.Controls.Button"));
+        int expectedCount = service.GetAvailableTypes(xmlNamespace).Count;
+        TypeMetadata? actual = null;
+        int actualCount = 0;
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 1000; index++)
+        {
+            actualCount = service.GetAvailableTypes(xmlNamespace).Count;
+            actual = service.GetType(xmlNamespace, "Button");
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Same(expected, actual);
+        Assert.Equal(expectedCount, actualCount);
+        Assert.True(allocated < 4096, $"Repeated metadata lookups allocated {allocated} bytes.");
+    }
+
+    [Fact]
+    public void LoadAssembly_RefreshesPreviouslyQueriedNamespace()
+    {
+        TypeMetadataService service = new();
+        string assemblyName = typeof(Console).Assembly.GetName().Name!;
+        string xmlNamespace = $"clr-namespace:System;assembly={assemblyName}";
+        Assert.Empty(service.GetAvailableTypes(xmlNamespace));
+
+        service.LoadAssembly(typeof(Console).Assembly.Location);
+
+        TypeMetadata type = Assert.Single(service.GetAvailableTypes(xmlNamespace), item => item.Name == "Console");
+        Assert.Equal(assemblyName, type.AssemblyName);
+        Assert.Same(type, service.GetType(xmlNamespace, "System.Console"));
+        Assert.Same(type, service.GetTypeMetadata("System.Console"));
+    }
+
     private static MemoryStream CompileMetadataAssembly(string name, string source, params MetadataReference[] references)
     {
         List<MetadataReference> allReferences = new(references)
@@ -158,6 +204,33 @@ public sealed class TypeMetadataServiceTests
         Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics));
         stream.Position = 0;
         return stream;
+    }
+
+    private sealed class RegularPropertyOwner : AvaloniaObject
+    {
+        public static readonly StyledProperty<string> TextProperty =
+            AvaloniaProperty.Register<RegularPropertyOwner, string>("Text", string.Empty);
+
+        static RegularPropertyOwner()
+        {
+            s_regularPropertyOwnerInitialized = true;
+            throw new InvalidOperationException("Unrelated styled-property owners must not be initialized by attached-property discovery.");
+        }
+
+        public string Text
+        {
+            get => GetValue(TextProperty);
+            set => SetValue(TextProperty, value);
+        }
+    }
+
+    private static class AliasedAttachedOwner
+    {
+        public static readonly StyledProperty<string> NoteProperty =
+            AvaloniaProperty.RegisterAttached<AvaloniaObject, string>("Note", typeof(AliasedAttachedOwner), "aliased");
+
+        public static string GetNote(AvaloniaObject target) => target.GetValue(NoteProperty);
+        public static void SetNote(AvaloniaObject target, string value) => target.SetValue(NoteProperty, value);
     }
 
     private static class NestedAttachedOwner

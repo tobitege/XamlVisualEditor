@@ -1046,6 +1046,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TypeMetadata> _cache = new(StringComparer.Ordinal);
     private readonly object _catalogGate = new();
+    private readonly Dictionary<string, IReadOnlyList<TypeMetadata>> _namespaceTypes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _registeredAssemblyPaths = new(StringComparer.OrdinalIgnoreCase);
     private Lazy<IReadOnlyList<TypeMetadata>>? _typeCatalog;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, Type[]> _exportedTypesCache = new();
@@ -1086,10 +1087,14 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public TypeMetadata? GetType(string xmlNamespace, string typeName)
     {
-        TypeMetadata? catalogType = GetAvailableTypes(xmlNamespace).FirstOrDefault(type =>
-            string.Equals(type.Name, typeName, StringComparison.Ordinal)
-            || string.Equals(type.FullName, typeName, StringComparison.Ordinal));
-        if (catalogType is not null) return catalogType;
+        IReadOnlyList<TypeMetadata> types = GetAvailableTypes(xmlNamespace);
+        for (int index = 0; index < types.Count; index++)
+        {
+            TypeMetadata type = types[index];
+            if (string.Equals(type.Name, typeName, StringComparison.Ordinal)
+                || string.Equals(type.FullName, typeName, StringComparison.Ordinal))
+                return type;
+        }
 
         if (TryResolveType(xmlNamespace, typeName, out Type? resolved))
         {
@@ -1109,29 +1114,38 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null)
     {
-        IReadOnlyList<TypeMetadata> types = GetTypeCatalog();
         if (string.IsNullOrWhiteSpace(xmlNamespace))
         {
-            return types;
+            return GetTypeCatalog();
         }
 
+        lock (_catalogGate)
+        {
+            if (_namespaceTypes.TryGetValue(xmlNamespace, out IReadOnlyList<TypeMetadata>? cached))
+                return cached;
+
+            IReadOnlyList<TypeMetadata> filtered = FilterAvailableTypes(xmlNamespace);
+            _namespaceTypes.Add(xmlNamespace, filtered);
+            return filtered;
+        }
+    }
+
+    private IReadOnlyList<TypeMetadata> FilterAvailableTypes(string xmlNamespace)
+    {
+        IReadOnlyList<TypeMetadata> types = GetTypeCatalog();
         if (TryParseClrNamespace(xmlNamespace, out string? clrNamespace, out string? assemblyName))
         {
             return types.Where(type => string.Equals(type.ClrNamespace, clrNamespace, StringComparison.Ordinal)
                 && (string.IsNullOrEmpty(assemblyName)
                     || string.Equals(type.AssemblyName, assemblyName, StringComparison.OrdinalIgnoreCase))).ToArray();
         }
-
-        XmlnsDefinition[] mappings;
-        lock (_catalogGate)
+        if (_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
         {
-            mappings = _xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? definitions)
-                ? definitions.ToArray()
-                : Array.Empty<XmlnsDefinition>();
+            return types.Where(type => mappings.Any(mapping =>
+                string.Equals(type.AssemblyName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(type.ClrNamespace, mapping.ClrNamespace, StringComparison.Ordinal))).ToArray();
         }
-        return types.Where(type => mappings.Any(mapping =>
-            string.Equals(type.AssemblyName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(type.ClrNamespace, mapping.ClrNamespace, StringComparison.Ordinal))).ToArray();
+        return Array.Empty<TypeMetadata>();
     }
 
     private IReadOnlyList<TypeMetadata> GetTypeCatalog()
@@ -1310,6 +1324,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                     if (!mappings.Contains(mapping)) mappings.Add(mapping);
                 }
                 _typeCatalog = null;
+                _namespaceTypes.Clear();
             }
         }
         catch (Exception ex)
@@ -1495,6 +1510,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
             _loadedAssemblies.Add(asm);
             AddXmlnsDefinitions(asm);
             _typeCatalog = null;
+            _namespaceTypes.Clear();
         }
     }
 
@@ -1677,7 +1693,8 @@ public sealed class TypeMetadataService : ITypeMetadataService
                     {
                         FieldInfo? field = owner!.GetField(candidate.FieldName,
                             BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
-                        if (field is not null && typeof(AvaloniaProperty).IsAssignableFrom(field.FieldType))
+                        if (field is not null && typeof(AvaloniaProperty).IsAssignableFrom(field.FieldType)
+                            && IsAttachedPropertyCandidate(field))
                         {
                             fields.Add(field);
                         }
@@ -1697,6 +1714,26 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
             return fields.ToArray();
         });
+    }
+
+    private static bool IsAttachedPropertyCandidate(FieldInfo field)
+    {
+        // Reading a field runs its owner's initializer. Do not initialize ordinary controls
+        // merely to discover whether their properties are attached.
+        if (field.FieldType.IsGenericType &&
+            field.FieldType.GetGenericTypeDefinition() == typeof(AttachedProperty<>)) return true;
+        Type? owner = field.DeclaringType;
+        if (owner is null) return false;
+        string name = field.Name.EndsWith("Property", StringComparison.Ordinal) ? field.Name[..^8] : field.Name;
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        return owner.GetMember("Get" + name, MemberTypes.Method, flags)
+            .Concat(owner.GetMember("Set" + name, MemberTypes.Method, flags)).OfType<MethodInfo>()
+            .Any(method =>
+            {
+                ParameterInfo[] parameters = method.GetParameters();
+                return !method.ContainsGenericParameters && parameters.Length == (method.Name.StartsWith("Get", StringComparison.Ordinal) ? 1 : 2)
+                    && typeof(AvaloniaObject).IsAssignableFrom(parameters[0].ParameterType);
+            });
     }
 
     private static object? TryGetDefaultValue(Avalonia.AvaloniaProperty prop, Type ownerType)

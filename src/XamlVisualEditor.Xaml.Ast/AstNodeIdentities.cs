@@ -35,6 +35,25 @@ public static class AstNodeIdentities
         if (document.Root is not null) document.NodeMap.RegisterTree(document.Root);
     }
 
+    /// <summary>Updates source ranges without replacing live designer nodes or their identities.</summary>
+    public static void CopySourcePositions(MutableAstDocument document, MutableAstDocument? parsedSource)
+    {
+        Dictionary<string, MutableAstNode> positions = new(StringComparer.Ordinal);
+        if (parsedSource is not null)
+        {
+            foreach ((string path, MutableAstNode node) in Enumerate(parsedSource)) positions[path] = node;
+        }
+
+        foreach ((string path, MutableAstNode node) in Enumerate(document))
+        {
+            positions.TryGetValue(path, out MutableAstNode? source);
+            node.Line = source?.Line ?? 0;
+            node.Column = source?.Column ?? 0;
+            node.EndLine = source?.EndLine ?? 0;
+            node.EndColumn = source?.EndColumn ?? 0;
+        }
+    }
+
     private static IEnumerable<(string Path, MutableAstNode Node)> Enumerate(MutableAstDocument document)
     {
         if (document.Root is null) yield break;

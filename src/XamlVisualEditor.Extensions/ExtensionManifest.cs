@@ -37,14 +37,18 @@ public sealed class ExtensionManifest
 public sealed class ExtensionPackageInfo
 {
     /// <summary>Creates a package info.</summary>
-    public ExtensionPackageInfo(string packagePath, ExtensionManifest manifest)
+    public ExtensionPackageInfo(string packagePath, ExtensionManifest manifest, string? installationDirectory = null)
     {
         PackagePath = packagePath;
         Manifest = manifest;
+        InstallationDirectory = installationDirectory;
     }
 
     /// <summary>Gets the package path.</summary>
     public string PackagePath { get; }
+
+    /// <summary>Gets the extracted package directory, or null for an uninstalled archive.</summary>
+    public string? InstallationDirectory { get; }
 
     /// <summary>Gets the parsed manifest.</summary>
     public ExtensionManifest Manifest { get; }

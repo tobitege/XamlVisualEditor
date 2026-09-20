@@ -76,6 +76,8 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 {
     private readonly CompositeDisposable _disposables = new();
     public bool IsDisposed { get; private set; }
+    [Reactive]
+    public partial bool IsLoaded { get; private set; }
     private SyncSource _selectionSource = SyncSource.DesignSurface;
     private readonly ITypeMetadataService? _metadataService;
     private readonly Func<WorkspaceModel?>? _workspaceProvider;
@@ -221,7 +223,9 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         Func<string, System.Threading.Tasks.Task>? openFileAsync = null,
         ILogger<DesignerDocumentViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null,
-        ILanguageIntellisenseRegistry? languageRegistry = null)
+        ILanguageIntellisenseRegistry? languageRegistry = null,
+        Func<DesignerDocumentViewModel, System.Threading.Tasks.Task>? startPreviewerAsync = null,
+        Func<DesignerDocumentViewModel, System.Threading.Tasks.Task>? updatePreviewerAsync = null)
     {
         FilePath = filePath;
         _metadataService = metadataService;
@@ -235,6 +239,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         XamlSerializationService serializationService = new();
         NodeMap = new AstNodeMap();
         SyncEngine = new SyncEngine(parsingService, serializationService, NodeMap);
+        InitializeDesignerDiagnostics();
         // Create sub-ViewModels
         DesignSurface = new DesignSurfaceViewModel();
         SelectionManager = DesignSurface.Selection;
@@ -249,10 +254,23 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         ControlFactory = new ControlFactory(
             metadataService,
             _loggerFactory?.CreateLogger<ControlFactory>());
+        InitializeDesignerThemes();
+        InitializePreviewerUpdates(updatePreviewerAsync);
+
+        if (startPreviewerAsync is not null)
+        {
+            ReactiveCommand<Unit, Unit> start = ReactiveCommand.CreateFromTask(
+                () => startPreviewerAsync(this), this.WhenAnyValue(document => document.IsLoaded));
+            StartPreviewerCommand = start;
+            _disposables.Add(start);
+            _disposables.Add(start.ThrownExceptions.ObserveOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(error => SetPreviewerLaunchError(error.Message)));
+        }
 
         // Track modification state
+        InitializeDesignerFileState();
         IDisposable isModifiedSubscription = this.WhenAnyValue(x => x.CodeEditor.IsModified)
-            .Subscribe(m => IsModified = m);
+            .Subscribe(_ => UpdateFileModifiedState());
         _disposables.Add(isModifiedSubscription);
 
         // Watch for property changes to raise Title notification
@@ -334,16 +352,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             });
         _disposables.Add(syncEventsSubscription);
 
-        SaveCommand = ReactiveCommand.CreateFromTask(async () =>
-        {
-            string? text = SyncEngine.CurrentText;
-            if (text is not null)
-            {
-                await System.IO.File.WriteAllTextAsync(FilePath, text);
-                IsModified = false;
-                CodeEditor.IsModified = false;
-            }
-        });
+        SaveCommand = ReactiveCommand.CreateFromTask(SaveDocumentFileAsync);
 
         CloseCommand = ReactiveCommand.Create(() => { /* Handled by MainWindowViewModel.CloseDocument */ });
 
@@ -358,10 +367,16 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 (hasSelection, servicesAvailable) => hasSelection && servicesAvailable);
         NavigateToDefinitionCommand = ReactiveCommand.CreateFromTask(NavigateToDefinitionAsync, canNavigate);
 
-        IDisposable previewerToggleSubscription = this.WhenAnyValue(x => x.UseExternalPreviewer)
-            .Where(usePreviewer => usePreviewer)
+        IDisposable previewerToggleSubscription = this.WhenAnyValue(
+                x => x.UseExternalPreviewer, x => x.IsLoaded, x => x.StartPreviewerCommand)
+            .Where(state => state.Item1 && state.Item2 && state.Item3 is not null)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => StartPreviewerCommand?.Execute(null));
+            .Subscribe(state =>
+            {
+                if (!IsDisposed && IsLoaded && UseExternalPreviewer &&
+                    ReferenceEquals(state.Item3, StartPreviewerCommand) && state.Item3!.CanExecute(null))
+                    state.Item3.Execute(null);
+            });
         _disposables.Add(previewerToggleSubscription);
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
@@ -503,14 +518,17 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// </summary>
     public async System.Threading.Tasks.Task LoadAsync()
     {
+        IsLoaded = false;
         if (System.IO.File.Exists(FilePath))
         {
-            string text = await System.IO.File.ReadAllTextAsync(FilePath);
+            string text = await _fileState.ReadAsync(FilePath);
             await SyncEngine.LoadAsync(text);
             CodeEditor.SetTextSilently(text);
+            UpdateFileModifiedState();
 
             await CodeEditor.InitializeLanguageServicesAsync();
 
+            IsLoaded = true;
             // Ensure the design surface rebuilds after loading
             DesignSurface.RequestRebuild();
         }
@@ -524,6 +542,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         }
 
         IsDisposed = true;
+        IsLoaded = false;
         if (_breakpointsSource is not null)
         {
             _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
@@ -2660,7 +2679,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ISystemIconService? systemIconService = null,
         IDotNetCli? dotNetCli = null,
         IControlCatalogUpdater? controlCatalogUpdater = null,
-        IClipboardService? clipboardService = null)
+        IClipboardService? clipboardService = null,
+        IWorkspaceInfo? themeWorkspaceInfo = null,
+        Func<string, IExtensionStorage>? extensionStorageFactory = null)
     {
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
@@ -2684,6 +2705,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ExtensionManager = new ExtensionManagerViewModel(
             extensionManager ?? new NullExtensionManager(),
             () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
+        InitializeThemePackages(extensionManager);
         SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
 
         if (_extensionContributions is not null)
@@ -2929,7 +2951,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DuplicateCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
             if (ActiveDesignerDocument is not { } document) return;
-            DesignerSelectionEditor editor = new(document.SyncEngine, _metadataService);
+            DesignerSelectionEditor editor = new(document.SyncEngine, _metadataService, document.DesignSurface.AutoGenerateAutomationIds);
             ApplyDesignerSelection(document, editor.Duplicate(GetSelectedObjects(document)));
         }), hasDesignerSelection);
         DeleteCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
@@ -3022,7 +3044,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         StartPreviewerCommand = ReactiveCommand.CreateFromTask(
             StartPreviewerForActiveDocumentAsync,
-            hasDesignerDoc.CombineLatest(hasWorkspace, (hasDoc, hasWs) => hasDoc && hasWs));
+            this.WhenAnyValue(viewModel => viewModel.ActiveDesignerDocument)
+                .Select(document => document is null ? Observable.Return(false) : document.WhenAnyValue(value => value.IsLoaded))
+                .Switch().CombineLatest(hasWorkspace, (loaded, hasWs) => loaded && hasWs));
 
         StartDebugCommand = ReactiveCommand.CreateFromTask(StartDebuggingAsync, canStartDebug);
         StopDebugCommand = ReactiveCommand.CreateFromTask(StopDebuggingAsync, canStopDebug);
@@ -3064,7 +3088,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         // Update trees when active document changes
         IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Where(doc => doc is null || !doc.IsDisposed)
-            .Subscribe(doc => UpdateTrees(doc));
+            .Subscribe(doc =>
+            {
+                ConfigurePreviewThemes(doc);
+                UpdateTrees(doc);
+            });
         _disposables.Add(activeDocumentTreesSubscription);
 
         IDisposable activeDocumentDockSubscription = this.WhenAnyValue(x => x.ActiveDocument)
@@ -3081,32 +3109,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
 
-        IDisposable previewerUpdateSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .Where(d => d is not null && !d.IsDisposed)
-            .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
-            .Switch()
-            .Throttle(TimeSpan.FromMilliseconds(250))
-            .ObserveOn(RxSchedulers.TaskpoolScheduler)
-            .Subscribe(d =>
-            {
-                if (_workspace is null)
-                {
-                    return;
-                }
-
-                string? xamlText = d.SyncEngine.CurrentText;
-                if (string.IsNullOrWhiteSpace(xamlText))
-                {
-                    return;
-                }
-
-                _ = _previewerLaunchService.SendUpdateXamlAsync(
-                    d.FilePath,
-                    xamlText,
-                    _workspace,
-                    (level, message) => LogOutput(level, message));
-            });
-        _disposables.Add(previewerUpdateSubscription);
+        InitializeThemePreferences(themeWorkspaceInfo ?? workspaceInfoUpdater as IWorkspaceInfo,
+            extensionStorageFactory?.Invoke("xve.designerThemes"));
 
         IDisposable previewerSessionSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Subscribe(doc =>
@@ -3381,7 +3385,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 StatusText = title;
             }), hasMultipleSelection);
             document.DesignSurface.LayoutActions.Add(new DesignerLayoutAction(title,
-                "Canvas uses the primary selection or selection extent. Grid uses its cells; existing definitions remain unchanged. StackPanel distribution changes shared spacing and requires all children.", command));
+                "Canvas uses the primary selection or selection extent. Grid uses its cells; existing definitions remain unchanged. StackPanel distribution changes shared spacing and requires all children.", command)
+            {
+                Icon = Avalonia.Media.Geometry.Parse(DesignerLayoutEditor.IconData(operation))
+            });
         }
     }
 
@@ -3499,7 +3506,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (visual)
         {
             MutableAstObjectNode? selected = selectedId is { } id ? designer!.NodeMap.FindById(id) as MutableAstObjectNode : null;
-            DesignerSelectionEditor editor = new(designer!.SyncEngine, _metadataService);
+            DesignerSelectionEditor editor = new(designer!.SyncEngine, _metadataService, designer.DesignSurface.AutoGenerateAutomationIds);
             ApplyDesignerSelection(designer, editor.Paste(clipboard, selected));
         }
         else if (designer is not null)
@@ -3617,7 +3624,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                                 Spacing="8"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
-                        <TextBox Width="200" Watermark="Enter text here..." />
+                        <TextBox Width="200" PlaceholderText="Enter text here..." />
                         <Button Content="Click Me"
                                 HorizontalAlignment="Center" />
                     </StackPanel>
@@ -3639,8 +3646,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             OpenFileAsync,
             _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
             _loggerFactory,
-            _languageRegistry);
-        doc.StartPreviewerCommand = StartPreviewerCommand;
+            _languageRegistry,
+            StartPreviewerForDocumentAsync,
+            UpdatePreviewerForDocumentAsync);
         doc.Breakpoints = Breakpoints;
         ConfigureDesignerCommands(doc);
         Documents.Add(doc);
@@ -4293,6 +4301,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void RefreshExtensionContributions()
     {
+        ConfigurePreviewThemes(ActiveDesignerDocument);
         if (_extensionContributions is null)
         {
             DisposeCollectionItems(ExtensionMenuItems);
@@ -5139,20 +5148,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _extensionTools.Clear();
         SyncExtensionDockables();
 
-        // Delete persisted layout so it reloads default on next start
-        try
-        {
-            string appData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
-            string layoutPath = System.IO.Path.Combine(appData, "XamlVisualEditor", "dock-layout.json");
-            if (System.IO.File.Exists(layoutPath))
-            {
-                System.IO.File.Delete(layoutPath);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Failed to delete layout file: {Message}", ex.Message);
-        }
+        DockFactory.CollapseBottomToolDock(layout);
+        DockFactory.SaveLayout(layout);
 
         StatusText = "Layout reset";
     }
@@ -6696,8 +6693,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 OpenFileAsync,
                 _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
                 _loggerFactory,
-                _languageRegistry);
-            designer.StartPreviewerCommand = StartPreviewerCommand;
+                _languageRegistry,
+                StartPreviewerForDocumentAsync,
+                UpdatePreviewerForDocumentAsync);
             designer.Breakpoints = Breakpoints;
             ConfigureDesignerCommands(designer);
             Documents.Add(designer);
@@ -7288,40 +7286,94 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return DebugToolConsentInteraction.Handle(request).ToTask();
     }
 
-    private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
+    private void ConfigurePreviewThemes(DesignerDocumentViewModel? document) =>
+        document?.SetPreviewThemeProviders(_extensionContributions?.DesignerThemeProviders
+            ?? Array.Empty<DesignerThemeProviderRegistration>());
+
+    private async System.Threading.Tasks.Task UpdatePreviewerForDocumentAsync(DesignerDocumentViewModel document)
     {
-        if (ActiveDesignerDocument is null || _workspace is null)
+        WorkspaceModel? workspace = _workspace;
+        string? workspacePath = _workspacePath;
+        if (workspace is null || document.IsDisposed || !Documents.Contains(document)
+            || !_previewerLaunchService.TryGetSession(document.FilePath, out _)) return;
+        string? xaml = GetPreviewerXaml(document);
+        if (string.IsNullOrWhiteSpace(xaml)) return;
+        try
         {
+            await _previewerLaunchService.SendUpdateXamlAsync(document.FilePath, xaml, workspace,
+                (level, message) => LogOutput(level, message), workspacePath);
+            if (!document.IsDisposed && ReferenceEquals(workspace, _workspace)) document.SetPreviewerLaunchError(null);
+        }
+        catch (Exception) when (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(workspace, _workspace))
+        {
+            // Closing a document or replacing its workspace invalidates pending transport work.
+        }
+    }
+
+    private static string? GetPreviewerXaml(DesignerDocumentViewModel document)
+    {
+        if (document.MetadataService is { } metadata && document.SyncEngine.CanEditAst
+            && document.SyncEngine.CurrentDocument is { Root: not null } ast)
+            return new XamlVisualEditor.Designer.Rendering.RuntimeDesignRenderer(metadata)
+                .PrepareXaml(ast, themeVariant: document.DesignSurface.PreviewThemeVariant, themeRequest: document.PreviewThemeRequest);
+        return document.SyncEngine.CurrentText;
+    }
+
+    private System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync() =>
+        ActiveDesignerDocument is { } document
+            ? StartPreviewerForDocumentAsync(document)
+            : System.Threading.Tasks.Task.CompletedTask;
+
+    private async System.Threading.Tasks.Task StartPreviewerForDocumentAsync(DesignerDocumentViewModel document)
+    {
+        WorkspaceModel? workspace = _workspace;
+        string? workspacePath = _workspacePath;
+        if (document.IsDisposed || !document.IsLoaded || !Documents.Contains(document)) return;
+        if (_changingThemePackages.Any(id => UsesThemePackage(document, id))) return;
+        ConfigurePreviewThemes(document);
+        document.SetPreviewerLaunchError(null);
+        if (workspace is null)
+        {
+            document.SetPreviewerLaunchError("Open a project before starting the previewer.");
             return;
         }
 
-        if (!await EnsurePreviewerTrustAsync(ActiveDesignerDocument.FilePath))
+        if (!await EnsurePreviewerTrustAsync(document.FilePath))
         {
-            StatusText = "Previewer start cancelled";
+            if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = "Previewer start cancelled";
             return;
         }
 
-        string? xamlText = ActiveDesignerDocument.SyncEngine.CurrentText;
+        if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace)) return;
+        string? xamlText = GetPreviewerXaml(document);
         PreviewerLaunchResult result = await _previewerLaunchService.StartPreviewerAsync(
-            ActiveDesignerDocument.FilePath,
+            document.FilePath,
             xamlText,
-            _workspace,
-            _workspacePath,
-            command => RunWorkspaceCommandAsync(command),
+            workspace,
+            workspacePath,
+            command => ReferenceEquals(_workspace, workspace)
+                ? RunWorkspaceCommandAsync(command) : System.Threading.Tasks.Task.CompletedTask,
             (level, message) => LogOutput(level, message));
+
+        if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace))
+        {
+            if (result.Process is not null) _previewerLaunchService.StopPreviewer(document.FilePath, result.Process);
+            return;
+        }
 
         if (result.Success)
         {
-            StatusText = "Previewer started";
-            if (_previewerLaunchService.TryGetSession(ActiveDesignerDocument.FilePath, out PreviewerTcpSession? session))
+            if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = "Previewer started";
+            if (_previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session))
             {
-                ActiveDesignerDocument.PreviewerSession = session;
+                document.PreviewerSession = session;
             }
             return;
         }
 
-        StatusText = "Previewer start failed";
-        ActiveDesignerDocument.PreviewerSession = null;
+        if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = "Previewer start failed";
+        document.PreviewerSession = null;
+        document.SetPreviewerLaunchError(result.ErrorMessage ?? "Previewer start failed.");
         if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
         {
             LogOutput("Error", result.ErrorMessage);
@@ -7433,7 +7485,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     // Frames treffen waehrend des Aufbaus mehrfach ein (Viewport-Verhandlung); als stabil gilt
     // der letzte Frame, wenn 1,5 s lang weder Groessenwechsel noch Resize-Anforderung kamen.
-    private static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
+    internal static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
         PreviewerTcpSession session,
         int timeoutMs)
     {

@@ -17,11 +17,16 @@ public sealed class LayoutEditService
 {
     private const string CollectionNodeName = "__PropertyElementChildren__";
     private readonly ITypeMetadataService? _metadata;
+    private readonly bool _generateAutomationIds;
     private static readonly string[] CanvasProperties = { "Canvas.Left", "Canvas.Top", "Canvas.Right", "Canvas.Bottom" };
     private static readonly string[] GridProperties = { "Grid.Row", "Grid.Column", "Grid.RowSpan", "Grid.ColumnSpan" };
 
     /// <summary>Creates an editor that understands inherited control types when metadata is available.</summary>
-    public LayoutEditService(ITypeMetadataService? metadata = null) => _metadata = metadata;
+    public LayoutEditService(ITypeMetadataService? metadata = null, bool generateAutomationIds = false)
+    {
+        _metadata = metadata;
+        _generateAutomationIds = generateAutomationIds;
+    }
 
     /// <summary>Gets the actual container kind, including custom subclasses.</summary>
     public LayoutContainerKind GetKind(MutableAstObjectNode node)
@@ -107,6 +112,7 @@ public sealed class LayoutEditService
         ContentSlot slot = GetSlot(parent);
         int insertion = index ?? slot.Nodes.Count;
         if (insertion < 0 || insertion > slot.Nodes.Count) return Fail("The insertion position is outside the target.", out error);
+        if (_generateAutomationIds && _metadata is not null) AutomationIdGenerator.Assign(parent, node, _metadata);
         ApplyPlacement(node, parent, placement);
         slot.Insert(insertion, node);
         return true;
@@ -126,9 +132,11 @@ public sealed class LayoutEditService
         int insertion = index ?? target.Nodes.Count;
         if (insertion < 0 || insertion > target.Nodes.Count) return Fail("The insertion position is outside the target.", out error);
         if (ReferenceEquals(oldParent, parent) && insertion > oldIndex) insertion--;
+        AstSourceScope sourceScope = AstSourceScope.Capture(node);
         source.Remove(node);
         ApplyPlacement(node, parent, placement);
         target.Insert(insertion, node);
+        sourceScope.ApplyTo(node);
         return true;
     }
 
@@ -168,6 +176,7 @@ public sealed class LayoutEditService
         ContentSlot slot = GetSlot(parent);
         int index = slot.Nodes.ToList().IndexOf(node);
         if (index < 0) return Fail("The element is not visual content of its parent.", out error);
+        if (_generateAutomationIds && _metadata is not null) AutomationIdGenerator.Assign(parent, wrapper, _metadata);
         slot.Remove(node);
         foreach (MutableAstPropertyNode property in node.Properties.Where(property =>
             CanvasProperties.Contains(property.PropertyName) || GridProperties.Contains(property.PropertyName)

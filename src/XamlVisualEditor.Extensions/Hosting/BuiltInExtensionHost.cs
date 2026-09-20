@@ -35,6 +35,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly ITerminalBridge _terminal;
     private readonly IExtensionViewHost _viewHost;
     private readonly ISettings _settings;
+    private readonly Func<string, IExtensionStorage> _storageFactory;
     private readonly IControlCatalog? _controlCatalog;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
@@ -68,7 +69,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         ITerminalBridge terminal,
         IExtensionViewHost viewHost,
         ISettings settings,
-        IControlCatalog? controlCatalog = null)
+        IControlCatalog? controlCatalog = null,
+        Func<string, IExtensionStorage>? storageFactory = null)
     {
         _extensions = extensions;
         _commands = commands;
@@ -98,6 +100,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _terminal = terminal;
         _viewHost = viewHost;
         _settings = settings;
+        _storageFactory = storageFactory ?? (_ => new InMemoryExtensionStorage());
         _controlCatalog = controlCatalog;
     }
 
@@ -137,7 +140,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         List<IDisposable> subscriptions = new();
         _extensionSubscriptions.Add(subscriptions);
 
-        IExtensionStorage storage = new InMemoryExtensionStorage();
+        IExtensionStorage storage = _storageFactory(extensionId);
         IExtensionLogger logger = new NullExtensionLogger();
         IExtensionPermissions permissions = new ExtensionPermissionService(extensionId, _settings, _window);
 

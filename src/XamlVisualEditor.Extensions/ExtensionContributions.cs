@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions;
 
@@ -88,6 +89,12 @@ public interface IExtensionContributionRegistry
     IReadOnlyList<ExtensionPropertyEditorContribution> PropertyEditors { get; }
 
     IReadOnlyList<ExtensionViewContribution> ViewContributions { get; }
+
+    /// <summary>Gets theme providers to load in the isolated preview application.</summary>
+    IReadOnlyList<DesignerThemeProviderRegistration> DesignerThemeProviders { get; }
+
+    /// <summary>Registers globally unique provider IDs without loading their assemblies in the editor.</summary>
+    IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers);
 
     IDisposable RegisterMenuItems(string extensionId, IReadOnlyList<ExtensionMenuContribution> items);
 

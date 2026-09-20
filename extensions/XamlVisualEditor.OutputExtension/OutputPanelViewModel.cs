@@ -177,7 +177,8 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
 
     public void HandleChannelMessage(OutputChannelInfo channel, string message, bool isLine)
     {
-        Dispatcher.UIThread.Post(() => AppendMessage(channel, message, isLine));
+        DateTimeOffset timestamp = DateTimeOffset.Now;
+        Dispatcher.UIThread.Post(() => AppendMessage(channel, message, isLine, timestamp));
     }
 
     public void Dispose()
@@ -282,7 +283,7 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
         }
     }
 
-    private void AppendMessage(OutputChannelInfo channel, string message, bool isLine)
+    private void AppendMessage(OutputChannelInfo channel, string message, bool isLine, DateTimeOffset timestamp)
     {
         OutputChannelViewModel? existing = FindChannel(channel.Name);
         if (existing is null)
@@ -291,7 +292,7 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
             _channels.Add(existing);
         }
 
-        OutputMessageEntry entry = new(DateTimeOffset.Now, message, isLine);
+        OutputMessageEntry entry = new(timestamp, message, isLine);
         existing.Messages.Add(entry);
 
         if (ReferenceEquals(SelectedChannel, existing))

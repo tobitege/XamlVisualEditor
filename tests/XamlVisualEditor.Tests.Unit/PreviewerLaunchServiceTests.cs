@@ -1,16 +1,192 @@
 using System;
 using System.IO;
+using System.Reflection;
+using System.Reflection.Emit;
+using Avalonia;
+using XamlVisualEditor.Designer.PreviewerHost;
+using SkiaSharp;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit;
 
+[CollectionDefinition(nameof(PreviewerHostEnvironmentCollection), DisableParallelization = true)]
+public sealed class PreviewerHostEnvironmentCollection;
+
+[Collection(nameof(PreviewerHostEnvironmentCollection))]
 public sealed class PreviewerLaunchServiceTests : IDisposable
 {
+    private readonly ITestOutputHelper _output;
     private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "XamlVisualEditor-PreviewerLaunch-" + Guid.NewGuid().ToString("N"));
+
+    public PreviewerLaunchServiceTests(ITestOutputHelper output) => _output = output;
+
+    [Fact]
+    public async System.Threading.Tasks.Task LibraryHostRendersWindowlessControlsWithoutApplicationAssembly()
+    {
+        Directory.CreateDirectory(_root);
+        string librarySource = typeof(XamlVisualEditor.TestControls.CaptionControl).Assembly.Location;
+        string libraryPath = Path.Combine(_root, Path.GetFileName(librarySource));
+        File.Copy(librarySource, libraryPath);
+        string projectPath = Path.Combine(_root, "Library.csproj");
+        string xamlPath = Path.Combine(_root, "LibraryView.axaml");
+        File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        const string xaml = """
+            <UserControl xmlns="https://github.com/avaloniaui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         xmlns:lib="clr-namespace:XamlVisualEditor.TestControls;assembly=XamlVisualEditor.TestControls"
+                         x:CompileBindings="False" Width="160" Height="96">
+              <Border Background="#102030">
+                <lib:CaptionControl Caption="Library" Width="100" Height="40"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <lib:CaptionControl.Template>
+                    <ControlTemplate>
+                      <Border Background="#F04020">
+                        <TextBlock Text="{ReflectionBinding Caption, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Foreground="White" FontSize="18"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
+                    </ControlTemplate>
+                  </lib:CaptionControl.Template>
+                </lib:CaptionControl>
+              </Border>
+            </UserControl>
+            """;
+        File.WriteAllText(xamlPath, xaml);
+        WorkspaceModel workspace = new()
+        {
+            Projects = new[]
+            {
+                new ProjectModel
+                {
+                    Name = "Library", ProjectPath = projectPath, OutputAssemblyPath = libraryPath,
+                    TargetFramework = "net10.0", IsExecutable = false,
+                    XamlFiles = new[] { new XamlFileModel { FilePath = xamlPath, RelativePath = "LibraryView.axaml" } },
+                    Files = Array.Empty<ProjectFileModel>(), References = Array.Empty<AssemblyReference>()
+                }
+            }
+        };
+        string? appOverride = Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY");
+        try
+        {
+            Environment.SetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY", null);
+            using PreviewerLaunchService service = new();
+            System.Collections.Concurrent.ConcurrentQueue<string> messages = new();
+            PreviewerLaunchResult launch = await service.StartPreviewerAsync(xamlPath, xaml, workspace, projectPath,
+                runWorkspaceCommandAsync: null, (level, message) => messages.Enqueue($"{level}: {message}"));
+            Assert.True(launch.Success, launch.ErrorMessage + Environment.NewLine + string.Join(Environment.NewLine, messages));
+            Assert.NotNull(launch.Process);
+            using System.Diagnostics.Process lifetime = System.Diagnostics.Process.GetProcessById(launch.Process.Id);
+            _output.WriteLine("HOST_PROCESS_ID=" + launch.Process.Id);
+            Assert.Contains(libraryPath, launch.Process.StartInfo.Arguments);
+            Assert.True(service.TryGetSession(xamlPath, out PreviewerTcpSession? session));
+            Assert.NotNull(session);
+            session.UpdateViewport(160, 96, 96, 96);
+            Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await MainWindowViewModel.WaitForStableFrameAsync(session, 30000);
+            Assert.True(frame is not null, session.LastError + Environment.NewLine + string.Join(Environment.NewLine, messages));
+            Assert.Null(session.LastError);
+            Assert.Equal(160, frame.Width);
+            Assert.Equal(96, frame.Height);
+            Assert.Equal(Avalonia.Remote.Protocol.Viewport.PixelFormat.Bgra8888, frame.Format);
+            int stride = frame.Stride > 0 ? frame.Stride : frame.Width * 4;
+            byte[] Pixel(int x, int y) => frame.Data.AsSpan(y * stride + x * 4, 4).ToArray();
+            Assert.Equal(new byte[] { 0x30, 0x20, 0x10, 0xff }, Pixel(4, 4));
+            Assert.Equal(new byte[] { 0x20, 0x40, 0xf0, 0xff }, Pixel(32, 30));
+            Assert.Contains(Enumerable.Range(0, frame.Width * frame.Height), index =>
+            {
+                byte[] pixel = Pixel(index % frame.Width, index / frame.Width);
+                return pixel[0] > 160 && pixel[1] > 160 && pixel[2] > 160 && pixel[3] > 200;
+            });
+
+            string artifactDirectory = Path.Combine(Path.GetTempPath(), "XamlVisualEditor-preview-artifacts");
+            Directory.CreateDirectory(artifactDirectory);
+            string pngPath = Path.Combine(artifactDirectory, "library-preview-" + Guid.NewGuid().ToString("N") + ".png");
+            using SKBitmap bitmap = new(new SKImageInfo(frame.Width, frame.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+            for (int row = 0; row < frame.Height; row++)
+                System.Runtime.InteropServices.Marshal.Copy(frame.Data, row * stride,
+                    bitmap.GetPixels() + row * bitmap.RowBytes, frame.Width * 4);
+            using SKImage image = SKImage.FromBitmap(bitmap);
+            using SKData png = image.Encode(SKEncodedImageFormat.Png, 100);
+            using FileStream stream = File.Create(pngPath);
+            png.SaveTo(stream);
+            _output.WriteLine("PREVIEW_ARTIFACT=" + pngPath);
+            service.Dispose();
+            Assert.True(lifetime.HasExited, "Disposing the previewer service must release its process before returning.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY", appOverride);
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task FailedStartupPreservesTheOriginalReason()
+    {
+        using PreviewerLaunchService service = new();
+        PreviewerLaunchResult result = await service.StartPreviewerAsync("Missing.axaml", "<UserControl />",
+            new WorkspaceModel { Projects = Array.Empty<ProjectModel>() }, null, null, null);
+        Assert.False(result.Success);
+        Assert.Contains("No project found for XAML file.", result.ErrorMessage);
+        Assert.Null(result.Process);
+    }
+
+    [Fact]
+    public void LibraryBootstrapUsesProjectApplicationWithoutConstructingIt()
+    {
+        AssemblyBuilder library = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("PreviewLibrary_" + Guid.NewGuid().ToString("N")), AssemblyBuilderAccess.Run);
+        TypeBuilder application = library.DefineDynamicModule("Library").DefineType(
+            "LibraryApplication", TypeAttributes.Public, typeof(Application));
+        application.DefineDefaultConstructor(MethodAttributes.Public);
+        Type applicationType = application.CreateType()!;
+
+        AppBuilder builder = Assert.IsType<AppBuilder>(LibraryPreviewBootstrap.CreateAppBuilder(library, Assembly.Load));
+        Assert.Same(applicationType, builder.ApplicationType);
+        Assert.Null(builder.Instance);
+        Assert.NotNull(builder.RenderingSubsystemInitializer);
+        Assert.NotNull(builder.TextShapingSubsystemInitializer);
+    }
+
+    [Fact]
+    public void LibraryBootstrapPreservesProjectFactoryConfiguration()
+    {
+        AssemblyBuilder library = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("PreviewFactory_" + Guid.NewGuid().ToString("N")), AssemblyBuilderAccess.Run);
+        TypeBuilder factory = library.DefineDynamicModule("Library").DefineType("LibraryFactory", TypeAttributes.Public);
+        MethodBuilder method = factory.DefineMethod("BuildAvaloniaApp", MethodAttributes.Public | MethodAttributes.Static,
+            typeof(AppBuilder), Type.EmptyTypes);
+        ILGenerator il = method.GetILGenerator();
+        MethodInfo configure = typeof(AppBuilder).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(candidate => candidate.Name == "Configure" && candidate.IsGenericMethodDefinition
+                && candidate.GetParameters().Length == 0).MakeGenericMethod(typeof(Application));
+        il.Emit(OpCodes.Call, configure);
+        il.Emit(OpCodes.Ldnull);
+        il.Emit(OpCodes.Ldstr, "Project renderer");
+        il.Emit(OpCodes.Callvirt, typeof(AppBuilder).GetMethod("UseRenderingSubsystem", new[] { typeof(Action), typeof(string) })!);
+        il.Emit(OpCodes.Ret);
+        factory.CreateType();
+
+        AppBuilder builder = Assert.IsType<AppBuilder>(LibraryPreviewBootstrap.CreateAppBuilder(library, Assembly.Load));
+        Assert.Equal("Project renderer", builder.RenderingSubsystemName);
+        Assert.Null(builder.Instance);
+    }
+
+    [Fact]
+    public void LibraryBootstrapConfiguresRenderingAndThemeForPlainControlLibraries()
+    {
+        AssemblyBuilder library = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("PlainControls_" + Guid.NewGuid().ToString("N")), AssemblyBuilderAccess.Run);
+        library.DefineDynamicModule("Library");
+        AppBuilder builder = Assert.IsType<AppBuilder>(LibraryPreviewBootstrap.CreateAppBuilder(library, Assembly.Load));
+        Assert.Same(typeof(Application), builder.ApplicationType);
+        Assert.NotNull(builder.RenderingSubsystemInitializer);
+        Assert.NotNull(builder.TextShapingSubsystemInitializer);
+        Assert.True(builder.AfterSetupCallback.GetInvocationList().Length > 1);
+        Assert.Null(builder.Instance);
+    }
 
     [Fact]
     public void ResolveHostApplicationPath_UsesSharedOutputParentName()
@@ -77,6 +253,46 @@ public sealed class PreviewerLaunchServiceTests : IDisposable
 
         Assert.Equal("Host application has no entry point.", session.LastError);
         Assert.Equal("Host application has no entry point.", received?.Message);
+    }
+
+    [Fact]
+    public void MetadataInspectionDoesNotLoadTheProjectAssemblyIntoTheEditor()
+    {
+        Directory.CreateDirectory(_root);
+        string name = "MetadataOnly_" + Guid.NewGuid().ToString("N");
+        string path = Path.Combine(_root, name + ".dll");
+        PersistedAssemblyBuilder assembly = new(new AssemblyName(name), typeof(object).Assembly);
+        assembly.DefineDynamicModule(name);
+        assembly.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(AssemblyMetadataAttribute).GetConstructor(new[] { typeof(string), typeof(string) })!,
+            new object[] { "AvaloniaUseCompiledBindingsByDefault", "true" }));
+        assembly.Save(path);
+
+        Assert.True(PreviewerLaunchService.TryGetAssemblyMetadataValue(path,
+            "AvaloniaUseCompiledBindingsByDefault", out string? value));
+        Assert.Equal("true", value);
+        Assert.DoesNotContain(AppDomain.CurrentDomain.GetAssemblies(), loaded => loaded.GetName().Name == name);
+        Assert.False(PreviewerLaunchService.TryGetAssemblyMetadataValue(path, "MissingKey", out _));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task DesignTreesAreAcceptedOnlyForTheCurrentPreviewRevision()
+    {
+        using PreviewerTcpSession session = new("Sample.axaml", log: null);
+        Guid first = Guid.NewGuid();
+        Guid second = Guid.NewGuid();
+        DesignerHostNode node = new(Guid.NewGuid(), 1, null, "Avalonia.Controls.Button", "Action", 0, 0, 100, 30, true);
+        DesignerHostSnapshot snapshot = new(first, 100, 30, new[] { node });
+        string Message(DesignerHostSnapshot tree) => PreviewerTcpSession.DesignTreeMessagePrefix + System.Text.Json.JsonSerializer.Serialize(tree);
+        await session.SendUpdateXamlAsync("<Button />", "Library.dll", "/Sample.axaml", null, null, first);
+        Assert.True(session.TryReceiveDesignTree(Message(snapshot)));
+        Assert.Equal(first, session.LastDesignTree?.RenderId);
+        await session.SendUpdateXamlAsync("<Button />", "Library.dll", "/Sample.axaml", null, null, second);
+        Assert.Null(session.LastDesignTree);
+        Assert.True(session.TryReceiveDesignTree(Message(snapshot)));
+        Assert.Null(session.LastDesignTree);
+        Assert.True(session.TryReceiveDesignTree(Message(snapshot with { RenderId = second })));
+        Assert.Equal(second, session.LastDesignTree?.RenderId);
     }
 
     public void Dispose()

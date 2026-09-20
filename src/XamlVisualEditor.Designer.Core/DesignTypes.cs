@@ -14,7 +14,10 @@ using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.Designer.Core;
 
-public sealed record DesignerLayoutAction(string Title, string Description, ReactiveCommand<Unit, Unit> Command);
+public sealed record DesignerLayoutAction(string Title, string Description, ReactiveCommand<Unit, Unit> Command)
+{
+    public Avalonia.Media.Geometry? Icon { get; init; }
+}
 
 /// <summary>
 /// Concrete implementation of <see cref="IDesignItem"/> that bridges
@@ -52,6 +55,12 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
     [Reactive]
     public partial Control? VisualElement { get; set; }
 
+    /// <summary>Identifies one live instance in an external preview.</summary>
+    public int? HostInstanceId { get; init; }
+
+    /// <summary>Measured bounds in the external host's viewport coordinate space.</summary>
+    public Rect? HostBounds { get; init; }
+
     /// <inheritdoc />
     public IDesignItem? Parent { get; internal set; }
 
@@ -65,12 +74,12 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
     /// Gets the bounds of the visual element relative to its parent.
     /// For surface-relative bounds, use <see cref="GetBoundsRelativeTo"/>.
     /// </summary>
-    public Rect Bounds => VisualElement?.Bounds ?? default;
+    public Rect Bounds => VisualElement?.Bounds ?? HostBounds ?? default;
 
     /// <summary>
-    /// Gets the bounds of the visual element translated to the coordinate space
+    /// Gets the bounds of the visual element transformed to the coordinate space
     /// of the specified ancestor control (typically the design surface root).
-    /// Falls back to <see cref="Bounds"/> if translation is not possible.
+    /// Falls back to <see cref="Bounds"/> if transformation is not possible.
     /// </summary>
     public Rect GetBoundsRelativeTo(Control? ancestor)
     {
@@ -79,13 +88,12 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
             return Bounds;
         }
 
-        Point? translated = VisualElement.TranslatePoint(new Point(0, 0), ancestor);
-        if (translated is null)
+        if (VisualElement.TransformToVisual(ancestor) is not { } transform)
         {
             return Bounds;
         }
 
-        return new Rect(translated.Value, VisualElement.Bounds.Size);
+        return new Rect(VisualElement.Bounds.Size).TransformToAABB(transform);
     }
 
     /// <summary>
@@ -313,8 +321,24 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// <summary>
     /// Gets or sets the zoom level (1.0 = 100%).
     /// </summary>
-    [Reactive]
-    public partial double Zoom { get; set; } = 1.0;
+    public double Zoom
+    {
+        get => _zoom;
+        set => this.RaiseAndSetIfChanged(ref _zoom, Math.Clamp(double.IsNaN(value) ? 1 : value, MinimumZoom, MaximumZoom));
+    }
+
+    public const double MinimumZoom = 0.25;
+    public const double MaximumZoom = 3.0;
+    public const double ZoomStep = 0.25;
+    private double _zoom = 1.0;
+
+    public static double StepZoom(double zoom, int direction)
+    {
+        zoom = Math.Clamp(double.IsNaN(zoom) ? 1 : zoom, MinimumZoom, MaximumZoom);
+        double tick = Math.Round(zoom / ZoomStep, 8);
+        double next = direction > 0 ? Math.Floor(tick) + 1 : direction < 0 ? Math.Ceiling(tick) - 1 : tick;
+        return Math.Clamp(next * ZoomStep, MinimumZoom, MaximumZoom);
+    }
 
     /// <summary>
     /// Gets or sets whether snap lines are enabled.
@@ -399,6 +423,16 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public partial bool ShowMarginPadding { get; set; }
 
     /// <summary>
+    /// Gets or sets the unscaled editor space around the artboard, in pixels.
+    /// </summary>
+    [Reactive]
+    public partial double CanvasGap { get; set; } = 8.0;
+
+    /// <summary>Assigns unique automation IDs when visual editing creates controls.</summary>
+    [Reactive]
+    public partial bool AutoGenerateAutomationIds { get; set; }
+
+    /// <summary>
     /// Gets or sets whether snap to grid is enabled.
     /// </summary>
     [Reactive]
@@ -476,8 +510,8 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
 
     public DesignSurfaceViewModel()
     {
-        ZoomInCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom * 1.1, 0.1, 8.0); });
-        ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom / 1.1, 0.1, 8.0); });
+        ZoomInCommand = ReactiveCommand.Create(() => { Zoom = StepZoom(Zoom, 1); });
+        ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = StepZoom(Zoom, -1); });
         ResetZoomCommand = ReactiveCommand.Create(() => { Zoom = 1.0; });
         SelectNextControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: false));
         SelectPreviousControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: true));
@@ -495,6 +529,17 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         RootItem = root;
         _itemMap = itemMap;
         _controlMap = controlMap;
+    }
+
+    /// <summary>Restores concrete instances without publishing a new user selection.</summary>
+    public void SelectDesignItemsFromSync(IEnumerable<IDesignItem> items)
+    {
+        using (BeginSelectionSync())
+        using (Selection.SuppressSelectionChanged())
+        {
+            Selection.ClearSelection();
+            foreach (IDesignItem item in items) Selection.Select(item, addToSelection: true);
+        }
     }
 
     /// <summary>

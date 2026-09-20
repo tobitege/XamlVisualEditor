@@ -230,7 +230,14 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
 
     private void Refresh(XElement selection)
     {
+        Dictionary<XElement, bool> expansion = new(ReferenceEqualityComparer.Instance);
+        foreach (StructureNodeViewModel previous in Roots.SelectMany(node => node.DescendantsAndSelf()))
+            expansion[previous.Element] = previous.IsExpanded;
+        HashSet<XElement> selectionAncestors = new(selection.Ancestors(), ReferenceEqualityComparer.Instance);
         StructureNodeViewModel root = new(_root);
+        foreach (StructureNodeViewModel node in root.DescendantsAndSelf())
+            if (!selectionAncestors.Contains(node.Element) && expansion.TryGetValue(node.Element, out bool expanded))
+                node.IsExpanded = expanded;
         Roots.Clear();
         Roots.Add(root);
         SelectedNode = root.DescendantsAndSelf().FirstOrDefault(node => ReferenceEquals(node.Element, selection)) ?? root;
@@ -379,16 +386,28 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     }
 }
 
-public sealed class StructureNodeViewModel
+public sealed class StructureNodeViewModel : ReactiveObject
 {
+    private bool _isExpanded = true;
+
     public StructureNodeViewModel(XElement element)
     {
         Element = element;
         Children = element.Elements().Select(child => new StructureNodeViewModel(child)).ToArray();
     }
     internal XElement Element { get; }
-    public string Label => Element.Name.LocalName + (Element.Attributes().FirstOrDefault(attribute =>
-        attribute.Name.LocalName is "Name" or "Key") is { } identity ? $" ({identity.Value})" : string.Empty);
+    public bool IsExpanded { get => _isExpanded; set => this.RaiseAndSetIfChanged(ref _isExpanded, value); }
+    public string Label
+    {
+        get
+        {
+            XAttribute? caption = Element.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName is "Name" or "Key")
+                ?? Element.Attributes().FirstOrDefault(attribute => attribute.Name.Namespace == XNamespace.None
+                    && attribute.Name.LocalName is "Header" or "Content" or "Text"
+                    && !string.IsNullOrWhiteSpace(attribute.Value));
+            return Element.Name.LocalName + (caption is null ? string.Empty : $" ({caption.Value})");
+        }
+    }
     public IReadOnlyList<StructureNodeViewModel> Children { get; }
     public IEnumerable<StructureNodeViewModel> DescendantsAndSelf()
     {

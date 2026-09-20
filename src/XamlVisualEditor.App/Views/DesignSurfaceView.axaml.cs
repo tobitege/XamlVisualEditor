@@ -27,6 +27,8 @@ using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Xaml.Ast;
 
+using static XamlVisualEditor.Designer.Core.AlignmentSnapping;
+
 namespace XamlVisualEditor.App.Views;
 
 /// <summary>
@@ -46,8 +48,8 @@ public sealed partial class DesignSurfaceView : UserControl
     private Control? _rootControl;
     private Control? _zoomSurface;
     private TopLevel? _topLevel;
-    private const double MinZoom = 0.1;
-    private const double MaxZoom = 8.0;
+    private const double MinZoom = DesignSurfaceViewModel.MinimumZoom;
+    private const double MaxZoom = DesignSurfaceViewModel.MaximumZoom;
     private DesignAdornerLayer? _adornerLayer;
     private ScrollViewer? _scrollViewer;
     private Border? _surfaceBorder;
@@ -55,6 +57,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private Control? _workspaceThemeTarget;
     private readonly List<IStyle> _workspaceThemeStyles = new();
     private readonly List<IResourceProvider> _workspaceThemeResources = new();
+    private readonly List<Avalonia.Controls.Templates.IDataTemplate> _workspaceDataTemplates = new();
     private RulerControl? _horizontalRuler;
     private RulerControl? _verticalRuler;
     private IDesignItem? _hoveredItem;
@@ -95,6 +98,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
+        LayoutUpdated += (_, _) => UpdateRulerOffsets();
 
         // Wire drag-and-drop handlers (listen even if handled by inner controls)
         AddHandler(
@@ -107,6 +111,7 @@ public sealed partial class DesignSurfaceView : UserControl
             OnDrop,
             Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
             true);
+        AddHandler(DragDrop.DragLeaveEvent, (_, _) => _adornerLayer?.UpdateDropTarget(null, null));
 
         AddHandler(
             KeyDownEvent,
@@ -307,7 +312,8 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (e.PropertyName == nameof(DesignSurfaceViewModel.Zoom) ||
             e.PropertyName == nameof(DesignSurfaceViewModel.CanvasWidth) ||
-            e.PropertyName == nameof(DesignSurfaceViewModel.CanvasHeight))
+            e.PropertyName == nameof(DesignSurfaceViewModel.CanvasHeight) ||
+            e.PropertyName == nameof(DesignSurfaceViewModel.CanvasGap))
         {
             UpdateSurfaceMargin();
             UpdateRulerOffsets();
@@ -379,23 +385,22 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void UpdateRulerOffsets()
     {
-        if (_scrollViewer is null)
+        Control? surfaceRoot = GetSurfaceRoot();
+        if (surfaceRoot?.TranslatePoint(default, this) is not Point surfaceOrigin)
         {
             return;
         }
 
-        Point origin = GetCanvasOriginInScrollViewer();
-        double offsetX = -origin.X;
-        double offsetY = -origin.Y;
-
-        if (_horizontalRuler is not null)
+        if (_horizontalRuler is not null &&
+            _horizontalRuler.TranslatePoint(default, this) is Point horizontalOrigin)
         {
-            _horizontalRuler.Offset = offsetX;
+            _horizontalRuler.Offset = horizontalOrigin.X - surfaceOrigin.X;
         }
 
-        if (_verticalRuler is not null)
+        if (_verticalRuler is not null &&
+            _verticalRuler.TranslatePoint(default, this) is Point verticalOrigin)
         {
-            _verticalRuler.Offset = offsetY;
+            _verticalRuler.Offset = verticalOrigin.Y - surfaceOrigin.Y;
         }
     }
 
@@ -615,11 +620,11 @@ public sealed partial class DesignSurfaceView : UserControl
             {
                 if (TryGetCanvasFocus(center, out Point canvasFocus))
                 {
-                    ApplyZoom(ClampZoom(_currentVm.Zoom * 1.1), center, canvasFocus);
+                    ApplyZoom(DesignSurfaceViewModel.StepZoom(_currentVm.Zoom, 1), center, canvasFocus);
                 }
                 else
                 {
-                    ApplyZoom(ClampZoom(_currentVm.Zoom * 1.1), center);
+                    ApplyZoom(DesignSurfaceViewModel.StepZoom(_currentVm.Zoom, 1), center);
                 }
                 e.Handled = true;
                 return true;
@@ -629,11 +634,11 @@ public sealed partial class DesignSurfaceView : UserControl
             {
                 if (TryGetCanvasFocus(center, out Point canvasFocus))
                 {
-                    ApplyZoom(ClampZoom(_currentVm.Zoom / 1.1), center, canvasFocus);
+                    ApplyZoom(DesignSurfaceViewModel.StepZoom(_currentVm.Zoom, -1), center, canvasFocus);
                 }
                 else
                 {
-                    ApplyZoom(ClampZoom(_currentVm.Zoom / 1.1), center);
+                    ApplyZoom(DesignSurfaceViewModel.StepZoom(_currentVm.Zoom, -1), center);
                 }
                 e.Handled = true;
                 return true;
@@ -721,21 +726,17 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        const double padding = 0;
+        double padding = Math.Clamp(_currentVm.CanvasGap, 0, 64);
+        Thickness border = _surfaceBorder?.BorderThickness ?? default;
         double width = Math.Max(1, bounds.Width);
         double height = Math.Max(1, bounds.Height);
-        double zoomX = (viewport.Width - padding * 2) / width;
-        double zoomY = (viewport.Height - padding * 2) / height;
+        double zoomX = (viewport.Width - padding * 2 - border.Left - border.Right) / width;
+        double zoomY = (viewport.Height - padding * 2 - border.Top - border.Bottom) / height;
         double targetZoom = ClampZoom(Math.Min(zoomX, zoomY));
         _currentVm.Zoom = targetZoom;
         UpdateSurfaceMargin();
 
         Point center = bounds.Center;
-        Point origin = GetCanvasOriginInScrollViewer();
-        Vector targetOffset = new(
-            origin.X + center.X * targetZoom - viewport.Width / 2,
-            origin.Y + center.Y * targetZoom - viewport.Height / 2);
-
         Dispatcher.UIThread.Post(() =>
         {
             if (_scrollViewer is null)
@@ -743,7 +744,12 @@ public sealed partial class DesignSurfaceView : UserControl
                 return;
             }
 
-            _scrollViewer.Offset = targetOffset;
+            _scrollViewer.UpdateLayout();
+            Point origin = GetCanvasOriginInScrollViewer();
+            Size currentViewport = _scrollViewer.Viewport;
+            _scrollViewer.Offset += new Vector(
+                origin.X + center.X * targetZoom - currentViewport.Width / 2,
+                origin.Y + center.Y * targetZoom - currentViewport.Height / 2);
         }, DispatcherPriority.Render);
     }
 
@@ -782,9 +788,10 @@ public sealed partial class DesignSurfaceView : UserControl
 
             if (canvasFocus.HasValue)
             {
+                _scrollViewer.UpdateLayout();
                 Point logical = canvasFocus.Value;
                 Point origin = GetCanvasOriginInScrollViewer();
-                _scrollViewer.Offset = new Vector(
+                _scrollViewer.Offset += new Vector(
                     origin.X + logical.X * clamped - focus.X,
                     origin.Y + logical.Y * clamped - focus.Y);
             }
@@ -808,12 +815,8 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        double zoom = Math.Max(0.01, _currentVm.Zoom);
-        double contentWidth = _currentVm.CanvasWidth * zoom;
-        double contentHeight = _currentVm.CanvasHeight * zoom;
-        double marginX = Math.Max(0, (viewport.Width - contentWidth) / 2);
-        double marginY = Math.Max(0, (viewport.Height - contentHeight) / 2);
-        _surfaceBorder.Margin = new Thickness(marginX, marginY, marginX, marginY);
+        double gap = Math.Clamp(_currentVm.CanvasGap, 0, 64);
+        _surfaceBorder.Margin = new Thickness(gap);
     }
 
     private bool TryGetCanvasFocus(Point focusInScrollViewer, out Point canvasFocus)
@@ -826,9 +829,8 @@ public sealed partial class DesignSurfaceView : UserControl
 
         Point origin = GetCanvasOriginInScrollViewer();
         double zoom = Math.Max(0.01, _currentVm.Zoom);
-        Vector offset = _scrollViewer.Offset;
-        double logicalX = (focusInScrollViewer.X + offset.X - origin.X) / zoom;
-        double logicalY = (focusInScrollViewer.Y + offset.Y - origin.Y) / zoom;
+        double logicalX = (focusInScrollViewer.X - origin.X) / zoom;
+        double logicalY = (focusInScrollViewer.Y - origin.Y) / zoom;
         canvasFocus = new Point(logicalX, logicalY);
         return true;
     }
@@ -900,8 +902,26 @@ public sealed partial class DesignSurfaceView : UserControl
     {
         ToolboxDropPlan? plan = ResolveToolboxDrop(e);
         e.DragEffects = plan is null ? DragDropEffects.None : DragDropEffects.Copy;
-        _adornerLayer?.UpdateDropTarget(plan?.Target?.GetBoundsRelativeTo(GetSurfaceRoot()), DropPosition.Inside);
+        _adornerLayer?.UpdateDropIndicator(GetToolboxDropIndicator(plan));
         e.Handled = true;
+    }
+
+    private LayoutDropIndicator? GetToolboxDropIndicator(ToolboxDropPlan? plan)
+    {
+        if (plan?.Target?.VisualElement is not { } visual || _canvas is null
+            || visual.TransformToVisual(_canvas) is not { } transform) return null;
+        LayoutDropIndicator indicator = visual switch
+        {
+            Grid grid => LayoutDropGeometry.GridCell(grid.Bounds.Size,
+                grid.RowDefinitions.Select(row => row.ActualHeight).ToArray(),
+                grid.ColumnDefinitions.Select(column => column.ActualWidth).ToArray(),
+                grid.RowSpacing, grid.ColumnSpacing, plan.Placement?.Row ?? 0, plan.Placement?.Column ?? 0),
+            StackPanel stack => LayoutDropGeometry.StackInsertion(stack.Bounds.Size,
+                stack.Children.Where(child => _currentVm!.ControlMap.ContainsKey(child)).Select(child => (Rect?)child.Bounds).ToArray(),
+                plan.Index ?? 0, stack.Orientation == Orientation.Horizontal, stack.Spacing),
+            _ => new LayoutDropIndicator(new Rect(visual.Bounds.Size))
+        };
+        return indicator.Transform(transform);
     }
 
     private void OnDrop(object? sender, DragEventArgs e)
@@ -911,7 +931,8 @@ public sealed partial class DesignSurfaceView : UserControl
         _adornerLayer?.UpdateDropTarget(null, null);
         if (plan is null || document?.SyncEngine.CanEditAst != true) return;
         using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Insert " + plan.Node.TypeName);
-        if (!new LayoutEditService(document.MetadataService).TryInsert(plan.Parent, plan.Node, out _, plan.Index, plan.Placement)) return;
+        if (!new LayoutEditService(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds)
+            .TryInsert(plan.Parent, plan.Node, out _, plan.Index, plan.Placement)) return;
         edit.Commit();
         document.SetSelectedNode(plan.Node.Id, SyncSource.DesignSurface);
         e.DragEffects = DragDropEffects.Copy;
@@ -926,7 +947,7 @@ public sealed partial class DesignSurfaceView : UserControl
             || !ToolboxDragData.TryParse(args.DataTransfer.TryGetValue(DesignerDataFormats.ToolboxItem), out ToolboxDragData? payload)) return null;
         MutableAstObjectNode node = new() { TypeName = payload!.TypeName, XmlNamespace = payload.XmlNamespace };
         Control? hit = ControlFactory.HitTest(_rootControl, args.GetPosition(_rootControl));
-        DesignItem? hovered = hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) ? item : null;
+        DesignItem? hovered = FindDesignItem(hit);
         LayoutEditService editor = new(document.MetadataService);
         MutableAstObjectNode? parent = hovered is not null && editor.CanInsert(hovered.AstNode, node, out _)
             ? hovered.AstNode : editor.FindInsertionParent(root, hovered?.AstNode, node);
@@ -937,20 +958,13 @@ public sealed partial class DesignSurfaceView : UserControl
         LayoutPlacement? placement = null;
         int? insertion = null;
         if (visual is Canvas) placement = new LayoutPlacement(position.X, position.Y);
-        if (visual is Grid grid) placement = new LayoutPlacement(Row: FindGridIndex(grid.RowDefinitions, position.Y, grid.Bounds.Height),
-            Column: FindGridIndex(grid.ColumnDefinitions, position.X, grid.Bounds.Width));
+        if (visual is Grid grid) placement = new LayoutPlacement(
+            Row: LayoutDropGeometry.TrackIndex(grid.RowDefinitions.Select(row => row.ActualHeight).ToArray(), grid.RowSpacing, position.Y),
+            Column: LayoutDropGeometry.TrackIndex(grid.ColumnDefinitions.Select(column => column.ActualWidth).ToArray(), grid.ColumnSpacing, position.X));
         if (visual is StackPanel stack)
         {
-            insertion = 0;
-            foreach (Control child in stack.Children)
-            {
-                if (!_currentVm.ControlMap.ContainsKey(child)) continue;
-                double cursor = stack.Orientation == Orientation.Vertical ? position.Y : position.X;
-                double center = stack.Orientation == Orientation.Vertical
-                    ? child.Bounds.Center.Y : child.Bounds.Center.X;
-                if (cursor < center) break;
-                insertion++;
-            }
+            insertion = LayoutDropGeometry.StackIndex(stack.Children.Where(child => _currentVm.ControlMap.ContainsKey(child))
+                .Select(child => (Rect?)child.Bounds).ToArray(), stack.Orientation == Orientation.Horizontal, position);
         }
         return new ToolboxDropPlan(parent, node, placement, insertion, target);
     }
@@ -991,6 +1005,24 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (docVm.UseExternalPreviewer)
+        {
+            if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
+            canvas.Children.Clear();
+            if (_runtimeRenderedDocument?.Root is Window ownedWindow) ownedWindow.Close();
+            _rootControl = null;
+            _runtimeRenderedDocument = null;
+            _runtimeDocumentOwner = null;
+            if (_currentVm is { } surface)
+            {
+                if (surface.ControlMap.Count > 0)
+                    surface.SetDesignTree(null, new Dictionary<Guid, DesignItem>(), new Dictionary<Control, DesignItem>());
+                if (surface.Selection.SelectedItems.OfType<DesignItem>().Any(item => item.VisualElement is not null))
+                    surface.ClearSelectionFromSync();
+            }
+            return;
+        }
+
         List<Guid>? selectedIds = null;
         if (_currentVm is not null)
         {
@@ -1003,6 +1035,7 @@ public sealed partial class DesignSurfaceView : UserControl
         MutableAstDocument? doc = docVm.SyncEngine.CurrentDocument;
         if (doc?.Root is null)
         {
+            ShowRuntimeRenderFailure(canvas, docVm, new InvalidOperationException("The document has no valid XAML root to render."));
             return;
         }
 
@@ -1019,14 +1052,16 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        ApplyDesignModeProperties(tree);
         if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
         canvas.Children.Clear();
-        _renderFailurePanel = null;
+        _runtimeRenderFailed = false;
         canvas.Children.Add(tree);
         _rootControl = tree;
         _runtimeRenderedDocument = renderedDocument;
         _runtimeDocumentOwner = docVm;
+        docVm.SetRuntimeRenderDiagnostics(renderedDocument.Diagnostics);
+        SetPreviewStatus(renderedDocument.Diagnostics.Count == 0 ? null :
+            $"Preview incomplete: {renderedDocument.Diagnostics.Count} control(s) unavailable. See Problems.");
         UpdateCanvasSizeFromRoot(docVm, doc.Root);
         tree.UpdateLayout();
 
@@ -1077,6 +1112,13 @@ public sealed partial class DesignSurfaceView : UserControl
     {
         if (_currentVm is null || _rootControl is null)
         {
+            return;
+        }
+
+        if (_runtimeRenderFailed)
+        {
+            SetPreviewHitTest(_rootControl, false);
+            if (_canvas is not null) _canvas.ContextMenu = null;
             return;
         }
 
@@ -1242,17 +1284,8 @@ public sealed partial class DesignSurfaceView : UserControl
         Point canvasPoint = e.GetPosition(_canvas);
         Point rootPoint = e.GetPosition(_rootControl);
         Control? hit = ControlFactory.HitTest(_rootControl, rootPoint);
-        DesignItem? item = null;
-        Control? mappedHit = null;
-        if (hit is not null)
-        {
-            foreach (Control candidate in new[] { hit }.Concat(hit.GetVisualAncestors().OfType<Control>()))
-            {
-                if (!_currentVm.ControlMap.TryGetValue(candidate, out item)) continue;
-                mappedHit = candidate;
-                break;
-            }
-        }
+        DesignItem? item = FindDesignItem(hit);
+        Control? mappedHit = item?.VisualElement;
         if (item is not null)
         {
             ApplySelection(item, e.KeyModifiers);
@@ -1396,7 +1429,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
-        if (_currentVm is null || _scrollViewer is null)
+        if (e.Handled || e.Delta.Y == 0 || _currentVm is null || _scrollViewer is null)
         {
             return;
         }
@@ -1408,8 +1441,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        double factor = Math.Pow(1.2, e.Delta.Y);
-        double targetZoom = ClampZoom(_currentVm.Zoom * factor);
+        double targetZoom = DesignSurfaceViewModel.StepZoom(_currentVm.Zoom, Math.Sign(e.Delta.Y));
         Point focus = e.GetPosition(_scrollViewer);
         if (TryGetCanvasFocus(focus, out Point canvasFocus))
         {
@@ -1495,6 +1527,8 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (!add && _currentVm?.Selection.SelectedItems.Any(selected => selected.AstNodeId == item.AstNodeId) == true)
+            return;
         _currentVm?.Selection.Select(item, addToSelection: add);
     }
 
@@ -1726,6 +1760,17 @@ public sealed partial class DesignSurfaceView : UserControl
         edit.Commit();
     }
 
+    private DesignItem? FindDesignItem(Control? hit)
+    {
+        if (_currentVm is null) return null;
+        for (Visual? visual = hit; visual is not null; visual = visual.GetVisualParent())
+        {
+            if (visual is Control control && _currentVm.ControlMap.TryGetValue(control, out DesignItem? item)) return item;
+            if (ReferenceEquals(visual, _rootControl)) break;
+        }
+        return null;
+    }
+
     private void UpdateHover(Point surfacePoint)
     {
         if (_currentVm is null)
@@ -1734,11 +1779,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         Control? hit = ControlFactory.HitTest(_rootControl!, surfacePoint);
-        IDesignItem? hover = null;
-        if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
-        {
-            hover = item;
-        }
+        IDesignItem? hover = FindDesignItem(hit);
 
         if (!ReferenceEquals(_hoveredItem, hover))
         {
@@ -1768,7 +1809,7 @@ public sealed partial class DesignSurfaceView : UserControl
             StartPoint = startPoint,
             LastPoint = startPoint,
             Mode = GetDragMode(item),
-            StartBounds = item.GetBoundsRelativeTo(GetSurfaceRoot()),
+            StartBounds = GetAlignmentBounds(item),
             StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
             StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
         };
@@ -1805,6 +1846,9 @@ public sealed partial class DesignSurfaceView : UserControl
             Mode = DragMode.Resize,
             ResizeDirection = handle.Direction,
             StartBounds = item.GetBoundsRelativeTo(GetSurfaceRoot()),
+            ResizeStartSize = item.VisualElement?.Bounds.Size ?? item.Bounds.Size,
+            ResizeToParent = _canvas is not null && item.VisualElement?.Parent is Visual parent
+                ? _canvas.TransformToVisual(parent) : null,
             StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
             StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
         };
@@ -1870,20 +1914,26 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        if (_dragState.Mode == DragMode.Reorder && _dragState.DropTarget is DesignItem target && _dragState.DropPosition.HasValue)
+        DragState state = _dragState;
+        bool commit = true;
+        if (state.Mode == DragMode.Reorder && state.DropTarget is DesignItem target && state.DropPosition.HasValue)
         {
-            bool moved = _surfaceDropHandler.Move(_dragState.Item, target, _dragState.DropPosition.Value, docVm.MetadataService);
+            IEnumerable<DesignItem> sources = state.ReorderItems ?? new[] { state.Item };
+            if (state.DropPosition == DropPosition.After) sources = sources.Reverse();
+            bool moved = sources.All(item => _surfaceDropHandler.Move(item, target, state.DropPosition.Value, docVm.MetadataService));
+            commit = moved;
             if (moved && docVm.SyncEngine.CurrentDocument is not null)
             {
                 docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
             }
         }
-        else if (_dragState.HasMoved && docVm.SyncEngine.CurrentDocument is not null)
+        else if (state.HasMoved && docVm.SyncEngine.CurrentDocument is not null)
         {
             docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
         }
 
-        _dragState.Transaction?.Commit();
+        if (commit) state.Transaction?.Commit();
+        else state.Transaction?.Dispose();
 
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
@@ -1910,27 +1960,27 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        Vector delta = currentPoint - state.StartPoint;
+        Vector delta = ToCanvasParentDelta(state, currentPoint - state.StartPoint);
         double left = state.StartCanvasLeft + delta.X;
         double top = state.StartCanvasTop + delta.Y;
+        Point rawPosition = new(left, top);
+        if (_currentVm.SnapToGrid)
+        {
+            left = Snap(left, _currentVm.GridSnapSize);
+            top = Snap(top, _currentVm.GridSnapSize);
+        }
 
         IReadOnlyList<double> snapHorizontal = Array.Empty<double>();
         IReadOnlyList<double> snapVertical = Array.Empty<double>();
 
         if (_currentVm.ShowAlignmentGuides || _currentVm.SnapLinesEnabled)
         {
-            (left, top, snapHorizontal, snapVertical) = ApplySnapLines(state, left, top, _currentVm.SnapLinesEnabled);
+            (left, top, snapHorizontal, snapVertical) = ApplySnapLines(state, left, top, _currentVm.SnapLinesEnabled, rawPosition);
         }
 
         if (_currentVm.ShowGuides || _currentVm.SnapToGuides)
         {
-            (left, top) = ApplyGuideSnaps(state, left, top, _currentVm.SnapToGuides);
-        }
-
-        if (_currentVm.SnapToGrid)
-        {
-            left = Snap(left, _currentVm.GridSnapSize);
-            top = Snap(top, _currentVm.GridSnapSize);
+            (left, top) = ApplyGuideSnaps(state, left, top, _currentVm.SnapToGuides, rawPosition);
         }
 
         double dx = left - state.StartCanvasLeft;
@@ -1954,7 +2004,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _adornerLayer?.UpdateSnapLines(snapHorizontal, snapVertical);
-        UpdateSpacingGuidesForDrag(new Rect(left, top, state.StartBounds.Width, state.StartBounds.Height));
+        UpdateSpacingGuidesForDrag(GetCanvasMoveBounds(state, left, top));
         RefreshSelectionAdorners();
     }
 
@@ -1966,8 +2016,8 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         Point inGrid = TranslateFromCanvas(grid, currentPoint);
-        int row = FindGridIndex(grid.RowDefinitions, inGrid.Y, grid.Bounds.Height);
-        int column = FindGridIndex(grid.ColumnDefinitions, inGrid.X, grid.Bounds.Width);
+        int row = LayoutDropGeometry.TrackIndex(grid.RowDefinitions.Select(definition => definition.ActualHeight).ToArray(), grid.RowSpacing, inGrid.Y);
+        int column = LayoutDropGeometry.TrackIndex(grid.ColumnDefinitions.Select(definition => definition.ActualWidth).ToArray(), grid.ColumnSpacing, inGrid.X);
 
         SetAttachedInt(state.Item, "Grid.Row", row);
         SetAttachedInt(state.Item, "Grid.Column", column);
@@ -2005,28 +2055,48 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void UpdateReorderDrag(DragState state, Point currentPoint)
     {
-        if (_currentVm is null)
+        if (_currentVm is null || _canvas is null || _rootControl is null)
         {
             return;
         }
 
+        state.DropTarget = null;
+        state.DropPosition = null;
+        state.ReorderItems = null;
+        _adornerLayer?.UpdateDropTarget(null, null);
         Point rootPoint = TranslateToRoot(currentPoint);
-        Control? hit = ControlFactory.HitTest(_rootControl!, rootPoint);
-        if (hit is null || !_currentVm.ControlMap.TryGetValue(hit, out DesignItem? target) || target is null)
+        Control? hit = ControlFactory.HitTest(_rootControl, rootPoint);
+        StackPanel? stack = hit is StackPanel direct && _currentVm.ControlMap.ContainsKey(direct) ? direct
+            : hit?.GetVisualAncestors().OfType<StackPanel>().FirstOrDefault(panel => _currentVm.ControlMap.ContainsKey(panel));
+        if (stack is not null && _currentVm.ControlMap.TryGetValue(stack, out DesignItem? stackItem)
+            && _canvas.TranslatePoint(currentPoint, stack) is { } positionInStack
+            && stack.TransformToVisual(_canvas) is { } transform)
         {
-            _adornerLayer?.UpdateDropTarget(null, null);
-            state.DropTarget = null;
-            state.DropPosition = null;
+            DesignItem[] sources = _currentVm.Selection.SelectedItems.OfType<DesignItem>().ToArray();
+            if (!sources.Any(item => item.AstNodeId == state.Item.AstNodeId)) sources = new[] { state.Item };
+            if (sources.Length > 1)
+            {
+                if (state.Item.VisualElement?.Parent is not Panel sourcePanel
+                    || sources.Any(item => !ReferenceEquals(item.VisualElement?.Parent, sourcePanel))) return;
+                sources = sources.OrderBy(item => sourcePanel.Children.IndexOf(item.VisualElement!)).ToArray();
+            }
+            HashSet<Guid> movingIds = new(sources.Select(item => item.AstNodeId));
+            Control[] remaining = stack.Children.Where(child => _currentVm.ControlMap.TryGetValue(child, out DesignItem? item)
+                && !movingIds.Contains(item.AstNodeId)).ToArray();
+            Rect?[] remainingBounds = remaining.Select(child => (Rect?)child.Bounds).ToArray();
+            bool horizontal = stack.Orientation == Orientation.Horizontal;
+            int index = LayoutDropGeometry.StackIndex(remainingBounds, horizontal, positionInStack);
+            state.ReorderItems = sources;
+            state.DropTarget = remaining.Length == 0 ? stackItem : _currentVm.ControlMap[remaining[Math.Min(index, remaining.Length - 1)]];
+            state.DropPosition = remaining.Length == 0 ? DropPosition.Inside
+                : index < remaining.Length ? DropPosition.Before : DropPosition.After;
+            _adornerLayer?.UpdateDropIndicator(LayoutDropGeometry.StackInsertion(stack.Bounds.Size,
+                remainingBounds, index, horizontal, stack.Spacing).Transform(transform));
             return;
         }
 
-        if (ReferenceEquals(target, state.Item))
-        {
-            _adornerLayer?.UpdateDropTarget(null, null);
-            state.DropTarget = null;
-            state.DropPosition = null;
-            return;
-        }
+        DesignItem? target = FindDesignItem(hit);
+        if (target is null || ReferenceEquals(target, state.Item)) return;
 
         DropPosition position = ComputeDropPosition(target, currentPoint);
         state.DropTarget = target;
@@ -2049,6 +2119,10 @@ public sealed partial class DesignSurfaceView : UserControl
         double top = bounds.Top;
         double width = bounds.Width;
         double height = bounds.Height;
+        double scaleX = bounds.Width > 0 && state.ResizeStartSize.Width > 0 ? bounds.Width / state.ResizeStartSize.Width : 1;
+        double scaleY = bounds.Height > 0 && state.ResizeStartSize.Height > 0 ? bounds.Height / state.ResizeStartSize.Height : 1;
+        bool resizeLeft = state.ResizeDirection.Value is ResizeDirection.Left or ResizeDirection.TopLeft or ResizeDirection.BottomLeft;
+        bool resizeTop = state.ResizeDirection.Value is ResizeDirection.Top or ResizeDirection.TopLeft or ResizeDirection.TopRight;
 
         switch (state.ResizeDirection.Value)
         {
@@ -2088,27 +2162,37 @@ public sealed partial class DesignSurfaceView : UserControl
                 break;
         }
 
-        width = Math.Max(1, width);
-        height = Math.Max(1, height);
+        width = Math.Max(scaleX, width);
+        height = Math.Max(scaleY, height);
 
         if (_currentVm.SnapToGrid)
         {
-            width = Snap(width, _currentVm.GridSnapSize);
-            height = Snap(height, _currentVm.GridSnapSize);
+            width = Math.Max(1, Snap(width / scaleX, _currentVm.GridSnapSize)) * scaleX;
+            height = Math.Max(1, Snap(height / scaleY, _currentVm.GridSnapSize)) * scaleY;
         }
+        if (resizeLeft) left = bounds.Right - width;
+        if (resizeTop) top = bounds.Bottom - height;
 
         if (_currentVm.SnapToGuides)
         {
             (left, top, width, height) = ApplyGuideSnapsToResize(state, left, top, width, height);
         }
 
-        SetPropertyDouble(state.Item, "Width", width);
-        SetPropertyDouble(state.Item, "Height", height);
+        width = Math.Max(scaleX, width);
+        height = Math.Max(scaleY, height);
+        if (resizeLeft) left = bounds.Right - width;
+        if (resizeTop) top = bounds.Bottom - height;
+        SetPropertyDouble(state.Item, "Width", width / scaleX);
+        SetPropertyDouble(state.Item, "Height", height / scaleY);
 
         if (state.Item.VisualElement?.Parent is Canvas)
         {
-            SetAttachedDouble(state.Item, "Canvas.Left", left);
-            SetAttachedDouble(state.Item, "Canvas.Top", top);
+            Vector positionDelta = new(left - bounds.Left, top - bounds.Top);
+            if (state.ResizeToParent is { } toParent)
+                positionDelta = new Vector(positionDelta.X * toParent.M11 + positionDelta.Y * toParent.M21,
+                    positionDelta.X * toParent.M12 + positionDelta.Y * toParent.M22);
+            SetAttachedDouble(state.Item, "Canvas.Left", state.StartCanvasLeft + positionDelta.X);
+            SetAttachedDouble(state.Item, "Canvas.Top", state.StartCanvasTop + positionDelta.Y);
         }
 
         UpdateSpacingGuidesForDrag(new Rect(left, top, width, height));
@@ -2147,60 +2231,6 @@ public sealed partial class DesignSurfaceView : UserControl
             Panel => DragMode.Reorder,
             _ => DragMode.Reorder
         };
-    }
-
-    private static int FindGridIndex(IReadOnlyList<RowDefinition> definitions, double position, double totalSize)
-    {
-        if (definitions.Count == 0)
-        {
-            return 0;
-        }
-
-        double offset = 0;
-        for (int i = 0; i < definitions.Count; i++)
-        {
-            double size = definitions[i].ActualHeight;
-            if (size <= 0)
-            {
-                size = totalSize / definitions.Count;
-            }
-
-            if (position <= offset + size)
-            {
-                return i;
-            }
-
-            offset += size;
-        }
-
-        return definitions.Count - 1;
-    }
-
-    private static int FindGridIndex(IReadOnlyList<ColumnDefinition> definitions, double position, double totalSize)
-    {
-        if (definitions.Count == 0)
-        {
-            return 0;
-        }
-
-        double offset = 0;
-        for (int i = 0; i < definitions.Count; i++)
-        {
-            double size = definitions[i].ActualWidth;
-            if (size <= 0)
-            {
-                size = totalSize / definitions.Count;
-            }
-
-            if (position <= offset + size)
-            {
-                return i;
-            }
-
-            offset += size;
-        }
-
-        return definitions.Count - 1;
     }
 
     private void SetPreviewHitTest(Control root, bool interactive)
@@ -2244,19 +2274,16 @@ public sealed partial class DesignSurfaceView : UserControl
     }
 
     private (double left, double top, IReadOnlyList<double> snapHorizontal, IReadOnlyList<double> snapVertical)
-        ApplySnapLines(DragState state, double left, double top, bool applySnap)
+        ApplySnapLines(DragState state, double left, double top, bool applySnap, Point rawPosition)
     {
         if (_currentVm is null || _canvas is null)
         {
             return (left, top, Array.Empty<double>(), Array.Empty<double>());
         }
 
-        const double threshold = 6.0;
-        double width = state.StartBounds.Width;
-        double height = state.StartBounds.Height;
-
         List<double> candidateX = new();
         List<double> candidateY = new();
+        Control? parent = state.Item.VisualElement?.Parent as Control;
 
         foreach (DesignItem item in _currentVm.ItemMap.Values)
         {
@@ -2270,7 +2297,9 @@ public sealed partial class DesignSurfaceView : UserControl
                 continue;
             }
 
-            Rect bounds = item.GetBoundsRelativeTo(GetSurfaceRoot());
+            if (item.VisualElement is not { } visual || !visual.IsVisible) continue;
+            if (parent is not null && !ReferenceEquals(visual, parent) && !ReferenceEquals(visual.Parent, parent)) continue;
+            Rect bounds = GetAlignmentBounds(item);
             candidateX.Add(bounds.Left);
             candidateX.Add(bounds.Center.X);
             candidateX.Add(bounds.Right);
@@ -2279,82 +2308,58 @@ public sealed partial class DesignSurfaceView : UserControl
             candidateY.Add(bounds.Bottom);
         }
 
-        double snappedLeft = left;
-        double snappedTop = top;
-        List<double> snapVertical = new();
-        List<double> snapHorizontal = new();
-
-        if (candidateX.Count > 0)
-        {
-            (double offset, double line) = FindSnapOffset(
-                new[] { left, left + width / 2, left + width },
-                candidateX,
-                threshold);
-            if (Math.Abs(offset) > 0)
-            {
-                if (applySnap)
-                {
-                    snappedLeft = left + offset;
-                }
-                snapVertical.Add(line);
-            }
-        }
-
-        if (candidateY.Count > 0)
-        {
-            (double offset, double line) = FindSnapOffset(
-                new[] { top, top + height / 2, top + height },
-                candidateY,
-                threshold);
-            if (Math.Abs(offset) > 0)
-            {
-                if (applySnap)
-                {
-                    snappedTop = top + offset;
-                }
-                snapHorizontal.Add(line);
-            }
-        }
-
-        return (snappedLeft, snappedTop, snapHorizontal, snapVertical);
+        return SnapCanvasLines(state, left, top, candidateX, candidateY, applySnap, rawPosition);
     }
 
-    private (double left, double top) ApplyGuideSnaps(DragState state, double left, double top, bool applySnap)
+    private Rect GetAlignmentBounds(DesignItem item) =>
+        item.VisualElement is { } visual && _canvas is not null && visual.TransformToVisual(_canvas) is { } transform
+            ? new Rect(visual.Bounds.Size).TransformToAABB(transform) : item.GetBoundsRelativeTo(_canvas);
+
+    private Vector ToCanvasParentDelta(DragState state, Vector delta)
+    {
+        if (state.Item.VisualElement?.Parent is not Control parent) return delta;
+        return TranslateFromCanvas(parent, new Point(delta.X, delta.Y)) - TranslateFromCanvas(parent, default);
+    }
+
+    private Rect GetCanvasMoveBounds(DragState state, double left, double top)
+    {
+        Vector delta = new(left - state.StartCanvasLeft, top - state.StartCanvasTop);
+        if (state.Item.VisualElement?.Parent is Control parent && _canvas is not null
+            && parent.TranslatePoint(default, _canvas) is { } origin
+            && parent.TranslatePoint(new Point(delta.X, delta.Y), _canvas) is { } moved)
+            delta = moved - origin;
+        return state.StartBounds.Translate(delta);
+    }
+
+    private (double left, double top, IReadOnlyList<double> horizontal, IReadOnlyList<double> vertical)
+        SnapCanvasLines(DragState state, double left, double top, IReadOnlyList<double> candidateX,
+            IReadOnlyList<double> candidateY, bool applySnap, Point rawPosition)
+    {
+        Rect current = GetCanvasMoveBounds(state, left, top);
+        Rect proposed = applySnap ? GetCanvasMoveBounds(state, rawPosition.X, rawPosition.Y) : current;
+        double threshold = 6.0 / Math.Max(0.1, _currentVm?.Zoom ?? 1);
+        (double dx, double? x) = FindSnapOffset(new[] { proposed.Left, proposed.Center.X, proposed.Right }, candidateX, threshold);
+        (double dy, double? y) = FindSnapOffset(new[] { proposed.Top, proposed.Center.Y, proposed.Bottom }, candidateY, threshold);
+        if (applySnap)
+        {
+            Vector correction = ToCanvasParentDelta(state, new Vector(
+                x.HasValue ? proposed.Left + dx - current.Left : 0,
+                y.HasValue ? proposed.Top + dy - current.Top : 0));
+            left += correction.X;
+            top += correction.Y;
+        }
+        return (left, top, y is { } horizontal ? new[] { horizontal } : Array.Empty<double>(),
+            x is { } vertical ? new[] { vertical } : Array.Empty<double>());
+    }
+
+    private (double left, double top) ApplyGuideSnaps(DragState state, double left, double top, bool applySnap, Point rawPosition)
     {
         if (_currentVm is null)
         {
             return (left, top);
         }
-
-        const double threshold = 6.0;
-        double width = state.StartBounds.Width;
-        double height = state.StartBounds.Height;
-
-        if (_currentVm.VerticalGuides.Count > 0)
-        {
-            (double offset, _) = FindSnapOffset(
-                new[] { left, left + width / 2, left + width },
-                _currentVm.VerticalGuides,
-                threshold);
-            if (applySnap && Math.Abs(offset) > 0)
-            {
-                left += offset;
-            }
-        }
-
-        if (_currentVm.HorizontalGuides.Count > 0)
-        {
-            (double offset, _) = FindSnapOffset(
-                new[] { top, top + height / 2, top + height },
-                _currentVm.HorizontalGuides,
-                threshold);
-            if (applySnap && Math.Abs(offset) > 0)
-            {
-                top += offset;
-            }
-        }
-
-        return (left, top);
+        var snapped = SnapCanvasLines(state, left, top, _currentVm.VerticalGuides, _currentVm.HorizontalGuides, applySnap, rawPosition);
+        return (snapped.left, snapped.top);
     }
 
     private (double left, double top, double width, double height) ApplyGuideSnapsToResize(
@@ -2463,182 +2468,10 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private IReadOnlyList<SpacingGuide> BuildSpacingGuides(Rect selectionBounds)
     {
-        if (_currentVm is null || _canvas is null)
-        {
-            return Array.Empty<SpacingGuide>();
-        }
-
-        double? bestLeft = null;
-        double? bestRight = null;
-        double? bestTop = null;
-        double? bestBottom = null;
-        Rect leftBounds = default;
-        Rect rightBounds = default;
-        Rect topBounds = default;
-        Rect bottomBounds = default;
-
-        foreach (DesignItem item in _currentVm.ItemMap.Values)
-        {
-            if (_currentVm.Selection.SelectedItems.Contains(item))
-            {
-                continue;
-            }
-
-            Rect bounds = item.GetBoundsRelativeTo(GetSurfaceRoot());
-
-            if (TryGetVerticalOverlap(selectionBounds, bounds, out double overlapY))
-            {
-                if (bounds.Right <= selectionBounds.Left)
-                {
-                    double distance = selectionBounds.Left - bounds.Right;
-                    if (!bestLeft.HasValue || distance < bestLeft.Value)
-                    {
-                        bestLeft = distance;
-                        leftBounds = bounds;
-                    }
-                }
-
-                if (bounds.Left >= selectionBounds.Right)
-                {
-                    double distance = bounds.Left - selectionBounds.Right;
-                    if (!bestRight.HasValue || distance < bestRight.Value)
-                    {
-                        bestRight = distance;
-                        rightBounds = bounds;
-                    }
-                }
-            }
-
-            if (TryGetHorizontalOverlap(selectionBounds, bounds, out double overlapX))
-            {
-                if (bounds.Bottom <= selectionBounds.Top)
-                {
-                    double distance = selectionBounds.Top - bounds.Bottom;
-                    if (!bestTop.HasValue || distance < bestTop.Value)
-                    {
-                        bestTop = distance;
-                        topBounds = bounds;
-                    }
-                }
-
-                if (bounds.Top >= selectionBounds.Bottom)
-                {
-                    double distance = bounds.Top - selectionBounds.Bottom;
-                    if (!bestBottom.HasValue || distance < bestBottom.Value)
-                    {
-                        bestBottom = distance;
-                        bottomBounds = bounds;
-                    }
-                }
-            }
-        }
-
-        List<SpacingGuide> guides = new();
-
-        if (bestLeft.HasValue)
-        {
-            double y = GetOverlapCenterY(selectionBounds, leftBounds);
-            guides.Add(new SpacingGuide(
-                new Point(leftBounds.Right, y),
-                new Point(selectionBounds.Left, y),
-                bestLeft.Value.ToString("0")));
-        }
-
-        if (bestRight.HasValue)
-        {
-            double y = GetOverlapCenterY(selectionBounds, rightBounds);
-            guides.Add(new SpacingGuide(
-                new Point(selectionBounds.Right, y),
-                new Point(rightBounds.Left, y),
-                bestRight.Value.ToString("0")));
-        }
-
-        if (bestTop.HasValue)
-        {
-            double x = GetOverlapCenterX(selectionBounds, topBounds);
-            guides.Add(new SpacingGuide(
-                new Point(x, topBounds.Bottom),
-                new Point(x, selectionBounds.Top),
-                bestTop.Value.ToString("0")));
-        }
-
-        if (bestBottom.HasValue)
-        {
-            double x = GetOverlapCenterX(selectionBounds, bottomBounds);
-            guides.Add(new SpacingGuide(
-                new Point(x, selectionBounds.Bottom),
-                new Point(x, bottomBounds.Top),
-                bestBottom.Value.ToString("0")));
-        }
-
-        return guides;
-    }
-
-    private static bool TryGetVerticalOverlap(Rect a, Rect b, out double center)
-    {
-        double top = Math.Max(a.Top, b.Top);
-        double bottom = Math.Min(a.Bottom, b.Bottom);
-        if (bottom <= top)
-        {
-            center = 0;
-            return false;
-        }
-
-        center = (top + bottom) / 2;
-        return true;
-    }
-
-    private static bool TryGetHorizontalOverlap(Rect a, Rect b, out double center)
-    {
-        double left = Math.Max(a.Left, b.Left);
-        double right = Math.Min(a.Right, b.Right);
-        if (right <= left)
-        {
-            center = 0;
-            return false;
-        }
-
-        center = (left + right) / 2;
-        return true;
-    }
-
-    private static double GetOverlapCenterY(Rect a, Rect b)
-    {
-        TryGetVerticalOverlap(a, b, out double center);
-        return center;
-    }
-
-    private static double GetOverlapCenterX(Rect a, Rect b)
-    {
-        TryGetHorizontalOverlap(a, b, out double center);
-        return center;
-    }
-
-    private static (double offset, double line) FindSnapOffset(
-        IReadOnlyList<double> primaryLines,
-        IReadOnlyList<double> candidateLines,
-        double threshold)
-    {
-        double bestDelta = 0;
-        double bestLine = 0;
-        double bestDistance = threshold + 1;
-
-        foreach (double primary in primaryLines)
-        {
-            foreach (double candidate in candidateLines)
-            {
-                double delta = candidate - primary;
-                double distance = Math.Abs(delta);
-                if (distance <= threshold && distance < bestDistance)
-                {
-                    bestDistance = distance;
-                    bestDelta = delta;
-                    bestLine = candidate;
-                }
-            }
-        }
-
-        return bestDistance <= threshold ? (bestDelta, bestLine) : (0, 0);
+        if (_currentVm is null || _canvas is null) return Array.Empty<SpacingGuide>();
+        return SpacingGuideAdorner.Calculate(selectionBounds, _currentVm.ItemMap.Values
+            .Where(item => !_currentVm.Selection.SelectedItems.Contains(item))
+            .Select(item => item.GetBoundsRelativeTo(GetSurfaceRoot())));
     }
 
     private static double GetAttachedDouble(DesignItem item, string propertyName)
@@ -2822,13 +2655,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private Point TranslateFromCanvas(Control target, Point canvasPoint)
     {
-        if (_canvas is null)
-        {
-            return canvasPoint;
-        }
-
-        Point? origin = target.TranslatePoint(new Point(0, 0), _canvas);
-        return origin.HasValue ? canvasPoint - origin.Value : canvasPoint;
+        return _canvas?.TranslatePoint(canvasPoint, target) ?? canvasPoint;
     }
 
     private Point TranslateToRoot(Point canvasPoint)
@@ -2838,8 +2665,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return canvasPoint;
         }
 
-        Point? origin = _rootControl.TranslatePoint(new Point(0, 0), _canvas);
-        return origin.HasValue ? canvasPoint - origin.Value : canvasPoint;
+        return _canvas.TranslatePoint(canvasPoint, _rootControl) ?? canvasPoint;
     }
 
     private sealed class DragState
@@ -2853,10 +2679,13 @@ public sealed partial class DesignSurfaceView : UserControl
         public Point LastPoint { get; set; }
         public bool HasMoved { get; set; }
         public ResizeDirection? ResizeDirection { get; init; }
+        public Size ResizeStartSize { get; init; }
+        public Matrix? ResizeToParent { get; init; }
         public double StartCanvasLeft { get; init; }
         public double StartCanvasTop { get; init; }
         public DesignItem? DropTarget { get; set; }
         public DropPosition? DropPosition { get; set; }
+        public IReadOnlyList<DesignItem>? ReorderItems { get; set; }
         public Dictionary<Guid, Point> StartPositions { get; } = new();
     }
 
@@ -2937,6 +2766,10 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        foreach (var template in _workspaceDataTemplates)
+            _workspaceThemeTarget?.DataTemplates.Remove(template);
+        _workspaceDataTemplates.Clear();
+
         foreach (IStyle style in _workspaceThemeStyles)
         {
             _workspaceThemeTarget?.Styles.Remove(style);
@@ -2951,60 +2784,43 @@ public sealed partial class DesignSurfaceView : UserControl
         _workspaceThemeResources.Clear();
         _workspaceThemeTarget = target;
 
+        int resourceIndex = 0;
         foreach (Func<IResourceProvider?> factory in WorkspaceDesignThemeRegistry.ResourceFactories)
         {
             if (factory() is { } provider)
             {
-                target.Resources.MergedDictionaries.Add(provider);
+                target.Resources.MergedDictionaries.Insert(resourceIndex++, provider);
                 _workspaceThemeResources.Add(provider);
             }
         }
 
+        int styleIndex = 0;
         foreach (Func<IStyle?> factory in WorkspaceDesignThemeRegistry.StyleFactories)
         {
             if (factory() is { } style)
             {
-                target.Styles.Add(style);
+                target.Styles.Insert(styleIndex++, style);
                 _workspaceThemeStyles.Add(style);
+                foreach (var template in WorkspaceDesignThemeLoader.GetApplicationDataTemplates(style))
+                {
+                    target.DataTemplates.Add(template);
+                    _workspaceDataTemplates.Add(template);
+                }
             }
         }
 
-        if (WorkspaceDesignThemeRegistry.StyleFactories.Count == 0 && metadata is not null)
+        if (metadata is not null)
         {
+            int libraryStyleIndex = 0;
             foreach (IStyle style in LibraryDesignThemeLoader.CreateStyles(target, metadata,
                          message => Log.Information("{DesignThemeDiagnostic}", message)))
             {
-                target.Styles.Add(style);
+                target.Styles.Insert(libraryStyleIndex++, style);
                 _workspaceThemeStyles.Add(style);
             }
         }
 
         _appliedWorkspaceThemeVersion = WorkspaceDesignThemeRegistry.Version;
-    }
-
-    // Replacement for Design.ApplyDesignModeProperties, removed in Avalonia 12:
-    // applies Design.Width/Height/DataContext/DesignStyle to the instantiated tree.
-    private static void ApplyDesignModeProperties(Control control)
-    {
-        if (control.IsSet(Design.WidthProperty))
-        {
-            control.Width = control.GetValue(Design.WidthProperty);
-        }
-
-        if (control.IsSet(Design.HeightProperty))
-        {
-            control.Height = control.GetValue(Design.HeightProperty);
-        }
-
-        if (control.IsSet(Design.DataContextProperty))
-        {
-            control.DataContext = control.GetValue(Design.DataContextProperty);
-        }
-
-        if (control.GetValue(Design.DesignStyleProperty) is { } designStyle && !control.Styles.Contains(designStyle))
-        {
-            control.Styles.Add(designStyle);
-        }
     }
 
     private DesignerDocumentViewModel? FindDocumentViewModel()

@@ -11,8 +11,10 @@ public sealed class ToolboxExtension : IXveExtension
 
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
-        ToolboxPanelViewModel viewModel = new(context.Commands, context.Settings, context.ControlCatalog);
+        ToolboxPanelViewModel viewModel = new(context.Commands, context.Settings, context.ControlCatalog,
+            workspaceInfo: context.WorkspaceInfo, storage: context.Storage);
         context.Subscriptions.Add(viewModel);
+        await viewModel.InitializePreferencesAsync(cancellationToken);
 
         context.Subscriptions.Add(context.Commands.Register(InsertButtonCommandId, _ => InsertButtonAsync(context, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(InsertSelectedCommandId, commandContext =>

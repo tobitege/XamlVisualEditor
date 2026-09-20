@@ -19,11 +19,11 @@ public sealed class DesignerSelectionEditor
     private const string XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
 
     /// <summary>Creates an editor for one document.</summary>
-    public DesignerSelectionEditor(SyncEngine engine, ITypeMetadataService? metadata = null)
+    public DesignerSelectionEditor(SyncEngine engine, ITypeMetadataService? metadata = null, bool generateAutomationIds = false)
     {
         _engine = engine;
         _metadata = metadata;
-        _layout = new LayoutEditService(metadata);
+        _layout = new LayoutEditService(metadata, generateAutomationIds);
     }
 
     /// <summary>Copies top-level selected roots in document order without detaching source nodes.</summary>
@@ -33,7 +33,7 @@ public sealed class DesignerSelectionEditor
         foreach (MutableAstObjectNode source in SelectionRoots(selection))
         {
             MutableAstObjectNode copy = AstNodeCloner.Clone(source);
-            foreach (var alias in EffectiveNamespaces(source)) copy.NamespaceAliases[alias.Key] = alias.Value;
+            AstSourceScope.Capture(source, _engine.CurrentDocument!.NamespaceAliases).ApplyTo(copy);
             MutableAstDocument fragment = new() { Root = copy };
             foreach (var alias in copy.NamespaceAliases) fragment.NamespaceAliases[alias.Key] = alias.Value;
             fragments.Add(_serializer.Serialize(fragment));
@@ -76,10 +76,12 @@ public sealed class DesignerSelectionEditor
         using DocumentEditTransaction edit = _engine.BeginEditTransaction("Paste selection");
         foreach (MutableAstObjectNode node in nodes)
         {
+            AstSourceScope sourceScope = AstSourceScope.Capture(node);
             foreach (MutableAstPropertyNode directive in node.Properties.Where(property => property.PropertyName == "x:Class"
                 || property.XmlNamespace == XamlNamespace && LocalName(property.PropertyName) == "Class").ToArray())
                 node.Properties.Remove(directive);
             if (!_layout.TryInsert(parent, node, out string? error)) throw new InvalidOperationException(error);
+            sourceScope.ApplyTo(node);
         }
         edit.Commit();
         return nodes;
@@ -128,38 +130,23 @@ public sealed class DesignerSelectionEditor
 
     private List<MutableAstObjectNode> ParseFragments(string text)
     {
-        ParseResult parsed = _parser.Parse(text);
+        XamlParserOptions options = new() { UseTolerantParser = false };
+        ParseResult parsed = _parser.Parse(text, options);
         if (!parsed.HasErrors && parsed.Document is MutableAstDocument { Root: { } single } document)
         {
             foreach (var alias in document.NamespaceAliases) single.NamespaceAliases.TryAdd(alias.Key, alias.Value);
             document.Root = null;
             return new List<MutableAstObjectNode> { single };
         }
-        parsed = _parser.Parse("<Panel xmlns=\"https://github.com/avaloniaui\">" + text + "</Panel>");
+        parsed = _parser.Parse("<Panel xmlns=\"https://github.com/avaloniaui\">" + text + "</Panel>", options);
         if (parsed.HasErrors || parsed.Document is not MutableAstDocument { Root: { } wrapper })
             throw new InvalidOperationException("The clipboard does not contain valid XAML fragments.");
+        if (wrapper.Properties.Count > 0 || wrapper.Children.Any(node =>
+                node is MutableAstTextNode value && !string.IsNullOrWhiteSpace(value.Text)))
+            throw new InvalidOperationException("Paste complete control elements without surrounding text or standalone property elements.");
         List<MutableAstObjectNode> nodes = wrapper.Children.OfType<MutableAstObjectNode>().ToList();
         wrapper.Children.Clear();
         return nodes;
-    }
-
-    private Dictionary<string, string> EffectiveNamespaces(MutableAstObjectNode source)
-    {
-        Dictionary<string, string> aliases = new(_engine.CurrentDocument!.NamespaceAliases);
-        Stack<MutableAstNode> parents = new();
-        for (MutableAstNode? node = source; node is not null; node = node.Parent) parents.Push(node);
-        foreach (MutableAstNode node in parents)
-        {
-            IReadOnlyDictionary<string, string>? local = node switch
-            {
-                MutableAstObjectNode element => element.NamespaceAliases,
-                MutableAstPropertyNode property => property.NamespaceAliases,
-                _ => null
-            };
-            if (local is null) continue;
-            foreach (var alias in local) aliases[alias.Key] = alias.Value;
-        }
-        return aliases;
     }
 
     private void MakeNamesUnique(IReadOnlyList<MutableAstObjectNode> roots, MutableAstObjectNode destination)

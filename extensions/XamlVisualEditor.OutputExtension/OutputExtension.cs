@@ -139,17 +139,13 @@ public sealed class OutputExtension : IXveExtension
 
         EventHandler<DiagnosticsChannelsChangedEventArgs> channelsHandler = (_, args) =>
             problemsViewModel.HandleChannelsChanged(args.Channels);
-        EventHandler<DiagnosticsChannelPublishedEventArgs> diagnosticsHandler = (_, args) =>
-            problemsViewModel.HandleDiagnosticsPublished(args.ChannelId, args.Diagnostics);
         EventHandler<DiagnosticsSnapshotPublishedEventArgs> snapshotHandler = (_, args) =>
             problemsViewModel.HandleSnapshotsPublished(args.Snapshots);
 
         context.Diagnostics.ChannelsChanged += channelsHandler;
-        context.Diagnostics.DiagnosticsChannelPublished += diagnosticsHandler;
         context.Diagnostics.DiagnosticsSnapshotPublished += snapshotHandler;
 
         context.Subscriptions.Add(Disposable.Create(() => context.Diagnostics.ChannelsChanged -= channelsHandler));
-        context.Subscriptions.Add(Disposable.Create(() => context.Diagnostics.DiagnosticsChannelPublished -= diagnosticsHandler));
         context.Subscriptions.Add(Disposable.Create(() => context.Diagnostics.DiagnosticsSnapshotPublished -= snapshotHandler));
         context.Subscriptions.Add(Disposable.Create(problemsViewModel.Dispose));
 

@@ -41,7 +41,8 @@ public sealed class ToolboxDropHandler
         IDesignItem? targetItem,
         DropPosition position,
         string xmlNamespace = "https://github.com/avaloniaui",
-        ITypeMetadataService? metadata = null)
+        ITypeMetadataService? metadata = null,
+        bool generateAutomationIds = false)
     {
         if (targetItem is not DesignItem designItem)
         {
@@ -54,7 +55,7 @@ public sealed class ToolboxDropHandler
             XmlNamespace = xmlNamespace
         };
 
-        LayoutEditService editor = new(metadata);
+        LayoutEditService editor = new(metadata, generateAutomationIds);
         if (position == DropPosition.Inside)
             return editor.TryInsert(designItem.AstNode, newNode, out _) ? newNode : null;
         MutableAstObjectNode? parent = LayoutEditService.GetParent(designItem.AstNode);

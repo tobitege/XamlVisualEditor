@@ -10,6 +10,9 @@ namespace XamlVisualEditor.Designer.PreviewerHost;
 
 public static class Program
 {
+    private static Assembly? s_targetAssembly;
+    private static TargetAssemblyResolver? s_resolver;
+
     public static void Main(string[] args)
     {
         string targetAssemblyPath = ResolveTargetAssemblyPath(args);
@@ -17,7 +20,10 @@ public static class Program
         AssemblyLoadContext.Default.Resolving += resolver.Resolve;
         AssemblyLoadContext.Default.ResolvingUnmanagedDll += resolver.ResolveUnmanaged;
 
-        _ = AssemblyLoadContext.Default.LoadFromAssemblyPath(targetAssemblyPath);
+        s_targetAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(targetAssemblyPath);
+        s_resolver = resolver;
+        if (s_targetAssembly == typeof(Program).Assembly)
+            throw new InvalidOperationException("The preview target must be a project assembly, not the previewer host.");
 
         RuntimeXamlLoaderRegistrar.Configure(targetAssemblyPath);
         RuntimeXamlLoaderRegistrar.Register();
@@ -36,7 +42,26 @@ public static class Program
             throw new InvalidOperationException("Unable to locate RemoteDesignerEntryPoint.Main method.");
         }
 
-        _ = mainMethod.Invoke(null, new object[] { args });
+        string[] remoteArguments = (string[])args.Clone();
+        for (int index = remoteArguments.Length - 1; index >= 0; index--)
+        {
+            if (HasAssemblyExtension(remoteArguments[index]) &&
+                string.Equals(Path.GetFullPath(remoteArguments[index]), targetAssemblyPath,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                remoteArguments[index] = typeof(Program).Assembly.Location;
+                break;
+            }
+        }
+        _ = mainMethod.Invoke(null, new object[] { remoteArguments });
+    }
+
+    public static object BuildAvaloniaApp()
+    {
+        if (s_targetAssembly is null || s_resolver is null)
+            throw new InvalidOperationException("No preview target has been configured.");
+        return LibraryPreviewBootstrap.CreateAppBuilder(s_targetAssembly,
+            name => LoadAssemblyByName(s_resolver, name));
     }
 
     private static Assembly LoadAssemblyByName(TargetAssemblyResolver resolver, string assemblyName)
@@ -90,12 +115,15 @@ public static class Program
     private sealed class TargetAssemblyResolver
     {
         private readonly AssemblyDependencyResolver _resolver;
+        private readonly AssemblyDependencyResolver? _editorResolver;
         private readonly string _targetDirectory;
 
         public TargetAssemblyResolver(string mainAssemblyPath)
         {
             _resolver = new AssemblyDependencyResolver(mainAssemblyPath);
             _targetDirectory = Path.GetDirectoryName(mainAssemblyPath) ?? string.Empty;
+            string editorAssembly = Path.Combine(AppContext.BaseDirectory, "XamlVisualEditor.App.dll");
+            if (File.Exists(editorAssembly)) _editorResolver = new AssemblyDependencyResolver(editorAssembly);
         }
 
         public Assembly? Resolve(AssemblyLoadContext context, AssemblyName assemblyName)
@@ -124,12 +152,19 @@ public static class Program
                 }
             }
 
+            path ??= _editorResolver?.ResolveAssemblyToPath(assemblyName);
+            if (path is null)
+            {
+                string editorAssembly = Path.Combine(AppContext.BaseDirectory, assemblyName.Name + ".dll");
+                if (File.Exists(editorAssembly)) path = editorAssembly;
+            }
             return path;
         }
 
         public string? ResolveUnmanagedPath(string unmanagedDllName)
         {
-            string? path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            string? path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName)
+                ?? _editorResolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
             if (path == null && !string.IsNullOrWhiteSpace(_targetDirectory))
             {
                 string candidate = Path.Combine(_targetDirectory, unmanagedDllName);
@@ -147,6 +182,7 @@ public static class Program
 internal static class RuntimeXamlLoaderRegistrar
 {
     private static string? s_targetDirectory;
+    private static DesignerThemeProviderSession? s_themeProviders;
 
     public static void Configure(string targetAssemblyPath)
     {
@@ -338,13 +374,18 @@ internal static class RuntimeXamlLoaderRegistrar
             SetLocalAssembly(configuration, resolvedAssembly);
         }
 
-        if (TryLoadWithRuntimeLoader(document, configuration, out object? result))
-        {
-            return result ?? throw new InvalidOperationException(
-                "AvaloniaRuntimeXamlLoader.Load returned null.");
-        }
+        object? stream = GetPropertyValue(document, "Stream") ?? GetPropertyValue(document, "XamlStream")
+            ?? GetPropertyValue(document, "ContentStream");
+        if (stream is not Stream { CanSeek: false } && GetXamlFromDocument(document) is { } source
+            && source.Contains(XamlVisualEditor.Core.DesignerThemeProtocol.PropertyName, StringComparison.Ordinal)
+            && XamlVisualEditor.Core.DesignerThemeProtocol.ReadRequest(System.Xml.Linq.XDocument.Parse(source)) is { } themeRequest)
+            (s_themeProviders ??= new DesignerThemeProviderSession()).Apply(themeRequest);
 
-        return LoadWithAvaloniaXamlLoader(document);
+        object loaded = TryLoadWithRuntimeLoader(document, configuration, out object? result)
+            ? result ?? throw new InvalidOperationException("AvaloniaRuntimeXamlLoader.Load returned null.")
+            : LoadWithAvaloniaXamlLoader(document);
+        DesignTreeReporter.Track(loaded);
+        return loaded;
     }
 
     private static bool TryLoadWithRuntimeLoader(

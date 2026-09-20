@@ -136,6 +136,58 @@ public sealed class LayoutEditingWorkflowTests
         Assert.Same(extra, Assert.Single(editor.GetChildren(border)));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OptionalAutomationIdsCoverInsertionThirdPartyControlsAndDuplication(bool enabled)
+    {
+        const string input = "<StackPanel xmlns=\"https://github.com/avaloniaui\"><Button Name=\"existing\" AutomationProperties.AutomationId=\"Button_1\" /></StackPanel>";
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(typeof(CaptionControl).Assembly.Location);
+        using SyncEngine engine = new(new XamlParsingService(), new XamlSerializationService(), new AstNodeMap());
+        await engine.LoadAsync(input);
+        MutableAstObjectNode root = engine.CurrentDocument!.Root!;
+        LayoutEditService editor = new(metadata, enabled);
+        MutableAstObjectNode button = new() { TypeName = "Button", XmlNamespace = root.XmlNamespace };
+        MutableAstObjectNode foreign = new()
+        {
+            TypeName = nameof(CaptionControl),
+            XmlNamespace = $"clr-namespace:XamlVisualEditor.TestControls;assembly={typeof(CaptionControl).Assembly.GetName().Name}"
+        };
+        using (DocumentEditTransaction edit = engine.BeginEditTransaction("Insert controls"))
+        {
+            Assert.True(editor.TryInsert(root, button, out string? error), error);
+            Assert.True(editor.TryInsert(root, foreign, out error), error);
+            edit.Commit();
+        }
+        Assert.Equal("Button_1", Find(root, "existing").GetPropertyValue("AutomationProperties.AutomationId"));
+        Assert.Equal(enabled ? "Button_2" : null, button.GetPropertyValue("AutomationProperties.AutomationId"));
+        Assert.Equal(enabled ? "CaptionControl_1" : null, foreign.GetPropertyValue("AutomationProperties.AutomationId"));
+        Assert.Equal(1, engine.UndoRedo.UndoCount);
+        string inserted = await engine.SaveAsync();
+        engine.Undo();
+        Assert.Equal(input, engine.GetCurrentText());
+        engine.Redo();
+        Assert.Equal(inserted, engine.GetCurrentText());
+
+        root = engine.CurrentDocument!.Root!;
+        button = root.Children.OfType<MutableAstObjectNode>().First(node => node.TypeName == "Button" && node.GetPropertyValue("Name") is null);
+        XamlVisualEditor.Shell.ViewModels.DesignerSelectionEditor selection = new(engine, metadata, enabled);
+        MutableAstObjectNode copy = Assert.Single(selection.Duplicate(new[] { button }));
+        Assert.Equal(enabled ? "Button_3" : null, copy.GetPropertyValue("AutomationProperties.AutomationId"));
+        string saved = await engine.SaveAsync();
+        using SyncEngine reopened = new(new XamlParsingService(), new XamlSerializationService(), new AstNodeMap());
+        await reopened.LoadAsync(saved);
+        string?[] ids = reopened.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>()
+            .Select(node => node.GetPropertyValue("AutomationProperties.AutomationId")).Where(id => id is not null).ToArray();
+        Assert.Equal(enabled ? 4 : 1, ids.Length);
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
+        engine.Undo();
+        Assert.Equal(inserted, engine.GetCurrentText());
+        engine.Redo();
+        Assert.Equal(saved, engine.GetCurrentText());
+    }
+
     private static MutableAstObjectNode Find(MutableAstObjectNode root, string name)
     {
         Stack<MutableAstNode> nodes = new();

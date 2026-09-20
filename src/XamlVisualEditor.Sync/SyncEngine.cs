@@ -194,6 +194,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 string newText = ApplyEdits(_lastKnownText, edits);
                 _lastKnownText = newText;
                 _synchronizedAst = _serializer.Serialize(_document);
+                RefreshSourcePositions();
                 RecordSnapshot(description);
                 RefreshNodeMap();
 
@@ -202,7 +203,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                     Source = source,
                     Changes = _pendingChanges.ToList(),
                     UpdatedText = newText,
-                    Diagnostics = Array.Empty<XamlDiagnostic>()
+                    Diagnostics = _diagnostics
                 };
 
                 _pendingChanges.Clear();
@@ -251,7 +252,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 Source = source,
                 Changes = Array.Empty<AstChange>(),
                 UpdatedText = _lastKnownText,
-                Diagnostics = Array.Empty<XamlDiagnostic>()
+                Diagnostics = _diagnostics
             };
 
             SyncCompleted?.Invoke(syncEvent);
@@ -366,7 +367,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
             RollbackEdit(_editGroup);
             return;
         }
-        _undoRedo.Undo(snapshot => RestoreSnapshot(snapshot, SyncSource.CodeEditor));
+        _undoRedo.Undo(snapshot => RestoreSnapshot(snapshot, SyncSource.DesignSurface));
     }
 
     /// <summary>
@@ -375,7 +376,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     public void Redo()
     {
         if (_editGroup is not null) return;
-        _undoRedo.Redo(snapshot => RestoreSnapshot(snapshot, SyncSource.CodeEditor));
+        _undoRedo.Redo(snapshot => RestoreSnapshot(snapshot, SyncSource.DesignSurface));
     }
 
     private void SynchronizeAst()
@@ -384,10 +385,20 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         string canonical = _serializer.Serialize(_document);
         if (!string.Equals(canonical, _synchronizedAst, StringComparison.Ordinal))
         {
-            _lastKnownText = canonical;
+            _lastKnownText = ApplyEdits(_lastKnownText,
+                XamlSerializationService.ComputeMinimalEdits(_lastKnownText, canonical));
+            RefreshSourcePositions();
         }
         _synchronizedAst = canonical;
         RefreshNodeMap();
+    }
+
+    private void RefreshSourcePositions()
+    {
+        if (_document is null) return;
+        ParseResult parsed = _parser.Parse(_lastKnownText, new XamlParserOptions { UseTolerantParser = false });
+        _diagnostics = parsed.Diagnostics;
+        AstNodeIdentities.CopySourcePositions(_document, parsed.Document as MutableAstDocument);
     }
 
     private void RefreshNodeMap()

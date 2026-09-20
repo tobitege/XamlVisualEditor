@@ -7,5 +7,8 @@
     <Description>Out-of-process Avalonia preview host for rendering designer documents.</Description>
   </PropertyGroup>
 
-  <ItemGroup />
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+  </ItemGroup>
 </Project>

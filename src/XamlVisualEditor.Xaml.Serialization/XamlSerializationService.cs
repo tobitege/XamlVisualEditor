@@ -9,7 +9,7 @@ namespace XamlVisualEditor.Xaml.Serialization;
 /// <summary>
 /// Serializes a mutable AST document back to formatted XAML text.
 /// </summary>
-public sealed class XamlSerializationService : IXamlSerializationService
+public sealed partial class XamlSerializationService : IXamlSerializationService
 {
     /// <inheritdoc />
     public string Serialize(IXamlDocumentModel document, SerializationOptions? options = null)
@@ -32,13 +32,26 @@ public sealed class XamlSerializationService : IXamlSerializationService
         string currentText,
         IReadOnlyList<AstChange> changes)
     {
-        // For now, serialize the full document and compute a single replacement edit.
-        // This will be refined to produce truly minimal edits based on change records.
-        string newText = Serialize(document);
+        return ComputeMinimalEdits(currentText, Serialize(document));
+    }
 
+    /// <summary>Computes source edits from an already serialized document.</summary>
+    public static IReadOnlyList<TextEdit> ComputeMinimalEdits(string currentText, string newText)
+    {
         if (currentText == newText)
         {
             return Array.Empty<TextEdit>();
+        }
+
+        if (TryComputeAttributeEdits(currentText, newText, out IReadOnlyList<TextEdit> attributeEdits))
+        {
+            return attributeEdits;
+        }
+
+        if (TryPreserveStructuralSource(currentText, newText, out string preservedText))
+        {
+            newText = preservedText;
+            if (currentText == newText) return Array.Empty<TextEdit>();
         }
 
         // Find common prefix and suffix to minimize the edit

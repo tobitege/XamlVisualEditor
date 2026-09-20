@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -11,11 +12,13 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     private readonly Dictionary<string, List<ExtensionCommandPaletteContribution>> _paletteByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ExtensionPropertyEditorContribution>> _propertyEditorsByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ExtensionViewContribution>> _viewsByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<DesignerThemeProviderRegistration>> _themesByExtension = new(StringComparer.Ordinal);
     private List<ExtensionMenuContribution> _menuItems = new();
     private List<ExtensionToolbarContribution> _toolbarItems = new();
     private List<ExtensionCommandPaletteContribution> _paletteItems = new();
     private List<ExtensionPropertyEditorContribution> _propertyEditorItems = new();
     private List<ExtensionViewContribution> _viewItems = new();
+    private List<DesignerThemeProviderRegistration> _themeItems = new();
 
     public event EventHandler? Changed;
 
@@ -28,6 +31,23 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     public IReadOnlyList<ExtensionPropertyEditorContribution> PropertyEditors => _propertyEditorItems;
 
     public IReadOnlyList<ExtensionViewContribution> ViewContributions => _viewItems;
+
+    public IReadOnlyList<DesignerThemeProviderRegistration> DesignerThemeProviders => _themeItems;
+
+    public IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers)
+    {
+        ArgumentNullException.ThrowIfNull(providers);
+        HashSet<string> ids = new(StringComparer.Ordinal);
+        foreach (DesignerThemeProviderRegistration provider in providers)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Id);
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.TypeName);
+            if (!ids.Add(provider.Id) || !System.IO.Path.IsPathFullyQualified(provider.AssemblyPath))
+                throw new ArgumentException("Theme providers require unique IDs and absolute assembly paths.", nameof(providers));
+        }
+        return RegisterItems(extensionId, providers, _themesByExtension, () => _themeItems = BuildList(_themesByExtension));
+    }
 
     public IDisposable RegisterMenuItems(string extensionId, IReadOnlyList<ExtensionMenuContribution> items)
     {
@@ -67,26 +87,27 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
 
         items ??= Array.Empty<T>();
 
+        List<T> registration = new(items);
         lock (_gate)
         {
-            target[extensionId] = new List<T>(items);
+            target[extensionId] = registration;
             rebuild();
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
 
-        return new Registration(() => Unregister(extensionId, target, rebuild));
+        return new Registration(() => Unregister(extensionId, target, rebuild, registration));
     }
 
-    private void Unregister<T>(string extensionId, Dictionary<string, List<T>> target, Action rebuild)
+    private void Unregister<T>(string extensionId, Dictionary<string, List<T>> target, Action rebuild, List<T> expected)
     {
         lock (_gate)
         {
-            if (!target.Remove(extensionId))
+            if (!target.TryGetValue(extensionId, out List<T>? current) || !ReferenceEquals(current, expected))
             {
                 return;
             }
-
+            target.Remove(extensionId);
             rebuild();
         }
 

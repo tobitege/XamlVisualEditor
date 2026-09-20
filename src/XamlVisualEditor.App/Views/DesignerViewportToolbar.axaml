@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dc="using:XamlVisualEditor.Designer.Core"
+             xmlns:v="using:XamlVisualEditor.App.Views"
+             x:Class="XamlVisualEditor.App.Views.DesignerViewportToolbar"
+             x:DataType="dc:DesignSurfaceViewModel" x:Name="ToolbarRoot">
+    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="4,2">
+        <WrapPanel Orientation="Horizontal">
+            <WrapPanel.Styles>
+                <Style Selector="WrapPanel > :is(Control)"><Setter Property="Margin" Value="2,1" /></Style>
+            </WrapPanel.Styles>
+            <TextBlock Text="Zoom:" VerticalAlignment="Center" Margin="4,0" FontSize="12" />
+            <Slider Minimum="{x:Static dc:DesignSurfaceViewModel.MinimumZoom}" Maximum="{x:Static dc:DesignSurfaceViewModel.MaximumZoom}"
+                    TickFrequency="{x:Static dc:DesignSurfaceViewModel.ZoomStep}" SmallChange="{x:Static dc:DesignSurfaceViewModel.ZoomStep}"
+                    LargeChange="{x:Static dc:DesignSurfaceViewModel.ZoomStep}" IsSnapToTickEnabled="True"
+                    Value="{CompiledBinding Zoom, Mode=TwoWay}" Width="120" VerticalAlignment="Center"
+                    AutomationProperties.Name="Zoom" ToolTip.Tip="25% to 300%, in 25% steps" />
+            <TextBlock Text="{CompiledBinding Zoom, StringFormat='{}{0:P0}'}" VerticalAlignment="Center" Margin="4,0" FontSize="12" />
+            <Button Content="-" Command="{CompiledBinding ZoomOutCommand}" Padding="6,2" FontSize="12" />
+            <Button Content="+" Command="{CompiledBinding ZoomInCommand}" Padding="6,2" FontSize="12" />
+            <Button Content="100%" Command="{CompiledBinding ResetZoomCommand}" Padding="6,2" FontSize="12" />
+            <Button Content="Fit" Click="OnFitClick" Padding="6,2" FontSize="12" />
+            <Button Content="Sel" Click="OnSelectionClick" Padding="6,2" FontSize="12" />
+            <ComboBox x:Name="LibraryThemeSelector" ItemsSource="{CompiledBinding PreviewThemes}"
+                      SelectedItem="{CompiledBinding SelectedPreviewTheme, Mode=TwoWay}"
+                      IsVisible="{CompiledBinding HasPreviewThemeProviders}" IsEnabled="{CompiledBinding HasPreviewThemeCatalog}"
+                      MinWidth="140" MaxWidth="240" VerticalAlignment="Center" Padding="6,2" FontSize="12"
+                      AutomationProperties.Name="Preview theme" ToolTip.Tip="{CompiledBinding PreviewThemeStatus}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="dc:DesignerThemeChoice">
+                        <TextBlock Text="{CompiledBinding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding DisplayName}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Separator />
+            <Button Content="Settings" Padding="6,2" FontSize="12">
+                <Button.Flyout>
+                    <Flyout Placement="Bottom">
+                        <StackPanel Spacing="6" Margin="8" MinWidth="320">
+                            <StackPanel.Styles>
+                                <Style Selector="WrapPanel > ToggleButton">
+                                    <Setter Property="Margin" Value="0,0,6,0" />
+                                </Style>
+                            </StackPanel.Styles>
+                            <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}" Content="Grid" />
+                            <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}" Content="Snap Grid" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Variant" VerticalAlignment="Center" />
+                                <ComboBox ItemsSource="{CompiledBinding ThemeVariants}" SelectedItem="{CompiledBinding PreviewThemeVariant, Mode=TwoWay}" MinWidth="140" />
+                            </StackPanel>
+                            <Separator />
+                            <WrapPanel Orientation="Horizontal">
+                                <ToggleButton IsChecked="{CompiledBinding ShowAlignmentGuides, Mode=TwoWay}" Content="Align" />
+                                <ToggleButton IsChecked="{CompiledBinding SnapLinesEnabled, Mode=TwoWay}" Content="Snap Align" />
+                                <ToggleButton IsChecked="{CompiledBinding ShowSpacingGuides, Mode=TwoWay}" Content="Spacing" />
+                            </WrapPanel>
+                            <Separator />
+                            <WrapPanel Orientation="Horizontal">
+                                <ToggleButton IsChecked="{CompiledBinding ShowGuides, Mode=TwoWay}" Content="Guides" />
+                                <ToggleButton IsChecked="{CompiledBinding SnapToGuides, Mode=TwoWay}" Content="Snap Guides"
+                                              ToolTip.Tip="Snap moving and resizing controls to ruler guides." />
+                                <ToggleButton IsChecked="{CompiledBinding ShowRulers, Mode=TwoWay}" Content="Rulers" />
+                            </WrapPanel>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                <TextBlock Text="Canvas gap" VerticalAlignment="Center" />
+                                <NumericUpDown Grid.Column="1" Value="{CompiledBinding CanvasGap, Mode=TwoWay}"
+                                               Minimum="0" Maximum="64" Increment="1" FormatString="0" MinWidth="140"
+                                               HorizontalAlignment="Stretch" AutomationProperties.Name="Canvas gap in pixels"
+                                               ToolTip.Tip="Space around the artboard in pixels; 0 disables the gap." />
+                            </Grid>
+                            <Separator />
+                            <ToggleButton IsChecked="{CompiledBinding ShowMarginPadding, Mode=TwoWay}" Content="Margin / padding"
+                                          ToolTip.Tip="Show margin and padding guides for the selected control." />
+                            <ToggleButton IsChecked="{CompiledBinding IsEditMode, Mode=TwoWay}" Content="Edit" />
+                            <Separator />
+                            <ToggleButton IsChecked="{CompiledBinding AutoGenerateAutomationIds, Mode=TwoWay}" Content="Automation IDs"
+                                          ToolTip.Tip="Assign unique AutomationProperties.AutomationId values to newly inserted controls. Existing controls are unchanged." />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <v:DesignerLayoutToolbar VerticalAlignment="Center" />
+        </WrapPanel>
+    </Border>
+</UserControl>

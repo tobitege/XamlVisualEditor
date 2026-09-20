@@ -41,6 +41,21 @@ public sealed class DesignerLayoutEditor
         _ => throw new ArgumentOutOfRangeException(nameof(operation))
     };
 
+    public static string IconData(DesignerLayoutOperation operation) => operation switch
+    {
+        DesignerLayoutOperation.AlignLeft => "M1,1 H3 V19 H1 Z M5,4 H18 V8 H5 Z M5,12 H13 V16 H5 Z",
+        DesignerLayoutOperation.CenterHorizontally => "M9,1 H11 V19 H9 Z M2,4 H18 V8 H2 Z M5,12 H15 V16 H5 Z",
+        DesignerLayoutOperation.AlignRight => "M17,1 H19 V19 H17 Z M2,4 H15 V8 H2 Z M7,12 H15 V16 H7 Z",
+        DesignerLayoutOperation.AlignTop => "M1,1 H19 V3 H1 Z M4,5 H8 V18 H4 Z M12,5 H16 V13 H12 Z",
+        DesignerLayoutOperation.CenterVertically => "M1,9 H19 V11 H1 Z M4,2 H8 V18 H4 Z M12,5 H16 V15 H12 Z",
+        DesignerLayoutOperation.AlignBottom => "M1,17 H19 V19 H1 Z M4,2 H8 V15 H4 Z M12,7 H16 V15 H12 Z",
+        DesignerLayoutOperation.DistributeHorizontally => "M1,2 H3 V18 H1 Z M17,2 H19 V18 H17 Z M5,7 H7 V13 H5 Z M9,5 H11 V15 H9 Z M13,7 H15 V13 H13 Z",
+        DesignerLayoutOperation.DistributeVertically => "M2,1 H18 V3 H2 Z M2,17 H18 V19 H2 Z M7,5 H13 V7 H7 Z M5,9 H15 V11 H5 Z M7,13 H13 V15 H7 Z",
+        DesignerLayoutOperation.SameWidth => "M2,1 H18 V6 H2 Z M2,14 H18 V19 H2 Z M2,10 L6,7 V9 H14 V7 L18,10 L14,13 V11 H6 V13 Z",
+        DesignerLayoutOperation.SameHeight => "M1,2 H6 V18 H1 Z M14,2 H19 V18 H14 Z M10,2 L13,6 H11 V14 H13 L10,18 L7,14 H9 V6 H7 Z",
+        _ => throw new ArgumentOutOfRangeException(nameof(operation))
+    };
+
     public void Apply(DesignerLayoutOperation operation)
     {
         if (_document.IsDisposed || !_document.SyncEngine.CanEditAst)
@@ -56,6 +71,14 @@ public sealed class DesignerLayoutEditor
         MutableAstObjectNode? parent = LayoutEditService.GetParent(nodes[0]);
         if (parent is null || nodes.Any(node => !ReferenceEquals(LayoutEditService.GetParent(node), parent)))
             throw new InvalidOperationException("Layout actions require controls in the same container.");
+
+        if (_document.UseExternalPreviewer)
+        {
+            DesignerHostSnapshot snapshot = _document.PreviewerSession?.LastDesignTree
+                ?? throw new InvalidOperationException("Wait for current previewer layout measurements.");
+            new PreviewerGeometryEditor(_document, snapshot).Arrange(selection, operation);
+            return;
+        }
 
         Control[] controls = selection.Select(item => surface.ControlMap.FirstOrDefault(pair => ReferenceEquals(pair.Value, item)).Key).ToArray();
         if (controls.Any(control => control is null)) throw new InvalidOperationException("Render the selected controls before arranging them.");

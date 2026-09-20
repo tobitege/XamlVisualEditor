@@ -5,10 +5,16 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Threading;
 using Xunit;
 using XamlVisualEditor.App.Services;
+using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
@@ -53,6 +59,66 @@ public sealed class ExtensionCommandMenuIntegrationTests
             Assert.False(await host.CanExecuteAsync(pasteCommand));
             Assert.False(await host.CanExecuteAsync(redoCommand));
             Assert.True(await host.CanExecuteAsync(selectAllCommand));
+
+            TextBox input = new() { Text = "search text", Width = 200 };
+            AvaloniaEdit.TextEditor editor = new() { Text = "editor text", Width = 300, Height = 80 };
+            Button documentTarget = new() { Content = "Document command target" };
+            Application application = Application.Current!;
+            var theme = new Avalonia.Themes.Fluent.FluentTheme();
+            application.Styles.Add(theme);
+            var editorTheme = new StyleInclude(new Uri("avares://AvaloniaEdit/"))
+            {
+                Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml")
+            };
+            application.Styles.Add(editorTheme);
+            XamlVisualEditor.App.MainWindow? window = null;
+            try
+            {
+                window = new XamlVisualEditor.App.MainWindow(host.ViewModel)
+                {
+                    Content = new StackPanel { Children = { input, editor, documentTarget } },
+                    Width = 520, Height = 240
+                };
+                WindowLayoutBehavior.SetIsEnabled(window, false);
+                window.Show();
+                window.UpdateLayout();
+                Assert.Contains(window.KeyBindings, binding => binding.Gesture.Key == Key.A);
+                void Press(Key key, PhysicalKey physical, RawInputModifiers modifiers = RawInputModifiers.None)
+                {
+                    window.KeyPress(key, modifiers, physical, null);
+                    window.KeyRelease(key, modifiers, physical, null);
+                }
+
+                Assert.True(input.Focus());
+                Assert.Same(input, window.FocusManager!.GetFocusedElement());
+                Assert.False(window.KeyBindings.Single(binding => binding.Gesture.Key == Key.A).Command.CanExecute(null));
+                Press(Key.A, PhysicalKey.A, RawInputModifiers.Control);
+                Assert.Equal("search text", input.SelectedText);
+                Press(Key.Delete, PhysicalKey.Delete);
+                Assert.Equal(string.Empty, input.Text);
+                Assert.Equal("alpha beta", await host.GetActiveTextAsync());
+                Press(Key.Z, PhysicalKey.Z, RawInputModifiers.Control);
+                Assert.Equal("search text", input.Text);
+
+                Assert.True(editor.TextArea.Focus());
+                Press(Key.A, PhysicalKey.A, RawInputModifiers.Control);
+                Assert.Equal("editor text", editor.SelectedText);
+                Press(Key.Delete, PhysicalKey.Delete);
+                Assert.Equal(string.Empty, editor.Text);
+                Assert.Equal("alpha beta", await host.GetActiveTextAsync());
+
+                Assert.True(documentTarget.Focus());
+                Press(Key.A, PhysicalKey.A, RawInputModifiers.Control);
+                await host.FlushAsync();
+                Assert.Equal(await host.GetActiveTextLengthAsync(), await host.GetSelectionLengthAsync());
+            }
+            finally
+            {
+                window?.Close();
+                application.Styles.Remove(editorTheme);
+                application.Styles.Remove(theme);
+            }
+            await host.SetTextSelectionAsync(start: 0, length: 0);
 
             bool copyChanged = false;
             await host.SubscribeCanExecuteChangedAsync(copyCommand, () => copyChanged = true);

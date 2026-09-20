@@ -41,5 +41,6 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.App\XamlVisualEditor.App.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj" />
   </ItemGroup>
 </Project>

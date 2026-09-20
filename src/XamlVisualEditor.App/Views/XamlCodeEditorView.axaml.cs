@@ -56,6 +56,35 @@ public sealed partial class XamlCodeEditorView : UserControl
         Loaded += OnLoaded;
         DataContextChanged += OnDataContextChanged;
         DetachedFromLogicalTree += OnDetachedFromLogicalTree;
+        AddHandler(KeyDownEvent, OnHistoryKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LostFocus += OnEditorLostFocus;
+    }
+
+    private void OnHistoryKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not CodeEditorViewModel vm ||
+            (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) == 0 ||
+            (e.KeyModifiers & KeyModifiers.Alt) != 0 || e.Key is not (Key.Z or Key.Y))
+        {
+            return;
+        }
+
+        bool redo = e.Key == Key.Y || (e.KeyModifiers & KeyModifiers.Shift) != 0;
+        System.Windows.Input.ICommand command = redo ? vm.RedoCommand : vm.UndoCommand;
+        if (command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is CodeEditorViewModel vm)
+        {
+            vm.FlushPendingTextChanges();
+        }
     }
 
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)

@@ -12,5 +12,6 @@
         <dockFluent:DockFluentTheme />
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml" />
+        <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorDensity.axaml" />
     </Application.Styles>
 </Application>

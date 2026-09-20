@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Text.Json.Nodes;
 using System.Reactive.Linq;
 using Dock.Avalonia.Controls;
 using Dock.Model.Controls;
@@ -302,7 +303,7 @@ public sealed partial class InfiniteCanvasDocument : Document
 /// </summary>
 public sealed partial class XamlEditorDockFactory : Factory
 {
-    private static readonly bool LogLayoutWarnings = false;
+    private static readonly bool LogLayoutWarnings = true;
     private const string SolutionExplorerViewId = "solutionExplorer.panel";
     private readonly MainWindowViewModel _mainVm;
     private readonly ILogger<XamlEditorDockFactory> _logger;
@@ -781,14 +782,18 @@ public sealed partial class XamlEditorDockFactory : Factory
     /// </summary>
     public void SaveLayout(IRootDock rootDock, string? filePath = null)
     {
+        if (filePath is null && !HasDesktopLifetime()) return;
         filePath ??= GetDefaultLayoutPath();
-        List<Action> restoreActions = DetachToolViewModels(rootDock);
+        List<Action> restoreActions = DetachRuntimeDocuments(rootDock);
         restoreActions.AddRange(DetachNonPersistentExtensionTools(rootDock));
-        restoreActions.AddRange(DetachDockRuntimeReferences(rootDock));
         try
         {
-            string json = s_serializer.Serialize(rootDock);
-            File.WriteAllText(filePath, json);
+            JsonObject snapshot = JsonNode.Parse(s_serializer.Serialize(rootDock)) as JsonObject
+                ?? throw new InvalidOperationException("The dock serializer did not return a layout object.");
+            snapshot.Remove(nameof(IRootDock.PinnedDock));
+            snapshot.Remove(nameof(IRootDock.Window));
+            snapshot.Remove(nameof(IRootDock.Windows));
+            File.WriteAllText(filePath, snapshot.ToJsonString());
         }
         catch (Exception ex)
         {
@@ -811,6 +816,7 @@ public sealed partial class XamlEditorDockFactory : Factory
     /// </summary>
     public IRootDock? LoadLayout(string? filePath = null)
     {
+        if (filePath is null && !HasDesktopLifetime()) return null;
         filePath ??= GetDefaultLayoutPath();
         try
         {
@@ -820,10 +826,15 @@ public sealed partial class XamlEditorDockFactory : Factory
             }
 
             string json = File.ReadAllText(filePath);
-            RootDock? rootDock = s_serializer.Deserialize<RootDock>(json);
+            JsonObject? persisted = JsonNode.Parse(json) as JsonObject;
+            persisted?.Remove(nameof(IRootDock.PinnedDock));
+            persisted?.Remove(nameof(IRootDock.Window));
+            persisted?.Remove(nameof(IRootDock.Windows));
+            IRootDock? rootDock = s_serializer.Deserialize<IRootDock>(persisted?.ToJsonString() ?? json);
             if (rootDock is not null)
             {
                 EnsureLayoutDefaults(rootDock);
+                NormalizeDockReferences(rootDock);
                 bool hasLeft = FindDockable<ToolDock>(rootDock, "LeftToolDock") is not null;
                 bool hasRight = FindDockable<ToolDock>(rootDock, "RightToolDock") is not null;
                 bool hasBottom = FindDockable<ToolDock>(rootDock, "BottomToolDock") is not null;
@@ -1106,9 +1117,81 @@ public sealed partial class XamlEditorDockFactory : Factory
         restore.Add(() => setter(tool, current));
     }
 
+    private static void NormalizeDockReferences(IRootDock rootDock)
+    {
+        IReadOnlyList<IDockable> dockables = FindDockables<IDockable>(rootDock);
+        Dictionary<string, IDockable> byId = dockables.Where(item => !string.IsNullOrEmpty(item.Id))
+            .GroupBy(item => item.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        foreach (IDock dock in dockables.OfType<IDock>())
+        {
+            dock.ActiveDockable = Resolve(dock.ActiveDockable);
+            dock.DefaultDockable = Resolve(dock.DefaultDockable);
+            dock.FocusedDockable = Resolve(dock.FocusedDockable);
+        }
+
+        IDockable? Resolve(IDockable? reference) => reference?.Id is { } id && byId.TryGetValue(id, out IDockable? canonical)
+            ? canonical : null;
+    }
+
+    private static bool HasDesktopLifetime() =>
+        Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+
+    private static List<Action> DetachRuntimeDocuments(IRootDock rootDock)
+    {
+        List<Action> restoreCollections = new();
+        List<Action> restoreReferences = new();
+        foreach (IDock dock in FindDockables<IDock>(rootDock))
+        {
+            DetachReference(() => dock.ActiveDockable, value => dock.ActiveDockable = value);
+            DetachReference(() => dock.DefaultDockable, value => dock.DefaultDockable = value);
+            DetachReference(() => dock.FocusedDockable, value => dock.FocusedDockable = value);
+            DetachCollection(dock.VisibleDockables);
+            if (dock is IRootDock root)
+            {
+                DetachCollection(root.HiddenDockables);
+                DetachCollection(root.LeftPinnedDockables);
+                DetachCollection(root.RightPinnedDockables);
+                DetachCollection(root.TopPinnedDockables);
+                DetachCollection(root.BottomPinnedDockables);
+            }
+        }
+        restoreCollections.AddRange(restoreReferences);
+        return restoreCollections;
+
+        void DetachReference(Func<IDockable?> get, Action<IDockable?> set)
+        {
+            IDockable? value = get();
+            if (value is not DesignerDocument and not TextDocument) return;
+            set(null);
+            restoreReferences.Add(() => set(value));
+        }
+
+        void DetachCollection(IList<IDockable>? items)
+        {
+            if (items is null) return;
+            var documents = items.Select((item, index) => (Item: item, Index: index))
+                .Where(entry => entry.Item is DesignerDocument or TextDocument).ToArray();
+            for (int index = documents.Length - 1; index >= 0; index--)
+                items.RemoveAt(documents[index].Index);
+            if (documents.Length == 0) return;
+            restoreCollections.Add(() =>
+            {
+                foreach (var document in documents)
+                    items.Insert(Math.Min(document.Index, items.Count), document.Item);
+            });
+        }
+    }
+
     private static List<Action> DetachDockRuntimeReferences(IRootDock rootDock)
     {
         List<Action> restore = new();
+
+        if (rootDock.PinnedDock is { } pinnedDock)
+        {
+            rootDock.PinnedDock = null;
+            restore.Add(() => rootDock.PinnedDock = pinnedDock);
+        }
 
         if (rootDock.Window is not null)
         {

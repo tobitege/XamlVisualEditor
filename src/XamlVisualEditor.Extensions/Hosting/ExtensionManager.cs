@@ -1,26 +1,35 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
 /// <summary>Default extension manager implementation.</summary>
-public sealed class ExtensionManager : IExtensionManager
+public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProviderLifecycle
 {
     private readonly IExtensionPackageStore _store;
     private readonly IExtensionStateStore _stateStore;
     private readonly IExtensionUpdateService _updateService;
     private readonly Lazy<IReadOnlyList<ExtensionPackageInfo>> _builtInPackages;
     private readonly Lazy<HashSet<string>> _builtInIds;
+    private readonly IExtensionContributionRegistry? _contributions;
+    private readonly SemaphoreSlim _operations = new(1, 1);
+    private readonly Dictionary<string, (IReadOnlyList<DesignerThemeProviderRegistration> Providers, IDisposable Registration)> _themePackages = new(StringComparer.OrdinalIgnoreCase);
+
+    public event Func<string, CancellationToken, Task>? ThemeProvidersChanging;
+    public event Func<string, CancellationToken, Task>? ThemeProvidersChanged;
 
     public ExtensionManager(
         IExtensionPackageStore store,
         IExtensionStateStore stateStore,
         IExtensionUpdateService updateService,
-        IServiceProvider services)
+        IServiceProvider services,
+        IExtensionContributionRegistry? contributions = null)
     {
         _store = store;
         _stateStore = stateStore;
         _updateService = updateService;
+        _contributions = contributions;
         _builtInPackages = new Lazy<IReadOnlyList<ExtensionPackageInfo>>(() =>
         {
             IEnumerable<IXveExtension> extensions = services.GetServices<IXveExtension>();
@@ -35,7 +44,11 @@ public sealed class ExtensionManager : IExtensionManager
     /// <inheritdoc />
     public async Task<IReadOnlyList<ExtensionPackageInfo>> GetInstalledAsync(CancellationToken ct)
     {
+        await _operations.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
         IReadOnlyList<ExtensionPackageInfo> installed = await _store.GetInstalledAsync(ct).ConfigureAwait(false);
+        await SynchronizeThemeProvidersAsync(installed, ct).ConfigureAwait(false);
         if (_builtInPackages.Value.Count == 0)
         {
             return installed;
@@ -56,23 +69,43 @@ public sealed class ExtensionManager : IExtensionManager
         }
 
         return merged.Values.ToArray();
+        }
+        finally { _operations.Release(); }
     }
 
     /// <inheritdoc />
-    public Task<ExtensionPackageInfo> InstallAsync(string packagePath, CancellationToken ct)
+    public async Task<ExtensionPackageInfo> InstallAsync(string packagePath, CancellationToken ct)
     {
-        return _store.InstallAsync(packagePath, ct);
+        await _operations.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ExtensionPackageInfo installed = await _store.InstallAsync(packagePath, ct).ConfigureAwait(false);
+            await SynchronizeThemeProvidersAsync(await _store.GetInstalledAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+            return installed;
+        }
+        finally { _operations.Release(); }
     }
 
     /// <inheritdoc />
-    public Task UninstallAsync(string extensionId, CancellationToken ct)
+    public async Task UninstallAsync(string extensionId, CancellationToken ct)
     {
         if (IsBuiltIn(extensionId))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return _store.UninstallAsync(extensionId, ct);
+        await _operations.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            try
+            {
+                await NotifyAsync(ThemeProvidersChanging, extensionId, ct).ConfigureAwait(false);
+                await _store.UninstallAsync(extensionId, ct).ConfigureAwait(false);
+                if (_themePackages.Remove(extensionId, out var previous)) previous.Registration.Dispose();
+            }
+            finally { await NotifyAsync(ThemeProvidersChanged, extensionId, CancellationToken.None).ConfigureAwait(false); }
+        }
+        finally { _operations.Release(); }
     }
 
     /// <inheritdoc />
@@ -87,20 +120,58 @@ public sealed class ExtensionManager : IExtensionManager
     }
 
     /// <inheritdoc />
-    public Task SetEnabledAsync(string extensionId, bool enabled, CancellationToken ct)
+    public async Task SetEnabledAsync(string extensionId, bool enabled, CancellationToken ct)
     {
         if (IsBuiltIn(extensionId))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return _stateStore.SetEnabledAsync(extensionId, enabled, ct);
+        await _operations.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _stateStore.SetEnabledAsync(extensionId, enabled, ct).ConfigureAwait(false);
+            await SynchronizeThemeProvidersAsync(await _store.GetInstalledAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+        }
+        finally { _operations.Release(); }
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<ExtensionUpdateInfo>> CheckForUpdatesAsync(CancellationToken ct)
     {
         return _updateService.CheckForUpdatesAsync(ct);
+    }
+
+    private async Task SynchronizeThemeProvidersAsync(IReadOnlyList<ExtensionPackageInfo> packages, CancellationToken ct)
+    {
+        if (_contributions is null) return;
+        Dictionary<string, IReadOnlyList<DesignerThemeProviderRegistration>> desired = new(StringComparer.OrdinalIgnoreCase);
+        foreach (ExtensionPackageInfo package in packages)
+        {
+            if (!await _stateStore.GetEnabledAsync(package.Manifest.ExtensionId, ct).ConfigureAwait(false)) continue;
+            var providers = DesignerThemePackageContributions.Read(package);
+            if (providers.Count > 0) desired[package.Manifest.ExtensionId] = providers;
+        }
+        foreach (string id in _themePackages.Keys.Union(desired.Keys, StringComparer.OrdinalIgnoreCase).ToArray())
+        {
+            desired.TryGetValue(id, out var providers);
+            if (_themePackages.TryGetValue(id, out var previous) && providers is not null && previous.Providers.SequenceEqual(providers)) continue;
+            try
+            {
+                await NotifyAsync(ThemeProvidersChanging, id, ct).ConfigureAwait(false);
+                if (_themePackages.Remove(id, out previous)) previous.Registration.Dispose();
+                if (providers is not null)
+                    _themePackages[id] = (providers, _contributions.RegisterDesignerThemeProviders(id, providers));
+            }
+            finally { await NotifyAsync(ThemeProvidersChanged, id, CancellationToken.None).ConfigureAwait(false); }
+        }
+    }
+
+    private static async Task NotifyAsync(Func<string, CancellationToken, Task>? handlers, string id, CancellationToken ct)
+    {
+        if (handlers is null) return;
+        foreach (Func<string, CancellationToken, Task> handler in handlers.GetInvocationList())
+            await handler(id, ct).ConfigureAwait(false);
     }
 
     private bool IsBuiltIn(string extensionId)

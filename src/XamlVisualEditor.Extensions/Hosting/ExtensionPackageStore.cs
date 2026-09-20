@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Compression;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -10,7 +11,8 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
 
     public ExtensionPackageStore(string installRoot, ExtensionPackageLoader loader)
     {
-        _installRoot = installRoot;
+        if (!Path.IsPathFullyQualified(installRoot)) throw new ArgumentException("An absolute install root is required.", nameof(installRoot));
+        _installRoot = Path.GetFullPath(installRoot);
         _loader = loader;
     }
 
@@ -22,29 +24,78 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
             return Array.Empty<ExtensionPackageInfo>();
         }
 
-        List<ExtensionPackageInfo> results = new();
-        foreach (string path in Directory.EnumerateFiles(_installRoot, "*.nupkg", SearchOption.AllDirectories))
+        Dictionary<string, ExtensionPackageInfo> results = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string extensionDirectory in Directory.EnumerateDirectories(_installRoot))
         {
-            ct.ThrowIfCancellationRequested();
-            ExtensionPackageInfo info = await _loader.LoadAsync(path, ct).ConfigureAwait(false);
-            results.Add(info);
+            string id = Path.GetFileName(extensionDirectory);
+            DesignerThemePackageContributions.ResolvePackagePath(_installRoot, id);
+            foreach (string directory in Directory.EnumerateDirectories(extensionDirectory))
+            {
+                ct.ThrowIfCancellationRequested();
+                string version = Path.GetFileName(directory);
+                string path = DesignerThemePackageContributions.ResolvePackagePath(_installRoot,
+                    Path.Combine(id, version, id + "." + version + ".nupkg"));
+                if (!File.Exists(path)) continue;
+                ExtensionPackageInfo archive = await _loader.LoadAsync(path, ct).ConfigureAwait(false);
+                if (!string.Equals(archive.Manifest.ExtensionId, id, StringComparison.OrdinalIgnoreCase) || archive.Manifest.Version != version)
+                    throw new InvalidDataException("Installed package identity does not match its directory.");
+                ExtensionPackageInfo info = new(path, archive.Manifest, directory);
+                if (!results.TryGetValue(id, out ExtensionPackageInfo? current)
+                    || ExtensionUpdateService.ExtensionVersionComparer.IsNewer(version, current.Manifest.Version))
+                    results[id] = info;
+            }
         }
 
-        return results.Count == 0 ? Array.Empty<ExtensionPackageInfo>() : results;
+        return results.Values.ToArray();
     }
 
     /// <inheritdoc />
     public async Task<ExtensionPackageInfo> InstallAsync(string packagePath, CancellationToken ct)
     {
         ExtensionPackageInfo info = await _loader.LoadAsync(packagePath, ct).ConfigureAwait(false);
-        string extensionDir = Path.Combine(_installRoot, info.Manifest.ExtensionId, info.Manifest.Version);
-        Directory.CreateDirectory(extensionDir);
-
+        DesignerThemePackageContributions.ValidateSegment(info.Manifest.Name, "extension name");
+        DesignerThemePackageContributions.ValidateSegment(info.Manifest.Publisher, "extension publisher");
+        DesignerThemePackageContributions.ValidateSegment(info.Manifest.Version, "extension version");
+        string extensionDir = DesignerThemePackageContributions.ResolvePackagePath(_installRoot,
+            Path.Combine(info.Manifest.ExtensionId, info.Manifest.Version));
+        if (Directory.Exists(extensionDir)) throw new InvalidOperationException("This extension version is already installed. Uninstall it before reinstalling.");
         string fileName = info.Manifest.ExtensionId + "." + info.Manifest.Version + ".nupkg";
         string targetPath = Path.Combine(extensionDir, fileName);
-        File.Copy(packagePath, targetPath, overwrite: true);
-
-        return await _loader.LoadAsync(targetPath, ct).ConfigureAwait(false);
+        ExtensionPackageInfo installed = new(targetPath, info.Manifest, extensionDir);
+        var providers = DesignerThemePackageContributions.Read(installed);
+        string stagingDirectory = DesignerThemePackageContributions.ResolvePackagePath(_installRoot,
+            Path.Combine(info.Manifest.ExtensionId, info.Manifest.Version + ".installing-" + Guid.NewGuid().ToString("N")));
+        using (ZipArchive archive = ZipFile.OpenRead(packagePath))
+        {
+            HashSet<string> files = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            foreach (ZipArchiveEntry entry in archive.Entries)
+            {
+                string destination = DesignerThemePackageContributions.ResolvePackagePath(extensionDir, entry.FullName);
+                if (!files.Add(destination) || string.Equals(destination, targetPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    throw new InvalidDataException("The package contains a duplicate or reserved destination.");
+            }
+            foreach (var provider in providers)
+                if (!archive.Entries.Any(entry => !entry.FullName.EndsWith('/') &&
+                    string.Equals(DesignerThemePackageContributions.ResolvePackagePath(extensionDir, entry.FullName), provider.AssemblyPath,
+                        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
+                    throw new InvalidDataException("The package does not contain its declared theme provider assembly.");
+            Directory.CreateDirectory(stagingDirectory);
+            foreach (ZipArchiveEntry entry in archive.Entries)
+            {
+                ct.ThrowIfCancellationRequested();
+                string destination = DesignerThemePackageContributions.ResolvePackagePath(stagingDirectory, entry.FullName);
+                if (entry.FullName.EndsWith('/')) Directory.CreateDirectory(destination);
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    entry.ExtractToFile(destination);
+                }
+            }
+        }
+        ct.ThrowIfCancellationRequested();
+        File.Copy(packagePath, Path.Combine(stagingDirectory, fileName));
+        Directory.Move(stagingDirectory, extensionDir);
+        return installed;
     }
 
     /// <inheritdoc />
@@ -55,7 +106,8 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
             throw new ArgumentException("Extension id is required.", nameof(extensionId));
         }
 
-        string extensionDir = Path.Combine(_installRoot, extensionId);
+        DesignerThemePackageContributions.ValidateSegment(extensionId, "extension ID");
+        string extensionDir = DesignerThemePackageContributions.ResolvePackagePath(_installRoot, extensionId);
         if (Directory.Exists(extensionDir))
         {
             Directory.Delete(extensionDir, recursive: true);

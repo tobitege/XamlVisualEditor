@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -60,8 +60,10 @@ public static class Program
     {
         if (s_targetAssembly is null || s_resolver is null)
             throw new InvalidOperationException("No preview target has been configured.");
-        return LibraryPreviewBootstrap.CreateAppBuilder(s_targetAssembly,
+        object builder = LibraryPreviewBootstrap.CreateAppBuilder(s_targetAssembly,
             name => LoadAssemblyByName(s_resolver, name));
+        IncrementalPreviewInput.Register(builder);
+        return builder;
     }
 
     private static Assembly LoadAssemblyByName(TargetAssemblyResolver resolver, string assemblyName)
@@ -183,6 +185,10 @@ internal static class RuntimeXamlLoaderRegistrar
 {
     private static string? s_targetDirectory;
     private static DesignerThemeProviderSession? s_themeProviders;
+    private static readonly IncrementalPreviewUpdater s_incremental = new();
+
+    internal static XamlVisualEditor.Core.DesignerUpdateResult ApplyIncrementalUpdate(XamlVisualEditor.Core.DesignerUpdateRequest request) =>
+        s_incremental.Apply(request, DesignTreeReporter.FindControls, DesignTreeReporter.Refresh);
 
     public static void Configure(string targetAssemblyPath)
     {
@@ -367,6 +373,7 @@ internal static class RuntimeXamlLoaderRegistrar
 
     private static object LoadRuntimeXaml(object document, object configuration)
     {
+        s_incremental.Reset();
         Assembly? localAssembly = GetLocalAssembly(configuration);
         Assembly? resolvedAssembly = EnsureLocalAssemblyInContext(localAssembly);
         if (resolvedAssembly != null)
@@ -376,8 +383,8 @@ internal static class RuntimeXamlLoaderRegistrar
 
         object? stream = GetPropertyValue(document, "Stream") ?? GetPropertyValue(document, "XamlStream")
             ?? GetPropertyValue(document, "ContentStream");
-        if (stream is not Stream { CanSeek: false } && GetXamlFromDocument(document) is { } source
-            && source.Contains(XamlVisualEditor.Core.DesignerThemeProtocol.PropertyName, StringComparison.Ordinal)
+        string? source = stream is Stream { CanSeek: false } ? null : GetXamlFromDocument(document);
+        if (source is not null && source.Contains(XamlVisualEditor.Core.DesignerThemeProtocol.PropertyName, StringComparison.Ordinal)
             && XamlVisualEditor.Core.DesignerThemeProtocol.ReadRequest(System.Xml.Linq.XDocument.Parse(source)) is { } themeRequest)
             (s_themeProviders ??= new DesignerThemeProviderSession()).Apply(themeRequest);
 
@@ -385,6 +392,28 @@ internal static class RuntimeXamlLoaderRegistrar
             ? result ?? throw new InvalidOperationException("AvaloniaRuntimeXamlLoader.Load returned null.")
             : LoadWithAvaloniaXamlLoader(document);
         DesignTreeReporter.Track(loaded);
+        if (source is not null && DesignTreeReporter.CurrentRenderId is { } renderId)
+        {
+            Type documentType = document.GetType();
+            object? baseUri = GetPropertyValue(document, "BaseUri");
+            s_incremental.Record(source, renderId, (control, fragment) =>
+            {
+                object patchDocument = Activator.CreateInstance(documentType, new[] { control, fragment })!;
+                documentType.GetProperty("BaseUri")?.SetValue(patchDocument, baseUri);
+                Type nameScope = Type.GetType("Avalonia.Controls.NameScope, Avalonia.Base", throwOnError: true)!;
+                object? previousScope = nameScope.GetMethod("GetNameScope")!.Invoke(null, new[] { control });
+                try
+                {
+                    if (!TryLoadWithRuntimeLoader(patchDocument, configuration, out _))
+                        throw new InvalidOperationException("Runtime population is unavailable.");
+                }
+                finally
+                {
+                    nameScope.GetMethod("SetNameScope")!.Invoke(null, new[] { control, previousScope });
+                    if (GetPropertyValue(patchDocument, "XamlStream") is IDisposable patchStream) patchStream.Dispose();
+                }
+            });
+        }
         return loaded;
     }
 
@@ -401,7 +430,18 @@ internal static class RuntimeXamlLoaderRegistrar
         }
 
         MethodInfo loadMethod = FindLoadMethod(loaderType);
-        result = loadMethod.Invoke(null, new[] { document, configuration });
+        try
+        {
+            result = loadMethod.Invoke(null, new[] { document, configuration });
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            Exception cause = exception.InnerException;
+            while (cause is AggregateException aggregate && aggregate.InnerExceptions.Count > 0)
+                cause = aggregate.InnerExceptions[0];
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(cause).Throw();
+            throw;
+        }
         if (result == null)
         {
             throw new InvalidOperationException("AvaloniaRuntimeXamlLoader.Load returned null.");

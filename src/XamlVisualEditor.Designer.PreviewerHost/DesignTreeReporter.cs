@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +15,7 @@ internal sealed class DesignTreeReporter
     private const string MessagePrefix = "XVE-DESIGN-TREE ";
     private static DesignTreeReporter? s_current;
     private readonly object _root;
-    private readonly Guid _renderId;
+    private Guid _renderId;
     private readonly MethodInfo _getNodeId;
     private readonly MethodInfo _transformToVisual;
     private readonly EventInfo _layoutUpdated;
@@ -25,6 +25,24 @@ internal sealed class DesignTreeReporter
     private bool _queued;
     private string? _lastPayload;
     private string? _lastError;
+    private readonly Dictionary<Guid, List<object>> _controls = new();
+
+    public static Guid? CurrentRenderId => s_current?._renderId;
+
+    public static IReadOnlyList<object> FindControls(Guid nodeId) =>
+        s_current?._controls.TryGetValue(nodeId, out List<object>? controls) == true ? controls : Array.Empty<object>();
+
+    public static void Refresh(Guid renderId)
+    {
+        if (s_current is not { } current) throw new InvalidOperationException("No rendered document is available.");
+        current._renderId = renderId;
+        current._lastPayload = null;
+        current._getNodeId.DeclaringType!.GetMethod("SetRenderId")!.Invoke(null, new[] { current._root, renderId.ToString() });
+        MethodInfo updateLayout = current._root.GetType().GetMethod("UpdateLayout", Type.EmptyTypes)
+            ?? throw new MissingMethodException(current._root.GetType().FullName, "UpdateLayout");
+        updateLayout.Invoke(current._root, null);
+        current.Publish();
+    }
 
     private DesignTreeReporter(object root, Guid renderId, MethodInfo getNodeId, EventInfo layoutUpdated)
     {
@@ -41,16 +59,30 @@ internal sealed class DesignTreeReporter
 
     public static void Track(object root)
     {
+        if (s_current is { } previous)
+        {
+            previous._layoutUpdated.RemoveEventHandler(previous._root, new EventHandler(previous.OnLayoutUpdated));
+            s_current = null;
+        }
         Type? identity = AppDomain.CurrentDomain.GetAssemblies()
             .FirstOrDefault(assembly => assembly.GetName().Name == "XamlVisualEditor.Designer.Rendering")
             ?.GetType("XamlVisualEditor.Designer.Rendering.DesignNodeIdentity");
         MethodInfo? getRenderId = identity?.GetMethod("GetRenderId");
-        if (getRenderId is null || !getRenderId.GetParameters()[0].ParameterType.IsInstanceOfType(root)
+        if (getRenderId is null) return;
+        Type controlType = getRenderId.GetParameters()[0].ParameterType;
+        if (!controlType.IsInstanceOfType(root))
+        {
+            Type? design = controlType.Assembly.GetType("Avalonia.Controls.Design");
+            MethodInfo? getPreview = design?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(method => method.Name == "GetPreviewWith"
+                    && method.GetParameters() is { Length: 1 } parameters
+                    && parameters[0].ParameterType.IsInstanceOfType(root));
+            root = getPreview?.Invoke(null, new[] { root }) ?? root;
+        }
+        if (!controlType.IsInstanceOfType(root)
             || !Guid.TryParse(getRenderId.Invoke(null, new[] { root }) as string, out Guid renderId)) return;
         EventInfo? layoutUpdated = root.GetType().GetEvent("LayoutUpdated");
         if (layoutUpdated is null) return;
-        if (s_current is { } previous)
-            previous._layoutUpdated.RemoveEventHandler(previous._root, new EventHandler(previous.OnLayoutUpdated));
         s_current = new DesignTreeReporter(root, renderId, identity!.GetMethod("GetNodeId")!, layoutUpdated);
     }
 
@@ -73,6 +105,7 @@ internal sealed class DesignTreeReporter
             object viewportBounds = Read(viewport, "Bounds")!;
             RectData viewportClip = new(0, 0, Number(viewportBounds, "Width"), Number(viewportBounds, "Height"));
             List<object> nodes = new();
+            _controls.Clear();
             Stack<(object Visual, int? Parent, bool Visible, RectData Clip)> pending = new();
             pending.Push((_root, null, true, viewportClip));
             Type controlType = _getNodeId.GetParameters()[0].ParameterType;
@@ -89,6 +122,8 @@ internal sealed class DesignTreeReporter
                 if (controlType.IsInstanceOfType(visual)
                     && Guid.TryParse(_getNodeId.Invoke(null, new[] { visual }) as string, out Guid nodeId))
                 {
+                    if (!_controls.TryGetValue(nodeId, out List<object>? controls)) _controls[nodeId] = controls = new();
+                    controls.Add(visual);
                     if (measured is not null)
                     {
                         int instanceId = _instances.GetValue(visual, _ => new InstanceIdentity(++_nextInstanceId)).Value;

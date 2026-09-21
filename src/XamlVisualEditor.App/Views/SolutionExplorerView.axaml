@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
@@ -6,10 +6,11 @@
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
              x:DataType="vm:SolutionExplorerViewModel"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.SolutionExplorerView">
   <DockPanel>
     <TextBox DockPanel.Dock="Top"
-             PlaceholderText="🔍 Search files..."
+             PlaceholderText="{x:Static loc:UiStrings.SearchFiles}"
              Text="{CompiledBinding FilterText, Mode=TwoWay}"
              Margin="4" />
 
@@ -29,9 +30,9 @@
                 v:DataGridContextSelectionBehavior.IsEnabled="True">
       <dg:DataGrid.ContextMenu>
         <ContextMenu x:DataType="vm:SolutionExplorerViewModel">
-          <MenuItem Header="Open"
+          <MenuItem Header="{x:Static loc:UiStrings.Open}"
                     Command="{CompiledBinding OpenSelectedCommand}" />
-          <MenuItem Header="Set as Startup Project"
+          <MenuItem Header="{x:Static loc:UiStrings.SetStartupProject}"
                     Command="{CompiledBinding SetStartupProjectCommand}" />
         </ContextMenu>
       </dg:DataGrid.ContextMenu>
@@ -42,7 +43,7 @@
               <TextBlock Text="▶"
                          Foreground="#2E8B57"
                          IsVisible="{CompiledBinding IsStartupProject}" />
-              <TextBlock Text="RUN"
+              <TextBlock Text="{x:Static loc:UiStrings.RunUpper}"
                          Foreground="#3C7A3C"
                          FontSize="10"
                          FontWeight="SemiBold"
@@ -63,7 +64,7 @@
         </DataTemplate>
       </dg:DataGrid.DataTemplates>
       <dg:DataGrid.Columns>
-        <dg:DataGridHierarchicalColumn Header="Name"
+        <dg:DataGridHierarchicalColumn Header="{x:Static loc:UiStrings.Name}"
                                        Width="*"
                                        Binding="{CompiledBinding Item}"
                                        SortMemberPath="Item.Name"

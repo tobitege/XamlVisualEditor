@@ -171,8 +171,8 @@ public sealed class RuntimeDesignRenderer
         copy.NamespaceAliases[prefix] = IdentityNamespace;
         Dictionary<Guid, string> sourceTypes = new();
         AddDesignMetadata(source, copy, prefix, sourceTypes, cancellationToken);
-        if (sourceTypes.ContainsKey(source.Id))
-            copy.Properties.Add(new MutableAstPropertyNode
+        if (FindPreviewControl(copy) is { } previewRoot)
+            previewRoot.Properties.Add(new MutableAstPropertyNode
             {
                 PropertyName = prefix + ":DesignNodeIdentity.RenderId",
                 XmlNamespace = IdentityNamespace,

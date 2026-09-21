@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -11,6 +11,8 @@ using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
 
+using XamlVisualEditor.Core.Localization;
+
 namespace XamlVisualEditor.Shell.ViewModels;
 
 public enum DesignerLayoutOperation
@@ -22,37 +24,52 @@ public enum DesignerLayoutOperation
 /// <summary>Plans layout-specific multi-selection changes before committing one document transaction.</summary>
 public sealed class DesignerLayoutEditor
 {
+    // Fluent System Icons 1.1.341, regular 20px; see THIRD-PARTY-NOTICES.md.
+    private const string AlignLeftIconPath = "M3.5 2a.5.5 0 0 0-.5.5v15a.5.5 0 0 0 1 0v-15a.5.5 0 0 0-.5-.5M7 11a2 2 0 0 0-2 2v1c0 1.1.9 2 2 2h5a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2zm-1 2a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zM5 6c0-1.1.9-2 2-2h8a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z";
+    private const string CenterHorizontallyIconPath = "M10.5 18a.5.5 0 0 1-.5-.5V16H8a2 2 0 0 1-2-2v-1c0-1.1.9-2 2-2h2V9H6a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h4V2.5a.5.5 0 0 1 1 0V4h4a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-4v2h2a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2v1.5a.5.5 0 0 1-.5.5M6 5a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1zm2 7a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1z";
+    private const string AlignRightIconPath = "M16.5 2c.28 0 .5.22.5.5v15a.5.5 0 0 1-1 0v-15c0-.28.22-.5.5-.5M13 11a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-1c0-1.1.9-2 2-2zm1 2a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1zm1-7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v1c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2zm-2-1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z";
+    private const string AlignTopIconPath = "M2 3.5c0-.28.22-.5.5-.5h15a.5.5 0 0 1 0 1h-15a.5.5 0 0 1-.5-.5M11 7c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1zM6 5a2 2 0 0 0-2 2v8c0 1.1.9 2 2 2h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM5 7a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z";
+    private const string CenterVerticallyIconPath = "M18 9.5a.5.5 0 0 1-.5.5H16v2a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-2H9v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4H2.5a.5.5 0 0 1 0-1H4V5c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v4h2V7c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v2h1.5c.28 0 .5.22.5.5M5 14a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1zm7-2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1z";
+    private const string AlignBottomIconPath = "M2 16.5c0 .28.22.5.5.5h15a.5.5 0 0 0 0-1h-15a.5.5 0 0 0-.5.5m9-3.5c0 1.1.9 2 2 2h1a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-1a2 2 0 0 0-2 2zm2 1a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1zm-7 1a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2zm-1-2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1z";
+    private const string DistributeHorizontallyIconPath = "M3 16a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2zm-1-2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1zm7 2a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2zm-1-2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1zm7 2a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2zm-1-2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1z";
+    private const string DistributeVerticallyIconPath = "M4 3c0-1.1.9-2 2-2h8a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z M4 15c0-1.1.9-2 2-2h8a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1z M6 7a2 2 0 0 0-2 2v1c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM5 9a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z";
+    private const string SameWidthIconPath = "m16.37 15-1.18 1.14a.5.5 0 1 0 .7.72l1.88-1.82c.3-.3.3-.78 0-1.08l-1.88-1.82a.5.5 0 1 0-.7.72L16.38 14H12.5a.5.5 0 1 0 0 1zM15 3a2 2 0 0 1 2 2v4.5a.5.5 0 0 1-1 0V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v4.5a.5.5 0 0 1-1 0V5c0-1.1.9-2 2-2zM4.81 16.14 3.63 15H7.5a.5.5 0 1 0 0-1H3.63l1.18-1.14a.5.5 0 0 0-.7-.72l-1.88 1.82c-.3.3-.3.79 0 1.08l1.89 1.82a.5.5 0 1 0 .69-.72";
+    private const string SameHeightIconPath = "m15 3.63 1.14 1.18a.5.5 0 1 0 .72-.7l-1.82-1.88a.75.75 0 0 0-1.08 0L12.14 4.1a.5.5 0 1 0 .72.7L14 3.63V7.5a.5.5 0 0 0 1 0zM3 5c0-1.1.9-2 2-2h4.5a.5.5 0 0 1 0 1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4.5a.5.5 0 0 1 0 1H5a2 2 0 0 1-2-2zm13.14 10.2L15 16.36V12.5a.5.5 0 1 0-1 0v3.87l-1.14-1.18a.5.5 0 1 0-.72.7l1.82 1.88c.3.3.79.3 1.08 0l1.82-1.88a.5.5 0 1 0-.72-.7";
+
+    /// <summary>Fluent grid symbol used by the shared snap-to-grid toggle.</summary>
+    public const string SnapToGridIconPath = "M7.5 11c.83 0 1.5.67 1.5 1.5v4c0 .83-.67 1.5-1.5 1.5h-4A1.5 1.5 0 0 1 2 16.5v-4c0-.83.67-1.5 1.5-1.5zm9 0c.83 0 1.5.67 1.5 1.5v4c0 .83-.67 1.5-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-4c0-.83.67-1.5 1.5-1.5zm-9 1h-4a.5.5 0 0 0-.5.5v4c0 .28.22.5.5.5h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5m9 0h-4a.5.5 0 0 0-.5.5v4c0 .28.22.5.5.5h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5m-9-10C8.33 2 9 2.67 9 3.5v4C9 8.33 8.33 9 7.5 9h-4A1.5 1.5 0 0 1 2 7.5v-4C2 2.67 2.67 2 3.5 2zm9 0c.83 0 1.5.67 1.5 1.5v4c0 .83-.67 1.5-1.5 1.5h-4A1.5 1.5 0 0 1 11 7.5v-4c0-.83.67-1.5 1.5-1.5zm-9 1h-4a.5.5 0 0 0-.5.5v4c0 .28.22.5.5.5h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5m9 0h-4a.5.5 0 0 0-.5.5v4c0 .28.22.5.5.5h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5";
+
     private readonly DesignerDocumentViewModel _document;
 
     public DesignerLayoutEditor(DesignerDocumentViewModel document) => _document = document;
 
     public static string Title(DesignerLayoutOperation operation) => operation switch
     {
-        DesignerLayoutOperation.AlignLeft => "Align left",
-        DesignerLayoutOperation.CenterHorizontally => "Center horizontally",
-        DesignerLayoutOperation.AlignRight => "Align right",
-        DesignerLayoutOperation.AlignTop => "Align top",
-        DesignerLayoutOperation.CenterVertically => "Center vertically",
-        DesignerLayoutOperation.AlignBottom => "Align bottom",
-        DesignerLayoutOperation.DistributeHorizontally => "Distribute horizontally",
-        DesignerLayoutOperation.DistributeVertically => "Distribute vertically",
-        DesignerLayoutOperation.SameWidth => "Same width",
-        DesignerLayoutOperation.SameHeight => "Same height",
+        DesignerLayoutOperation.AlignLeft => UiStrings.AlignLeft,
+        DesignerLayoutOperation.CenterHorizontally => UiStrings.CenterHorizontally,
+        DesignerLayoutOperation.AlignRight => UiStrings.AlignRight,
+        DesignerLayoutOperation.AlignTop => UiStrings.AlignTop,
+        DesignerLayoutOperation.CenterVertically => UiStrings.CenterVertically,
+        DesignerLayoutOperation.AlignBottom => UiStrings.AlignBottom,
+        DesignerLayoutOperation.DistributeHorizontally => UiStrings.DistributeHorizontally,
+        DesignerLayoutOperation.DistributeVertically => UiStrings.DistributeVertically,
+        DesignerLayoutOperation.SameWidth => UiStrings.SameWidth,
+        DesignerLayoutOperation.SameHeight => UiStrings.SameHeight,
         _ => throw new ArgumentOutOfRangeException(nameof(operation))
     };
 
     public static string IconData(DesignerLayoutOperation operation) => operation switch
     {
-        DesignerLayoutOperation.AlignLeft => "M1,1 H3 V19 H1 Z M5,4 H18 V8 H5 Z M5,12 H13 V16 H5 Z",
-        DesignerLayoutOperation.CenterHorizontally => "M9,1 H11 V19 H9 Z M2,4 H18 V8 H2 Z M5,12 H15 V16 H5 Z",
-        DesignerLayoutOperation.AlignRight => "M17,1 H19 V19 H17 Z M2,4 H15 V8 H2 Z M7,12 H15 V16 H7 Z",
-        DesignerLayoutOperation.AlignTop => "M1,1 H19 V3 H1 Z M4,5 H8 V18 H4 Z M12,5 H16 V13 H12 Z",
-        DesignerLayoutOperation.CenterVertically => "M1,9 H19 V11 H1 Z M4,2 H8 V18 H4 Z M12,5 H16 V15 H12 Z",
-        DesignerLayoutOperation.AlignBottom => "M1,17 H19 V19 H1 Z M4,2 H8 V15 H4 Z M12,7 H16 V15 H12 Z",
-        DesignerLayoutOperation.DistributeHorizontally => "M1,2 H3 V18 H1 Z M17,2 H19 V18 H17 Z M5,7 H7 V13 H5 Z M9,5 H11 V15 H9 Z M13,7 H15 V13 H13 Z",
-        DesignerLayoutOperation.DistributeVertically => "M2,1 H18 V3 H2 Z M2,17 H18 V19 H2 Z M7,5 H13 V7 H7 Z M5,9 H15 V11 H5 Z M7,13 H13 V15 H7 Z",
-        DesignerLayoutOperation.SameWidth => "M2,1 H18 V6 H2 Z M2,14 H18 V19 H2 Z M2,10 L6,7 V9 H14 V7 L18,10 L14,13 V11 H6 V13 Z",
-        DesignerLayoutOperation.SameHeight => "M1,2 H6 V18 H1 Z M14,2 H19 V18 H14 Z M10,2 L13,6 H11 V14 H13 L10,18 L7,14 H9 V6 H7 Z",
+        DesignerLayoutOperation.AlignLeft => AlignLeftIconPath,
+        DesignerLayoutOperation.CenterHorizontally => CenterHorizontallyIconPath,
+        DesignerLayoutOperation.AlignRight => AlignRightIconPath,
+        DesignerLayoutOperation.AlignTop => AlignTopIconPath,
+        DesignerLayoutOperation.CenterVertically => CenterVerticallyIconPath,
+        DesignerLayoutOperation.AlignBottom => AlignBottomIconPath,
+        DesignerLayoutOperation.DistributeHorizontally => DistributeHorizontallyIconPath,
+        DesignerLayoutOperation.DistributeVertically => DistributeVerticallyIconPath,
+        DesignerLayoutOperation.SameWidth => SameWidthIconPath,
+        DesignerLayoutOperation.SameHeight => SameHeightIconPath,
         _ => throw new ArgumentOutOfRangeException(nameof(operation))
     };
 

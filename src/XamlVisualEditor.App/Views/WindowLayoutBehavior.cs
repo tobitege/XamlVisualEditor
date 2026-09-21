@@ -1,10 +1,11 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using XamlVisualEditor.App.Services;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Persists and restores the size of an Avalonia window.</summary>
+/// <summary>Speichert und übernimmt Größe und Position eines Fensters vor dem Anzeigen.</summary>
 public sealed class WindowLayoutBehavior
 {
     /// <summary>Identifies the attached property that enables window layout persistence.</summary>
@@ -38,33 +39,47 @@ public sealed class WindowLayoutBehavior
 
         if (enabled && !attached)
         {
-            window.Opened += OnOpened;
+            window.Initialized += OnInitialized;
             window.Closing += OnClosing;
             window.SetValue(HandlersAttachedProperty, true);
+            if (window.IsInitialized) RestoreLayout(window);
         }
         else if (!enabled && attached)
         {
-            window.Opened -= OnOpened;
+            window.Initialized -= OnInitialized;
             window.Closing -= OnClosing;
             window.SetValue(HandlersAttachedProperty, false);
         }
     }
 
-    private static void OnOpened(object? sender, System.EventArgs e)
+    private static void OnInitialized(object? sender, System.EventArgs e)
     {
         if (sender is not Window window)
         {
             return;
         }
 
+        RestoreLayout(window);
+    }
+
+    private static void RestoreLayout(Window window)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime) return;
         UiLayoutState state = UiLayoutStateStore.Load();
         window.Width = state.WindowWidth;
         window.Height = state.WindowHeight;
+        if (state.WindowX is { } x && state.WindowY is { } y
+            && window.Screens.ScreenFromPoint(new PixelPoint(x, y)) is not null)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Position = new PixelPoint(x, y);
+        }
     }
 
     private static void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (sender is not Window window || window.WindowState != WindowState.Normal)
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime
+            || sender is not Window window || window.WindowState != WindowState.Normal)
         {
             return;
         }
@@ -75,6 +90,8 @@ public sealed class WindowLayoutBehavior
         {
             state.WindowWidth = width;
             state.WindowHeight = height;
+            state.WindowX = window.Position.X;
+            state.WindowY = window.Position.Y;
         });
     }
 }

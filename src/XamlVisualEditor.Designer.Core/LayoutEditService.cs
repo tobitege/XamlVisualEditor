@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia.Controls;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -112,10 +112,32 @@ public sealed class LayoutEditService
         ContentSlot slot = GetSlot(parent);
         int insertion = index ?? slot.Nodes.Count;
         if (insertion < 0 || insertion > slot.Nodes.Count) return Fail("The insertion position is outside the target.", out error);
+        DeclareControlNamespace(parent, node.XmlNamespace);
         if (_generateAutomationIds && _metadata is not null) AutomationIdGenerator.Assign(parent, node, _metadata);
         ApplyPlacement(node, parent, placement);
         slot.Insert(insertion, node);
         return true;
+    }
+
+    private static void DeclareControlNamespace(MutableAstObjectNode parent, string xmlNamespace)
+    {
+        if (string.IsNullOrEmpty(xmlNamespace)) return;
+        MutableAstObjectNode root = parent;
+        HashSet<string> reserved = new(StringComparer.Ordinal);
+        for (MutableAstNode? ancestor = parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is MutableAstObjectNode element)
+            {
+                root = element;
+                reserved.UnionWith(element.NamespaceAliases.Keys);
+            }
+            else if (ancestor is MutableAstPropertyNode property)
+                reserved.UnionWith(property.NamespaceAliases.Keys);
+        }
+        if (root.XmlNamespace == xmlNamespace || root.NamespaceAliases.Values.Contains(xmlNamespace)) return;
+        string prefix = "ns1";
+        for (int index = 2; reserved.Contains(prefix); index++) prefix = "ns" + index;
+        root.NamespaceAliases[prefix] = xmlNamespace;
     }
 
     /// <summary>Moves an existing element atomically after validating both locations.</summary>

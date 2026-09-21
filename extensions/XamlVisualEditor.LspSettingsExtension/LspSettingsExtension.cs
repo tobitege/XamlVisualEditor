@@ -1,7 +1,9 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.LspSettingsExtension.Views;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.LspSettingsExtension;
 
@@ -18,8 +20,8 @@ public sealed class LspSettingsExtension : IXveExtension
 
         context.Subscriptions.Add(context.Settings.RegisterSchema(new SettingsSectionSchema(
             LspSettingsSection,
-            "LSP Server Settings",
-            "Configured language server entries.",
+            UiStrings.LspServerSettings,
+            UiStrings.LspSettingsDescription,
             "array",
             ValidateLspSettings)));
 
@@ -59,8 +61,8 @@ public sealed class LspSettingsExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ToggleLspSettingsCommandId,
             new CommandMetadata(
-                Title: "View: Toggle LSP Settings",
-                Category: "Settings",
+                Title: UiStrings.ToggleLspSettingsCommand,
+                Category: UiStrings.Settings,
                 Priority: 90)));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(
@@ -69,7 +71,7 @@ public sealed class LspSettingsExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     LspSettingsViewId,
-                    "LSP Settings",
+                    UiStrings.LspSettings,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     70,
@@ -82,7 +84,7 @@ public sealed class LspSettingsExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleLspSettingsCommandId,
-                    "LSP Settings",
+                    UiStrings.LspSettings,
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     90)
@@ -94,8 +96,8 @@ public sealed class LspSettingsExtension : IXveExtension
             {
                 new ExtensionCommandPaletteContribution(
                     ToggleLspSettingsCommandId,
-                    "Toggle LSP Settings",
-                    "Settings")
+                    UiStrings.ToggleLspSettings,
+                    UiStrings.Settings)
             }));
 
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
@@ -131,7 +133,7 @@ public sealed class LspSettingsExtension : IXveExtension
         {
             return new[]
             {
-                new SettingsValidationIssue("Expected a list of LSP server settings.")
+                new SettingsValidationIssue(UiStrings.LspSettingsListExpected)
             };
         }
 
@@ -141,7 +143,7 @@ public sealed class LspSettingsExtension : IXveExtension
             {
                 return new[]
                 {
-                    new SettingsValidationIssue("LanguageId cannot be empty.", "LanguageId")
+                    new SettingsValidationIssue(UiStrings.LanguageIdRequired, "LanguageId")
                 };
             }
 
@@ -149,7 +151,7 @@ public sealed class LspSettingsExtension : IXveExtension
             {
                 return new[]
                 {
-                    new SettingsValidationIssue("ServerPath cannot be empty.", "ServerPath")
+                    new SettingsValidationIssue(UiStrings.ServerPathRequired, "ServerPath")
                 };
             }
         }

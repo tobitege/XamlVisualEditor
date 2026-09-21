@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -23,6 +23,8 @@ public sealed class AcpOAuthFlowIntegrationTests
 
         AcpProfile profile = AcpProfile.CreateCodexProfile();
         profile.OAuthClientId = "client-id";
+        profile.OAuthDeviceCodeUrl = "https://example.com/device";
+        profile.OAuthTokenUrl = "https://example.com/token";
 
         AcpProfileViewModel profileVm = new(profile);
         AcpToolViewModel vm = new(service, null, secrets, oauth, () => "/tmp");
@@ -96,6 +98,8 @@ public sealed class AcpOAuthFlowIntegrationTests
 
     private sealed class FakeAcpService : IAcpService
     {
+        public event Action? ConnectionChanged { add { } remove { } }
+        public JsonElement? GetTerminalOutput(string terminalId) => null;
         public bool IsConnected => false;
         public string? ActiveSessionId => null;
         public event Action<string>? StderrReceived { add { } remove { } }

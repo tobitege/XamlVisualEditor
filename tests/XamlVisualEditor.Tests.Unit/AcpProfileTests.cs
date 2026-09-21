@@ -1,4 +1,4 @@
-using XamlVisualEditor.Acp;
+﻿using XamlVisualEditor.Acp;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit;
@@ -11,7 +11,8 @@ public sealed class AcpProfileTests
         AcpProfile profile = AcpProfile.CreateClaudeProfile();
 
         Assert.Equal("claude", profile.Id);
-        Assert.Equal("claude", profile.Command);
+        Assert.Equal("claude-agent-acp", profile.Command);
+        Assert.Empty(profile.Arguments);
         Assert.True(profile.IsBuiltIn);
         Assert.Equal("ANTHROPIC_API_KEY", profile.ApiKeyEnvVar);
         Assert.Equal("ANTHROPIC_MODEL", profile.ModelEnvVar);

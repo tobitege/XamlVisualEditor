@@ -1,8 +1,9 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.ToolboxExtension"
              xmlns:views="using:XamlVisualEditor.ToolboxExtension.Views"
              xmlns:drag="using:XamlVisualEditor.Designer.DragDrop"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.ToolboxExtension.Views.ToolboxPanelView"
              x:DataType="vm:ToolboxPanelViewModel">
   <UserControl.Resources>
@@ -17,7 +18,7 @@
                     Width="24" Height="24" MinWidth="24" MinHeight="24" Padding="0" FontSize="16"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                     ToolTip.Tip="{CompiledBinding FavoriteToolTip}"
-                    AutomationProperties.Name="{CompiledBinding DisplayName, StringFormat='Favorite {0}'}" />
+                    AutomationProperties.Name="{CompiledBinding DisplayName, StringFormat={x:Static loc:UiStrings.FavoriteFormat}}" />
     </DataTemplate>
     <DataTemplate x:Key="FilterTemplate" x:DataType="vm:ToolboxFilterOption">
       <TextBlock Text="{CompiledBinding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding Label}" />
@@ -68,20 +69,20 @@
   </UserControl.Styles>
   <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="6" RowSpacing="4">
     <StackPanel Spacing="4">
-      <TextBlock Text="Toolbox" FontWeight="SemiBold" />
+      <TextBlock Text="{x:Static loc:UiStrings.Toolbox}" FontWeight="SemiBold" />
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-        <TextBox x:Name="ControlSearch" PlaceholderText="Search controls..."
-                 ToolTip.Tip="Search controls, namespaces, assemblies and categories"
+        <TextBox x:Name="ControlSearch" PlaceholderText="{x:Static loc:UiStrings.SearchControls}"
+                 ToolTip.Tip="{x:Static loc:UiStrings.SearchControlsHint}"
                  Text="{CompiledBinding SearchText, Mode=TwoWay}" />
-        <Button Grid.Column="1" Content="Assemblies" ToolTip.Tip="{CompiledBinding AssemblyFilterSummary}">
+        <Button Grid.Column="1" Content="{x:Static loc:UiStrings.Assemblies}" ToolTip.Tip="{CompiledBinding AssemblyFilterSummary}">
           <Button.Flyout>
             <Flyout>
               <StackPanel Width="320" Spacing="6" IsEnabled="{CompiledBinding CanEditAssemblyPreferences}">
-                <TextBlock Text="Assemblies in this workspace" FontWeight="SemiBold" />
+                <TextBlock Text="{x:Static loc:UiStrings.WorkspaceAssemblies}" FontWeight="SemiBold" />
                 <TextBlock Text="{CompiledBinding AssemblyFilterSummary}" />
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                  <Button Content="Show all" Command="{CompiledBinding ShowAllAssembliesCommand}" />
-                  <Button Content="Hide all" Command="{CompiledBinding HideAllAssembliesCommand}" />
+                  <Button Content="{x:Static loc:UiStrings.ShowAll}" Command="{CompiledBinding ShowAllAssembliesCommand}" />
+                  <Button Content="{x:Static loc:UiStrings.HideAll}" Command="{CompiledBinding HideAllAssembliesCommand}" />
                 </StackPanel>
                 <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                   <ItemsControl ItemsSource="{CompiledBinding AssemblyChoices}">
@@ -111,20 +112,20 @@
                   SelectedItem="{CompiledBinding SelectedCategory, Mode=TwoWay}" HorizontalAlignment="Stretch" />
       </Grid>
       <WrapPanel>
-        <Button Content="Reload" Command="{CompiledBinding ReloadCommand}" Margin="0,0,4,0" />
-        <Button Content="Clear filters" Command="{CompiledBinding ClearFiltersCommand}" Margin="0,0,4,0" />
-        <Button Content="Cancel" Command="{CompiledBinding CancelLoadCommand}"
+        <Button Content="{x:Static loc:UiStrings.Reload}" Command="{CompiledBinding ReloadCommand}" Margin="0,0,4,0" />
+        <Button Content="{x:Static loc:UiStrings.ClearFilters}" Command="{CompiledBinding ClearFiltersCommand}" Margin="0,0,4,0" />
+        <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelLoadCommand}"
                 Height="26" MinHeight="26" Margin="0,0,4,0" />
         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <Button Command="{CompiledBinding CollapseAllCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                  ToolTip.Tip="Collapse all" AutomationProperties.Name="Collapse all assemblies">
+                  ToolTip.Tip="{x:Static loc:UiStrings.CollapseAll}" AutomationProperties.Name="{x:Static loc:UiStrings.CollapseAllAssemblies}">
             <PathIcon Width="12" Height="12"
                       Data="M 0,5 L 5,0 L 10,5 L 8.6,6.4 L 5,2.8 L 1.4,6.4 Z M 0,11 L 5,6 L 10,11 L 8.6,12.4 L 5,8.8 L 1.4,12.4 Z" />
           </Button>
           <Button Command="{CompiledBinding ExpandAllCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                  ToolTip.Tip="Expand all" AutomationProperties.Name="Expand all assemblies">
+                  ToolTip.Tip="{x:Static loc:UiStrings.ExpandAll}" AutomationProperties.Name="{x:Static loc:UiStrings.ExpandAllAssemblies}">
             <PathIcon Width="12" Height="12"
                       Data="M 0,1.4 L 1.4,0 L 5,3.6 L 8.6,0 L 10,1.4 L 5,6.4 Z M 0,7.4 L 1.4,6 L 5,9.6 L 8.6,6 L 10,7.4 L 5,12.4 Z" />
           </Button>
@@ -169,7 +170,7 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
-      <TextBlock Text="No matching controls" IsVisible="{CompiledBinding NoMatches}"
+      <TextBlock Text="{x:Static loc:UiStrings.NoMatchingControls}" IsVisible="{CompiledBinding NoMatches}"
                  HorizontalAlignment="Center" VerticalAlignment="Center" />
     </Grid>
 
@@ -178,7 +179,7 @@
     </ScrollViewer>
 
     <Button Grid.Row="3"
-            Content="Insert Selected"
+            Content="{x:Static loc:UiStrings.InsertSelected}"
             Command="{CompiledBinding InsertSelectedCommand}" />
   </Grid>
 </UserControl>

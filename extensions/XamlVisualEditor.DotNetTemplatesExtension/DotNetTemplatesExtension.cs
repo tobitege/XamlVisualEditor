@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,6 +6,8 @@ using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.DotNetTemplatesExtension.ViewModels;
 using XamlVisualEditor.DotNetTemplatesExtension.Views;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.DotNetTemplatesExtension;
 
@@ -47,9 +49,9 @@ public sealed class DotNetTemplatesExtension : IXveExtension
 
         ExtensionMenuContribution[] menuItems =
         {
-            new(NewProjectCommandId, "New Project...", ExtensionMenuLocations.FileNew, "dotnet", 10),
-            new(NewSolutionCommandId, "New Solution...", ExtensionMenuLocations.FileNew, "dotnet", 20),
-            new(NewFileCommandId, "New File from Template...", ExtensionMenuLocations.FileNew, "dotnet", 30)
+            new(NewProjectCommandId, UiStrings.NewProjectDialog, ExtensionMenuLocations.FileNew, "dotnet", 10),
+            new(NewSolutionCommandId, UiStrings.NewSolutionDialog, ExtensionMenuLocations.FileNew, "dotnet", 20),
+            new(NewFileCommandId, UiStrings.NewFileTemplateDialog, ExtensionMenuLocations.FileNew, "dotnet", 30)
         };
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(context.ExtensionId, menuItems));
 
@@ -57,8 +59,8 @@ public sealed class DotNetTemplatesExtension : IXveExtension
         {
             new(
                 NewProjectCommandId,
-                "New Project",
-                "Create a new project",
+                UiStrings.NewProject,
+                UiStrings.CreateNewProject,
                 ExtensionToolbarLocations.Main,
                 "dotnet",
                 10,
@@ -68,9 +70,9 @@ public sealed class DotNetTemplatesExtension : IXveExtension
 
         ExtensionCommandPaletteContribution[] paletteItems =
         {
-            new(NewProjectCommandId, "New Project...", "File"),
-            new(NewSolutionCommandId, "New Solution...", "File"),
-            new(NewFileCommandId, "New File from Template...", "File")
+            new(NewProjectCommandId, UiStrings.NewProjectDialog, UiStrings.File),
+            new(NewSolutionCommandId, UiStrings.NewSolutionDialog, UiStrings.File),
+            new(NewFileCommandId, UiStrings.NewFileTemplateDialog, UiStrings.File)
         };
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(context.ExtensionId, paletteItems));
 
@@ -96,7 +98,7 @@ public sealed class DotNetTemplatesExtension : IXveExtension
             if (string.IsNullOrWhiteSpace(filePath))
             {
                 await context.Window.ShowErrorMessageAsync(
-                    "Template creation did not return a file path.",
+                    UiStrings.TemplateNoFilePath,
                     CancellationToken.None);
                 return;
             }

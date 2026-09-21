@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Dock.Model.Core;
@@ -35,6 +35,8 @@ using XamlVisualEditor.TreeInspectorExtension;
 using XamlVisualEditor.TreeInspectorExtension.Views;
 using XamlVisualEditor.TreeView;
 
+using XamlVisualEditor.Core.Localization;
+
 namespace XamlVisualEditor.App;
 
 /// <summary>
@@ -64,7 +66,6 @@ public sealed class ViewLocator : IDataTemplate
                 LocalsTool tool => new LocalsView { DataContext = tool.LocalsViewModel },
                 WatchesTool tool => new WatchesView { DataContext = tool.WatchesViewModel },
                 ExtensionTool tool => new ExtensionToolView { DataContext = tool },
-                ExtensionManagerTool tool => new ExtensionManagerView { DataContext = tool.ExtensionManagerViewModel },
                 _ => null
             };
 
@@ -111,7 +112,7 @@ public sealed class ViewLocator : IDataTemplate
             ExtensionTreeViewModel => new ExtensionTreeView(),
             ExtensionWebviewViewModel => new ExtensionWebviewView(),
             ExtensionManagerViewModel => new ExtensionManagerView(),
-            _ => new TextBlock { Text = $"No view for {param?.GetType().FullName ?? "null"}" }
+            _ => new TextBlock { Text = string.Format(UiStrings.MissingView, (object?)(param?.GetType().FullName ?? "null")) }
         });
     }
 

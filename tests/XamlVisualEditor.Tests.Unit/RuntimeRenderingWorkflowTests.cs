@@ -79,6 +79,7 @@ public sealed class RuntimeRenderingWorkflowTests
                 preview = Assert.IsAssignableFrom<Control>(Design.GetPreviewWith(style));
                 preview.Styles.Add(style);
             }
+            Assert.True(Guid.TryParse(DesignNodeIdentity.GetRenderId(preview), out _));
             Window host = new() { Content = preview, RequestedThemeVariant = ThemeVariant.Light };
             try
             {
@@ -129,6 +130,7 @@ public sealed class RuntimeRenderingWorkflowTests
             TextBlock text = Assert.Single(rendered.Root.GetVisualDescendants().OfType<TextBlock>());
             Assert.Equal("Preview data", text.Text);
             Assert.Contains(text, rendered.GetControlNodeIds().Keys);
+            Assert.True(Guid.TryParse(DesignNodeIdentity.GetRenderId(rendered.Root), out _));
             Assert.Equal(original, serializer.Serialize(document));
         }
         finally { host.Close(); }

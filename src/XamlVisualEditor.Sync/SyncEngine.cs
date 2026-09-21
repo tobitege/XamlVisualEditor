@@ -1,4 +1,4 @@
-using System.Reactive.Linq;
+﻿using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using ReactiveUI;
 using XamlVisualEditor.Core;
@@ -6,6 +6,8 @@ using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Sync;
 
@@ -99,19 +101,28 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     public Task LoadAsync(string xamlText, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        if (_editGroup is not null) _editGroup.Completed = true;
-        _editGroup = null;
-        _undoRedo.Clear();
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
         ParseResult result = _parser.Parse(xamlText, new XamlParserOptions
         {
             UseTolerantParser = false
         });
+        ct.ThrowIfCancellationRequested();
+        MutableAstDocument? document = result.Document as MutableAstDocument;
+        string serialized = document is null ? string.Empty : _serializer.Serialize(document);
 
-        SetDocument(result.Document as MutableAstDocument);
-        _diagnostics = result.Diagnostics;
-        _lastKnownText = xamlText;
-        _synchronizedAst = _document is null ? string.Empty : _serializer.Serialize(_document);
-        _checkpoint = CaptureSnapshot();
+        lock (_syncLock)
+        {
+            ct.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+            if (_editGroup is not null) _editGroup.Completed = true;
+            _editGroup = null;
+            _undoRedo.Clear();
+            SetDocument(document);
+            _diagnostics = result.Diagnostics;
+            _lastKnownText = xamlText;
+            _synchronizedAst = serialized;
+            _checkpoint = CaptureSnapshot();
+        }
 
         return Task.CompletedTask;
     }
@@ -176,12 +187,12 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
             // Commit as an undoable operation
             string description = change switch
             {
-                NodeAdded na => $"Add {na.NodeTypeName}",
-                NodeRemoved => "Remove node",
-                NodeMoved => "Move node",
-                PropertyValueChanged pvc => $"Set {pvc.PropertyName}",
-                TextContentChanged => "Edit text",
-                _ => "Edit"
+                NodeAdded na => string.Format(UiStrings.UndoAddNode, (object?)(na.NodeTypeName)),
+                NodeRemoved => UiStrings.UndoRemoveNode,
+                NodeMoved => UiStrings.UndoMoveNode,
+                PropertyValueChanged pvc => string.Format(UiStrings.UndoSetProperty, (object?)(pvc.PropertyName)),
+                TextContentChanged => UiStrings.UndoEditText,
+                _ => UiStrings.Edit
             };
 
             // Serialize the current AST to text

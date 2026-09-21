@@ -75,7 +75,7 @@ public sealed class DesignerThemeWorkflowTests
             ComboBox combo = toolbar.FindControl<ComboBox>("LibraryThemeSelector")!;
             Assert.True(combo.IsVisible);
             Assert.True(combo.IsEnabled);
-            Assert.Equal(new[] { "Project default", "Clay", "Harbor" }, document.DesignSurface.PreviewThemes.Select(theme => theme.DisplayName));
+            Assert.Equal(new[] { "Theme default", "Clay", "Harbor" }, document.DesignSurface.PreviewThemes.Select(theme => theme.DisplayName));
             combo.SelectedIndex = 2;
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             Assert.Equal(new DesignerThemeSelection(provider.Id, "harbor"), document.PreviewThemeRequest.Selection);

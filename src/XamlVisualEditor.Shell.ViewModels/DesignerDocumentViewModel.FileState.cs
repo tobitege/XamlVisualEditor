@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 
@@ -26,6 +26,7 @@ public sealed partial class DesignerDocumentViewModel
     private async Task SaveDocumentFileAsync()
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
+        if (IsLoading) throw new InvalidOperationException("Wait until the document finishes loading before saving.");
         CodeEditor.FlushPendingTextChanges();
         string text = await SyncEngine.SaveAsync();
         await _fileState.SaveAsync(FilePath, text);

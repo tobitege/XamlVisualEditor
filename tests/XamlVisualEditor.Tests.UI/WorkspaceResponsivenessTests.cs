@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reactive.Linq;
@@ -17,6 +17,87 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class WorkspaceResponsivenessTests
 {
+    [AvaloniaFact]
+    public async Task WorkspaceMetadataRegistrationAndCatalogConstructionRunOutsideTheUiThread()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-metadata-thread-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string projectPath = Path.Combine(root, "Test.csproj");
+        await File.WriteAllTextAsync(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        string outputPath = Path.Combine(root, "Test.dll");
+        File.Copy(typeof(TypeMetadata).Assembly.Location, outputPath);
+        StubWorkspaceService workspaceService = new()
+        {
+            WorkspaceOverride = new WorkspaceModel
+            {
+                Projects = new[]
+                {
+                    new ProjectModel
+                    {
+                        Name = "Test", ProjectPath = projectPath, OutputAssemblyPath = outputPath,
+                        XamlFiles = Array.Empty<XamlFileModel>(), Files = Array.Empty<ProjectFileModel>(),
+                        References = Array.Empty<AssemblyReference>()
+                    }
+                }
+            }
+        };
+        StubMetadataService metadata = new();
+        ControllableDotNetCli cli = new();
+        using MainWindowViewModel main = new(workspaceService: workspaceService, metadataService: metadata, dotNetCli: cli);
+        int uiThread = Environment.CurrentManagedThreadId;
+
+        await main.OpenFileAsync(projectPath);
+
+        Assert.NotNull(metadata.LoadThread);
+        Assert.NotNull(metadata.CatalogThread);
+        Assert.NotEqual(uiThread, metadata.LoadThread);
+        Assert.NotEqual(uiThread, metadata.CatalogThread);
+        Assert.Contains(outputPath, metadata.LoadedAssemblies);
+        Assert.Empty(cli.Calls);
+        Assert.True(main.HasWorkspace);
+    }
+
+    [AvaloniaFact]
+    public async Task MissingSnapshotDoesNotBuildOrLoadLiveReferenceAssemblies()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-missing-snapshot-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string projectPath = Path.Combine(root, "Test.csproj");
+        await File.WriteAllTextAsync(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        string snapshotPath = Path.Combine(root, "missing-snapshot");
+        StubWorkspaceService workspaceService = new()
+        {
+            WorkspaceOverride = new WorkspaceModel
+            {
+                Projects = new[]
+                {
+                    new ProjectModel
+                    {
+                        Name = "Test", ProjectPath = projectPath,
+                        AssemblySnapshotDirectory = snapshotPath,
+                        OutputAssemblyPath = Path.Combine(snapshotPath, "Test.dll"),
+                        XamlFiles = Array.Empty<XamlFileModel>(), Files = Array.Empty<ProjectFileModel>(),
+                        References = new[]
+                        {
+                            new AssemblyReference { Name = "LiveReference", Path = typeof(TypeMetadata).Assembly.Location }
+                        }
+                    }
+                }
+            }
+        };
+        ControllableDotNetCli dotNetCli = new();
+        StubMetadataService metadata = new();
+        using MainWindowViewModel viewModel = new(
+            workspaceService: workspaceService, metadataService: metadata, dotNetCli: dotNetCli);
+
+        await viewModel.OpenFileAsync(projectPath);
+
+        Assert.True(viewModel.HasWorkspace);
+        Assert.False(viewModel.IsWorkspaceLoading);
+        Assert.Empty(dotNetCli.Calls);
+        Assert.Empty(metadata.LoadedAssemblies);
+    }
+
     [AvaloniaFact]
     public async Task Workspace_Load_Uses_Nonblocking_Cli_And_Leaves_Shell_Responsive()
     {
@@ -152,14 +233,16 @@ public sealed class WorkspaceResponsivenessTests
 
     private sealed class StubWorkspaceService : IWorkspaceService
     {
+        public WorkspaceModel? WorkspaceOverride { get; init; }
+
         public Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
         {
-            return Task.FromResult(CreateWorkspace(solutionPath));
+            return Task.FromResult(WorkspaceOverride ?? CreateWorkspace(solutionPath));
         }
 
         public Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default)
         {
-            return Task.FromResult(CreateWorkspace(projectPath));
+            return Task.FromResult(WorkspaceOverride ?? CreateWorkspace(projectPath));
         }
 
         public WorkspaceModel CreateStandaloneWorkspace(string xamlFilePath)
@@ -189,10 +272,17 @@ public sealed class WorkspaceResponsivenessTests
 
     private sealed class StubMetadataService : ITypeMetadataService
     {
+        public List<string> LoadedAssemblies { get; } = new();
+        public int? LoadThread { get; private set; }
+        public int? CatalogThread { get; private set; }
+
         public TypeMetadata? GetType(string xmlNamespace, string typeName) => null;
 
-        public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null) =>
-            Array.Empty<TypeMetadata>();
+        public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null)
+        {
+            CatalogThread = Environment.CurrentManagedThreadId;
+            return Array.Empty<TypeMetadata>();
+        }
 
         public IReadOnlyList<PropertyMetadata> GetProperties(TypeMetadata type) =>
             Array.Empty<PropertyMetadata>();
@@ -204,10 +294,13 @@ public sealed class WorkspaceResponsivenessTests
 
         public void LoadAssembly(string assemblyPath)
         {
+            LoadedAssemblies.Add(assemblyPath);
         }
 
         public void LoadAssemblies(IEnumerable<string> assemblyPaths)
         {
+            LoadThread = Environment.CurrentManagedThreadId;
+            LoadedAssemblies.AddRange(assemblyPaths);
         }
 
         public Type? ResolveClrType(TypeMetadata type) => null;

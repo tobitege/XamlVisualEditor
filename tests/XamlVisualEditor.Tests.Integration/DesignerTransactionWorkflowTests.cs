@@ -251,6 +251,80 @@ public sealed class DesignerTransactionWorkflowTests
     }
 
     [Theory]
+    [InlineData("\n", false)]
+    [InlineData("\r\n", false)]
+    [InlineData("\n", true)]
+    [InlineData("\r\n", true)]
+    public async Task MovingAnonymousSubtreeKeepsItsOwnMarkupInsteadOfTheReplacedSibling(string newLine, bool propertyTarget)
+    {
+        string header = "<?xml version='1.0' encoding='utf-8'?>" + newLine + "<?design keep-this?>" + newLine +
+            "<Grid xmlns='https://github.com/avaloniaui' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>";
+        string resources = string.Join(newLine,
+            "  <Grid.Resources>",
+            "    <!-- Keep the resource layout. -->",
+            "    <SolidColorBrush x:Key = 'Accent' Color='#123456' />",
+            "  </Grid.Resources>");
+        string moved = string.Join(newLine,
+            "<Button Content = 'Moved &amp; kept' Width = '90' Tag='{Binding Caption}'>",
+            "      <!-- Keep the template layout. -->",
+            "      <Button.Template>",
+            "        <ControlTemplate><Border Background = '{DynamicResource Accent}' /></ControlTemplate>",
+            "      </Button.Template>",
+            "    </Button>");
+        const string untouched = "    <TextBlock Text = 'Source stays' />";
+        string target = propertyTarget
+            ? string.Join(newLine, "  <Border x:Name='Target'>", "    <Border.Child>",
+                "      <Button Content=\"Replaced\" Width=\"80\" />", "    </Border.Child>", "  </Border>")
+            : string.Join(newLine, "  <StackPanel x:Name='Target'>",
+                "    <Button Content=\"Replaced\" Width=\"80\" />", "  </StackPanel>");
+        string original = string.Join(newLine, header, resources, "  <StackPanel x:Name='Source'>",
+            "    " + moved, untouched, "  </StackPanel>", target, "</Grid>", "");
+        using SyncEngine engine = new(new XamlParsingService(), new XamlSerializationService(), new AstNodeMap());
+        await engine.LoadAsync(original);
+        MutableAstObjectNode[] containers = engine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>().ToArray();
+        MutableAstObjectNode moving = containers[0].Children.OfType<MutableAstObjectNode>().First();
+
+        using (DocumentEditTransaction edit = engine.BeginEditTransaction("Move control between containers"))
+        {
+            containers[0].Children.Remove(moving);
+            if (propertyTarget)
+                containers[1].Properties.Single(property => property.PropertyName == "Border.Child").Value = moving;
+            else
+            {
+                containers[1].Children.Clear();
+                containers[1].Children.Add(moving);
+            }
+            edit.Commit();
+        }
+
+        string edited = engine.GetCurrentText();
+        Assert.StartsWith(header, edited);
+        Assert.Contains(resources, edited);
+        Assert.Contains(untouched, edited);
+        Assert.Contains(moved, edited);
+        Assert.DoesNotContain("Replaced", edited);
+        Assert.EndsWith(newLine, edited);
+        Assert.Equal(1, engine.UndoRedo.UndoCount);
+        Assert.Equal(edited, await engine.SaveAsync());
+
+        using SyncEngine reopened = new(new XamlParsingService(), new XamlSerializationService(), new AstNodeMap());
+        await reopened.LoadAsync(edited);
+        MutableAstObjectNode[] reopenedContainers = reopened.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>().ToArray();
+        Assert.Single(reopenedContainers[0].Children.OfType<MutableAstObjectNode>());
+        MutableAstObjectNode restored = propertyTarget
+            ? Assert.IsType<MutableAstObjectNode>(reopenedContainers[1].Properties.Single(property => property.PropertyName == "Border.Child").Value)
+            : Assert.Single(reopenedContainers[1].Children.OfType<MutableAstObjectNode>());
+        Assert.Equal("Moved & kept", restored.GetPropertyValue("Content"));
+        Assert.Equal("{Binding Caption}", restored.GetPropertyValue("Tag"));
+        Assert.Equal("90", restored.GetPropertyValue("Width"));
+        Assert.Equal(edited, await reopened.SaveAsync());
+        engine.Undo();
+        Assert.Equal(original, engine.GetCurrentText());
+        engine.Redo();
+        Assert.Equal(edited, engine.GetCurrentText());
+    }
+
+    [Theory]
     [InlineData("\n")]
     [InlineData("\r\n")]
     public async Task InsertedMarkupKeepsDocumentLineEndingsWithoutChangingLiteralValues(string newLine)

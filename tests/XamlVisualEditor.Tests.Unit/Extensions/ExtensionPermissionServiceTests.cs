@@ -1,22 +1,52 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
+using XamlVisualEditor.Core.Localization;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
+[Collection(nameof(UiLocalizationCollection))]
 public sealed class ExtensionPermissionServiceTests
 {
+    [Theory]
+    [InlineData("en", 0, true, false)]
+    [InlineData("en", 1, true, true)]
+    [InlineData("en", 2, false, false)]
+    [InlineData("en", 3, false, true)]
+    [InlineData("de", 0, true, false)]
+    [InlineData("de", 1, true, true)]
+    [InlineData("de", 2, false, false)]
+    [InlineData("de", 3, false, true)]
+    public async Task LocalizedDecisionKeepsAllowAndRememberFlags(string language, int choice, bool allowed, bool remembered)
+    {
+        CultureInfo? previous = UiStrings.Culture;
+        UiStrings.Culture = CultureInfo.GetCultureInfo(language);
+        try
+        {
+            string[] labels = { UiStrings.PermissionAllowOnce, UiStrings.PermissionAlwaysAllow, UiStrings.PermissionDenyOnce, UiStrings.PermissionAlwaysDeny };
+            FakeWindow window = new();
+            window.EnqueuePick(new QuickPickItem(labels[choice], null, null));
+            ExtensionPermissionService service = new("localized.extension", new FakeSettings(), window);
+            service.Declare(new[] { new ExtensionCapabilityDeclaration("workspace.write", "Write files", "Test capability", true) });
+            ExtensionPermissionDecision decision = await service.RequestAsync("workspace.write", CancellationToken.None);
+            Assert.Equal(allowed, decision.IsAllowed);
+            Assert.Equal(remembered, decision.IsRemembered);
+        }
+        finally { UiStrings.Culture = previous; }
+    }
+
     [Fact]
     public async Task RequestAsync_AlwaysAllow_IsRememberedAndReused()
     {
         FakeSettings settings = new();
         FakeWindow window = new();
-        window.EnqueuePick(new QuickPickItem("Always allow", "remember", null));
+        window.EnqueuePick(new QuickPickItem(UiStrings.PermissionAlwaysAllow, "remember", null));
 
         ExtensionPermissionService service = new("sample.extension", settings, window);
         service.Declare(
@@ -44,8 +74,8 @@ public sealed class ExtensionPermissionServiceTests
     {
         FakeSettings settings = new();
         FakeWindow window = new();
-        window.EnqueuePick(new QuickPickItem("Allow once", null, null));
-        window.EnqueuePick(new QuickPickItem("Deny once", null, null));
+        window.EnqueuePick(new QuickPickItem(UiStrings.PermissionAllowOnce, null, null));
+        window.EnqueuePick(new QuickPickItem(UiStrings.PermissionDenyOnce, null, null));
 
         ExtensionPermissionService service = new("sample.extension", settings, window);
         service.Declare(
@@ -90,7 +120,7 @@ public sealed class ExtensionPermissionServiceTests
     {
         FakeSettings settings = new();
         FakeWindow window = new();
-        window.EnqueuePick(new QuickPickItem("Always allow", null, null));
+        window.EnqueuePick(new QuickPickItem(UiStrings.PermissionAlwaysAllow, null, null));
 
         ExtensionPermissionService service = new("sample.extension", settings, window);
         service.Declare(

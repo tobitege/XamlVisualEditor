@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Extensions.Hosting.IdeBridge;
 
@@ -130,23 +132,25 @@ public sealed class IdeBridgePermissionService
 
         IReadOnlyList<QuickPickItem> items = new[]
         {
-            new QuickPickItem("Allow read-only", "Read files and diagnostics", null),
-            new QuickPickItem("Allow full access", "Read and write files, commands, terminals", null),
-            new QuickPickItem("Deny", "Block this client", null)
+            new QuickPickItem(UiStrings.AllowReadOnly, UiStrings.ReadFilesDiagnostics, null),
+            new QuickPickItem(UiStrings.AllowFullAccess, UiStrings.FullAccessDescription, null),
+            new QuickPickItem(UiStrings.Deny, UiStrings.BlockClient, null)
         };
 
-        QuickPickItem? choice = await _window.ShowQuickPickAsync(items, new QuickPickOptions("IDE Bridge access", false), ct).ConfigureAwait(false);
+        QuickPickItem? choice = await _window.ShowQuickPickAsync(items, new QuickPickOptions(UiStrings.IdeBridgeAccess, false), ct).ConfigureAwait(false);
         if (choice is null)
         {
             return null;
         }
 
-        if (string.Equals(choice.Label, "Deny", StringComparison.OrdinalIgnoreCase))
+        bool readOnly = string.Equals(choice.Label, items[0].Label, StringComparison.Ordinal);
+        bool fullAccess = string.Equals(choice.Label, items[1].Label, StringComparison.Ordinal);
+        if (!readOnly && !fullAccess)
         {
             return null;
         }
 
-        IdeBridgeCapabilities caps = string.Equals(choice.Label, "Allow full access", StringComparison.OrdinalIgnoreCase)
+        IdeBridgeCapabilities caps = fullAccess
             ? CreateFullCapabilities()
             : CreateReadOnlyCapabilities();
 

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;
@@ -31,27 +31,28 @@ public sealed class McpSessionService
         McpServerCapabilities capabilities = new(
             new McpToolsCapability(),
             new McpResourcesCapability(),
-            new McpPromptsCapability(),
-            new McpLoggingCapability());
+            new McpPromptsCapability());
 
         McpInitializeResult result = new(
             McpProtocol.ProtocolVersion,
             serverInfo,
             capabilities,
             workspaceId,
-            state.SessionToken);
+            Guid.NewGuid().ToString("N"));
 
         return new McpInitializeOutcome(result, state.AccessLevel);
     }
 
     private string ResolveWorkspaceId(string? requestedId)
     {
-        string? path = requestedId ?? _workspaceInfo.WorkspacePath;
-        if (string.IsNullOrWhiteSpace(path))
+        string? path = _workspaceInfo.WorkspacePath;
+        string workspaceId = string.IsNullOrWhiteSpace(path) ? "default" : Path.GetFullPath(path);
+        if (!string.IsNullOrWhiteSpace(requestedId)
+            && !string.Equals(workspaceId, Path.GetFullPath(requestedId),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
-            return "default";
+            throw new McpJsonRpcException(-32602, "The requested workspace is not the active workspace.");
         }
-
-        return Path.GetFullPath(path);
+        return workspaceId;
     }
 }

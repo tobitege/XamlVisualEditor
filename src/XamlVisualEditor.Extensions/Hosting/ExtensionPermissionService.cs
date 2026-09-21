@@ -1,7 +1,9 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -11,10 +13,10 @@ namespace XamlVisualEditor.Extensions.Hosting;
 public sealed class ExtensionPermissionService : IExtensionPermissions
 {
     private const string SettingsPrefix = "extensions.permissions";
-    private const string AllowOnceLabel = "Allow once";
-    private const string AlwaysAllowLabel = "Always allow";
-    private const string DenyOnceLabel = "Deny once";
-    private const string AlwaysDenyLabel = "Always deny";
+    private static string AllowOnceLabel => UiStrings.PermissionAllowOnce;
+    private static string AlwaysAllowLabel => UiStrings.PermissionAlwaysAllow;
+    private static string DenyOnceLabel => UiStrings.PermissionDenyOnce;
+    private static string AlwaysDenyLabel => UiStrings.PermissionAlwaysDeny;
 
     private readonly string _extensionId;
     private readonly string _settingsSection;
@@ -184,16 +186,16 @@ public sealed class ExtensionPermissionService : IExtensionPermissions
 
     private async Task<QuickPickItem?> PromptAsync(ExtensionCapabilityDeclaration declaration, CancellationToken cancellationToken)
     {
-        string risk = declaration.IsHighRisk ? "High risk capability" : "Standard capability";
+        string risk = declaration.IsHighRisk ? UiStrings.HighRiskCapability : UiStrings.StandardCapability;
         IReadOnlyList<QuickPickItem> choices =
         [
-            new QuickPickItem(AllowOnceLabel, "Grant access for this request only", risk),
-            new QuickPickItem(AlwaysAllowLabel, "Remember and allow future requests", risk),
-            new QuickPickItem(DenyOnceLabel, "Block this request only", risk),
-            new QuickPickItem(AlwaysDenyLabel, "Remember and block future requests", risk)
+            new QuickPickItem(AllowOnceLabel, UiStrings.GrantOnceHint, risk),
+            new QuickPickItem(AlwaysAllowLabel, UiStrings.RememberAllowHint, risk),
+            new QuickPickItem(DenyOnceLabel, UiStrings.DenyOnceHint, risk),
+            new QuickPickItem(AlwaysDenyLabel, UiStrings.RememberDenyHint, risk)
         ];
 
-        string title = _extensionId + " requests " + declaration.DisplayName;
+        string title = _extensionId + UiStrings.RequestsPrefix + declaration.DisplayName;
         return await _window.ShowQuickPickAsync(choices, new QuickPickOptions(title, false), cancellationToken).ConfigureAwait(false);
     }
 
@@ -212,10 +214,10 @@ public sealed class ExtensionPermissionService : IExtensionPermissions
 
         return choice.Label switch
         {
-            AlwaysAllowLabel => new ExtensionPermissionDecision(capabilityId, true, true, ExtensionPermissionDecisionSource.Prompt, now),
-            AllowOnceLabel => new ExtensionPermissionDecision(capabilityId, true, false, ExtensionPermissionDecisionSource.Prompt, now),
-            AlwaysDenyLabel => new ExtensionPermissionDecision(capabilityId, false, true, ExtensionPermissionDecisionSource.Prompt, now),
-            DenyOnceLabel => new ExtensionPermissionDecision(capabilityId, false, false, ExtensionPermissionDecisionSource.Prompt, now),
+            var label when label == AlwaysAllowLabel => new ExtensionPermissionDecision(capabilityId, true, true, ExtensionPermissionDecisionSource.Prompt, now),
+            var label when label == AllowOnceLabel => new ExtensionPermissionDecision(capabilityId, true, false, ExtensionPermissionDecisionSource.Prompt, now),
+            var label when label == AlwaysDenyLabel => new ExtensionPermissionDecision(capabilityId, false, true, ExtensionPermissionDecisionSource.Prompt, now),
+            var label when label == DenyOnceLabel => new ExtensionPermissionDecision(capabilityId, false, false, ExtensionPermissionDecisionSource.Prompt, now),
             _ => new ExtensionPermissionDecision(capabilityId, false, false, ExtensionPermissionDecisionSource.Dismissed, now)
         };
     }

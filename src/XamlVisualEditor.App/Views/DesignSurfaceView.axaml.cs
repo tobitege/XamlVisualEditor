@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -28,6 +28,8 @@ using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Xaml.Ast;
 
 using static XamlVisualEditor.Designer.Core.AlignmentSnapping;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -91,7 +93,7 @@ public sealed partial class DesignSurfaceView : UserControl
             Focus();
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
-        _openDefinitionMenuItem = new MenuItem { Header = "Open Definition" };
+        _openDefinitionMenuItem = new MenuItem { Header = UiStrings.OpenDefinition };
         _openDefinitionMenuItem.Click += OnOpenDefinitionClick;
         _surfaceContextMenu = new ContextMenu();
         _surfaceContextMenu.Items.Add(_openDefinitionMenuItem);
@@ -217,11 +219,11 @@ public sealed partial class DesignSurfaceView : UserControl
         AddEditMenuItem("Duplicate", _currentVm?.DuplicateCommand, Key.D);
         _surfaceContextMenu.Items.Add(new MenuItem
         {
-            Header = "Delete", Command = _currentVm?.DeleteSelectedCommand,
+            Header = UiStrings.Delete, Command = _currentVm?.DeleteSelectedCommand,
             InputGesture = new KeyGesture(Key.Delete)
         });
-        AddEditMenuItem("Select All", _currentVm?.SelectAllCommand, Key.A);
-        MenuItem layoutMenu = new() { Header = "Layout" };
+        AddEditMenuItem(UiStrings.SelectAll, _currentVm?.SelectAllCommand, Key.A);
+        MenuItem layoutMenu = new() { Header = UiStrings.Layout };
         if (_currentVm is not null)
         {
             foreach (DesignerLayoutAction action in _currentVm.LayoutActions)
@@ -883,7 +885,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        _currentVm.RebuildStatus = "Building design surface...";
+        _currentVm.RebuildStatus = UiStrings.BuildingDesignSurface;
         _currentVm.IsRebuilding = true;
         if (_rebuildScheduled)
         {
@@ -930,7 +932,7 @@ public sealed partial class DesignSurfaceView : UserControl
         DesignerDocumentViewModel? document = FindDocumentViewModel();
         _adornerLayer?.UpdateDropTarget(null, null);
         if (plan is null || document?.SyncEngine.CanEditAst != true) return;
-        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Insert " + plan.Node.TypeName);
+        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction(UiStrings.InsertPrefix + plan.Node.TypeName);
         if (!new LayoutEditService(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds)
             .TryInsert(plan.Parent, plan.Node, out _, plan.Index, plan.Placement)) return;
         edit.Commit();
@@ -1035,7 +1037,7 @@ public sealed partial class DesignSurfaceView : UserControl
         MutableAstDocument? doc = docVm.SyncEngine.CurrentDocument;
         if (doc?.Root is null)
         {
-            ShowRuntimeRenderFailure(canvas, docVm, new InvalidOperationException("The document has no valid XAML root to render."));
+            ShowRuntimeRenderFailure(canvas, docVm, new InvalidOperationException(UiStrings.NoValidXamlRoot));
             return;
         }
 
@@ -1613,7 +1615,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         DesignerDocumentViewModel? document = FindDocumentViewModel();
         if (document?.SyncEngine.CanEditAst != true) return;
-        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Move selection");
+        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction(UiStrings.MoveSelection);
         bool changed = false;
         foreach (IDesignItem item in _currentVm.Selection.SelectedItems)
         {
@@ -1747,7 +1749,7 @@ public sealed partial class DesignSurfaceView : UserControl
     {
         DesignerDocumentViewModel? document = FindDocumentViewModel();
         if (document?.SyncEngine.CanEditAst != true) return;
-        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Resize selection");
+        using XamlVisualEditor.Sync.DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction(UiStrings.ResizeSelection);
         double width = GetPropertyDouble(primary, "Width");
         double height = GetPropertyDouble(primary, "Height");
 
@@ -1875,7 +1877,7 @@ public sealed partial class DesignSurfaceView : UserControl
         if (!_dragState.HasMoved)
         {
             _dragState.Transaction = FindDocumentViewModel()?.SyncEngine.BeginEditTransaction(
-                _dragState.Mode == DragMode.Resize ? "Resize selection" : "Move selection");
+                _dragState.Mode == DragMode.Resize ? UiStrings.ResizeSelection : UiStrings.MoveSelection);
         }
         _dragState.HasMoved = true;
         _dragState.LastPoint = currentPoint;

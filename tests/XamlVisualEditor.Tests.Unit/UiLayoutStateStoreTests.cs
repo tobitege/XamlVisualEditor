@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
@@ -28,6 +28,8 @@ public sealed class UiLayoutStateStoreTests
         {
             WindowWidth = 1512,
             WindowHeight = 976,
+            WindowX = -1440,
+            WindowY = 20,
             Splitters =
             {
                 ["DesignerDocument"] = new SplitterLayoutState
@@ -42,6 +44,8 @@ public sealed class UiLayoutStateStoreTests
 
         Assert.Equal(1512, restored.WindowWidth);
         Assert.Equal(976, restored.WindowHeight);
+        Assert.Equal(-1440, restored.WindowX);
+        Assert.Equal(20, restored.WindowY);
         Assert.Equal(0.62, restored.Splitters["DesignerDocument"].ColumnRatio);
         Assert.Equal(0.71, restored.Splitters["DesignerDocument"].RowRatio);
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -64,7 +64,7 @@ public sealed class McpPromptsHandler : IMcpRequestHandler
         }
 
         string text = await BuildContextAsync(includeDiagnostics, ct).ConfigureAwait(false);
-        McpPromptMessage message = new("system", new[] { new McpContent("text", Text: text) });
+        McpPromptMessage message = new("user", new McpContent("text", Text: text));
         return new McpPromptsGetResult(new[] { message });
     }
 

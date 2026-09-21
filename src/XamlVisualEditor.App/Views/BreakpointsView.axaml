@@ -1,14 +1,15 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.BreakpointsView"
              x:DataType="vm:BreakpointsViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <TextBlock Text="Breakpoints" FontWeight="SemiBold" VerticalAlignment="Center" />
-      <Button Content="Remove" Command="{CompiledBinding RemoveSelectedCommand}" Padding="6,2" />
-      <Button Content="Clear" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
+      <TextBlock Text="{x:Static loc:UiStrings.Breakpoints}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <Button Content="{x:Static loc:UiStrings.Remove}" Command="{CompiledBinding RemoveSelectedCommand}" Padding="6,2" />
+      <Button Content="{x:Static loc:UiStrings.Clear}" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
     </StackPanel>
 
     <dg:DataGrid ItemsSource="{CompiledBinding Items}"
@@ -18,24 +19,24 @@
                 CanUserSortColumns="True">
       <dg:DataGrid.ContextMenu>
         <ContextMenu>
-          <MenuItem Header="Enable" Command="{CompiledBinding EnableSelectedCommand}" />
-          <MenuItem Header="Disable" Command="{CompiledBinding DisableSelectedCommand}" />
-          <MenuItem Header="Remove" Command="{CompiledBinding RemoveSelectedCommand}" />
+          <MenuItem Header="{x:Static loc:UiStrings.Enable}" Command="{CompiledBinding EnableSelectedCommand}" />
+          <MenuItem Header="{x:Static loc:UiStrings.Disable}" Command="{CompiledBinding DisableSelectedCommand}" />
+          <MenuItem Header="{x:Static loc:UiStrings.Remove}" Command="{CompiledBinding RemoveSelectedCommand}" />
           <Separator />
-          <MenuItem Header="Clear Condition" Command="{CompiledBinding ClearConditionCommand}" />
-          <MenuItem Header="Clear Hit Condition" Command="{CompiledBinding ClearHitConditionCommand}" />
-          <MenuItem Header="Clear Log Message" Command="{CompiledBinding ClearLogMessageCommand}" />
+          <MenuItem Header="{x:Static loc:UiStrings.ClearCondition}" Command="{CompiledBinding ClearConditionCommand}" />
+          <MenuItem Header="{x:Static loc:UiStrings.ClearHitCondition}" Command="{CompiledBinding ClearHitConditionCommand}" />
+          <MenuItem Header="{x:Static loc:UiStrings.ClearLogMessage}" Command="{CompiledBinding ClearLogMessageCommand}" />
         </ContextMenu>
       </dg:DataGrid.ContextMenu>
       <dg:DataGrid.Columns>
-        <dg:DataGridCheckBoxColumn Header="On" Binding="{CompiledBinding IsEnabled}" Width="48" />
-        <dg:DataGridTextColumn Header="File" Binding="{CompiledBinding FilePath}" Width="3*" IsReadOnly="True" />
-        <dg:DataGridTextColumn Header="Line" Binding="{CompiledBinding Line}" Width="64" />
-        <dg:DataGridTextColumn Header="Condition" Binding="{CompiledBinding Condition}" Width="2*" />
-        <dg:DataGridTextColumn Header="Hit" Binding="{CompiledBinding HitCondition}" Width="*" />
-        <dg:DataGridTextColumn Header="Log" Binding="{CompiledBinding LogMessage}" Width="2*" />
-        <dg:DataGridTextColumn Header="Verified" Binding="{CompiledBinding IsVerified}" Width="90" IsReadOnly="True" />
-        <dg:DataGridTextColumn Header="Message" Binding="{CompiledBinding Message}" Width="2*" IsReadOnly="True" />
+        <dg:DataGridCheckBoxColumn Header="{x:Static loc:UiStrings.On}" Binding="{CompiledBinding IsEnabled}" Width="48" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.File}" Binding="{CompiledBinding FilePath}" Width="3*" IsReadOnly="True" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Line}" Binding="{CompiledBinding Line}" Width="64" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Condition}" Binding="{CompiledBinding Condition}" Width="2*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Hit}" Binding="{CompiledBinding HitCondition}" Width="*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Log}" Binding="{CompiledBinding LogMessage}" Width="2*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Verified}" Binding="{CompiledBinding IsVerified}" Width="90" IsReadOnly="True" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Message}" Binding="{CompiledBinding Message}" Width="2*" IsReadOnly="True" />
       </dg:DataGrid.Columns>
     </dg:DataGrid>
   </DockPanel>

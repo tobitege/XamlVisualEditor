@@ -1,7 +1,9 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.App.Views.PreviewerTrustDialog"
+        Classes="editor-chrome"
         x:DataType="vm:PreviewerTrustDialogViewModel"
         Width="460" Height="220"
         WindowStartupLocation="CenterOwner"
@@ -13,9 +15,9 @@
       <TextBlock Text="{CompiledBinding Location}" TextWrapping="Wrap" />
     </Border>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
-      <Button Content="Allow Once" Command="{CompiledBinding AllowOnceCommand}" />
-      <Button Content="Trust Workspace" Command="{CompiledBinding TrustCommand}" IsDefault="True" />
+      <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+      <Button Content="{x:Static loc:UiStrings.AllowOnce}" Command="{CompiledBinding AllowOnceCommand}" />
+      <Button Content="{x:Static loc:UiStrings.TrustWorkspace}" Command="{CompiledBinding TrustCommand}" IsDefault="True" />
     </StackPanel>
   </StackPanel>
 </Window>

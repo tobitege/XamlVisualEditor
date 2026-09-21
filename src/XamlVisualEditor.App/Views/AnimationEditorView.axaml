@@ -1,7 +1,8 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.AnimationEditorView"
              x:DataType="vm:AnimationEditorViewModel">
 
@@ -10,12 +11,12 @@
             <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
                     Padding="6,4">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <Button Content="Add Timeline" Command="{CompiledBinding AddTimelineCommand}" />
-                    <Button Content="Play" Command="{CompiledBinding PlayPreviewCommand}" />
-                    <Button Content="Stop" Command="{CompiledBinding StopPreviewCommand}" />
-                    <Button Content="Undo" Command="{CompiledBinding UndoCommand}" />
-                    <Button Content="Redo" Command="{CompiledBinding RedoCommand}" />
-                    <TextBlock Text="Timeline" VerticalAlignment="Center" />
+                    <Button Content="{x:Static loc:UiStrings.AddTimeline}" Command="{CompiledBinding AddTimelineCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Play}" Command="{CompiledBinding PlayPreviewCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Stop}" Command="{CompiledBinding StopPreviewCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Undo}" Command="{CompiledBinding UndoCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Redo}" Command="{CompiledBinding RedoCommand}" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Timeline}" VerticalAlignment="Center" />
                     <ComboBox ItemsSource="{CompiledBinding Timelines}"
                               SelectedItem="{CompiledBinding SelectedTimeline, Mode=TwoWay}"
                               Width="180">
@@ -25,14 +26,14 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock Text="Key" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Key}" VerticalAlignment="Center" />
                     <TextBox Width="160"
                              Text="{CompiledBinding SelectedTimeline.ResourceKey, Mode=TwoWay}"
-                             PlaceholderText="AnimationKey" />
-                    <TextBlock Text="Duration" VerticalAlignment="Center" />
+                             PlaceholderText="{x:Static loc:UiStrings.AnimationKeyExample}" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Duration}" VerticalAlignment="Center" />
                     <TextBox Width="80"
                              Text="{CompiledBinding SelectedTimeline.DurationSeconds, Mode=TwoWay}" />
-                    <TextBlock Text="Zoom" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Zoom}" VerticalAlignment="Center" />
                     <Slider Minimum="0.25" Maximum="3.0"
                             Value="{CompiledBinding Zoom, Mode=TwoWay}"
                             Width="120" />
@@ -45,7 +46,7 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Content="Create Resource"
+                    <Button Content="{x:Static loc:UiStrings.CreateResource}"
                             Command="{CompiledBinding CreateResourceCommand}" />
                 </StackPanel>
             </Border>
@@ -53,21 +54,21 @@
             <Border Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
                     Padding="6,4">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock Text="Target" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Target}" VerticalAlignment="Center" />
                     <TextBlock Text="{CompiledBinding TargetDisplayName}"
                                VerticalAlignment="Center"
                                FontWeight="SemiBold" />
                     <Separator />
-                    <TextBlock Text="Track" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Track}" VerticalAlignment="Center" />
                     <TextBox Width="160"
                              Text="{CompiledBinding NewTrackPropertyName, Mode=TwoWay}"
-                             PlaceholderText="Opacity" />
-                    <Button Content="Add Track" Command="{CompiledBinding AddTrackCommand}" />
+                             PlaceholderText="{x:Static loc:UiStrings.Opacity}" />
+                    <Button Content="{x:Static loc:UiStrings.AddTrack}" Command="{CompiledBinding AddTrackCommand}" />
                     <Separator />
-                    <Button Content="Add Keyframe" Command="{CompiledBinding AddKeyframeCommand}" />
-                    <Button Content="Copy" Command="{CompiledBinding CopyKeyframesCommand}" />
-                    <Button Content="Paste" Command="{CompiledBinding PasteKeyframesCommand}" />
-                    <Button Content="Delete" Command="{CompiledBinding DeleteSelectionCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.AddKeyframe}" Command="{CompiledBinding AddKeyframeCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Copy}" Command="{CompiledBinding CopyKeyframesCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Paste}" Command="{CompiledBinding PasteKeyframesCommand}" />
+                    <Button Content="{x:Static loc:UiStrings.Delete}" Command="{CompiledBinding DeleteSelectionCommand}" />
                     <TextBlock Text="{CompiledBinding StatusMessage}"
                                VerticalAlignment="Center"
                                Opacity="0.7" />
@@ -76,7 +77,7 @@
             <Border Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
                     Padding="6,4">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock Text="Resources" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Static loc:UiStrings.Resources}" VerticalAlignment="Center" />
                     <ComboBox ItemsSource="{CompiledBinding AvailableResources}"
                               SelectedItem="{CompiledBinding SelectedResource, Mode=TwoWay}"
                               Width="220">
@@ -86,14 +87,14 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Content="Refresh"
+                    <Button Content="{x:Static loc:UiStrings.Refresh}"
                             Command="{CompiledBinding RefreshResourcesCommand}" />
-                    <Button Content="Load"
+                    <Button Content="{x:Static loc:UiStrings.Load}"
                             Command="{CompiledBinding LoadResourceCommand}"
                             CommandParameter="{CompiledBinding SelectedResource}" />
-                        <Button Content="Update"
+                        <Button Content="{x:Static loc:UiStrings.Update}"
                             Command="{CompiledBinding UpdateResourceCommand}" />
-                        <Button Content="Delete"
+                        <Button Content="{x:Static loc:UiStrings.Delete}"
                             Command="{CompiledBinding DeleteResourceCommand}" />
                 </StackPanel>
             </Border>
@@ -104,16 +105,16 @@
                         <ContentControl.ContentTemplate>
                             <DataTemplate x:DataType="vm:AnimationKeyframeViewModel">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="Keyframe" VerticalAlignment="Center" />
-                                    <TextBlock Text="Time" VerticalAlignment="Center" />
+                                    <TextBlock Text="{x:Static loc:UiStrings.Keyframe}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{x:Static loc:UiStrings.Time}" VerticalAlignment="Center" />
                                     <TextBox Width="80"
                                              Text="{CompiledBinding TimeSeconds, Mode=TwoWay}"
                                              BorderBrush="{ReflectionBinding DataContext.IsKeyframeTimeValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
-                                    <TextBlock Text="Value" VerticalAlignment="Center" />
+                                    <TextBlock Text="{x:Static loc:UiStrings.Value}" VerticalAlignment="Center" />
                                     <TextBox Width="160"
                                              Text="{CompiledBinding Value, Mode=TwoWay}"
                                              BorderBrush="{ReflectionBinding DataContext.IsKeyframeValueValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
-                                    <TextBlock Text="Easing" VerticalAlignment="Center" />
+                                    <TextBlock Text="{x:Static loc:UiStrings.Easing}" VerticalAlignment="Center" />
                                     <TextBox Width="160"
                                              Text="{CompiledBinding Easing, Mode=TwoWay}"
                                              BorderBrush="{ReflectionBinding DataContext.IsKeyframeEasingValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
@@ -205,7 +206,7 @@
                                         BorderThickness="0,0,1,0"
                                         Padding="6,4">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Button Content="Select"
+                                        <Button Content="{x:Static loc:UiStrings.Select}"
                                                 Command="{ReflectionBinding DataContext.SelectTrackCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}" />
                                         <TextBox Text="{CompiledBinding PropertyName, Mode=TwoWay}"
@@ -273,17 +274,17 @@
                                                             </Canvas.Left>
                                                             <ToolTip.Tip>
                                                                 <StackPanel>
-                                                                    <TextBlock Text="{CompiledBinding TimeSeconds, StringFormat='Time {0:0.00}s'}" />
+                                                                    <TextBlock Text="{CompiledBinding TimeSeconds, StringFormat={x:Static loc:UiStrings.TimeSecondsFormat}}" />
                                                                     <TextBlock Text="{CompiledBinding Value}" />
                                                                 </StackPanel>
                                                             </ToolTip.Tip>
                                                             <Border.ContextMenu>
                                                                 <ContextMenu>
-                                                                    <MenuItem Header="Copy"
+                                                                    <MenuItem Header="{x:Static loc:UiStrings.Copy}"
                                                                               Command="{ReflectionBinding DataContext.CopyKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                                    <MenuItem Header="Paste"
+                                                                    <MenuItem Header="{x:Static loc:UiStrings.Paste}"
                                                                               Command="{ReflectionBinding DataContext.PasteKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                                    <MenuItem Header="Delete"
+                                                                    <MenuItem Header="{x:Static loc:UiStrings.Delete}"
                                                                               Command="{ReflectionBinding DataContext.DeleteSelectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                                                 </ContextMenu>
                                                             </Border.ContextMenu>

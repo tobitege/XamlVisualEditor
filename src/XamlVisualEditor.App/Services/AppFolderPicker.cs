@@ -1,9 +1,11 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.App.Services;
 
@@ -42,7 +44,7 @@ public sealed class AppFolderPicker : IFolderPicker
 
         FolderPickerOpenOptions options = new()
         {
-            Title = string.IsNullOrWhiteSpace(title) ? "Select Folder" : title,
+            Title = string.IsNullOrWhiteSpace(title) ? UiStrings.SelectFolder : title,
             AllowMultiple = false
         };
 

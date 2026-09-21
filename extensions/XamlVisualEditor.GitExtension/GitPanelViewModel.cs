@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -16,6 +16,8 @@ using XamlVisualEditor.Core;
 using CoreGitDiffLineKind = XamlVisualEditor.Core.GitDiffLineKind;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.GitExtension;
 
@@ -65,20 +67,20 @@ public sealed partial class GitChangeEntryViewModel : ReactiveObject
     {
         if (isUntracked)
         {
-            return "Untracked";
+            return UiStrings.GitUntracked;
         }
 
-        string scope = isStaged ? "Staged" : "Unstaged";
+        string scope = isStaged ? UiStrings.GitStaged : UiStrings.GitUnstaged;
         return kind switch
         {
-            GitChangeKind.Added => scope + " Added",
-            GitChangeKind.Modified => scope + " Modified",
-            GitChangeKind.Deleted => scope + " Deleted",
-            GitChangeKind.Renamed => scope + " Renamed",
-            GitChangeKind.Copied => scope + " Copied",
-            GitChangeKind.TypeChanged => scope + " Type Changed",
-            GitChangeKind.Unmerged => scope + " Unmerged",
-            _ => scope + " Changed"
+            GitChangeKind.Added => scope + UiStrings.GitAddedSuffix,
+            GitChangeKind.Modified => scope + UiStrings.GitModifiedSuffix,
+            GitChangeKind.Deleted => scope + UiStrings.GitDeletedSuffix,
+            GitChangeKind.Renamed => scope + UiStrings.GitRenamedSuffix,
+            GitChangeKind.Copied => scope + UiStrings.GitCopiedSuffix,
+            GitChangeKind.TypeChanged => scope + UiStrings.GitTypeChangedSuffix,
+            GitChangeKind.Unmerged => scope + UiStrings.GitUnmergedSuffix,
+            _ => scope + UiStrings.GitChangedSuffix
         };
     }
 }
@@ -342,7 +344,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         {
                 Dispatcher.UIThread.Post(() =>
                 {
-                    ErrorMessage = "Git service unavailable";
+                    ErrorMessage = UiStrings.GitUnavailable;
                     IsRepository = false;
                     ClearChanges();
                 });
@@ -355,7 +357,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     RepositoryRoot = null;
-                    ErrorMessage = "No workspace loaded";
+                    ErrorMessage = UiStrings.NoWorkspaceLoadedStatus;
                     IsRepository = false;
                     ClearChanges();
                 });
@@ -371,7 +373,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
                     Dispatcher.UIThread.Post(() =>
                     {
                         RepositoryRoot = null;
-                        ErrorMessage = "Workspace is not a git repository";
+                        ErrorMessage = UiStrings.WorkspaceNotGitRepository;
                         IsRepository = false;
                         ClearChanges();
                     });

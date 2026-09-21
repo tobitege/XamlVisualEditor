@@ -1,8 +1,10 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dg="using:Avalonia.Controls"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.App.Views.CodeActionPickerDialog"
+        Classes="editor-chrome"
         x:DataType="vm:CodeActionPickerDialogViewModel"
         Width="520"
         Height="360"
@@ -19,10 +21,10 @@
                 HorizontalAlignment="Right"
                 Spacing="8"
                 Margin="0,8,0,0">
-      <Button Content="Apply"
+      <Button Content="{x:Static loc:UiStrings.Apply}"
               Command="{CompiledBinding ApplyCommand}"
               MinWidth="80" />
-      <Button Content="Cancel"
+      <Button Content="{x:Static loc:UiStrings.Cancel}"
               Command="{CompiledBinding CancelCommand}"
               MinWidth="80" />
     </StackPanel>
@@ -35,7 +37,7 @@
                 CanUserSortColumns="False"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>
-        <dg:DataGridTemplateColumn Header="Action" Width="*">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Action}" Width="*">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="vm:CodeActionItemViewModel">
               <StackPanel Spacing="2">

@@ -1,18 +1,20 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dc="using:XamlVisualEditor.Designer.Core"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.DesignerLayoutToolbar"
              x:DataType="dc:DesignSurfaceViewModel">
     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="4">
         <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
                       Width="26" Height="26" MinWidth="26" MinHeight="26" Padding="4"
                       VerticalAlignment="Top" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                      AutomationProperties.Name="Snap to grid" ToolTip.Tip="Snap moves and sizes to the grid">
-            <PathIcon Width="14" Height="14" Data="M0,0 H3 V3 H0 Z M5,0 H8 V3 H5 Z M10,0 H13 V3 H10 Z M0,5 H3 V8 H0 Z M5,5 H8 V8 H5 Z M10,5 H13 V8 H10 Z M0,10 H3 V13 H0 Z M5,10 H8 V13 H5 Z M10,10 H13 V13 H10 Z" />
+                      AutomationProperties.Name="{x:Static loc:UiStrings.SnapToGrid}" ToolTip.Tip="{x:Static loc:UiStrings.SnapToGridHint}">
+            <PathIcon Width="14" Height="14" Data="{x:Static vm:DesignerLayoutEditor.SnapToGridIconPath}" />
         </ToggleButton>
     <ItemsControl Grid.Column="1" ItemsSource="{CompiledBinding LayoutActions}"
                   IsEnabled="{CompiledBinding IsEditMode}"
-                  AutomationProperties.Name="Arrange selected controls">
+                  AutomationProperties.Name="{x:Static loc:UiStrings.ArrangeSelectedControls}">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>

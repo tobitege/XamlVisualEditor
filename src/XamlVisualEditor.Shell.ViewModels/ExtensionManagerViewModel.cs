@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
@@ -10,6 +10,8 @@ using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions.Hosting;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -32,6 +34,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync);
         InstallCommand = ReactiveCommand.CreateFromTask(InstallAsync);
         CheckUpdatesCommand = ReactiveCommand.CreateFromTask(CheckUpdatesAsync);
+        CloseCommand = ReactiveCommand.CreateFromObservable(() => CloseInteraction.Handle(Unit.Default));
 
         IObservable<bool> hasSelection = this.WhenAnyValue(x => x.SelectedPackage)
             .Select(item => item is not null);
@@ -61,7 +64,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         }
         catch (Exception ex)
         {
-            await UpdateUiAsync(() => StatusMessage = $"Extension refresh failed: {ex.Message}").ConfigureAwait(false);
+            await UpdateUiAsync(() => StatusMessage = string.Format(UiStrings.ExtensionRefreshFailed, (object?)(ex.Message))).ConfigureAwait(false);
         }
     }
 
@@ -78,6 +81,10 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
 
     public ReactiveCommand<Unit, Unit> InstallCommand { get; }
+
+    public Interaction<Unit, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
     public ReactiveCommand<Unit, Unit> UninstallCommand { get; }
 
@@ -119,7 +126,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
                 InstalledPackages.Add(item);
                 _itemSubscriptions.Add(Disposable.Create(() => item.EnabledChanged -= OnItemEnabledChanged));
             }
-            StatusMessage = InstalledPackages.Count == 0 ? "No extensions installed." : string.Empty;
+            StatusMessage = InstalledPackages.Count == 0 ? UiStrings.NoExtensionsInstalled : string.Empty;
         }).ConfigureAwait(false);
     }
 
@@ -128,7 +135,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         string? path = await _selectPackagePathAsync().ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(path))
         {
-            await UpdateUiAsync(() => StatusMessage = "Install canceled.").ConfigureAwait(false);
+            await UpdateUiAsync(() => StatusMessage = UiStrings.InstallCanceled).ConfigureAwait(false);
             return;
         }
 
@@ -138,12 +145,12 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
                 .ConfigureAwait(false);
             await _manager.SetEnabledAsync(info.Manifest.ExtensionId, true, CancellationToken.None)
                 .ConfigureAwait(false);
-            await UpdateUiAsync(() => StatusMessage = "Installed " + info.Manifest.ExtensionId).ConfigureAwait(false);
+            await UpdateUiAsync(() => StatusMessage = UiStrings.InstalledPrefix + info.Manifest.ExtensionId).ConfigureAwait(false);
             await RefreshAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            await UpdateUiAsync(() => StatusMessage = "Install failed: " + ex.Message).ConfigureAwait(false);
+            await UpdateUiAsync(() => StatusMessage = UiStrings.InstallFailedPrefix + ex.Message).ConfigureAwait(false);
         }
     }
 
@@ -158,12 +165,12 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         try
         {
             await _manager.UninstallAsync(extensionId, CancellationToken.None).ConfigureAwait(false);
-            await UpdateUiAsync(() => StatusMessage = "Uninstalled " + extensionId).ConfigureAwait(false);
+            await UpdateUiAsync(() => StatusMessage = UiStrings.UninstalledPrefix + extensionId).ConfigureAwait(false);
             await RefreshAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            await UpdateUiAsync(() => StatusMessage = "Uninstall failed: " + ex.Message).ConfigureAwait(false);
+            await UpdateUiAsync(() => StatusMessage = UiStrings.UninstallFailedPrefix + ex.Message).ConfigureAwait(false);
         }
     }
 
@@ -184,7 +191,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
                 item.LatestVersion = lookup.TryGetValue(item.ExtensionId, out ExtensionUpdateInfo? update)
                     ? update.Available.Manifest.Version : null;
             }
-            StatusMessage = updates.Count == 0 ? "Extensions are up to date." : "Updates available.";
+            StatusMessage = updates.Count == 0 ? UiStrings.ExtensionsCurrent : UiStrings.UpdatesAvailable;
         }).ConfigureAwait(false);
     }
 
@@ -205,15 +212,15 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
             await _manager.SetEnabledAsync(item.ExtensionId, enabled, CancellationToken.None)
                 .ConfigureAwait(false);
             await UpdateUiAsync(() => StatusMessage = enabled
-                ? "Enabled " + item.ExtensionId
-                : "Disabled " + item.ExtensionId).ConfigureAwait(false);
+                ? UiStrings.EnabledPrefix + item.ExtensionId
+                : UiStrings.DisabledPrefix + item.ExtensionId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             await UpdateUiAsync(() =>
             {
                 item.SetEnabledSilently(!enabled);
-                StatusMessage = "Enablement failed: " + ex.Message;
+                StatusMessage = UiStrings.EnablementFailedPrefix + ex.Message;
             }).ConfigureAwait(false);
         }
     }
@@ -273,8 +280,8 @@ public sealed partial class ExtensionPackageItemViewModel : ReactiveObject
     }
 
     public string UpdateLabel => string.IsNullOrWhiteSpace(LatestVersion)
-        ? "Up to date"
-        : "Update " + LatestVersion;
+        ? UiStrings.ExtensionUpToDate
+        : UiStrings.ExtensionUpdatePrefix + LatestVersion;
 
     public event EventHandler<bool>? EnabledChanged;
 

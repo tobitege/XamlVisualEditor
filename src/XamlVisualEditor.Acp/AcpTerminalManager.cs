@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -14,6 +14,13 @@ namespace XamlVisualEditor.Acp;
 public sealed class AcpTerminalManager
 {
     private readonly ConcurrentDictionary<string, TerminalState> _terminals = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, JsonElement> _releasedOutput = new(StringComparer.Ordinal);
+
+    public JsonElement? GetOutput(string terminalId)
+    {
+        if (_terminals.TryGetValue(terminalId, out TerminalState? state)) return CreateOutput(state);
+        return _releasedOutput.TryGetValue(terminalId, out JsonElement output) ? output : null;
+    }
 
     public void Register(AcpProtocolClient client)
     {
@@ -45,6 +52,7 @@ public sealed class AcpTerminalManager
             {
             }
         }
+        _releasedOutput.Clear();
     }
 
     private async Task<JsonElement?> HandleCreateAsync(JsonElement? parameters, CancellationToken ct)
@@ -121,16 +129,20 @@ public sealed class AcpTerminalManager
     {
         string terminalId = RequireString(parameters, "terminalId");
         TerminalState state = GetTerminal(terminalId);
+        return Task.FromResult<JsonElement?>(CreateOutput(state));
+    }
 
+    private static JsonElement CreateOutput(TerminalState state)
+    {
         (string output, bool truncated) = state.Output.GetSnapshot();
         TerminalExitStatus? exitStatus = state.GetExitStatusIfCompleted();
 
-        return Task.FromResult<JsonElement?>(JsonSerializer.SerializeToElement(new
+        return JsonSerializer.SerializeToElement(new
         {
             output,
             truncated,
             exitStatus
-        }));
+        }, JsonSerializerOptions.Web);
     }
 
     private Task<JsonElement?> HandleKillAsync(JsonElement? parameters, CancellationToken ct)
@@ -152,7 +164,7 @@ public sealed class AcpTerminalManager
     {
         string terminalId = RequireString(parameters, "terminalId");
         TerminalState state = GetTerminal(terminalId);
-        TerminalExitStatus exitStatus = await state.WaitForExitAsync().ConfigureAwait(false);
+        TerminalExitStatus exitStatus = await state.WaitForExitAsync().WaitAsync(ct).ConfigureAwait(false);
         return JsonSerializer.SerializeToElement(new { exitCode = exitStatus.ExitCode, signal = exitStatus.Signal });
     }
 
@@ -174,6 +186,8 @@ public sealed class AcpTerminalManager
         }
 
         state.Kill("SIGKILL");
+        await state.WaitForExitAsync().ConfigureAwait(false);
+        _releasedOutput[terminalId] = CreateOutput(state);
         await state.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -326,6 +340,7 @@ public sealed class AcpTerminalManager
 
         public void Kill(string signal)
         {
+            if (Process.HasExited) return;
             if (_exitSignal is null)
             {
                 _exitSignal = signal;
@@ -368,6 +383,7 @@ public sealed class AcpTerminalManager
             try
             {
                 await Process.WaitForExitAsync().ConfigureAwait(false);
+                await Task.WhenAll(StdOutTask, StdErrTask).ConfigureAwait(false);
             }
             catch
             {

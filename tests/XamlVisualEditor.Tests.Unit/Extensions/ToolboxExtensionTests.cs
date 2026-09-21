@@ -1,4 +1,4 @@
-using XamlVisualEditor.Core;
+﻿using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Debugging;
@@ -7,6 +7,8 @@ using XamlVisualEditor.ToolboxExtension;
 using System.Reactive.Threading.Tasks;
 using ToolboxExtensionEntry = XamlVisualEditor.ToolboxExtension.ToolboxExtension;
 using Xunit;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
@@ -97,7 +99,7 @@ public sealed class ToolboxExtensionTests
             new object?[] { "Button" },
             CancellationToken.None);
 
-        Assert.Contains(window.Messages, message => message.Contains("expects arguments"));
+        Assert.Contains(UiStrings.ToolboxArgumentsRequired, window.Messages);
     }
 
     private static ExtensionContext CreateContext(

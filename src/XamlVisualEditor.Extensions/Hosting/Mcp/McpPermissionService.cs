@@ -1,5 +1,7 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;
 
@@ -23,6 +25,8 @@ public sealed class McpPermissionService
     private readonly ISettings _settings;
     private readonly IWindow _window;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public event Action<string?>? PermissionsRevoked;
 
     public McpPermissionService(ISettings settings, IWindow window)
     {
@@ -57,6 +61,7 @@ public sealed class McpPermissionService
 
                 states[workspaceId] = renewed;
                 await SaveStatesAsync(states, ct).ConfigureAwait(false);
+                PermissionsRevoked?.Invoke(workspaceId);
                 return renewed;
             }
 
@@ -96,28 +101,38 @@ public sealed class McpPermissionService
             return;
         }
 
-        Dictionary<string, McpWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
-        if (states.Remove(workspaceId))
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            Dictionary<string, McpWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
+            if (states.Remove(workspaceId))
+                await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            PermissionsRevoked?.Invoke(workspaceId);
         }
+        finally { _gate.Release(); }
     }
 
-    public Task ClearAllAsync(CancellationToken ct)
+    public async Task ClearAllAsync(CancellationToken ct)
     {
-        return SaveStatesAsync(new Dictionary<string, McpWorkspacePermissionState>(StringComparer.Ordinal), ct);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await SaveStatesAsync(new Dictionary<string, McpWorkspacePermissionState>(StringComparer.Ordinal), ct).ConfigureAwait(false);
+            PermissionsRevoked?.Invoke(null);
+        }
+        finally { _gate.Release(); }
     }
 
     private async Task<McpWorkspacePermissionState?> PromptForConsentAsync(CancellationToken ct)
     {
         IReadOnlyList<QuickPickItem> items = new[]
         {
-            new QuickPickItem("Allow read-only", "Read files, diagnostics, and editor state", null),
-            new QuickPickItem("Allow full access", "Read and write files, commands, terminals", null),
-            new QuickPickItem("Deny", "Block this client", null)
+            new QuickPickItem(UiStrings.AllowReadOnly, UiStrings.ReadFilesDiagnosticsEditor, null),
+            new QuickPickItem(UiStrings.AllowFullAccess, UiStrings.FullAccessDescription, null),
+            new QuickPickItem(UiStrings.Deny, UiStrings.BlockClient, null)
         };
 
-        QuickPickItem? choice = await _window.ShowQuickPickAsync(items, new QuickPickOptions("MCP access", false), ct).ConfigureAwait(false);
+        QuickPickItem? choice = await _window.ShowQuickPickAsync(items, new QuickPickOptions(UiStrings.McpAccess, false), ct).ConfigureAwait(false);
         if (choice is null)
         {
             if (_window is InMemoryWindow or NullWindow)
@@ -128,12 +143,14 @@ public sealed class McpPermissionService
             return null;
         }
 
-        if (string.Equals(choice.Label, "Deny", StringComparison.OrdinalIgnoreCase))
+        bool readOnly = string.Equals(choice.Label, items[0].Label, StringComparison.Ordinal);
+        bool fullAccess = string.Equals(choice.Label, items[1].Label, StringComparison.Ordinal);
+        if (!readOnly && !fullAccess)
         {
             return null;
         }
 
-        McpAccessLevel accessLevel = string.Equals(choice.Label, "Allow full access", StringComparison.OrdinalIgnoreCase)
+        McpAccessLevel accessLevel = fullAccess
             ? McpAccessLevel.Full
             : McpAccessLevel.ReadOnly;
 

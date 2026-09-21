@@ -152,6 +152,12 @@ public sealed class ProjectModel
     /// <summary>Gets the primary output assembly path for the project, if known.</summary>
     public string? OutputAssemblyPath { get; init; }
 
+    /// <summary>Gets the isolated runtime assembly directory, when a local snapshot is configured.</summary>
+    public string? AssemblySnapshotDirectory { get; init; }
+
+    /// <summary>Gets the preview application selected by the local snapshot configuration.</summary>
+    public string? PreviewApplicationAssemblyPath { get; init; }
+
     /// <summary>Gets the target framework for this project instance, if known.</summary>
     public string? TargetFramework { get; init; }
 

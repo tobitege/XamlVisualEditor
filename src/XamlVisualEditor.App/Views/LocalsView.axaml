@@ -1,12 +1,13 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.LocalsView"
              x:DataType="vm:LocalsViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <TextBlock Text="Locals" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <TextBlock Text="{x:Static loc:UiStrings.Locals}" FontWeight="SemiBold" VerticalAlignment="Center" />
     </StackPanel>
 
     <dg:DataGrid ItemsSource="{CompiledBinding Items}"
@@ -14,10 +15,10 @@
                 GridLinesVisibility="None"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>
-        <dg:DataGridTextColumn Header="Scope" Binding="{CompiledBinding ScopeName}" Width="*" />
-        <dg:DataGridTextColumn Header="Name" Binding="{CompiledBinding Name}" Width="*" />
-        <dg:DataGridTextColumn Header="Value" Binding="{CompiledBinding Value}" Width="2*" />
-        <dg:DataGridTextColumn Header="Type" Binding="{CompiledBinding TypeName}" Width="*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Scope}" Binding="{CompiledBinding ScopeName}" Width="*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Name}" Binding="{CompiledBinding Name}" Width="*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Value}" Binding="{CompiledBinding Value}" Width="2*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Type}" Binding="{CompiledBinding TypeName}" Width="*" />
       </dg:DataGrid.Columns>
     </dg:DataGrid>
   </DockPanel>

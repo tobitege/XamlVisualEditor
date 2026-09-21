@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions.Debugging;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -131,28 +133,28 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
     {
         if (_installer is null)
         {
-            StatusText = "Debug tool installer unavailable.";
+            StatusText = UiStrings.DebugInstallerUnavailable;
             return;
         }
 
         IsBusy = true;
-        StatusText = "Downloading netcoredbg...";
+        StatusText = UiStrings.DownloadingNetcoredbg;
         try
         {
             string? path = await _installer.EnsureNetcoredbgAsync(_confirmAsync).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 AdapterPath = path;
-                StatusText = "netcoredbg installed.";
+                StatusText = UiStrings.NetcoredbgInstalled;
             }
             else
             {
-                StatusText = "netcoredbg download cancelled.";
+                StatusText = UiStrings.NetcoredbgDownloadCanceled;
             }
         }
         catch (Exception ex)
         {
-            StatusText = $"Download failed: {ex.Message}";
+            StatusText = string.Format(UiStrings.DownloadFailed, (object?)(ex.Message));
         }
         finally
         {

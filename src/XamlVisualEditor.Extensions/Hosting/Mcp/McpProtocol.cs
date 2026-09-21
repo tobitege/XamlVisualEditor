@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,10 +9,10 @@ namespace XamlVisualEditor.Extensions.Hosting.Mcp;
 public static class McpProtocol
 {
     /// <summary>Current MCP protocol version.</summary>
-    public const string ProtocolVersion = "2024-11-05";
+    public const string ProtocolVersion = "2025-11-25";
 
     public const string InitializeMethod = "initialize";
-    public const string InitializedNotification = "initialized";
+    public const string InitializedNotification = "notifications/initialized";
 
     public const string ToolsListMethod = "tools/list";
     public const string ToolsCallMethod = "tools/call";
@@ -63,7 +63,6 @@ public sealed record McpServerCapabilities(
     McpToolsCapability Tools,
     McpResourcesCapability Resources,
     McpPromptsCapability Prompts,
-    McpLoggingCapability Logging,
     object? Experimental = null);
 
 /// <summary>Tools capability.</summary>
@@ -74,9 +73,6 @@ public sealed record McpResourcesCapability(bool Subscribe = false, bool ListCha
 
 /// <summary>Prompts capability.</summary>
 public sealed record McpPromptsCapability(bool ListChanged = false);
-
-/// <summary>Logging capability.</summary>
-public sealed record McpLoggingCapability(bool SupportsLevel = true);
 
 /// <summary>Tool descriptor.</summary>
 public sealed record McpToolDefinition(
@@ -158,7 +154,7 @@ public sealed record McpPromptGetParams(
 /// <summary>Prompt message.</summary>
 public sealed record McpPromptMessage(
     string Role,
-    IReadOnlyList<McpContent> Content);
+    McpContent Content);
 
 /// <summary>Prompt response payload.</summary>
 public sealed record McpPromptsGetResult(

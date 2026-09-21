@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -17,6 +17,8 @@ using Avalonia.Controls.DataGridHierarchical;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.OutputExtension;
 
@@ -61,7 +63,7 @@ public sealed class DiagnosticEntryViewModel
     public DateTimeOffset FirstSeen { get; }
     public string FirstSeenTime => FirstSeen.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
     public string FirstSeenDetails => FirstSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
-    public string Tooltip => $"{Message}{Environment.NewLine}First seen: {FirstSeenDetails}";
+    public string Tooltip => string.Format(UiStrings.DiagnosticFirstSeen, (object?)(Message), (object?)(Environment.NewLine), (object?)(FirstSeenDetails));
     public string Message { get; }
     public string Summary => Message.ReplaceLineEndings(" ");
     public string FilePath { get; }
@@ -280,7 +282,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         string? selectedId = SelectedChannel?.Id;
         _channels.Clear();
 
-        _channels.Add(new DiagnosticsChannelViewModel(AllChannelsId, "All"));
+        _channels.Add(new DiagnosticsChannelViewModel(AllChannelsId, UiStrings.FilterAll));
         foreach (DiagnosticsChannelInfo channel in channels)
         {
             _channels.Add(new DiagnosticsChannelViewModel(channel.Id, channel.DisplayName));
@@ -506,7 +508,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             string key = $"file:{entry.FilePath}";
             if (!groups.TryGetValue(key, out ProblemsGroupViewModel? group))
             {
-                string title = string.IsNullOrWhiteSpace(entry.FilePath) ? "Workspace" : Path.GetFileName(entry.FilePath);
+                string title = string.IsNullOrWhiteSpace(entry.FilePath) ? UiStrings.Workspace : Path.GetFileName(entry.FilePath);
                 group = new ProblemsGroupViewModel(key, title)
                 {
                     IsExpanded = !_collapsedGroups.Contains(key)

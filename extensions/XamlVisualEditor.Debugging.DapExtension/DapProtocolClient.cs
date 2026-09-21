@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Debugging.Dap;
 
@@ -109,7 +111,7 @@ public sealed class DapProtocolClient : IAsyncDisposable
         {
             string? message = root.TryGetProperty("message", out JsonElement messageElement)
                 ? messageElement.GetString()
-                : "DAP request failed";
+                : UiStrings.DapRequestFailed;
             tcs.TrySetException(new InvalidOperationException(message));
             return;
         }

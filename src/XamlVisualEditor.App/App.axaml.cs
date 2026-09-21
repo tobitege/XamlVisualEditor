@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -49,6 +49,8 @@ using OutputExtensionEntry = XamlVisualEditor.OutputExtension.OutputExtension;
 using XamlEditorExtensionEntry = XamlVisualEditor.XamlEditorExtension.XamlEditorExtension;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
 
+using XamlVisualEditor.Core.Localization;
+
 namespace XamlVisualEditor.App;
 
 /// <summary>
@@ -56,6 +58,8 @@ namespace XamlVisualEditor.App;
 /// </summary>
 public sealed class App : Application
 {
+    private readonly EditorOptionsStore _editorOptions = new(System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XamlVisualEditor", "editor-options.json"));
     /// <summary>
     /// Gets the service provider for DI.
     /// </summary>
@@ -63,7 +67,12 @@ public sealed class App : Application
 
     public override void Initialize()
     {
+        var culture = System.Globalization.CultureInfo.GetCultureInfo(_editorOptions.Current.Language);
+        XamlVisualEditor.Core.Localization.UiStrings.Culture = culture;
+        System.Globalization.CultureInfo.CurrentUICulture = culture;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
         AvaloniaXamlLoader.Load(this);
+        LocalizedResources.Apply(this);
         DialogAppearance.Initialize();
     }
 
@@ -72,7 +81,7 @@ public sealed class App : Application
         // Build the DI container
         Log.Information("Configuring application services");
         ServiceCollection services = new();
-        ConfigureServices(services);
+        ConfigureServices(services, _editorOptions);
         Services = services.BuildServiceProvider();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -144,13 +153,14 @@ public sealed class App : Application
             if (!cancellationToken.IsCancellationRequested)
             {
                 await services.GetRequiredService<IWindow>().ShowErrorMessageAsync(
-                    $"Application startup failed: {exception.Message}", cancellationToken);
+                    string.Format(UiStrings.ApplicationStartupFailed, (object?)(exception.Message)), cancellationToken);
             }
         }
     }
 
-    private static void ConfigureServices(ServiceCollection services)
+    private static void ConfigureServices(ServiceCollection services, EditorOptionsStore editorOptions)
     {
+        services.AddSingleton(editorOptions);
 #if DEBUG
         services.AddSingleton<CdpDiagnostics>();
 #endif
@@ -283,6 +293,13 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
-        services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton(sp =>
+        {
+            string profileDirectory = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XamlVisualEditor");
+            System.IO.Directory.CreateDirectory(profileDirectory);
+            string recentFilesPath = System.IO.Path.Combine(profileDirectory, "recent-files.json");
+            return ActivatorUtilities.CreateInstance<MainWindowViewModel>(sp, recentFilesPath);
+        });
     }
 }

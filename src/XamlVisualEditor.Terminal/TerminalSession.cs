@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -166,9 +166,9 @@ public sealed class TerminalSession : ITerminalSession
 
     public void Dispose()
     {
+        _process?.Dispose();
         _cts?.Cancel();
         _cts?.Dispose();
-        _process?.Dispose();
         _sequenceLogger?.Dispose();
         SignalExited(null);
     }

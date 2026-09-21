@@ -7,7 +7,7 @@ namespace XamlVisualEditor.Designer.Core;
 /// <summary>A named theme option, distinct from the editor theme and the light/dark variant.</summary>
 public sealed record DesignerThemeChoice(DesignerThemeSelection? Selection, string DisplayName)
 {
-    public static readonly DesignerThemeChoice ProjectDefault = new(null, "Project default");
+    public static readonly DesignerThemeChoice ProjectDefault = new(null, "Theme default");
 }
 
 public sealed partial class DesignSurfaceViewModel

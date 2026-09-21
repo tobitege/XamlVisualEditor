@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
@@ -32,14 +32,18 @@ public sealed class McpServer : IAsyncDisposable
 
     public event EventHandler<McpConnectionChangedEventArgs>? ConnectionChanged;
 
-    public int ConnectionCount => _connections.Count;
+    public int ConnectionCount => _sessions.Count;
 
     public McpServer(McpServerOptions options, IEnumerable<IMcpRequestHandler> handlers, McpSessionRegistry sessions)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _handlers = handlers?.ToList() ?? throw new ArgumentNullException(nameof(handlers));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        _sessions.Changed += OnSessionsChanged;
     }
+
+    private void OnSessionsChanged() => ConnectionChanged?.Invoke(this,
+        new McpConnectionChangedEventArgs(ConnectionCount, DateTimeOffset.UtcNow));
 
     public void Start(CancellationToken ct)
     {
@@ -55,14 +59,13 @@ public sealed class McpServer : IAsyncDisposable
             handler.Register(_router);
         }
 
-        if (_options.EnableStdio)
-        {
-            StartStdio(_cts.Token);
-        }
-
         if (_options.EnableHttp)
         {
             StartHttp(_cts.Token);
+        }
+        if (_options.EnableStdio)
+        {
+            StartStdio(_cts.Token);
         }
     }
 
@@ -88,7 +91,7 @@ public sealed class McpServer : IAsyncDisposable
             return;
         }
 
-        _httpServer = new McpHttpServer(_options.HttpPort, _options.HttpPath, _router);
+        _httpServer = new McpHttpServer(_options.HttpPort, _options.HttpPath, _router, _sessions);
         _acceptLoops.Add(_httpServer.StartAsync(ct));
     }
 
@@ -99,7 +102,6 @@ public sealed class McpServer : IAsyncDisposable
             _connections.Add(connection);
         }
 
-        ConnectionChanged?.Invoke(this, new McpConnectionChangedEventArgs(_connections.Count, DateTimeOffset.UtcNow));
     }
 
     private void RemoveConnection(McpJsonRpcConnection connection)
@@ -110,12 +112,12 @@ public sealed class McpServer : IAsyncDisposable
             _sessions.Remove(connection);
         }
 
-        ConnectionChanged?.Invoke(this, new McpConnectionChangedEventArgs(_connections.Count, DateTimeOffset.UtcNow));
     }
 
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
+        _sessions.Changed -= OnSessionsChanged;
         Task[] loops;
         lock (_sync)
         {
@@ -151,6 +153,7 @@ public sealed class McpServer : IAsyncDisposable
         }
 
         _cts?.Dispose();
+        _sessions.Revoke(null);
     }
 
     private sealed class McpHttpServer : IAsyncDisposable
@@ -158,12 +161,13 @@ public sealed class McpServer : IAsyncDisposable
         private readonly int _port;
         private readonly string _path;
         private readonly McpRequestRouter _router;
+        private readonly McpSessionRegistry _sessions;
         private readonly HttpListener _listener = new();
         private CancellationTokenSource? _cts;
         private Task? _loop;
         private CancellationTokenRegistration _shutdownRegistration;
 
-        public McpHttpServer(int port, string path, McpRequestRouter router)
+        public McpHttpServer(int port, string path, McpRequestRouter router, McpSessionRegistry sessions)
         {
             _port = port;
             string normalized = string.IsNullOrWhiteSpace(path) ? "/mcp/" : path;
@@ -178,6 +182,7 @@ public sealed class McpServer : IAsyncDisposable
 
             _path = normalized;
             _router = router;
+            _sessions = sessions;
         }
 
         public Task StartAsync(CancellationToken ct)
@@ -236,65 +241,109 @@ public sealed class McpServer : IAsyncDisposable
         {
             HttpListenerRequest request = context.Request;
             HttpListenerResponse response = context.Response;
-
-            if (!string.Equals(request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
-            {
-                response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
-                response.Close();
-                return;
-            }
-
-            using JsonDocument message = await JsonDocument.ParseAsync(request.InputStream, cancellationToken: ct).ConfigureAwait(false);
-            JsonElement root = message.RootElement;
-
-            if (!root.TryGetProperty("id", out JsonElement idElement) || !root.TryGetProperty("method", out JsonElement methodElement))
-            {
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                response.Close();
-                return;
-            }
-
-            string? method = methodElement.GetString();
-            if (string.IsNullOrWhiteSpace(method))
-            {
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                response.Close();
-                return;
-            }
-
-            string? sessionToken = request.Headers["X-Mcp-Session"];
-            McpRequestContext ctx = new(null, sessionToken);
-            JsonElement? parameters = root.TryGetProperty("params", out JsonElement paramsElement)
-                ? paramsElement.Clone()
-                : null;
-
-            if (!TryGetIdValue(idElement, out object? idValue) || idValue is null)
-            {
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                response.Close();
-                return;
-            }
-
-            object payload;
             try
             {
-                object? result = await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
-                payload = new { jsonrpc = "2.0", id = idValue, result };
-            }
-            catch (McpJsonRpcException ex)
-            {
-                payload = new { jsonrpc = "2.0", id = idValue, error = new { code = ex.Code, message = ex.Message } };
-            }
-            catch (Exception ex)
-            {
-                payload = new { jsonrpc = "2.0", id = idValue, error = new { code = -32000, message = ex.Message } };
-            }
+                string? origin = request.Headers["Origin"];
+                if (origin is not null && (!Uri.TryCreate(origin, UriKind.Absolute, out Uri? originUri)
+                    || originUri.Scheme != request.Url?.Scheme || originUri.Authority != request.Url?.Authority))
+                {
+                    response.StatusCode = (int)HttpStatusCode.Forbidden;
+                    return;
+                }
 
-            byte[] body = JsonSerializer.SerializeToUtf8Bytes(payload, McpMessageFraming.SerializerOptions);
-            response.ContentType = "application/json";
-            response.ContentLength64 = body.Length;
-            await response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
-            response.Close();
+                string? sessionToken = request.Headers["Mcp-Session-Id"];
+                if (request.HttpMethod == "DELETE")
+                {
+                    response.StatusCode = string.IsNullOrEmpty(sessionToken) ? (int)HttpStatusCode.BadRequest
+                        : _sessions.Remove(sessionToken) ? (int)HttpStatusCode.OK : (int)HttpStatusCode.NotFound;
+                    return;
+                }
+                if (request.HttpMethod != "POST")
+                {
+                    response.Headers["Allow"] = "POST, DELETE";
+                    response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+                    return;
+                }
+                if (request.ContentType?.Split(';')[0].Trim() != "application/json")
+                {
+                    response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
+                    return;
+                }
+                string? protocolVersion = request.Headers["MCP-Protocol-Version"];
+                if (protocolVersion is not null && protocolVersion != McpProtocol.ProtocolVersion)
+                {
+                    response.StatusCode = (int)HttpStatusCode.BadRequest;
+                    return;
+                }
+
+                using JsonDocument message = await JsonDocument.ParseAsync(request.InputStream, cancellationToken: ct).ConfigureAwait(false);
+                JsonElement root = message.RootElement;
+                if (root.ValueKind != JsonValueKind.Object
+                    || !root.TryGetProperty("jsonrpc", out JsonElement version)
+                    || version.ValueKind != JsonValueKind.String || version.GetString() != "2.0")
+                {
+                    response.StatusCode = (int)HttpStatusCode.BadRequest;
+                    return;
+                }
+                string? method = root.TryGetProperty("method", out JsonElement methodElement)
+                    && methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
+                bool hasId = root.TryGetProperty("id", out JsonElement idElement);
+                McpRequestContext ctx = new(null, sessionToken);
+                if (method != McpProtocol.InitializeMethod && _sessions.Resolve(ctx) is null)
+                {
+                    response.StatusCode = string.IsNullOrEmpty(sessionToken)
+                        ? (int)HttpStatusCode.BadRequest : (int)HttpStatusCode.NotFound;
+                    return;
+                }
+                JsonElement? parameters = root.TryGetProperty("params", out JsonElement paramsElement) ? paramsElement.Clone() : null;
+                if (!hasId && !string.IsNullOrEmpty(method))
+                {
+                    if (method == McpProtocol.InitializeMethod)
+                    {
+                        response.StatusCode = (int)HttpStatusCode.BadRequest;
+                        return;
+                    }
+                    if (method == McpProtocol.InitializedNotification)
+                        await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
+                    response.StatusCode = (int)HttpStatusCode.Accepted;
+                    return;
+                }
+                if (string.IsNullOrEmpty(method) || !hasId || !TryGetIdValue(idElement, out object? idValue) || idValue is null)
+                {
+                    response.StatusCode = (int)HttpStatusCode.BadRequest;
+                    return;
+                }
+
+                object payload;
+                try
+                {
+                    object? result = await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
+                    if (result is McpInitializeResult initialized)
+                        response.Headers["Mcp-Session-Id"] = initialized.SessionToken;
+                    payload = new { jsonrpc = "2.0", id = idValue, result = result ?? new { } };
+                }
+                catch (McpJsonRpcException ex)
+                {
+                    payload = new { jsonrpc = "2.0", id = idValue, error = new { code = ex.Code, message = ex.Message } };
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    payload = new { jsonrpc = "2.0", id = idValue, error = new { code = -32603, message = ex.Message } };
+                }
+                byte[] body = JsonSerializer.SerializeToUtf8Bytes(payload, McpMessageFraming.SerializerOptions);
+                response.ContentType = "application/json";
+                response.ContentLength64 = body.Length;
+                await response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
+            }
+            catch (JsonException)
+            {
+                response.StatusCode = (int)HttpStatusCode.BadRequest;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+            }
+            catch (HttpListenerException) { }
+            finally { response.Close(); }
         }
 
         private static bool TryGetIdValue(JsonElement element, out object? id)

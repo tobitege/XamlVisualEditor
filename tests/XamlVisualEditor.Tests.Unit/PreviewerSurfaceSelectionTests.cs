@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.Json;
 using System.Threading.Channels;
 using Avalonia;
@@ -10,9 +10,11 @@ using Avalonia.Remote.Protocol;
 using Avalonia.Remote.Protocol.Viewport;
 using Avalonia.Threading;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Workspace;
 using Xunit;
 using RemoteInput = Avalonia.Remote.Protocol.Input;
 
@@ -20,6 +22,104 @@ namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class PreviewerSurfaceSelectionTests
 {
+    [AvaloniaFact]
+    public async Task ExternalSurfaceKeyboardDuplicatesSelectsAndDeletesWithoutLocalControls()
+    {
+        const string original = "<Canvas xmlns=\"https://github.com/avaloniaui\" Width=\"200\" Height=\"100\"><Button Name=\"Original\" Width=\"40\" Height=\"20\" /></Canvas>";
+        string path = Path.Combine(Path.GetTempPath(), "xve-external-keys-" + Guid.NewGuid().ToString("N") + ".axaml");
+        await File.WriteAllTextAsync(path, original);
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(typeof(Control).Assembly.Location);
+        using MainWindowViewModel main = new(metadataService: metadata);
+        await main.OpenFileAsync(path);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDesignerDocument);
+        document.UseExternalPreviewer = true;
+        using PreviewerTcpSession session = new(path, log: null);
+        PreviewerSurfaceControl surface = new() { Document = document, Session = session };
+        Window window = new() { Content = surface, Width = 300, Height = 200 };
+        async Task PublishTree()
+        {
+            MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
+            Guid revision = Guid.NewGuid();
+            await session.SendUpdateXamlAsync(document.SyncEngine.CurrentText!, "Library.dll", "/Keys.axaml", 200, 100, revision);
+            List<DesignerHostNode> nodes = new()
+            {
+                new(root.Id, 1, null, "Avalonia.Controls.Canvas", null, 0, 0, 200, 100, true,
+                    Layout: new() { Kind = "Canvas", Width = 200, Height = 100 })
+            };
+            int index = 0;
+            foreach (MutableAstObjectNode child in root.Children.OfType<MutableAstObjectNode>())
+                nodes.Add(new(child.Id, ++index + 1, 1, "Avalonia.Controls.Button", child.GetPropertyValue("Name"), index * 50, 10, 40, 20, true));
+            DesignerHostSnapshot tree = new(revision, 200, 100, nodes);
+            Assert.True(session.TryReceiveDesignTree(PreviewerTcpSession.DesignTreeMessagePrefix + JsonSerializer.Serialize(tree)));
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        }
+        try
+        {
+            window.Show();
+            await PublishTree();
+            MutableAstObjectNode button = Assert.Single(document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>());
+            document.SetSelectedNode(button.Id, SyncSource.TreeView);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            Assert.True(surface.Focus());
+            window.KeyPress(Key.D, RawInputModifiers.Control, PhysicalKey.D, null);
+            MutableAstObjectNode[] children = document.SyncEngine.CurrentDocument.Root.Children.OfType<MutableAstObjectNode>().ToArray();
+            Assert.Equal(2, children.Length);
+            MutableAstObjectNode duplicate = Assert.Single(children, child => child.Id != button.Id);
+            Assert.NotEqual("Original", duplicate.GetPropertyValue("Name"));
+            Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
+
+            await PublishTree();
+            document.SetSelectedNode(duplicate.Id, SyncSource.TreeView);
+            window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+            Assert.Equal(2, document.DesignSurface.Selection.SelectedItems.Count);
+            document.SetSelectedNode(duplicate.Id, SyncSource.TreeView);
+            window.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+            Assert.Single(document.SyncEngine.CurrentDocument.Root.Children.OfType<MutableAstObjectNode>());
+            Assert.Empty(document.DesignSurface.ControlMap);
+            Assert.Equal(2, document.SyncEngine.UndoRedo.UndoCount);
+            document.SyncEngine.Undo();
+            document.SyncEngine.Undo();
+            Assert.Equal(original, document.SyncEngine.CurrentText);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task SynchronizedSelectionPublishesCompleteStateWithoutEchoingDocumentChanges()
+    {
+        const string xaml = "<Canvas xmlns=\"https://github.com/avaloniaui\"><Button /><TextBox /></Canvas>";
+        using DesignerDocumentViewModel document = new("SelectionState.axaml") { UseExternalPreviewer = true };
+        await document.SyncEngine.LoadAsync(xaml);
+        DesignItem[] items = document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>()
+            .Select(node => new DesignItem(node)).ToArray();
+        Guid? selectedNode = document.SelectedNodeId;
+        List<int> publishedCounts = new();
+        List<bool> synchronized = new();
+        document.DesignSurface.Selection.SelectionChanged += selection =>
+        {
+            publishedCounts.Add(selection.Count);
+            synchronized.Add(document.DesignSurface.IsSelectionSyncing);
+        };
+
+        document.DesignSurface.SelectDesignItemsFromSync(new[] { items[0], items[1], items[0] });
+        Assert.Equal(items, document.DesignSurface.Selection.SelectedItems);
+        Assert.Same(items[0], document.DesignSurface.Selection.PrimarySelection);
+        Assert.All(items, item => Assert.True(item.IsSelected));
+
+        document.DesignSurface.SelectDesignItemsFromSync(document.DesignSurface.Selection.SelectedItems);
+        Assert.Equal(items, document.DesignSurface.Selection.SelectedItems);
+        document.DesignSurface.SelectDesignItemsFromSync(Array.Empty<DesignItem>());
+
+        Assert.Equal(new[] { 2, 2, 0 }, publishedCounts);
+        Assert.All(synchronized, value => Assert.True(value));
+        Assert.All(items, item => Assert.False(item.IsSelected));
+        Assert.Null(document.DesignSurface.Selection.PrimarySelection);
+        Assert.Equal(selectedNode, document.SelectedNodeId);
+        Assert.Equal(xaml, document.SyncEngine.GetCurrentText());
+        Assert.Equal(0, document.SyncEngine.UndoRedo.UndoCount);
+    }
+
     [Fact]
     public void SharedSpacingGuidesUseNearestOverlappingNeighbors()
     {
@@ -173,11 +273,45 @@ public sealed class PreviewerSurfaceSelectionTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task DocumentChangesRejectPreviousGeometryBeforeTheNextPreviewRequest()
+    {
+        const string xaml = "<Canvas xmlns=\"https://github.com/avaloniaui\"><Button Name=\"Moved\" Canvas.Left=\"16\" Width=\"120\" /></Canvas>";
+        using DesignerDocumentViewModel document = new("PendingGeometry.axaml") { UseExternalPreviewer = true };
+        await document.SyncEngine.LoadAsync(xaml);
+        MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
+        using PreviewerTcpSession session = new(document.FilePath, log: null);
+        document.PreviewerSession = session;
+        Guid initial = Guid.NewGuid();
+        await session.SendUpdateXamlAsync(xaml, "Library.dll", "/PendingGeometry.axaml", 200, 100, initial);
+        DesignerHostSnapshot snapshot = new(initial, 200, 100,
+            new[] { new DesignerHostNode(root.Id, 1, null, "Avalonia.Controls.Canvas", null, 0, 0, 200, 100, true) });
+        string Message(DesignerHostSnapshot value) => PreviewerTcpSession.DesignTreeMessagePrefix
+            + System.Text.Json.JsonSerializer.Serialize(value);
+        session.TryReceiveDesignTree(Message(snapshot));
+        Assert.NotNull(session.LastDesignTree);
+
+        MutableAstObjectNode button = Assert.IsType<MutableAstObjectNode>(root.Children[0]);
+        button.SetPropertyValue("Canvas.Left", "80");
+        document.SyncEngine.NotifyAstChanged(document.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
+
+        Assert.Null(session.LastDesignTree);
+        session.TryReceiveDesignTree(Message(snapshot));
+        Assert.Null(session.LastDesignTree);
+        Guid current = Guid.NewGuid();
+        await session.SendUpdateXamlAsync(document.SyncEngine.GetCurrentText(), "Library.dll",
+            "/PendingGeometry.axaml", 200, 100, current);
+        session.TryReceiveDesignTree(Message(snapshot with { RenderId = current }));
+        Assert.Equal(current, session.LastDesignTree?.RenderId);
+    }
+
     [AvaloniaFact(Timeout = 30000)]
     public async Task PreviewSelectionUsesInstanceGeometryClippingAndTheCurrentDocumentRevision()
     {
         const string xaml = "<Canvas xmlns=\"https://github.com/avaloniaui\"><Button Name=\"Repeated\" Content=\"Initial\" /><TextBox Name=\"Other\" /></Canvas>";
         using DesignerDocumentViewModel document = new("PreviewSelection.axaml") { UseExternalPreviewer = true };
+        int publishedSelectionCount = -1;
+        document.DesignSurface.Selection.SelectionChanged += items => publishedSelectionCount = items.Count;
         document.DesignSurface.SnapToGrid = false;
         document.DesignSurface.SnapLinesEnabled = false;
         document.DesignSurface.Zoom = 2;
@@ -377,6 +511,7 @@ public sealed class PreviewerSurfaceSelectionTests
             Assert.Equal(2, document.DesignSurface.Selection.SelectedItems.Count);
             Assert.Contains(document.DesignSurface.Selection.SelectedItems, item => item.AstNodeId == other.Id);
             Assert.Contains(document.DesignSurface.Selection.SelectedItems, item => item.AstNodeId == button.Id);
+            Assert.Equal(2, publishedSelectionCount);
             Assert.Equal(beforeMarquee, document.SyncEngine.GetCurrentText());
             document.DesignSurface.CanvasGap = 8;
             Assert.Equal(new Thickness(8), surface.Margin);

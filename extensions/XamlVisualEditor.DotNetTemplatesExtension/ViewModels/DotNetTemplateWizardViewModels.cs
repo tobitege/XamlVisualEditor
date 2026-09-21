@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.ObjectModel;
@@ -13,6 +13,8 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.DotNetTemplatesExtension.ViewModels;
 
@@ -80,11 +82,11 @@ public sealed partial class DotNetTemplateListItemViewModel : ReactiveObject
         get
         {
             IReadOnlyList<string> languages = DotNetTemplateWizardViewModel.GetTemplateLanguages(Template);
-            return languages.Count == 0 ? "Any" : string.Join(", ", languages);
+            return languages.Count == 0 ? UiStrings.AnyLanguage : string.Join(", ", languages);
         }
     }
 
-    public string Type => string.IsNullOrWhiteSpace(Template.Type) ? "Template" : Template.Type;
+    public string Type => string.IsNullOrWhiteSpace(Template.Type) ? UiStrings.TemplateLabel : Template.Type;
 
     public string Author => Template.Author ?? string.Empty;
 
@@ -395,9 +397,9 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
     public bool ShowProjectDirectoryOption => !IsFileWizard;
 
-    public string PrimaryNameLabel => IsFileWizard ? "File name" : "Project name";
+    public string PrimaryNameLabel => IsFileWizard ? UiStrings.FileName : UiStrings.ProjectName;
 
-    public string PrimaryPathPreviewLabel => IsFileWizard ? "File path preview" : "Project path preview";
+    public string PrimaryPathPreviewLabel => IsFileWizard ? UiStrings.FilePathPreview : UiStrings.ProjectPathPreview;
 
     public string ProjectCountDisplay => $"Projects: {ProjectRows.Count}";
 
@@ -439,7 +441,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         _isLoadingTemplates = true;
         IsBusy = true;
-        StatusMessage = "Loading templates...";
+        StatusMessage = UiStrings.LoadingTemplates;
         ErrorMessage = null;
 
         try
@@ -460,7 +462,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
                 ApplyFilter();
 
                 Languages.Clear();
-                Languages.Add("All");
+                Languages.Add(UiStrings.FilterAll);
                 foreach (string language in GetTemplatesForMode(_allTemplates)
                              .SelectMany(item => GetTemplateLanguages(item.Template))
                              .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -469,7 +471,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
                     Languages.Add(language);
                 }
 
-                SelectedLanguage ??= "All";
+                SelectedLanguage ??= UiStrings.FilterAll;
             });
         }
         catch (Exception ex)
@@ -491,7 +493,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
         string search = SearchText?.Trim() ?? string.Empty;
         IEnumerable<DotNetTemplateListItemViewModel> filtered = GetTemplatesForMode(_allTemplates);
 
-        if (!string.IsNullOrWhiteSpace(language) && !string.Equals(language, "All", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(language) && !string.Equals(language, UiStrings.FilterAll, StringComparison.OrdinalIgnoreCase))
         {
             filtered = filtered.Where(item =>
                 GetTemplateLanguages(item.Template).Any(lang =>
@@ -543,7 +545,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         IsBusy = true;
         ErrorMessage = null;
-        StatusMessage = "Installing template...";
+        StatusMessage = UiStrings.InstallingTemplate;
 
         try
         {
@@ -551,7 +553,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
             if (!result.Success)
             {
                 ErrorMessage = string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Template installation failed."
+                    ? UiStrings.TemplateInstallFailed
                     : result.ErrorMessage;
                 return;
             }
@@ -579,21 +581,21 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         if (!IsSolutionSetup && !IsValidName(ProjectName))
         {
-            ErrorMessage = "Project name is invalid.";
+            ErrorMessage = UiStrings.InvalidProjectName;
             return;
         }
 
         if (IsSolutionSetup && !AreProjectRowsValid())
         {
-            ErrorMessage = "Please provide valid project names.";
+            ErrorMessage = UiStrings.ValidProjectNamesRequired;
             return;
         }
 
         IsBusy = true;
         ErrorMessage = null;
         StatusMessage = Mode == DotNetTemplateWizardMode.File
-            ? "Creating file..."
-            : "Creating project...";
+            ? UiStrings.CreatingFile
+            : UiStrings.CreatingProject;
 
         try
         {
@@ -612,7 +614,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
             if (!result.Success)
             {
                 ErrorMessage = string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Template creation failed."
+                    ? UiStrings.TemplateCreationFailed
                     : result.ErrorMessage;
                 return;
             }
@@ -620,7 +622,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
             string? primaryPath = result.ProjectPath ?? result.SolutionPath;
             if (string.IsNullOrWhiteSpace(primaryPath))
             {
-                ErrorMessage = "Template creation succeeded but no output path was returned.";
+                ErrorMessage = UiStrings.TemplateOutputPathMissing;
                 return;
             }
 
@@ -703,7 +705,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         string? selectedLanguage = SelectedLanguage;
         if (!string.IsNullOrWhiteSpace(selectedLanguage)
-            && !string.Equals(selectedLanguage, "All", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(selectedLanguage, UiStrings.FilterAll, StringComparison.OrdinalIgnoreCase))
         {
             parameters["language"] = selectedLanguage;
             return parameters;
@@ -992,14 +994,14 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
     {
         string baseTitle = Mode switch
         {
-            DotNetTemplateWizardMode.Solution => "New Solution",
-            DotNetTemplateWizardMode.File => "New File",
-            _ => "New Project"
+            DotNetTemplateWizardMode.Solution => UiStrings.NewSolution,
+            DotNetTemplateWizardMode.File => UiStrings.NewFile,
+            _ => UiStrings.NewProject
         };
 
         string stepTitle = Step == DotNetTemplateWizardStep.Template
-            ? "Select Template"
-            : "Configure";
+            ? UiStrings.SelectTemplate
+            : UiStrings.Configure;
 
         Title = baseTitle + " - " + stepTitle;
     }
@@ -1009,8 +1011,8 @@ public sealed partial class WorkspaceOpenPromptDialogViewModel : ReactiveObject
 {
     public WorkspaceOpenPromptDialogViewModel(WorkspaceOpenRequest request)
     {
-        Title = "Open Workspace";
-        Message = $"Open '{request.WorkspaceName}' now?";
+        Title = UiStrings.OpenWorkspace;
+        Message = string.Format(UiStrings.OpenWorkspaceNow, (object?)(request.WorkspaceName));
 
         OpenCurrentCommand = ReactiveCommand.CreateFromTask(async () =>
         {

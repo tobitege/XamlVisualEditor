@@ -200,7 +200,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 properties = type is null ? Array.Empty<PropertyMetadata>() : metadata.GetProperties(type);
                 declarations.Add(typeKey, properties);
             }
-            return properties.FirstOrDefault(property => property.Name == propertyName);
+            return properties.FirstOrDefault(property => property.Name == propertyName || property.Name == name.LocalName);
         }
 
         void Validate(XElement element, XName name, string value)
@@ -259,8 +259,23 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                     foreach (XElement value in element.Elements()) ValidateObject(element, declaredType, value);
                 continue;
             }
+            HashSet<string> assigned = new(StringComparer.Ordinal);
+            void RegisterAssignment(XName name)
+            {
+                PropertyMetadata? declaration = FindDeclaration(element, name);
+                if (declaration is null) return;
+                string key = declaration.IsAttached ? declaration.OwnerType + "|" + declaration.Name : declaration.Name;
+                if (assigned.Add(key)) return;
+                string member = name.LocalName.Contains('.') ? name.LocalName : element.Name.LocalName + "." + name.LocalName;
+                throw new InvalidOperationException($"{member} is set more than once. Keep either the attribute or the property element.");
+            }
             foreach (XAttribute attribute in element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration))
+            {
+                RegisterAssignment(attribute.Name);
                 Validate(element, attribute.Name, attribute.Value);
+            }
+            foreach (XElement property in element.Elements().Where(child => child.Name.LocalName.Contains('.')))
+                RegisterAssignment(property.Name);
         }
     }
 

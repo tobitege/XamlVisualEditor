@@ -61,3 +61,27 @@ Before changing or removing a provider, XVE stops affected preview processes to
 release their assemblies. Previously running previews restart after registration
 changes. Disabled packages contribute no themes. Missing providers remain
 reported rather than silently replacing a saved selection with another theme.
+
+## Flowery.NET adapter
+
+`extensions/XamlVisualEditor.FloweryThemeExtension` contains an optional provider for Flowery.NET 3.4.0.
+The editor application does not reference this project or Flowery.NET.
+The target project supplies its own Flowery.NET assembly.
+
+Build the package from the repository root:
+
+```powershell
+dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.FloweryThemeExtension.csproj -c Debug
+```
+
+Install the resulting package from the project's `bin/Debug` directory through Extensions.
+The provider ID is `xamlvisualeditor.flowery-themes/palette`.
+
+The catalog uses the target application's registered themes, exclusions, and preferred order.
+IDs use lowercase registered names. Labels use registered names, not private dropdown display aliases.
+The provider adds `DaisyUITheme` only when the target application has no such style.
+
+Palettes use a temporary resource layer. Project default restores the original resources, variant, and theme name.
+The provider does not call `CustomThemeApplicator`, which can persist application settings.
+Normal `ThemeChanged` subscribers still run inside the trusted preview process.
+The package contains the adapter, not another copy of Flowery.NET or the editor SDK.

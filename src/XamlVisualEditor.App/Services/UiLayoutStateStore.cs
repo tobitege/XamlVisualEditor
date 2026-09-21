@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -11,6 +11,10 @@ internal sealed class UiLayoutState
     public double WindowWidth { get; set; } = 1400;
 
     public double WindowHeight { get; set; } = 900;
+
+    public int? WindowX { get; set; }
+
+    public int? WindowY { get; set; }
 
     public Dictionary<string, SplitterLayoutState> Splitters { get; set; } = new(StringComparer.Ordinal);
 }

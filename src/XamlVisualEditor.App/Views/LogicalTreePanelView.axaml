@@ -1,8 +1,9 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
              xmlns:tv="using:XamlVisualEditor.TreeView"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.LogicalTreePanelView"
              x:DataType="tv:LogicalTreeGridViewModel">
 
@@ -17,7 +18,7 @@
                 CanUserSortColumns="False"
                 IsReadOnly="True">
         <dg:DataGrid.Columns>
-            <dg:DataGridHierarchicalColumn Header="Type"
+            <dg:DataGridHierarchicalColumn Header="{x:Static loc:UiStrings.Type}"
                                            Width="2*"
                                            Binding="{CompiledBinding Item}"
                                            x:DataType="dh:HierarchicalNode">
@@ -30,7 +31,7 @@
                     </DataTemplate>
                 </dg:DataGridHierarchicalColumn.CellTemplate>
             </dg:DataGridHierarchicalColumn>
-            <dg:DataGridTemplateColumn Header="Name" Width="*">
+            <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Name}" Width="*">
                 <dg:DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="dh:HierarchicalNode">
                         <ContentControl Content="{CompiledBinding Item}">

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -7,6 +7,8 @@ using System.Reactive.Linq;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -28,7 +30,7 @@ public sealed partial class InputBoxDialogViewModel : ReactiveObject
 
     public InputBoxDialogViewModel(InputBoxOptions options)
     {
-        Title = string.IsNullOrWhiteSpace(options.Title) ? "Input" : options.Title;
+        Title = string.IsNullOrWhiteSpace(options.Title) ? UiStrings.Input : options.Title;
         Prompt = options.Prompt ?? string.Empty;
         Value = options.Value ?? string.Empty;
 
@@ -58,7 +60,7 @@ public sealed partial class QuickPickDialogViewModel : ReactiveObject
 
     public QuickPickDialogViewModel(string? title, IReadOnlyList<QuickPickItem> items)
     {
-        Title = string.IsNullOrWhiteSpace(title) ? "Select" : title;
+        Title = string.IsNullOrWhiteSpace(title) ? UiStrings.Select : title;
 
         foreach (QuickPickItem item in items)
         {

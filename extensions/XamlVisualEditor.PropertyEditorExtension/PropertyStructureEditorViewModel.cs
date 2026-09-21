@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
@@ -55,7 +57,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     }
 
     public event Action? CloseRequested;
-    public string Title => $"Edit {_original.PropertyName}";
+    public string Title => string.Format(UiStrings.EditProperty, (object?)(_original.PropertyName));
     public ObservableCollection<StructureNodeViewModel> Roots { get; } = new();
     public ObservableCollection<StructureAttributeViewModel> Attributes { get; } = new();
     public IEnumerable<DesignerStructureType> AvailableTypes => _original.AvailableTypes
@@ -133,13 +135,13 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
 
     private void AddElement(bool sibling)
     {
-        DesignerStructureType type = SelectedType ?? throw new InvalidOperationException("Choose a type from the project metadata.");
+        DesignerStructureType type = SelectedType ?? throw new InvalidOperationException(UiStrings.ChooseMetadataType);
         XElement selected = RequireSelected();
-        XElement parent = sibling ? selected.Parent ?? throw new InvalidOperationException("The property root has no sibling.") : selected;
+        XElement parent = sibling ? selected.Parent ?? throw new InvalidOperationException(UiStrings.PropertyRootNoSibling) : selected;
         if (parent.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value)))
-            throw new InvalidOperationException("Clear the scalar content explicitly before inserting an object.");
+            throw new InvalidOperationException(UiStrings.ClearScalarBeforeInsert);
         if (ReferenceEquals(parent, _root) && !_original.IsCollection && parent.Elements().Any())
-            throw new InvalidOperationException("This property accepts only one root object.");
+            throw new InvalidOperationException(UiStrings.SinglePropertyRoot);
         EnsureNamespace(type.XmlNamespace);
         XElement added = new(XName.Get(type.TypeName, type.XmlNamespace));
         if (sibling) selected.AddAfterSelf(added);
@@ -150,13 +152,13 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     private void AddProperty()
     {
         XElement selected = RequireSelected();
-        if (selected.Name.LocalName.Contains('.')) throw new InvalidOperationException("Select an object, not a property element.");
+        if (selected.Name.LocalName.Contains('.')) throw new InvalidOperationException(UiStrings.SelectObjectNotProperty);
         string name = PropertyName?.Trim() ?? string.Empty;
-        if (name.Length == 0) throw new InvalidOperationException("Enter the property name.");
+        if (name.Length == 0) throw new InvalidOperationException(UiStrings.EnterPropertyName);
         XName qualified = name.Contains(':') ? ResolveName(selected, name)
             : selected.Name.Namespace + (name.Contains('.') ? name : selected.Name.LocalName + "." + name);
-        if (!qualified.LocalName.Contains('.')) throw new InvalidOperationException("Use Owner.Property for an attached property.");
-        if (selected.Elements(qualified).Any()) throw new InvalidOperationException("This property element already exists.");
+        if (!qualified.LocalName.Contains('.')) throw new InvalidOperationException(UiStrings.AttachedPropertyNameHelp);
+        if (selected.Elements(qualified).Any()) throw new InvalidOperationException(UiStrings.PropertyElementExists);
         XElement added = new(qualified);
         selected.Add(added);
         PropertyName = null;
@@ -166,7 +168,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     private void RemoveSelected()
     {
         XElement selected = RequireSelected();
-        XElement parent = selected.Parent ?? throw new InvalidOperationException("The property root cannot be removed. Use Reset in the property inspector.");
+        XElement parent = selected.Parent ?? throw new InvalidOperationException(UiStrings.PropertyRootCannotRemove);
         selected.Remove();
         Refresh(parent);
     }
@@ -186,10 +188,10 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     {
         XElement selected = RequireSelected();
         string name = AttributeName?.Trim() ?? string.Empty;
-        if (name.Length == 0) throw new InvalidOperationException("Enter the attribute name.");
+        if (name.Length == 0) throw new InvalidOperationException(UiStrings.EnterAttributeName);
         XName qualified = ResolveName(selected, name);
         if (qualified.Namespace == XNamespace.Xmlns || name == "xmlns")
-            throw new InvalidOperationException("Namespace declarations are managed by the type picker.");
+            throw new InvalidOperationException(UiStrings.NamespacesManagedByPicker);
         selected.SetAttributeValue(qualified, AttributeValue ?? string.Empty);
         Refresh(selected);
         SelectedAttribute = Attributes.FirstOrDefault(attribute => attribute.Attribute.Name == qualified);
@@ -197,7 +199,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
 
     private void RemoveAttribute()
     {
-        StructureAttributeViewModel attribute = SelectedAttribute ?? throw new InvalidOperationException("Select an attribute to remove.");
+        StructureAttributeViewModel attribute = SelectedAttribute ?? throw new InvalidOperationException(UiStrings.SelectAttributeToRemove);
         attribute.Attribute.Remove();
         Refresh(RequireSelected());
     }
@@ -219,14 +221,14 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
         int colon = name.IndexOf(':');
         if (colon < 0) return XName.Get(name);
         XNamespace ns = element.GetNamespaceOfPrefix(name[..colon])
-            ?? throw new InvalidOperationException("The namespace prefix is not declared in this document.");
+            ?? throw new InvalidOperationException(UiStrings.NamespacePrefixUndeclared);
         return ns + name[(colon + 1)..];
     }
 
     private static string GetQualifiedName(XElement owner, XName name) => name.Namespace == XNamespace.None ? name.LocalName
         : owner.GetPrefixOfNamespace(name.Namespace) is { Length: > 0 } prefix ? prefix + ":" + name.LocalName : name.ToString();
 
-    private XElement RequireSelected() => SelectedNode?.Element ?? throw new InvalidOperationException("Select a structure node first.");
+    private XElement RequireSelected() => SelectedNode?.Element ?? throw new InvalidOperationException(UiStrings.SelectStructureNode);
 
     private void Refresh(XElement selection)
     {
@@ -249,7 +251,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     private string _gridDefinitionSize = string.Empty;
 
     public bool IsGridEditor => _original.GridAxis != DesignerGridAxis.None;
-    public string AddGridDefinitionLabel => _original.GridAxis == DesignerGridAxis.Rows ? "Add row" : "Add column";
+    public string AddGridDefinitionLabel => _original.GridAxis == DesignerGridAxis.Rows ? UiStrings.AddRow : UiStrings.AddColumn;
     public bool HasSelectedGridDefinition => SelectedGridDefinition is not null;
 
     public string GridDefinitionSize
@@ -296,9 +298,9 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
         if (!IsGridEditor)
             return;
         XElement container = GridDefinitionContainer
-            ?? throw new InvalidOperationException("The Grid definition collection wrapper is missing.");
+            ?? throw new InvalidOperationException(UiStrings.GridCollectionMissing);
         if (container.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value)))
-            throw new InvalidOperationException("Clear the existing collection expression before adding a definition.");
+            throw new InvalidOperationException(UiStrings.ClearCollectionExpression);
         string name = _original.GridAxis == DesignerGridAxis.Rows ? "RowDefinition" : "ColumnDefinition";
         EnsureNamespace("https://github.com/avaloniaui");
         XElement definition = new(XName.Get(name, "https://github.com/avaloniaui"));
@@ -312,7 +314,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     private void SetGridDefinitionSize()
     {
         XElement definition = SelectedGridDefinition
-            ?? throw new InvalidOperationException("Select a row or column definition first.");
+            ?? throw new InvalidOperationException(UiStrings.SelectGridDefinition);
         var size = Avalonia.Controls.GridLength.Parse(GridDefinitionSize);
         string value = size.IsAuto ? "Auto" :
             size.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + (size.IsStar ? "*" : string.Empty);
@@ -332,7 +334,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
         if (_original.GridAxis == DesignerGridAxis.None || _gridDefinitionIndices is not null)
             return;
         XElement container = GridDefinitionContainer
-            ?? throw new InvalidOperationException("The Grid definition collection wrapper is missing.");
+            ?? throw new InvalidOperationException(UiStrings.GridCollectionMissing);
         _gridDefinitionIndices = new Dictionary<XElement, int>(ReferenceEqualityComparer.Instance);
         int index = 0;
         foreach (XElement definition in container.Elements())
@@ -345,7 +347,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
             return null;
         EnsureGridDefinitionTracking();
         XElement container = GridDefinitionContainer
-            ?? throw new InvalidOperationException("The Grid definition collection wrapper is missing.");
+            ?? throw new InvalidOperationException(UiStrings.GridCollectionMissing);
         return container.Elements().Select(element =>
             _gridDefinitionIndices!.TryGetValue(element, out int index) ? (int?)index : null).ToArray();
     }

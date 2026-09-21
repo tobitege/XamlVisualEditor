@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Disposables;
@@ -7,6 +7,8 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Collaboration;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Collaboration.UI;
 
@@ -95,7 +97,7 @@ public sealed partial class CollaborationPanelViewModel : ReactiveObject, IDispo
     /// Gets or sets the status message.
     /// </summary>
     [Reactive]
-    public partial string StatusMessage { get; set; } = "Not connected";
+    public partial string StatusMessage { get; set; } = UiStrings.NotConnected;
 
     /// <summary>
     /// Command to start a new collaboration session (host).
@@ -136,7 +138,7 @@ public sealed partial class CollaborationPanelViewModel : ReactiveObject, IDispo
     {
         SessionId = Guid.NewGuid().ToString("N")[..8];
         IsSessionActive = true;
-        StatusMessage = $"Hosting session {SessionId}";
+        StatusMessage = string.Format(UiStrings.HostingSession, (object?)(SessionId));
 
         // Add self as participant
         ParticipantViewModel localUser = new(_bridge?.LocalParticipantId ?? Guid.NewGuid().ToString("N"))
@@ -157,7 +159,7 @@ public sealed partial class CollaborationPanelViewModel : ReactiveObject, IDispo
         }
 
         IsSessionActive = true;
-        StatusMessage = $"Joined session {sessionId}";
+        StatusMessage = string.Format(UiStrings.JoinedSession, (object?)(sessionId));
 
         // Add self as participant
         ParticipantViewModel localUser = new(_bridge?.LocalParticipantId ?? Guid.NewGuid().ToString("N"))
@@ -173,7 +175,7 @@ public sealed partial class CollaborationPanelViewModel : ReactiveObject, IDispo
     {
         IsSessionActive = false;
         SessionId = null;
-        StatusMessage = "Not connected";
+        StatusMessage = UiStrings.NotConnected;
         Participants.Clear();
     }
 

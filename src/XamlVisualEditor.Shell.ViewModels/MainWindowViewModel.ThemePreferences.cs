@@ -1,4 +1,4 @@
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -103,7 +103,7 @@ public sealed partial class MainWindowViewModel
         {
             await OnThemePreferenceUiAsync(() =>
             {
-                if (IsCurrentThemePreferenceLoad(version)) ReportThemePreferenceError("load", error);
+                if (IsCurrentThemePreferenceLoad(version)) ReportThemePreferenceError(false, error);
             }).ConfigureAwait(false);
         }
     }
@@ -143,14 +143,16 @@ public sealed partial class MainWindowViewModel
         {
             RxSchedulers.MainThreadScheduler.Schedule(() =>
             {
-                if (!_themePreferencesDisposed && key == _themePreferenceKey) ReportThemePreferenceError("save", error);
+                if (!_themePreferencesDisposed && key == _themePreferenceKey) ReportThemePreferenceError(true, error);
             });
         }
     }
 
-    private void ReportThemePreferenceError(string operation, Exception error)
+    private void ReportThemePreferenceError(bool saving, Exception error)
     {
-        string message = $"Cannot {operation} the workspace preview theme: {error.Message}";
+        string message = string.Format(saving
+            ? XamlVisualEditor.Core.Localization.UiStrings.WorkspaceThemeSaveFailed
+            : XamlVisualEditor.Core.Localization.UiStrings.WorkspaceThemeLoadFailed, error.Message);
         LogOutput("Warning", message);
         StatusText = message;
         foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())

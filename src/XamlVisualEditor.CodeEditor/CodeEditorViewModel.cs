@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Reactive;
@@ -15,6 +15,8 @@ using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Intellisense;
 using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CodeEditor;
 
@@ -415,7 +417,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         string text = Document.Text;
 
         // Commit any pending AST changes as an undo batch before re-parsing
-        _syncEngine.CommitUndoBatch("Text edit");
+        _syncEngine.CommitUndoBatch(UiStrings.TextEdit);
 
         _syncEngine.NotifyTextChanged(text, SyncSource.CodeEditor);
         HasPendingTextChanges = false;

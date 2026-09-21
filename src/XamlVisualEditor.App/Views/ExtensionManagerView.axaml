@@ -1,41 +1,49 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.ExtensionManagerView"
              x:DataType="vm:ExtensionManagerViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top"
-                Orientation="Horizontal"
-                Spacing="8"
-                Margin="8">
-      <Button Content="Refresh"
+    <WrapPanel DockPanel.Dock="Top" Margin="8,8,4,0">
+      <WrapPanel.Styles>
+        <Style Selector="Button">
+          <Setter Property="Margin" Value="0,0,4,4" />
+          <Setter Property="Padding" Value="8,3" />
+        </Style>
+      </WrapPanel.Styles>
+      <Button Content="{x:Static loc:UiStrings.Refresh}"
               Command="{CompiledBinding RefreshCommand}" />
-      <Button Content="Install..."
+      <Button Content="{x:Static loc:UiStrings.InstallDialog}"
               Command="{CompiledBinding InstallCommand}" />
-      <Button Content="Check Updates"
+      <Button Content="{x:Static loc:UiStrings.CheckUpdates}"
               Command="{CompiledBinding CheckUpdatesCommand}" />
-      <Button Content="Uninstall"
+      <Button Content="{x:Static loc:UiStrings.Uninstall}"
               Command="{CompiledBinding UninstallCommand}"
               IsEnabled="{CompiledBinding HasSelection}" />
-      <TextBlock Text="{CompiledBinding StatusMessage}"
-                 Margin="12,0,0,0"
-                 VerticalAlignment="Center" />
-    </StackPanel>
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding StatusMessage}"
+               TextWrapping="Wrap"
+               Margin="8,0,8,4" />
 
     <dg:DataGrid ItemsSource="{CompiledBinding InstalledPackages}"
                 SelectedItem="{CompiledBinding SelectedPackage, Mode=TwoWay}"
                 AutoGenerateColumns="False"
                 CanUserSortColumns="True"
+                IsReadOnly="True"
+                RowHeight="28"
+                ColumnHeaderHeight="28"
                 GridLinesVisibility="None">
       <dg:DataGrid.Columns>
-        <dg:DataGridTextColumn Header="Name"
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Name}"
                                Width="2*"
                                Binding="{CompiledBinding DisplayName}" />
-        <dg:DataGridTextColumn Header="Version"
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Version}"
                                Width="*"
                                Binding="{CompiledBinding Version}" />
-        <dg:DataGridTemplateColumn Header="Enabled"
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Enabled}"
                                    Width="Auto">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="vm:ExtensionPackageItemViewModel">
@@ -43,7 +51,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTextColumn Header="Update"
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Update}"
                                Width="*"
                                Binding="{CompiledBinding UpdateLabel}" />
       </dg:DataGrid.Columns>

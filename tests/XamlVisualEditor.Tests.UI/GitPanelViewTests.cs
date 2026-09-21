@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -23,7 +23,7 @@ public sealed class GitPanelViewTests
         vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.Removed, "removed", "-", 1, null));
 
         GitPanelView view = new() { DataContext = vm };
-        Window window = await ShowInWindowAsync(view).ConfigureAwait(false);
+        Window window = await ShowInWindowAsync(view);
         try
         {
             await Dispatcher.UIThread.InvokeAsync(() =>

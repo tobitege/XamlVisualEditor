@@ -1,25 +1,26 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.PropertyEditorExtension"
              xmlns:ext="using:XamlVisualEditor.Extensions"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.PropertyEditorExtension.Views.PropertyStructureEditorView"
              x:DataType="vm:PropertyStructureEditorViewModel"
              x:CompileBindings="True">
   <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="12">
-    <TextBlock Text="Changes remain in this draft until you choose Apply. Cancel leaves the document unchanged."
+    <TextBlock Text="{x:Static loc:UiStrings.DraftChangesHint}"
                TextWrapping="Wrap" />
     <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="12" IsEnabled="{CompiledBinding CanEdit}">
       <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
         <Grid IsVisible="{CompiledBinding IsGridEditor}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6"
-              ToolTip.Tip="Controls follow their cells when definitions are inserted, removed or moved.">
+              ToolTip.Tip="{x:Static loc:UiStrings.GridDefinitionChangesHint}">
           <Button Content="{CompiledBinding AddGridDefinitionLabel}" Command="{CompiledBinding AddGridDefinitionCommand}" />
-          <TextBox Grid.Column="1" PlaceholderText="Auto, 120, * or 2*"
+          <TextBox Grid.Column="1" PlaceholderText="{x:Static loc:UiStrings.GridLengthExample}"
                    IsEnabled="{CompiledBinding HasSelectedGridDefinition}"
                    Text="{CompiledBinding GridDefinitionSize, Mode=TwoWay}" />
-          <Button Grid.Column="2" Content="Set size" Command="{CompiledBinding SetGridDefinitionSizeCommand}"
+          <Button Grid.Column="2" Content="{x:Static loc:UiStrings.SetSize}" Command="{CompiledBinding SetGridDefinitionSizeCommand}"
                   IsEnabled="{CompiledBinding HasSelectedGridDefinition}" />
         </Grid>
-        <TextBox Grid.Row="1" Text="{CompiledBinding TypeFilter, Mode=TwoWay}" PlaceholderText="Find a type or assembly..." />
+        <TextBox Grid.Row="1" Text="{CompiledBinding TypeFilter, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.FindTypeOrAssembly}" />
         <ComboBox Grid.Row="2" ItemsSource="{CompiledBinding AvailableTypes}" SelectedItem="{CompiledBinding SelectedType, Mode=TwoWay}"
                   HorizontalAlignment="Stretch">
           <ComboBox.ItemTemplate>
@@ -39,40 +40,40 @@
           </TreeView.ItemTemplate>
         </TreeView>
         <WrapPanel Grid.Row="4">
-          <Button Content="Add child" Command="{CompiledBinding AddChildCommand}" Margin="0,0,6,6" />
-          <Button Content="Add sibling" Command="{CompiledBinding AddSiblingCommand}" Margin="0,0,6,6" />
-          <Button Content="Remove" Command="{CompiledBinding RemoveCommand}" Margin="0,0,6,6" />
-          <Button Content="Move up" Command="{CompiledBinding MoveUpCommand}" Margin="0,0,6,6" />
-          <Button Content="Move down" Command="{CompiledBinding MoveDownCommand}" Margin="0,0,6,6" />
+          <Button Content="{x:Static loc:UiStrings.AddChild}" Command="{CompiledBinding AddChildCommand}" Margin="0,0,6,6" />
+          <Button Content="{x:Static loc:UiStrings.AddSibling}" Command="{CompiledBinding AddSiblingCommand}" Margin="0,0,6,6" />
+          <Button Content="{x:Static loc:UiStrings.Remove}" Command="{CompiledBinding RemoveCommand}" Margin="0,0,6,6" />
+          <Button Content="{x:Static loc:UiStrings.MoveUp}" Command="{CompiledBinding MoveUpCommand}" Margin="0,0,6,6" />
+          <Button Content="{x:Static loc:UiStrings.MoveDown}" Command="{CompiledBinding MoveDownCommand}" Margin="0,0,6,6" />
         </WrapPanel>
       </Grid>
       <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-        <TextBlock Text="Attributes of the selected node" FontWeight="SemiBold" />
+        <TextBlock Text="{x:Static loc:UiStrings.SelectedNodeAttributes}" FontWeight="SemiBold" />
         <ListBox Grid.Row="1" ItemsSource="{CompiledBinding Attributes}" SelectedItem="{CompiledBinding SelectedAttribute, Mode=TwoWay}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:StructureAttributeViewModel"><TextBlock Text="{CompiledBinding Display}" TextTrimming="CharacterEllipsis" /></DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBox Grid.Row="2" Text="{CompiledBinding AttributeName, Mode=TwoWay}" PlaceholderText="Attribute, e.g. x:Key or Width" />
-        <TextBox Grid.Row="3" Text="{CompiledBinding AttributeValue, Mode=TwoWay}" PlaceholderText="Value or binding expression; empty is a local value" />
+        <TextBox Grid.Row="2" Text="{CompiledBinding AttributeName, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.AttributeExample}" />
+        <TextBox Grid.Row="3" Text="{CompiledBinding AttributeValue, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.AttributeValueHint}" />
         <WrapPanel Grid.Row="4">
-          <Button Content="Set attribute" Command="{CompiledBinding SetAttributeCommand}" Margin="0,0,6,0" />
-          <Button Content="Remove attribute" Command="{CompiledBinding RemoveAttributeCommand}" />
+          <Button Content="{x:Static loc:UiStrings.SetAttribute}" Command="{CompiledBinding SetAttributeCommand}" Margin="0,0,6,0" />
+          <Button Content="{x:Static loc:UiStrings.RemoveAttribute}" Command="{CompiledBinding RemoveAttributeCommand}" />
         </WrapPanel>
         <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="6">
-          <TextBox Text="{CompiledBinding PropertyName, Mode=TwoWay}" PlaceholderText="Nested property, e.g. Resources" />
-          <Button Grid.Column="1" Content="Add property" Command="{CompiledBinding AddPropertyCommand}" />
+          <TextBox Text="{CompiledBinding PropertyName, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.NestedPropertyExample}" />
+          <Button Grid.Column="1" Content="{x:Static loc:UiStrings.AddProperty}" Command="{CompiledBinding AddPropertyCommand}" />
         </Grid>
         <TextBox Grid.Row="6" Text="{CompiledBinding TextValue, Mode=TwoWay}" IsEnabled="{CompiledBinding CanEditText}"
-                 PlaceholderText="Text content" AcceptsReturn="True" MinHeight="64" MaxHeight="140" />
-        <Button Grid.Row="7" Content="Clear selected content" Command="{CompiledBinding ClearContentCommand}"
-                ToolTip.Tip="Explicitly removes the selected node's content from this draft" />
+                 PlaceholderText="{x:Static loc:UiStrings.TextContent}" AcceptsReturn="True" MinHeight="64" MaxHeight="140" />
+        <Button Grid.Row="7" Content="{x:Static loc:UiStrings.ClearSelectedContent}" Command="{CompiledBinding ClearContentCommand}"
+                ToolTip.Tip="{x:Static loc:UiStrings.ClearDraftContentHint}" />
       </Grid>
     </Grid>
     <TextBlock Grid.Row="2" Text="{CompiledBinding Error}" TextWrapping="Wrap" />
     <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" />
-      <Button Content="Apply" Command="{CompiledBinding ApplyCommand}" IsDefault="True" />
+      <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" />
+      <Button Content="{x:Static loc:UiStrings.Apply}" Command="{CompiledBinding ApplyCommand}" IsDefault="True" />
     </StackPanel>
   </Grid>
 </UserControl>

@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.OutputExtension;
 
@@ -40,24 +42,24 @@ public sealed class OutputExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ShowProblemsCommandId,
             new CommandMetadata(
-                "Problems: Show Problems",
-                "View",
+                UiStrings.ShowProblemsCommand,
+                UiStrings.View,
                 When: "hasWorkspace",
                 Keybinding: "Ctrl+Shift+M",
                 Priority: 36)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             NextProblemCommandId,
             new CommandMetadata(
-                "Problems: Next Problem",
-                "Navigation",
+                UiStrings.NextProblemCommand,
+                UiStrings.Navigation,
                 When: "hasWorkspace",
                 Keybinding: "F8",
                 Priority: 37)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             PreviousProblemCommandId,
             new CommandMetadata(
-                "Problems: Previous Problem",
-                "Navigation",
+                UiStrings.PreviousProblemCommand,
+                UiStrings.Navigation,
                 When: "hasWorkspace",
                 Keybinding: "Shift+F8",
                 Priority: 38)));
@@ -68,14 +70,14 @@ public sealed class OutputExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     ViewId,
-                    "Output",
+                    UiStrings.Output,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     10,
                     ActivateByDefault: true),
                 new ExtensionViewContribution(
                     ProblemsViewId,
-                    "Problems",
+                    UiStrings.Problems,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     20,
@@ -88,13 +90,13 @@ public sealed class OutputExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleOutputCommandId,
-                    "Output",
+                    UiStrings.Output,
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     30),
                 new ExtensionMenuContribution(
                     ToggleProblemsCommandId,
-                    "Problems",
+                    UiStrings.Problems,
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     35)
@@ -103,9 +105,9 @@ public sealed class OutputExtension : IXveExtension
             context.ExtensionId,
             new[]
             {
-                new ExtensionCommandPaletteContribution(ShowProblemsCommandId, "Problems: Show Problems", "View"),
-                new ExtensionCommandPaletteContribution(NextProblemCommandId, "Problems: Next Problem", "Navigation"),
-                new ExtensionCommandPaletteContribution(PreviousProblemCommandId, "Problems: Previous Problem", "Navigation")
+                new ExtensionCommandPaletteContribution(ShowProblemsCommandId, UiStrings.ShowProblemsCommand, UiStrings.View),
+                new ExtensionCommandPaletteContribution(NextProblemCommandId, UiStrings.NextProblemCommand, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(PreviousProblemCommandId, UiStrings.PreviousProblemCommand, UiStrings.Navigation)
             }));
 
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
@@ -162,7 +164,7 @@ public sealed class OutputExtension : IXveExtension
         bool navigated = await problemsViewModel.NavigateToRelativeAsync(delta, cancellationToken).ConfigureAwait(false);
         if (!navigated)
         {
-            await context.Window.ShowInformationMessageAsync("No diagnostics available.", cancellationToken).ConfigureAwait(false);
+            await context.Window.ShowInformationMessageAsync(UiStrings.NoDiagnostics, cancellationToken).ConfigureAwait(false);
         }
     }
 

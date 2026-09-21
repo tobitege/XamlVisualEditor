@@ -205,6 +205,20 @@ public sealed partial class SelectionManager : ReactiveObject
         RaiseSelectionChanged();
     }
 
+    /// <summary>Replaces the selected items and publishes their complete state once.</summary>
+    public void SetSelection(IEnumerable<IDesignItem> items)
+    {
+        IDesignItem[] selected = items.Distinct().ToArray();
+        ClearSelectionInternal();
+        foreach (IDesignItem item in selected)
+        {
+            _selectedItems.Add(item);
+            if (item is DesignItem designItem) designItem.IsSelected = true;
+        }
+        PrimarySelection = _selectedItems.Count > 0 ? _selectedItems[0] : null;
+        RaiseSelectionChanged();
+    }
+
     /// <summary>
     /// Clears the selection.
     /// </summary>
@@ -535,10 +549,8 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public void SelectDesignItemsFromSync(IEnumerable<IDesignItem> items)
     {
         using (BeginSelectionSync())
-        using (Selection.SuppressSelectionChanged())
         {
-            Selection.ClearSelection();
-            foreach (IDesignItem item in items) Selection.Select(item, addToSelection: true);
+            Selection.SetSelection(items);
         }
     }
 

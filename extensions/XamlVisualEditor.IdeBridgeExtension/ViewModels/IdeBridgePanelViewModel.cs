@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -12,6 +12,8 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.IdeBridgeExtension;
 
@@ -109,7 +111,7 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     public partial string? UnixSocketPath { get; set; }
 
     [Reactive]
-    public partial string StatusText { get; private set; } = "Stopped";
+    public partial string StatusText { get; private set; } = UiStrings.Stopped;
 
     [Reactive]
     public partial string EndpointText { get; private set; } = "stdio";
@@ -192,14 +194,14 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     {
         IdeBridgeSettings settings = BuildSettings();
         await _controller.ApplySettingsAsync(settings, CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Applied settings.");
+        AppendLog(UiStrings.SettingsApplied);
         UpdateStatus();
     }
 
     private async Task RestartAsync()
     {
         await _controller.RestartAsync(CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Restarted server.");
+        AppendLog(UiStrings.ServerRestarted);
         UpdateStatus();
     }
 
@@ -223,14 +225,14 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
         }
 
         await _permissions.ClearPermissionAsync(SelectedPermission.WorkspaceId, CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Revoked permission for " + SelectedPermission.WorkspaceId + ".");
+        AppendLog(UiStrings.PermissionRevokedPrefix + SelectedPermission.WorkspaceId + ".");
         await RefreshPermissionsAsync().ConfigureAwait(false);
     }
 
     private async Task ClearPermissionsAsync()
     {
         await _permissions.ClearAllAsync(CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Cleared all permissions.");
+        AppendLog(UiStrings.PermissionsCleared);
         await RefreshPermissionsAsync().ConfigureAwait(false);
     }
 
@@ -242,12 +244,12 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
         }
 
         await CopyToClipboardInteraction.Handle(SessionToken).ToTask().ConfigureAwait(false);
-        AppendLog("Copied session token.");
+        AppendLog(UiStrings.SessionTokenCopied);
     }
 
     private void UpdateStatus()
     {
-        StatusText = _controller.IsRunning ? "Running" : "Stopped";
+        StatusText = _controller.IsRunning ? UiStrings.Running : UiStrings.Stopped;
         EndpointText = _controller.EndpointSummary;
         ConnectionCount = _controller.ConnectionCount;
         LastConnectionAt = _controller.LastConnectionAt?.ToLocalTime().ToString("u");

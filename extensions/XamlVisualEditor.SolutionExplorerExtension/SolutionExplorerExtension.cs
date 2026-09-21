@@ -1,4 +1,6 @@
-using XamlVisualEditor.Extensions;
+﻿using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.SolutionExplorerExtension;
 
@@ -20,7 +22,7 @@ public sealed class SolutionExplorerExtension : IXveExtension
 
         ExtensionViewContribution view = new(
             ViewId,
-            "Solution Explorer",
+            UiStrings.SolutionExplorer,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Left,
             5,
@@ -33,7 +35,7 @@ public sealed class SolutionExplorerExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleViewCommandId,
-                    "Solution Explorer",
+                    UiStrings.SolutionExplorer,
                     ExtensionMenuLocations.View,
                     "views.left",
                     0)

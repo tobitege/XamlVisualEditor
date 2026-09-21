@@ -1,8 +1,9 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:controls="using:XamlVisualEditor.GitExtension.Controls"
              xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.GitExtension.Views.GitPanelView"
              x:DataType="vm:GitPanelViewModel">
 
@@ -10,19 +11,19 @@
         <!-- Header -->
         <DockPanel Grid.Row="0" Margin="8,6" LastChildFill="True">
             <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
-                <TextBlock Text="Git" FontWeight="SemiBold" />
+                <TextBlock Text="{x:Static loc:UiStrings.Git}" FontWeight="SemiBold" />
                 <TextBlock Text="|" Opacity="0.4" />
-                <TextBlock Text="Branch:" Opacity="0.7" />
+                <TextBlock Text="{x:Static loc:UiStrings.BranchLabel}" Opacity="0.7" />
                 <TextBlock Text="{CompiledBinding BranchName}" />
-                <TextBlock Text="Upstream:" Opacity="0.7" Margin="8,0,0,0" />
+                <TextBlock Text="{x:Static loc:UiStrings.UpstreamLabel}" Opacity="0.7" Margin="8,0,0,0" />
                 <TextBlock Text="{CompiledBinding UpstreamName}" />
-                <TextBlock Text="Ahead:" Opacity="0.7" Margin="8,0,0,0" />
+                <TextBlock Text="{x:Static loc:UiStrings.AheadLabel}" Opacity="0.7" Margin="8,0,0,0" />
                 <TextBlock Text="{CompiledBinding AheadBy}" />
-                <TextBlock Text="Behind:" Opacity="0.7" Margin="8,0,0,0" />
+                <TextBlock Text="{x:Static loc:UiStrings.BehindLabel}" Opacity="0.7" Margin="8,0,0,0" />
                 <TextBlock Text="{CompiledBinding BehindBy}" />
             </StackPanel>
 
-            <Button Content="Refresh"
+            <Button Content="{x:Static loc:UiStrings.Refresh}"
                     Command="{CompiledBinding RefreshCommand}"
                     Padding="8,2"
                     DockPanel.Dock="Right" />
@@ -32,13 +33,13 @@
         <DockPanel Grid.Row="1" Margin="8,0,8,6" LastChildFill="True">
             <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
                 <TextBox Width="200"
-                         PlaceholderText="Search changes..."
+                         PlaceholderText="{x:Static loc:UiStrings.SearchChanges}"
                          Text="{CompiledBinding SearchText, Mode=TwoWay}" />
-                <Button Content="Stage" Command="{CompiledBinding StageCommand}" Padding="8,2" />
-                <Button Content="Unstage" Command="{CompiledBinding UnstageCommand}" Padding="8,2" />
-                <Button Content="Discard" Command="{CompiledBinding DiscardCommand}" Padding="8,2" />
-                <Button Content="Stage All" Command="{CompiledBinding StageAllCommand}" Padding="8,2" />
-                <Button Content="Unstage All" Command="{CompiledBinding UnstageAllCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.Stage}" Command="{CompiledBinding StageCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.Unstage}" Command="{CompiledBinding UnstageCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.Discard}" Command="{CompiledBinding DiscardCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.StageAll}" Command="{CompiledBinding StageAllCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.UnstageAll}" Command="{CompiledBinding UnstageAllCommand}" Padding="8,2" />
             </StackPanel>
             <TextBlock Text="{CompiledBinding ErrorMessage}"
                        Foreground="Orange"
@@ -49,7 +50,7 @@
         <!-- Main content -->
         <Grid Grid.Row="2" ColumnDefinitions="2*,3*" RowDefinitions="*" Margin="8">
             <TabControl Grid.Row="0" Grid.Column="0">
-                <TabItem Header="{CompiledBinding StagedCount, StringFormat='Staged ({0})'}">
+                <TabItem Header="{CompiledBinding StagedCount, StringFormat={x:Static loc:UiStrings.StagedCountFormat}}">
                     <dg:DataGrid ItemsSource="{CompiledBinding StagedView}"
                                  SelectedItem="{CompiledBinding SelectedStagedChange, Mode=TwoWay}"
                                  AutoGenerateColumns="False"
@@ -57,18 +58,18 @@
                                  GridLinesVisibility="None"
                                  IsReadOnly="True">
                         <dg:DataGrid.Columns>
-                            <dg:DataGridTextColumn Header="Path"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Path}"
                                                    Width="*"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding DisplayPath}" />
-                            <dg:DataGridTextColumn Header="Status"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Status}"
                                                    Width="120"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding StatusLabel}" />
                         </dg:DataGrid.Columns>
                     </dg:DataGrid>
                 </TabItem>
-                <TabItem Header="{CompiledBinding UnstagedCount, StringFormat='Unstaged ({0})'}">
+                <TabItem Header="{CompiledBinding UnstagedCount, StringFormat={x:Static loc:UiStrings.UnstagedCountFormat}}">
                     <dg:DataGrid ItemsSource="{CompiledBinding UnstagedView}"
                                  SelectedItem="{CompiledBinding SelectedUnstagedChange, Mode=TwoWay}"
                                  AutoGenerateColumns="False"
@@ -76,11 +77,11 @@
                                  GridLinesVisibility="None"
                                  IsReadOnly="True">
                         <dg:DataGrid.Columns>
-                            <dg:DataGridTextColumn Header="Path"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Path}"
                                                    Width="*"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding DisplayPath}" />
-                            <dg:DataGridTextColumn Header="Status"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Status}"
                                                    Width="120"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding StatusLabel}" />
@@ -91,11 +92,11 @@
 
             <DockPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,0">
                 <StackPanel DockPanel.Dock="Top" Spacing="4">
-                    <TextBlock Text="Commit" FontWeight="SemiBold" />
-                    <TextBox PlaceholderText="Commit message"
+                    <TextBlock Text="{x:Static loc:UiStrings.Commit}" FontWeight="SemiBold" />
+                    <TextBox PlaceholderText="{x:Static loc:UiStrings.CommitMessage}"
                              Text="{CompiledBinding CommitMessage, Mode=TwoWay}" />
-                    <Button Content="Commit" Command="{CompiledBinding CommitCommand}" Padding="8,2" />
-                    <TextBlock Text="{CompiledBinding DiffLineCount, StringFormat='Diff ({0})'}"
+                    <Button Content="{x:Static loc:UiStrings.Commit}" Command="{CompiledBinding CommitCommand}" Padding="8,2" />
+                    <TextBlock Text="{CompiledBinding DiffLineCount, StringFormat={x:Static loc:UiStrings.DiffCountFormat}}"
                                FontWeight="SemiBold"
                                Margin="0,8,0,0" />
                 </StackPanel>

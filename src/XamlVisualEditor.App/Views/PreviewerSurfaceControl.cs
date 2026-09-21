@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -608,12 +608,32 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnKeyDown(KeyEventArgs args)
     {
         base.OnKeyDown(args);
+        if (args.Handled) return;
         if (ForwardPreviewKey(args, true)) return;
         if (_pointerMove is not null)
         {
             if (args.Key == Key.Escape) CancelPointerMove();
             args.Handled = true;
             return;
+        }
+        if (_document is { IsDisposed: false } document && document.DesignSurface.IsEditMode)
+        {
+            System.Windows.Input.ICommand? editCommand = args.KeyModifiers == KeyModifiers.Control ? args.Key switch
+            {
+                Key.X => document.DesignSurface.CutCommand,
+                Key.C => document.DesignSurface.CopyCommand,
+                Key.V => document.DesignSurface.PasteCommand,
+                Key.D => document.DesignSurface.DuplicateCommand,
+                Key.A => document.DesignSurface.SelectAllCommand,
+                _ => null
+            } : args.Key == Key.Delete && args.KeyModifiers == KeyModifiers.None ? document.DesignSurface.DeleteSelectedCommand : null;
+            if (editCommand is not null)
+            {
+                document.SetSelectedNode(document.SelectedNodeId, SyncSource.DesignSurface);
+                args.Handled = true;
+                if (editCommand.CanExecute(null)) editCommand.Execute(null);
+                return;
+            }
         }
         if (CanEditGeometry && args.Key is Key.Left or Key.Right or Key.Up or Key.Down)
         {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -7,9 +7,12 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using XamlVisualEditor.Core;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -29,6 +32,10 @@ internal sealed class PreviewerLaunchService : IDisposable
         public Process? Process { get; set; }
         public PreviewerTcpSession? Session { get; set; }
         public string? XamlText { get; set; }
+        public SemaphoreSlim UpdateGate { get; } = new(1, 1);
+        public Guid? LastSentRenderId { get; set; }
+        public Guid PendingUpdateId { get; set; }
+        public TaskCompletionSource<bool>? PendingUpdate { get; set; }
     }
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
@@ -99,6 +106,8 @@ internal sealed class PreviewerLaunchService : IDisposable
 
         if (!launchInfo.HasRequiredAssets)
         {
+            if (workspace.Projects.Any(project => project.AssemblySnapshotDirectory is not null))
+                throw new InvalidOperationException("Previewer assets are missing from the assembly snapshot. Refresh the snapshot; the live workspace will not be built automatically.");
             if (runWorkspaceCommandAsync is not null && !string.IsNullOrWhiteSpace(workspacePath))
             {
                 log?.Invoke("Info", "Previewer assets missing. Building workspace...");
@@ -132,7 +141,8 @@ internal sealed class PreviewerLaunchService : IDisposable
             {
                 if (IsCurrent(xamlFilePath, instance) && !string.IsNullOrWhiteSpace(e.Data))
                 {
-                    if (!session.TryReceiveDesignTree(e.Data) && !session.TryReceiveThemeCatalog(e.Data))
+                    if (!TryReceiveIncrementalResult(instance, e.Data)
+                        && !session.TryReceiveDesignTree(e.Data) && !session.TryReceiveThemeCatalog(e.Data))
                         log?.Invoke("Info", $"Previewer: {e.Data}");
                 }
             };
@@ -141,7 +151,7 @@ internal sealed class PreviewerLaunchService : IDisposable
                 if (IsCurrent(xamlFilePath, instance) && !string.IsNullOrWhiteSpace(e.Data))
                 {
                     log?.Invoke("Error", $"Previewer: {e.Data}");
-                    session.ReportError(e.Data);
+                    session.ReportStandardErrorLine(e.Data);
                 }
             };
             process.Start();
@@ -205,29 +215,72 @@ internal sealed class PreviewerLaunchService : IDisposable
     private async Task SendInstanceUpdateAsync(string xamlFilePath, PreviewerInstance instance,
         string xamlText, PreviewerLaunchInfo launchInfo)
     {
-        if (!IsCurrent(xamlFilePath, instance) || instance.Session is not { } session) return;
-        string projectPath = BuildXamlProjectPath(xamlFilePath, launchInfo.ProjectDirectory);
-        string updatedXaml = NormalizeDesignDataContext(xamlText);
-        (double? width, double? height) = TryGetDesignSize(updatedXaml);
-        Guid? renderId = null;
-        Guid? themeRequestId = null;
+        await instance.UpdateGate.WaitAsync();
         try
         {
-            XDocument preview = XDocument.Parse(updatedXaml);
-            themeRequestId = DesignerThemeProtocol.ReadRequest(preview)?.RequestId;
-            string? value = preview.Root?.Attribute(XName.Get("DesignNodeIdentity.RenderId",
-                "clr-namespace:XamlVisualEditor.Designer.Rendering;assembly=XamlVisualEditor.Designer.Rendering"))?.Value;
-            if (Guid.TryParse(value, out Guid parsed)) renderId = parsed;
+            if (!IsCurrent(xamlFilePath, instance) || instance.Session is not { } session) return;
+            lock (_gate) { if (instance.XamlText != xamlText) return; }
+            string projectPath = BuildXamlProjectPath(xamlFilePath, launchInfo.ProjectDirectory);
+            string updatedXaml = NormalizeDesignDataContext(xamlText);
+            (double? width, double? height) = TryGetDesignSize(updatedXaml);
+            Guid? renderId = null;
+            Guid? themeRequestId = null;
+            try
+            {
+                XDocument preview = XDocument.Parse(updatedXaml);
+                themeRequestId = DesignerThemeProtocol.ReadRequest(preview)?.RequestId;
+                string? value = preview.Descendants().Attributes(XName.Get("DesignNodeIdentity.RenderId",
+                    "clr-namespace:XamlVisualEditor.Designer.Rendering;assembly=XamlVisualEditor.Designer.Rendering"))
+                    .FirstOrDefault()?.Value;
+                if (Guid.TryParse(value, out Guid parsed)) renderId = parsed;
+            }
+            catch (System.Xml.XmlException) { }
+            try
+            {
+                Guid? previousRenderId = instance.LastSentRenderId;
+                await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height, renderId, themeRequestId,
+                    previousRenderId is { } previous && renderId is { } current
+                        ? () => TrySendIncrementalUpdateAsync(instance, previous, current, updatedXaml) : null);
+                instance.LastSentRenderId = renderId;
+            }
+            catch (Exception) when (!IsCurrent(xamlFilePath, instance))
+            {
+                // Das Schließen oder Ersetzen eines Hosts beendet ausstehende Transportaufträge.
+            }
         }
-        catch (System.Xml.XmlException) { }
+        finally { instance.UpdateGate.Release(); }
+    }
+
+    private static async Task<bool> TrySendIncrementalUpdateAsync(PreviewerInstance instance, Guid previous, Guid current, string xaml)
+    {
+        if (instance.Process is not { } process || process.HasExited) return false;
+        Guid requestId = Guid.NewGuid();
+        TaskCompletionSource<bool> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (instance) { instance.PendingUpdateId = requestId; instance.PendingUpdate = completion; }
         try
         {
-            await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height, renderId, themeRequestId);
+            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new DesignerUpdateRequest(requestId, previous, current, xaml)));
+            await process.StandardInput.FlushAsync();
+            return await completion.Task;
         }
-        catch (Exception) when (!IsCurrent(xamlFilePath, instance))
+        finally
         {
-            // Closing or replacing a host cancels its in-flight transport work.
+            lock (instance) { if (ReferenceEquals(instance.PendingUpdate, completion)) instance.PendingUpdate = null; }
         }
+    }
+
+    private static bool TryReceiveIncrementalResult(PreviewerInstance instance, string message)
+    {
+        if (!message.StartsWith(DesignerUpdateProtocol.ResultPrefix, StringComparison.Ordinal)) return false;
+        try
+        {
+            DesignerUpdateResult? result = JsonSerializer.Deserialize<DesignerUpdateResult>(message[DesignerUpdateProtocol.ResultPrefix.Length..]);
+            lock (instance)
+                if (result is not null && result.RequestId == instance.PendingUpdateId)
+                    instance.PendingUpdate?.TrySetResult(result.Applied);
+        }
+        catch (JsonException) { }
+        return true;
     }
 
     private bool IsCurrent(string xamlFilePath, PreviewerInstance instance)
@@ -299,6 +352,7 @@ internal sealed class PreviewerLaunchService : IDisposable
 
     private static void DisposeInstance(PreviewerInstance instance)
     {
+        lock (instance) instance.PendingUpdate?.TrySetCanceled();
         instance.Session?.Dispose();
         if (instance.Process is not { } process) return;
         try
@@ -333,6 +387,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             WorkingDirectory = launchInfo.WorkingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -374,7 +429,7 @@ internal sealed class PreviewerLaunchService : IDisposable
 
         if (project is null)
         {
-            error = "No project found for XAML file.";
+            error = UiStrings.NoProjectForXaml;
             return false;
         }
 
@@ -383,7 +438,9 @@ internal sealed class PreviewerLaunchService : IDisposable
         string? xamlAssemblyPath = ProjectSelection.ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(xamlAssemblyPath) || !File.Exists(xamlAssemblyPath))
         {
-            error = "Project output assembly not found. Build the project first.";
+            error = project.AssemblySnapshotDirectory is null
+                ? UiStrings.ProjectAssemblyMissing
+                : UiStrings.SnapshotAssemblyMissing;
             return false;
         }
 
@@ -392,17 +449,31 @@ internal sealed class PreviewerLaunchService : IDisposable
         string targetAssemblyPath = xamlAssemblyPath;
         if (!project.IsExecutable)
         {
+            string? configuredApplication = Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY");
+            if (project.AssemblySnapshotDirectory is not null && !string.IsNullOrWhiteSpace(configuredApplication))
+                configuredApplication = Path.Combine(project.AssemblySnapshotDirectory, Path.GetFileName(configuredApplication));
+            if (string.IsNullOrWhiteSpace(configuredApplication))
+                configuredApplication = project.PreviewApplicationAssemblyPath;
+            if (project.AssemblySnapshotDirectory is not null && !string.IsNullOrWhiteSpace(configuredApplication)
+                && (!FileSystemPathComparison.IsSameOrDescendant(configuredApplication, project.AssemblySnapshotDirectory)
+                    || !IsHostApplication(configuredApplication)))
+            {
+                error = UiStrings.SnapshotRuntimeAssetsMissing;
+                return false;
+            }
             string? hostApplication = ResolveHostApplicationPath(
                 xamlAssemblyPath,
-                workspace.Projects,
-                Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY"));
+                project.AssemblySnapshotDirectory is null ? workspace.Projects
+                    : workspace.Projects.Where(candidate => FileSystemPathComparison.Equals(
+                        candidate.AssemblySnapshotDirectory, project.AssemblySnapshotDirectory)),
+                configuredApplication);
             targetAssemblyPath = hostApplication ?? xamlAssemblyPath;
         }
 
         string? outputDir = Path.GetDirectoryName(targetAssemblyPath);
         if (string.IsNullOrWhiteSpace(outputDir))
         {
-            error = "Project output directory could not be determined.";
+            error = UiStrings.ProjectOutputDirectoryUnknown;
             return false;
         }
 
@@ -726,7 +797,11 @@ internal readonly record struct PreviewerLaunchResult(bool Success, string? Erro
     public static PreviewerLaunchResult Fail(string message) => new(false, message, null);
 }
 
-public sealed record PreviewerErrorInfo(string Message, int? Line, int? Column, string? FilePath);
+public sealed record PreviewerErrorInfo(string Message, int? Line, int? Column, string? FilePath,
+    IReadOnlyList<PreviewerElementPathSegment>? ElementPath = null);
+
+/// <summary>Ordnet ein Element der Vorschau seinem Element im Quelldokument zu.</summary>
+public sealed record PreviewerElementPathSegment(string Namespace, string Name, int Index);
 
 internal sealed class PreviewerTelemetryStore
 {

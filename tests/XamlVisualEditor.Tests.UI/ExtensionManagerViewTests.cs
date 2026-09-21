@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading.Tasks;
@@ -24,7 +24,7 @@ public sealed class ExtensionManagerViewTests
         await vm.RefreshCommand.Execute().ToTask();
 
         ExtensionManagerView view = new() { DataContext = vm };
-        Window window = await ShowInWindowAsync(view).ConfigureAwait(false);
+        Window window = await ShowInWindowAsync(view);
         try
         {
             await Dispatcher.UIThread.InvokeAsync(() =>

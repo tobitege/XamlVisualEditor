@@ -1,12 +1,13 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.CallStackView"
              x:DataType="vm:CallStackViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <TextBlock Text="Call Stack" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <TextBlock Text="{x:Static loc:UiStrings.CallStack}" FontWeight="SemiBold" VerticalAlignment="Center" />
     </StackPanel>
 
     <dg:DataGrid ItemsSource="{CompiledBinding Frames}"
@@ -15,9 +16,9 @@
                 GridLinesVisibility="None"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>
-        <dg:DataGridTextColumn Header="Frame" Binding="{CompiledBinding DisplayText}" Width="3*" />
-        <dg:DataGridTextColumn Header="File" Binding="{CompiledBinding FilePath}" Width="2*" />
-        <dg:DataGridTextColumn Header="Line" Binding="{CompiledBinding Line}" Width="64" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.StackFrame}" Binding="{CompiledBinding DisplayText}" Width="3*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.File}" Binding="{CompiledBinding FilePath}" Width="2*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Line}" Binding="{CompiledBinding Line}" Width="64" />
       </dg:DataGrid.Columns>
     </dg:DataGrid>
   </DockPanel>

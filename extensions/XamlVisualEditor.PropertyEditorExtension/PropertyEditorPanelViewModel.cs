@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -12,6 +12,8 @@ using Avalonia.Collections;
 using Avalonia.Media;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
@@ -157,9 +159,11 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> SetNullCommand { get; }
     public event Action? NullRequested;
     public string Name { get; }
+    public string DisplayName => Name == "Height" ? "Height 123" : Name;
     public string PropertyType { get; }
     public bool IsReadOnly { get; }
     public string Category { get; }
+    public string CategoryDisplayName => UiLabels.Category(Category);
     public string? Description { get; }
     public string? DefaultValue { get; }
     public bool IsAttached { get; }
@@ -195,6 +199,21 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     }
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationError);
     public bool IsExpression => Value?.TrimStart() is { } text && text.StartsWith('{') && !text.StartsWith("{}", StringComparison.Ordinal);
+    public string ValueSourceDescription
+    {
+        get
+        {
+            if (!IsSet) return UiStrings.ValueSourceDefault;
+            string? text = Value?.Trim();
+            if (text == "{x:Null}") return UiStrings.ValueSourceNull;
+            if (text?.StartsWith("{DynamicResource ", StringComparison.Ordinal) == true)
+                return UiStrings.ValueSourceDynamic;
+            if (IsExpression) return UiStrings.ValueSourceExpression;
+            if (EditorKind == PropertyEditorKind.Brush && Color.TryParse(text, out Color color) && color.A == 0)
+                return UiStrings.ValueSourceTransparent;
+            return UiStrings.ValueSourceLocal;
+        }
+    }
 
     public string? Value
     {
@@ -215,7 +234,11 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public bool IsSet
     {
         get => _isSet;
-        private set => this.RaiseAndSetIfChanged(ref _isSet, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isSet, value);
+            this.RaisePropertyChanged(nameof(ValueSourceDescription));
+        }
     }
 
     public bool? BoolValue
@@ -985,7 +1008,7 @@ public sealed class PropertyRowGroupDescription : DataGridGroupDescription
     {
         if (item is PropertyRowViewModel row)
         {
-            return row.GroupName;
+            return UiLabels.Category(row.GroupName);
         }
 
         return string.Empty;
@@ -1026,7 +1049,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     private string _lastActiveDocumentPath = string.Empty;
     private DateTime _lastSelectionUpdateUtc = DateTime.MinValue;
     private static readonly TimeSpan SelectionPollInterval = TimeSpan.FromMilliseconds(500);
-    private const string LocalValuesGroupName = "Local Values";
+    private static string LocalValuesGroupName => UiStrings.LocalValues;
     private static readonly IReadOnlyDictionary<string, int> CategorySortOrder = new Dictionary<string, int>(
         StringComparer.OrdinalIgnoreCase)
     {
@@ -1236,7 +1259,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             {
                 ClearProperties();
                 ClearEvents();
-                StatusText = "Loading properties and events...";
+                StatusText = UiStrings.LoadingPropertiesEvents;
             }
 
             Task<IReadOnlyList<DesignerPropertyInfo>> propertiesTask = _designer.GetPropertiesAsync(node.NodeId, token);
@@ -1265,7 +1288,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             if (token.IsCancellationRequested || _isDisposed) return;
             ClearProperties();
             ClearEvents();
-            StatusText = $"Cannot inspect {SelectedTypeName ?? "selection"} in {_lastActiveDocumentPath}: {exception.Message}";
+            StatusText = string.Format(UiStrings.InspectSelectionFailed, (object?)(SelectedTypeName ?? UiStrings.Selection), (object?)(_lastActiveDocumentPath), (object?)(exception.Message));
         }
         finally
         {
@@ -1572,7 +1595,8 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                     entry.ValidationError = null;
                     _pendingPropertyValues[GetDraftKey(entry)] = new(documentPath, value, null);
                 }
-                if (!string.IsNullOrWhiteSpace(SearchText))
+                if (!string.IsNullOrWhiteSpace(SearchText)
+                    && PropertiesView.Contains(entry) != MatchesPropertyFilter(entry))
                 {
                     PropertiesView.Refresh();
                     RequestGroupedRefresh();
@@ -1585,7 +1609,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             .DistinctUntilChanged()
             .Subscribe(_ =>
             {
-                if (_suspendUpdates > 0)
+                if (_suspendUpdates > 0 || !string.Equals(entry.Value, entry.CommittedValue, StringComparison.Ordinal))
                 {
                     return;
                 }
@@ -1668,7 +1692,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
         if (!string.Equals(_designer.ActiveDocumentPath, draft.DocumentPath, StringComparison.OrdinalIgnoreCase))
         {
-            SetPropertyError(entry, draft, "The document changed before this value was applied. The draft is retained.");
+            SetPropertyError(entry, draft, UiStrings.PropertyDraftDocumentChanged);
             return;
         }
 
@@ -1693,7 +1717,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             cancellation.Token.ThrowIfCancellationRequested();
             if (_isDisposed || !string.Equals(_designer.ActiveDocumentPath, draft.DocumentPath, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("The document changed before this value was applied. The draft is retained.");
+                throw new InvalidOperationException(UiStrings.PropertyDraftDocumentChanged);
             }
 
             string? committedValue = draft.ForceReset ? null : value;
@@ -1702,7 +1726,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             {
                 if (_designer is not IDesignerPropertyValueHost valueHost)
                 {
-                    throw new InvalidOperationException("The designer host does not support explicit null values.");
+                    throw new InvalidOperationException(UiStrings.ExplicitNullUnsupported);
                 }
 
                 committedValue = await valueHost.SetPropertyNullAsync(entry.NodeId, entry.Name, cancellation.Token);
@@ -1713,7 +1737,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 applied = await _designer.SetPropertyAsync(entry.NodeId, entry.Name, committedValue, cancellation.Token);
             }
 
-            if (!applied) throw new InvalidOperationException("The value could not be applied to this property.");
+            if (!applied) throw new InvalidOperationException(UiStrings.PropertyValueApplyFailed);
             entry.MarkCommitted(committedValue);
             if (_pendingPropertyValues.TryGetValue(key, out PendingPropertyValue? current) && ReferenceEquals(current, draft))
             {
@@ -1775,7 +1799,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
         if (!string.Equals(_designer.ActiveDocumentPath, draft.DocumentPath, StringComparison.OrdinalIgnoreCase))
         {
-            SetEventError(entry, draft, "The document changed before the handler was applied. The draft is retained.");
+            SetEventError(entry, draft, UiStrings.EventDraftDocumentChanged);
             return;
         }
 
@@ -1794,13 +1818,13 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         {
             if (_designer is not IDesignerEventHost eventHost)
             {
-                throw new InvalidOperationException("The designer host does not support validated event assignments.");
+                throw new InvalidOperationException(UiStrings.ValidatedEventsUnsupported);
             }
 
             bool applied = await eventHost.SetEventHandlerAsync(entry.NodeId, entry.Name, handlerName, token);
             if (!applied)
             {
-                throw new InvalidOperationException("The handler could not be assigned to this event.");
+                throw new InvalidOperationException(UiStrings.EventHandlerApplyFailed);
             }
 
             entry.MarkCommitted(handlerName);
@@ -1815,7 +1839,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         }
         catch (OperationCanceledException)
         {
-            SetEventError(entry, draft, "The handler change was canceled. The draft is retained.");
+            SetEventError(entry, draft, UiStrings.EventHandlerCanceled);
         }
         catch (Exception exception)
         {
@@ -1842,7 +1866,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             if (_designer is not IDesignerEventHost eventHost ||
                 !await eventHost.NavigateToEventHandlerAsync(entry.NodeId, entry.Name, _loadCts?.Token ?? CancellationToken.None))
             {
-                throw new InvalidOperationException("The handler definition could not be opened.");
+                throw new InvalidOperationException(UiStrings.EventDefinitionOpenFailed);
             }
 
             StatusText = null;
@@ -1947,7 +1971,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
                 foreach (string category in categoryOrder)
                 {
-                    groupDescription.GroupKeys.Add(category);
+                    groupDescription.GroupKeys.Add(UiLabels.Category(category));
                 }
 
                 GroupedPropertiesView.GroupDescriptions.Add(groupDescription);
@@ -2029,7 +2053,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         }
 
         return entry.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-            || (entry.Value?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (entry.CommittedValue?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false)
             || entry.PropertyType.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
             || entry.Category.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
     }

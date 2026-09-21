@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -18,6 +18,8 @@ using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
 
+using XamlVisualEditor.Core.Localization;
+
 namespace XamlVisualEditor.Shell;
 
 /// <summary>
@@ -32,14 +34,14 @@ public sealed partial class SolutionExplorerTool : Tool
     public SolutionExplorerTool()
     {
         Id = "SolutionExplorer";
-        Title = "Solution Explorer";
+        Title = UiStrings.SolutionExplorer;
     }
 
     public SolutionExplorerTool(SolutionExplorerViewModel solutionExplorerViewModel)
     {
         SolutionExplorerViewModel = solutionExplorerViewModel;
         Id = "SolutionExplorer";
-        Title = "Solution Explorer";
+        Title = UiStrings.SolutionExplorer;
     }
 }
 
@@ -55,14 +57,14 @@ public sealed partial class OutputTool : Tool
     public OutputTool()
     {
         Id = "Output";
-        Title = "Output";
+        Title = UiStrings.Output;
     }
 
     public OutputTool(OutputViewModel outputViewModel)
     {
         OutputViewModel = outputViewModel;
         Id = "Output";
-        Title = "Output";
+        Title = UiStrings.Output;
     }
 }
 
@@ -78,7 +80,7 @@ public sealed partial class TerminalTool : Tool
     public TerminalTool()
     {
         Id = "Terminal";
-        Title = "Terminal";
+        Title = UiStrings.TerminalGroup;
     }
 
     public TerminalTool(TerminalViewModel terminalViewModel)
@@ -101,14 +103,14 @@ public sealed partial class BreakpointsTool : Tool
     public BreakpointsTool()
     {
         Id = "Breakpoints";
-        Title = "Breakpoints";
+        Title = UiStrings.Breakpoints;
     }
 
     public BreakpointsTool(BreakpointsViewModel breakpoints)
     {
         BreakpointsViewModel = breakpoints;
         Id = "Breakpoints";
-        Title = "Breakpoints";
+        Title = UiStrings.Breakpoints;
     }
 }
 
@@ -124,14 +126,14 @@ public sealed partial class CallStackTool : Tool
     public CallStackTool()
     {
         Id = "CallStack";
-        Title = "Call Stack";
+        Title = UiStrings.CallStack;
     }
 
     public CallStackTool(CallStackViewModel callStack)
     {
         CallStackViewModel = callStack;
         Id = "CallStack";
-        Title = "Call Stack";
+        Title = UiStrings.CallStack;
     }
 }
 
@@ -147,14 +149,14 @@ public sealed partial class LocalsTool : Tool
     public LocalsTool()
     {
         Id = "Locals";
-        Title = "Locals";
+        Title = UiStrings.Locals;
     }
 
     public LocalsTool(LocalsViewModel locals)
     {
         LocalsViewModel = locals;
         Id = "Locals";
-        Title = "Locals";
+        Title = UiStrings.Locals;
     }
 }
 
@@ -170,36 +172,14 @@ public sealed partial class WatchesTool : Tool
     public WatchesTool()
     {
         Id = "Watches";
-        Title = "Watches";
+        Title = UiStrings.Watches;
     }
 
     public WatchesTool(WatchesViewModel watches)
     {
         WatchesViewModel = watches;
         Id = "Watches";
-        Title = "Watches";
-    }
-}
-
-/// <summary>
-/// Dock tool for extension management.
-/// </summary>
-public sealed partial class ExtensionManagerTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public partial ExtensionManagerViewModel? ExtensionManagerViewModel { get; set; }
-
-    public ExtensionManagerTool()
-    {
-        Id = "ExtensionsManager";
-        Title = "Extensions";
-    }
-
-    public ExtensionManagerTool(ExtensionManagerViewModel viewModel)
-        : this()
-    {
-        ExtensionManagerViewModel = viewModel;
+        Title = UiStrings.Watches;
     }
 }
 
@@ -221,7 +201,7 @@ public sealed partial class ExtensionTool : Tool
     public ExtensionTool()
     {
         Id = "Extension";
-        Title = "Extension";
+        Title = UiStrings.Extension;
     }
 
     public ExtensionTool(ExtensionViewModel viewModel)
@@ -285,7 +265,7 @@ public sealed partial class InfiniteCanvasDocument : Document
     public InfiniteCanvasDocument()
     {
         Id = "InfiniteCanvas";
-        Title = "Canvas";
+        Title = UiStrings.Canvas;
         CanClose = true;
     }
 
@@ -293,7 +273,7 @@ public sealed partial class InfiniteCanvasDocument : Document
     {
         CanvasViewModel = canvasViewModel;
         Id = "InfiniteCanvas";
-        Title = "Canvas";
+        Title = UiStrings.Canvas;
         CanClose = true;
     }
 }
@@ -303,6 +283,11 @@ public sealed partial class InfiniteCanvasDocument : Document
 /// </summary>
 public sealed partial class XamlEditorDockFactory : Factory
 {
+    public override IDocumentDock CreateDocumentDock() => new DocumentDock
+    {
+        EmptyContent = UiStrings.NoDocumentsOpen
+    };
+
     private static readonly bool LogLayoutWarnings = true;
     private const string SolutionExplorerViewId = "solutionExplorer.panel";
     private readonly MainWindowViewModel _mainVm;
@@ -330,13 +315,12 @@ public sealed partial class XamlEditorDockFactory : Factory
         CallStackTool callStackTool = new(_mainVm.CallStack);
         LocalsTool localsTool = new(_mainVm.Locals);
         WatchesTool watchesTool = new(_mainVm.Watches);
-        ExtensionManagerTool extensionManagerTool = new(_mainVm.ExtensionManager);
 
         // Left tool dock
         ToolDock leftToolDock = new()
         {
             Id = "LeftToolDock",
-            Title = "Left Tools",
+            Title = UiStrings.LeftTools,
             Proportion = 0.2,
             ActiveDockable = null,
             VisibleDockables = CreateList<IDockable>(),
@@ -347,7 +331,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         ToolDock rightToolDock = new()
         {
             Id = "RightToolDock",
-            Title = "Right Tools",
+            Title = UiStrings.RightTools,
             Proportion = 0.25,
             ActiveDockable = null,
             VisibleDockables = CreateList<IDockable>(),
@@ -358,7 +342,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         ToolDock bottomToolDock = new()
         {
             Id = "BottomToolDock",
-            Title = "Bottom Tools",
+            Title = UiStrings.BottomTools,
             Proportion = 0.25,
             ActiveDockable = null,
             VisibleDockables = CreateList<IDockable>(
@@ -366,8 +350,7 @@ public sealed partial class XamlEditorDockFactory : Factory
                 breakpointsTool,
                 callStackTool,
                 localsTool,
-                watchesTool,
-                extensionManagerTool),
+                watchesTool),
             Alignment = Alignment.Bottom,
             AutoHide = true,
             IsExpanded = false
@@ -377,7 +360,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         DocumentDock documentDock = new()
         {
             Id = "DocumentDock",
-            Title = "Documents",
+            Title = UiStrings.Documents,
             IsCollapsable = false,
             VisibleDockables = CreateList<IDockable>(),
             ActiveDockable = null,
@@ -412,7 +395,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         RootDock rootDock = new()
         {
             Id = "Root",
-            Title = "Root",
+            Title = UiStrings.RootArea,
             IsCollapsable = false,
             ActiveDockable = mainLayout,
             DefaultDockable = mainLayout,
@@ -433,43 +416,42 @@ public sealed partial class XamlEditorDockFactory : Factory
         if (solutionTool is not null)
         {
             solutionTool.SolutionExplorerViewModel = _mainVm.SolutionExplorer;
+            solutionTool.Title = UiStrings.SolutionExplorer;
         }
 
         OutputTool? outputTool = FindDockable<OutputTool>(rootDock, "Output");
         if (outputTool is not null)
         {
             outputTool.OutputViewModel = _mainVm.Output;
+            outputTool.Title = UiStrings.Output;
         }
 
         BreakpointsTool? breakpointsTool = FindDockable<BreakpointsTool>(rootDock, "Breakpoints");
         if (breakpointsTool is not null)
         {
             breakpointsTool.BreakpointsViewModel = _mainVm.Breakpoints;
+            breakpointsTool.Title = UiStrings.Breakpoints;
         }
 
         CallStackTool? callStackTool = FindDockable<CallStackTool>(rootDock, "CallStack");
         if (callStackTool is not null)
         {
             callStackTool.CallStackViewModel = _mainVm.CallStack;
+            callStackTool.Title = UiStrings.CallStack;
         }
 
         LocalsTool? localsTool = FindDockable<LocalsTool>(rootDock, "Locals");
         if (localsTool is not null)
         {
             localsTool.LocalsViewModel = _mainVm.Locals;
+            localsTool.Title = UiStrings.Locals;
         }
 
         WatchesTool? watchesTool = FindDockable<WatchesTool>(rootDock, "Watches");
         if (watchesTool is not null)
         {
             watchesTool.WatchesViewModel = _mainVm.Watches;
-        }
-
-        ExtensionManagerTool? extensionManagerTool =
-            FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager");
-        if (extensionManagerTool is not null)
-        {
-            extensionManagerTool.ExtensionManagerViewModel = _mainVm.ExtensionManager;
+            watchesTool.Title = UiStrings.Watches;
         }
 
         foreach (ExtensionTool extensionTool in FindDockables<ExtensionTool>(rootDock))
@@ -573,14 +555,25 @@ public sealed partial class XamlEditorDockFactory : Factory
         ToolDock? toolDock = FindDockable<ToolDock>(rootDock, "BottomToolDock");
         if (toolDock is not null)
         {
+            bool wasCollapsed = toolDock.Proportion == 0;
             TerminalTool tool = new(terminalViewModel)
             {
                 Title = terminalViewModel.Title
             };
             AddDockable(toolDock, tool);
             SetOwnerRecursive(tool, toolDock);
-            SetActiveDockable(tool);
-            SetFocusedDockable(toolDock, tool);
+            toolDock.IsEmpty = false;
+            if (wasCollapsed)
+            {
+                PinDockable(tool);
+                EnsurePinnedToolSize(tool);
+                PreviewPinnedDockable(tool);
+            }
+            else
+            {
+                SetActiveDockable(tool);
+                SetFocusedDockable(toolDock, tool);
+            }
             return tool;
         }
 
@@ -602,6 +595,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             foreach (IDockable tool in tools)
             {
                 PinDockable(tool);
+                EnsurePinnedToolSize(tool);
             }
 
             if (double.IsFinite(bottomDock.Proportion) && bottomDock.Proportion > 0)
@@ -621,6 +615,13 @@ public sealed partial class XamlEditorDockFactory : Factory
             pinnedDock.IsActive = false;
             pinnedDock.IsExpanded = false;
         }
+    }
+
+    private static void EnsurePinnedToolSize(IDockable tool)
+    {
+        tool.GetPinnedBounds(out _, out _, out double width, out double height);
+        if (!double.IsFinite(width) || width <= 0 || !double.IsFinite(height) || height <= 0)
+            tool.SetPinnedBounds(0, 0, 400, 300);
     }
 
     public ExtensionTool? AddExtensionTool(IRootDock rootDock, ExtensionViewModel viewModel)
@@ -785,7 +786,9 @@ public sealed partial class XamlEditorDockFactory : Factory
         if (filePath is null && !HasDesktopLifetime()) return;
         filePath ??= GetDefaultLayoutPath();
         List<Action> restoreActions = DetachRuntimeDocuments(rootDock);
-        restoreActions.AddRange(DetachNonPersistentExtensionTools(rootDock));
+        restoreActions.InsertRange(0, DetachNonPersistentExtensionTools(rootDock));
+        restoreActions.InsertRange(0, DetachToolViewModels(rootDock));
+        restoreActions.InsertRange(0, DetachDockRuntimeReferences(rootDock));
         try
         {
             JsonObject snapshot = JsonNode.Parse(s_serializer.Serialize(rootDock)) as JsonObject
@@ -793,6 +796,15 @@ public sealed partial class XamlEditorDockFactory : Factory
             snapshot.Remove(nameof(IRootDock.PinnedDock));
             snapshot.Remove(nameof(IRootDock.Window));
             snapshot.Remove(nameof(IRootDock.Windows));
+            JsonObject pinnedSizes = new();
+            foreach (IDockable tool in rootDock.BottomPinnedDockables ?? Array.Empty<IDockable>())
+            {
+                tool.GetPinnedBounds(out _, out _, out double width, out double height);
+                if (!string.IsNullOrWhiteSpace(tool.Id) && double.IsFinite(width) && width > 0
+                    && double.IsFinite(height) && height > 0)
+                    pinnedSizes[tool.Id] = new JsonObject { ["Width"] = width, ["Height"] = height };
+            }
+            snapshot["PinnedToolSizes"] = pinnedSizes;
             File.WriteAllText(filePath, snapshot.ToJsonString());
         }
         catch (Exception ex)
@@ -827,14 +839,34 @@ public sealed partial class XamlEditorDockFactory : Factory
 
             string json = File.ReadAllText(filePath);
             JsonObject? persisted = JsonNode.Parse(json) as JsonObject;
+            JsonObject? pinnedSizes = persisted?["PinnedToolSizes"] as JsonObject;
+            persisted?.Remove("PinnedToolSizes");
             persisted?.Remove(nameof(IRootDock.PinnedDock));
             persisted?.Remove(nameof(IRootDock.Window));
             persisted?.Remove(nameof(IRootDock.Windows));
+            RemoveExtensionManagerDock(persisted);
+            if (persisted is not null && persisted[nameof(IRootDock.ActiveDockable)] is null)
+            {
+                persisted.Remove(nameof(IRootDock.DefaultDockable));
+            }
             IRootDock? rootDock = s_serializer.Deserialize<IRootDock>(persisted?.ToJsonString() ?? json);
             if (rootDock is not null)
             {
                 EnsureLayoutDefaults(rootDock);
                 NormalizeDockReferences(rootDock);
+                foreach (IDockable tool in rootDock.BottomPinnedDockables ?? Array.Empty<IDockable>())
+                {
+                    if (!string.IsNullOrWhiteSpace(tool.Id) && pinnedSizes?[tool.Id] is JsonObject size
+                        && size["Width"] is JsonValue widthValue && widthValue.TryGetValue(out double width)
+                        && size["Height"] is JsonValue heightValue && heightValue.TryGetValue(out double height)
+                        && double.IsFinite(width) && width > 0 && double.IsFinite(height) && height > 0)
+                        tool.SetPinnedBounds(0, 0, width, height);
+                    EnsurePinnedToolSize(tool);
+                }
+                IDockable? mainLayout = rootDock.VisibleDockables?
+                    .FirstOrDefault(dockable => dockable.Id == "MainLayout");
+                rootDock.ActiveDockable ??= mainLayout;
+                rootDock.DefaultDockable ??= mainLayout;
                 bool hasLeft = FindDockable<ToolDock>(rootDock, "LeftToolDock") is not null;
                 bool hasRight = FindDockable<ToolDock>(rootDock, "RightToolDock") is not null;
                 bool hasBottom = FindDockable<ToolDock>(rootDock, "BottomToolDock") is not null;
@@ -860,6 +892,29 @@ public sealed partial class XamlEditorDockFactory : Factory
         }
     }
 
+    private static void RemoveExtensionManagerDock(JsonNode? node)
+    {
+        if (node is JsonArray items)
+        {
+            for (int index = items.Count - 1; index >= 0; index--)
+            {
+                if (IsExtensionManagerDock(items[index])) items.RemoveAt(index);
+                else RemoveExtensionManagerDock(items[index]);
+            }
+        }
+        else if (node is JsonObject entry)
+        {
+            foreach (KeyValuePair<string, JsonNode?> property in entry.ToArray())
+            {
+                if (IsExtensionManagerDock(property.Value)) entry.Remove(property.Key);
+                else RemoveExtensionManagerDock(property.Value);
+            }
+        }
+    }
+
+    private static bool IsExtensionManagerDock(JsonNode? node) =>
+        node is JsonObject entry && entry[nameof(IDockable.Id)]?.GetValue<string>() == "ExtensionsManager";
+
     public static void EnsureLayoutDefaults(IRootDock rootDock)
     {
         const double leftWidth = 0.2;
@@ -872,9 +927,24 @@ public sealed partial class XamlEditorDockFactory : Factory
             rootDock.Id = "Root";
         }
 
-        if (string.IsNullOrWhiteSpace(rootDock.Title))
+        rootDock.Title = UiStrings.RootArea;
+        foreach (IDockable dock in FindDockables<IDockable>(rootDock))
         {
-            rootDock.Title = "Root";
+            if (dock is IDocumentDock emptyDocumentDock)
+            {
+                emptyDocumentDock.EmptyContent = UiStrings.NoDocumentsOpen;
+            }
+
+            string? title = dock.Id switch
+            {
+                "LeftToolDock" => UiStrings.LeftTools,
+                "RightToolDock" => UiStrings.RightTools,
+                "BottomToolDock" => UiStrings.BottomTools,
+                "DocumentDock" => UiStrings.Documents,
+                "PinnedDock" => UiStrings.Pinned,
+                _ => null
+            };
+            if (title is not null) dock.Title = title;
         }
 
         rootDock.VisibleDockables ??= new ObservableCollection<IDockable>();
@@ -890,7 +960,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             rootDock.PinnedDock = new ToolDock
             {
                 Id = "PinnedDock",
-                Title = "Pinned",
+                Title = UiStrings.Pinned,
                 Alignment = Alignment.Left,
                 VisibleDockables = new ObservableCollection<IDockable>()
             };
@@ -1030,12 +1100,6 @@ public sealed partial class XamlEditorDockFactory : Factory
                 (tool, vm) => tool.ExtensionViewModel = vm,
                 restore);
         }
-
-        DetachToolViewModel(
-            FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager"),
-            tool => tool.ExtensionManagerViewModel,
-            (tool, vm) => tool.ExtensionManagerViewModel = vm,
-            restore);
 
         return restore;
     }

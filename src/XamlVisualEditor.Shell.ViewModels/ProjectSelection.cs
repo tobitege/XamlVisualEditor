@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -150,6 +150,14 @@ internal static class ProjectSelection
 
     public static string? ResolveTargetAssemblyPath(ProjectModel project)
     {
+        if (!string.IsNullOrWhiteSpace(project.AssemblySnapshotDirectory))
+        {
+            string fileName = string.IsNullOrWhiteSpace(project.OutputAssemblyPath)
+                ? project.Name + ".dll"
+                : Path.GetFileName(project.OutputAssemblyPath);
+            return Path.Combine(project.AssemblySnapshotDirectory, fileName);
+        }
+
         if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
         {
             return project.OutputAssemblyPath;

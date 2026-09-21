@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,6 +13,11 @@ internal static class WorkspaceAssemblyDiscovery
         Action<string, Exception>? onEnumerationError = null)
     {
         ArgumentNullException.ThrowIfNull(project);
+
+        if (!string.IsNullOrWhiteSpace(project.AssemblySnapshotDirectory))
+        {
+            return EnumerateTopLevelAssemblies(project.AssemblySnapshotDirectory, onEnumerationError);
+        }
 
         if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath)
             && File.Exists(project.OutputAssemblyPath))

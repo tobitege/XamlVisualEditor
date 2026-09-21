@@ -1,31 +1,39 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.OutputExtension"
+             xmlns:views="using:XamlVisualEditor.OutputExtension.Views"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
              xmlns:i="using:Avalonia.Xaml.Interactivity"
              xmlns:ia="using:Avalonia.Xaml.Interactions.Core"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.OutputExtension.Views.ProblemsPanelView"
              x:DataType="vm:ProblemsPanelViewModel">
+  <UserControl.Resources>
+    <DataTemplate x:Key="FilterLabelTemplate" x:DataType="sys:String">
+      <TextBlock Text="{CompiledBinding ., Converter={x:Static views:ProblemsPanelView.FilterLabelConverter}}" />
+    </DataTemplate>
+  </UserControl.Resources>
   <Grid RowDefinitions="Auto,Auto,*" Margin="4" RowSpacing="4">
     <WrapPanel Classes="editor-toolbar" Orientation="Horizontal">
-      <Button Content="Refresh" Command="{CompiledBinding RefreshCommand}" Padding="6,2" />
-      <Button Content="Actions" Padding="6,2">
+      <Button Content="{x:Static loc:UiStrings.Refresh}" Command="{CompiledBinding RefreshCommand}" Padding="6,2" />
+      <Button Content="{x:Static loc:UiStrings.Actions}" Padding="6,2">
         <Button.Flyout>
           <MenuFlyout>
-            <MenuItem Header="Copy selected" Command="{CompiledBinding CopySelectedCommand}" />
-            <MenuItem Header="Copy all" Command="{CompiledBinding CopyAllCommand}" />
+            <MenuItem Header="{x:Static loc:UiStrings.CopySelected}" Command="{CompiledBinding CopySelectedCommand}" />
+            <MenuItem Header="{x:Static loc:UiStrings.CopyAll}" Command="{CompiledBinding CopyAllCommand}" />
             <Separator />
-            <MenuItem Header="Clear problems" Command="{CompiledBinding ClearCommand}" />
-            <MenuItem Header="Clear filters" Command="{CompiledBinding ClearFiltersCommand}" />
+            <MenuItem Header="{x:Static loc:UiStrings.ClearProblems}" Command="{CompiledBinding ClearCommand}" />
+            <MenuItem Header="{x:Static loc:UiStrings.ClearFilters}" Command="{CompiledBinding ClearFiltersCommand}" />
             <Separator />
-            <MenuItem Header="Show first-seen time" ToggleType="CheckBox"
+            <MenuItem Header="{x:Static loc:UiStrings.ShowFirstSeenTime}" ToggleType="CheckBox"
                       IsChecked="{CompiledBinding ShowFirstSeen, Mode=TwoWay}" />
           </MenuFlyout>
         </Button.Flyout>
       </Button>
       <ComboBox Width="140"
-                ToolTip.Tip="Diagnostic channel"
+                ToolTip.Tip="{x:Static loc:UiStrings.DiagnosticChannel}"
                 ItemsSource="{CompiledBinding ChannelsView}"
                 SelectedItem="{CompiledBinding SelectedChannel, Mode=TwoWay}">
         <ComboBox.ItemTemplate>
@@ -35,16 +43,18 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
       <ComboBox Width="110"
-                ToolTip.Tip="Group problems by"
+                ToolTip.Tip="{x:Static loc:UiStrings.GroupProblemsBy}"
                 ItemsSource="{CompiledBinding GroupByOptions}"
+                ItemTemplate="{StaticResource FilterLabelTemplate}"
                 SelectedItem="{CompiledBinding SelectedGroupBy, Mode=TwoWay}" />
       <ComboBox Width="100"
-                ToolTip.Tip="Diagnostic severity"
+                ToolTip.Tip="{x:Static loc:UiStrings.DiagnosticSeverity}"
                 ItemsSource="{CompiledBinding SeverityOptions}"
+                ItemTemplate="{StaticResource FilterLabelTemplate}"
                 SelectedItem="{CompiledBinding SelectedSeverity, Mode=TwoWay}" />
     </WrapPanel>
     <TextBox Grid.Row="1"
-             PlaceholderText="Search diagnostics..."
+             PlaceholderText="{x:Static loc:UiStrings.SearchDiagnostics}"
              Text="{CompiledBinding SearchText, Mode=TwoWay}" />
 
     <dg:DataGrid x:Name="DiagnosticsGrid" Grid.Row="2"
@@ -77,7 +87,7 @@
         </DataTemplate>
       </dg:DataGrid.DataTemplates>
       <dg:DataGrid.Columns>
-        <dg:DataGridTemplateColumn Header="Since" Width="80" SortMemberPath="Item.FirstSeen"
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Since}" Width="80" SortMemberPath="Item.FirstSeen"
                                    IsVisible="{ReflectionBinding DataContext.ShowFirstSeen, ElementName=DiagnosticsGrid}">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
@@ -92,7 +102,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridHierarchicalColumn Header="Message"
+        <dg:DataGridHierarchicalColumn Header="{x:Static loc:UiStrings.Message}"
                                        Width="*"
                                        MinWidth="120"
                                        Binding="{CompiledBinding Item}"
@@ -104,7 +114,7 @@
             </DataTemplate>
           </dg:DataGridHierarchicalColumn.CellTemplate>
         </dg:DataGridHierarchicalColumn>
-        <dg:DataGridTemplateColumn Header="Severity" Width="68">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Severity}" Width="68">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
@@ -118,7 +128,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="Location" Width="150">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Location}" Width="150">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
@@ -133,7 +143,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="Source" Width="90">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Source}" Width="90">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">

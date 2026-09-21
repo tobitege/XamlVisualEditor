@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.IdeBridgeExtension;
 
@@ -33,7 +35,7 @@ public sealed class IdeBridgeExtension : IXveExtension
 
         ExtensionViewContribution view = new(
             ViewId,
-            "IDE Bridge",
+            UiStrings.IdeBridge,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Right,
             35);

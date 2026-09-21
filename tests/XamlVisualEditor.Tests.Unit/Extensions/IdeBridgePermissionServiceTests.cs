@@ -1,22 +1,71 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
+using XamlVisualEditor.Extensions.Hosting.Mcp;
+using XamlVisualEditor.Core.Localization;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
+[CollectionDefinition(nameof(UiLocalizationCollection), DisableParallelization = true)]
+public sealed class UiLocalizationCollection;
+
+[Collection(nameof(UiLocalizationCollection))]
 public sealed class IdeBridgePermissionServiceTests
 {
+    [Theory]
+    [InlineData("en", 0)]
+    [InlineData("en", 1)]
+    [InlineData("en", 2)]
+    [InlineData("en", -1)]
+    [InlineData("en", 3)]
+    [InlineData("de", 0)]
+    [InlineData("de", 1)]
+    [InlineData("de", 2)]
+    [InlineData("de", -1)]
+    [InlineData("de", 3)]
+    public async Task LocalizedConsentPreservesTheSelectedAccessLevel(string language, int selection)
+    {
+        CultureInfo? previous = UiStrings.Culture;
+        UiStrings.Culture = CultureInfo.GetCultureInfo(language);
+        try
+        {
+            FakeWindow window = new()
+            {
+                Pick = items => selection < 0 ? null : selection < items.Count ? items[selection] : new QuickPickItem("unexpected", null, null)
+            };
+            IdeBridgePermissionService ide = new(new FakeSettings(), window);
+            McpPermissionService mcp = new(new FakeSettings(), window);
+            IdeBridgeWorkspacePermissionState? ideState = await ide.AuthorizeAsync("localized-test", null, CancellationToken.None);
+            McpWorkspacePermissionState? mcpState = await mcp.AuthorizeAsync("localized-test", null, CancellationToken.None);
+            if (selection is 0 or 1)
+            {
+                Assert.NotNull(ideState);
+                Assert.NotNull(mcpState);
+                Assert.Equal(selection == 1, ideState.Capabilities.Write);
+                Assert.Equal(selection == 1, ideState.Capabilities.Terminal);
+                Assert.Equal(selection == 1 ? McpAccessLevel.Full : McpAccessLevel.ReadOnly, mcpState.AccessLevel);
+            }
+            else
+            {
+                Assert.Null(ideState);
+                Assert.Null(mcpState);
+            }
+        }
+        finally { UiStrings.Culture = previous; }
+    }
+
     [Fact]
     public async Task AuthorizeAsync_AllowsFullAccessWhenApproved()
     {
         FakeSettings settings = new();
         FakeWindow window = new()
         {
-            NextPick = new QuickPickItem("Allow full access", "", null)
+            NextPick = new QuickPickItem(UiStrings.AllowFullAccess, "", null)
         };
 
         IdeBridgePermissionService service = new(settings, window);
@@ -33,7 +82,7 @@ public sealed class IdeBridgePermissionServiceTests
         FakeSettings settings = new();
         FakeWindow window = new()
         {
-            NextPick = new QuickPickItem("Allow read-only", "", null)
+            NextPick = new QuickPickItem(UiStrings.AllowReadOnly, "", null)
         };
 
         IdeBridgePermissionService service = new(settings, window);
@@ -47,6 +96,7 @@ public sealed class IdeBridgePermissionServiceTests
     private sealed class FakeWindow : IWindow
     {
         public QuickPickItem? NextPick { get; set; }
+        public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? Pick { get; init; }
 
         public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -57,7 +107,7 @@ public sealed class IdeBridgePermissionServiceTests
         public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
         public Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, QuickPickOptions options, CancellationToken cancellationToken)
-            => Task.FromResult(NextPick);
+            => Task.FromResult(Pick is null ? NextPick : Pick(items));
 
         public IOutputChannel CreateOutputChannel(string name) => new NullOutputChannel(name);
 

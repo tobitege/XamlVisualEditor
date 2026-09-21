@@ -148,6 +148,13 @@ public sealed partial class XamlSerializationService
                 }
             }
 
+            for (int index = 0; index < target.Length; index++)
+            {
+                if (pairs[index] is not null || FindGlobal(target[index]) is not { } original) continue;
+                pairs[index] = original;
+                remaining.Remove(original);
+            }
+
             Dictionary<string, Queue<XNode>> compatible = source.Where(remaining.Contains).GroupBy(Kind)
                 .ToDictionary(group => group.Key, group => new Queue<XNode>(group), StringComparer.Ordinal);
             for (int index = 0; index < target.Length; index++)

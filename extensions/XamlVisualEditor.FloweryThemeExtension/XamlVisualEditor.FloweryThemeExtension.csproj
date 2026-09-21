@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.FloweryThemeExtension</RootNamespace>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Description>Optional Flowery.NET theme provider for isolated XamlVisualEditor previews.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" PrivateAssets="all" />
+    <PackageReference Include="Flowery.NET" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="xve.extension.json" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

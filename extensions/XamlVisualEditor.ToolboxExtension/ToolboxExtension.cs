@@ -1,4 +1,6 @@
-using XamlVisualEditor.Extensions;
+﻿using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.ToolboxExtension;
 
@@ -28,7 +30,7 @@ public sealed class ToolboxExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     ToolboxViewId,
-                    "Toolbox",
+                    UiStrings.Toolbox,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Left,
                     12,
@@ -42,23 +44,23 @@ public sealed class ToolboxExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             InsertButtonCommandId,
             new CommandMetadata(
-                Title: "Toolbox: Insert Button",
-                Category: "Toolbox",
+                Title: UiStrings.ToolboxInsertButton,
+                Category: UiStrings.Toolbox,
                 Priority: 50)));
 
         context.Subscriptions.Add(context.CommandMetadata.Register(
             InsertSelectedCommandId,
             new CommandMetadata(
-                Title: "Toolbox: Insert Selected",
-                Category: "Toolbox",
+                Title: UiStrings.ToolboxInsertSelected,
+                Category: UiStrings.Toolbox,
                 Priority: 60)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
             new[]
             {
-                new ExtensionCommandPaletteContribution(InsertButtonCommandId, "Toolbox: Insert Button", "Toolbox"),
-                new ExtensionCommandPaletteContribution(InsertSelectedCommandId, "Toolbox: Insert Selected", "Toolbox")
+                new ExtensionCommandPaletteContribution(InsertButtonCommandId, UiStrings.ToolboxInsertButton, UiStrings.Toolbox),
+                new ExtensionCommandPaletteContribution(InsertSelectedCommandId, UiStrings.ToolboxInsertSelected, UiStrings.Toolbox)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
@@ -67,19 +69,19 @@ public sealed class ToolboxExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     InsertButtonCommandId,
-                    "Insert Button",
+                    UiStrings.InsertButton,
                     ExtensionMenuLocations.Tools,
                     "toolbox",
                     10),
                 new ExtensionMenuContribution(
                     InsertSelectedCommandId,
-                    "Insert Selected Toolbox Item",
+                    UiStrings.InsertSelectedToolboxItem,
                     ExtensionMenuLocations.Tools,
                     "toolbox",
                     20),
                 new ExtensionMenuContribution(
                     ToggleViewCommandId,
-                    "Toolbox",
+                    UiStrings.Toolbox,
                     ExtensionMenuLocations.View,
                     "views.left",
                     20)
@@ -102,7 +104,7 @@ public sealed class ToolboxExtension : IXveExtension
         if (insertedNodeId is null)
         {
             await context.Window.ShowWarningMessageAsync(
-                "No active designer document. Open a XAML designer document first.",
+                UiStrings.DesignerDocumentRequired,
                 cancellationToken);
         }
     }
@@ -116,7 +118,7 @@ public sealed class ToolboxExtension : IXveExtension
             || !TryGetStringArg(commandContext.Arguments, 1, out string? xmlNamespace))
         {
             await context.Window.ShowWarningMessageAsync(
-                "toolbox.insertSelected expects arguments: [typeName, xmlNamespace, optional parentNodeId].",
+                UiStrings.ToolboxArgumentsRequired,
                 cancellationToken);
             return;
         }
@@ -133,7 +135,7 @@ public sealed class ToolboxExtension : IXveExtension
         if (insertedNodeId is null)
         {
             await context.Window.ShowWarningMessageAsync(
-                "Insert failed. Ensure an active designer document is open and arguments are valid.",
+                UiStrings.ControlInsertFailed,
                 cancellationToken);
         }
     }

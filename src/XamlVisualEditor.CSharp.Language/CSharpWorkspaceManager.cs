@@ -163,7 +163,9 @@ public sealed class CSharpWorkspaceManager : IDisposable
         MSBuildWorkspace? workspace = null;
         try
         {
-            workspace = MSBuildWorkspace.Create();
+            AssemblySnapshotSettings? snapshot = AssemblySnapshotSettings.FindForWorkspace(workspacePath);
+            workspace = snapshot is null ? MSBuildWorkspace.Create()
+                : MSBuildWorkspace.Create(snapshot.CreateMSBuildProperties());
             workspace.RegisterWorkspaceFailedHandler(diagnostic =>
             {
                 if (diagnostic.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
@@ -190,6 +192,9 @@ public sealed class CSharpWorkspaceManager : IDisposable
             {
                 return;
             }
+
+            snapshot?.EnsureNoLiveReferences(solution.Projects.SelectMany(project => project.MetadataReferences)
+                .OfType<PortableExecutableReference>().Select(reference => reference.FilePath).OfType<string>());
 
             bool accepted;
             lock (_gate)

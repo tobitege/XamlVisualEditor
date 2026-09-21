@@ -1,5 +1,7 @@
-using XamlVisualEditor.Core.Interfaces;
+﻿using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.GitExtension;
 
@@ -19,7 +21,7 @@ public sealed class GitExtension : IXveExtension
     {
         ExtensionViewContribution view = new(
             ViewId,
-            "Git",
+            UiStrings.Git,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Bottom,
             40);

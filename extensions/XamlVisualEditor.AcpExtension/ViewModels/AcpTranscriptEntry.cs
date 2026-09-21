@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace XamlVisualEditor.AcpExtension;
 
@@ -23,7 +23,8 @@ public sealed record AcpTranscriptToolEntry(
     string? TerminalOutput,
     bool TerminalTruncated,
     int? TerminalExitCode,
-    string? TerminalSignal)
+    string? TerminalSignal,
+    string? OutputText = null)
     : AcpTranscriptEntry("tool", Timestamp)
 {
     public string TitleDisplay => string.IsNullOrWhiteSpace(Title) ? "Tool call" : Title;

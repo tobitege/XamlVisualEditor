@@ -1,7 +1,11 @@
-using System.Reactive.Disposables;
+﻿using System.Reactive.Disposables;
 using System.Reactive.Threading.Tasks;
+using System.Reactive.Linq;
+using ReactiveUI;
 using XamlVisualEditor.Acp;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.AcpExtension;
 
@@ -40,7 +44,7 @@ public sealed class AcpExtension : IXveExtension
 
         ExtensionViewContribution view = new(
             ViewId,
-            "ACP",
+            UiStrings.Acp,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Right,
             30);
@@ -63,7 +67,8 @@ public sealed class AcpExtension : IXveExtension
                 return Task.FromResult(AcpPermissionOutcome.Cancelled());
             }
 
-            return _viewModel.PermissionInteraction.Handle(request).ToTask();
+            return _viewModel.PermissionInteraction.Handle(request)
+                .SubscribeOn(RxSchedulers.MainThreadScheduler).ToTask(ct);
         });
         context.Subscriptions.Add(Disposable.Create(() => _acpService.SetPermissionHandler(null)));
 

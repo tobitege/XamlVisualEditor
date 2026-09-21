@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
@@ -24,7 +26,7 @@ public sealed class PropertyEditorExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     ViewId,
-                    "Properties",
+                    UiStrings.Properties,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Right,
                     20,
@@ -37,7 +39,7 @@ public sealed class PropertyEditorExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleViewCommandId,
-                    "Properties",
+                    UiStrings.Properties,
                     ExtensionMenuLocations.View,
                     "views.right",
                     10)

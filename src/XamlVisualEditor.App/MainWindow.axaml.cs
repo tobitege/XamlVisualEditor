@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Reactive;
@@ -18,6 +18,8 @@ using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
 
+using XamlVisualEditor.Core.Localization;
+
 namespace XamlVisualEditor.App;
 
 /// <summary>
@@ -35,6 +37,8 @@ public sealed partial class MainWindow : Window
     private IDisposable? _workspaceSymbolQueryHandler;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
+    private IDisposable? _extensionManagerHandler;
+    private ExtensionManagerDialog? _extensionManagerDialog;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
     private IDisposable? _themeVariantHandler;
@@ -76,6 +80,7 @@ public sealed partial class MainWindow : Window
             _workspaceSymbolQueryHandler?.Dispose();
             _commandPaletteHandler?.Dispose();
             _extensionPackageOpenHandler?.Dispose();
+            _extensionManagerHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
             _themeVariantHandler?.Dispose();
@@ -99,6 +104,7 @@ public sealed partial class MainWindow : Window
         _workspaceSymbolQueryHandler?.Dispose();
         _commandPaletteHandler?.Dispose();
         _extensionPackageOpenHandler?.Dispose();
+        _extensionManagerHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
         _themeVariantHandler?.Dispose();
@@ -108,18 +114,18 @@ public sealed partial class MainWindow : Window
         {
             FilePickerOpenOptions options = new()
             {
-                Title = "Open XAML, Project, or Solution",
+                Title = UiStrings.OpenXamlProjectSolution,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("All Supported")
+                    new FilePickerFileType(UiStrings.AllSupportedFiles)
                     {
                         Patterns = new[] { "*.axaml", "*.xaml", "*.csproj", "*.sln", "*.slnx" }
                     },
-                    new FilePickerFileType("XAML Files") { Patterns = new[] { "*.axaml", "*.xaml" } },
-                    new FilePickerFileType("Projects") { Patterns = new[] { "*.csproj" } },
-                    new FilePickerFileType("Solutions") { Patterns = new[] { "*.sln", "*.slnx" } },
-                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    new FilePickerFileType(UiStrings.XamlFiles) { Patterns = new[] { "*.axaml", "*.xaml" } },
+                    new FilePickerFileType(UiStrings.Projects) { Patterns = new[] { "*.csproj" } },
+                    new FilePickerFileType(UiStrings.Solutions) { Patterns = new[] { "*.sln", "*.slnx" } },
+                    new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };
 
@@ -139,13 +145,13 @@ public sealed partial class MainWindow : Window
         {
             FilePickerSaveOptions options = new()
             {
-                Title = "Save XAML File",
+                Title = UiStrings.SaveXamlFile,
                 DefaultExtension = ".axaml",
                 SuggestedFileName = interaction.Input,
                 FileTypeChoices = new[]
                 {
-                    new FilePickerFileType("XAML Files") { Patterns = new[] { "*.axaml", "*.xaml" } },
-                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    new FilePickerFileType(UiStrings.XamlFiles) { Patterns = new[] { "*.axaml", "*.xaml" } },
+                    new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };
 
@@ -221,20 +227,42 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
+        _extensionManagerHandler = vm.ExtensionManagerInteraction.RegisterHandler(async interaction =>
+        {
+            if (_extensionManagerDialog is not null)
+            {
+                _extensionManagerDialog.Activate();
+                interaction.SetOutput(Unit.Default);
+                return;
+            }
+
+            ExtensionManagerDialog dialog = new() { DataContext = vm.ExtensionManager };
+            _extensionManagerDialog = dialog;
+            try
+            {
+                await dialog.ShowDialog(this);
+            }
+            finally
+            {
+                _extensionManagerDialog = null;
+            }
+            interaction.SetOutput(Unit.Default);
+        });
+
         _extensionPackageOpenHandler = vm.ExtensionPackageOpenInteraction.RegisterHandler(async interaction =>
         {
             FilePickerOpenOptions options = new()
             {
-                Title = "Install Extension Package",
+                Title = UiStrings.InstallExtensionPackage,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("NuGet Package") { Patterns = new[] { "*.nupkg" } },
-                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    new FilePickerFileType(UiStrings.NuGetPackage) { Patterns = new[] { "*.nupkg" } },
+                    new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };
 
-            var files = await StorageProvider.OpenFilePickerAsync(options);
+            var files = await (_extensionManagerDialog ?? (Window)this).StorageProvider.OpenFilePickerAsync(options);
             if (files.Count > 0)
             {
                 interaction.SetOutput(files[0].Path.LocalPath);

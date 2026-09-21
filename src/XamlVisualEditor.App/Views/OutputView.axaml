@@ -1,23 +1,24 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.OutputView"
              x:DataType="vm:OutputViewModel">
 
     <DockPanel>
         <!-- Output toolbar -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="4,2">
-            <TextBlock Text="Output" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
+            <TextBlock Text="{x:Static loc:UiStrings.Output}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
             <Separator />
-            <TextBlock Text="{CompiledBinding ErrorCount, StringFormat='Errors: {0}'}"
+            <TextBlock Text="{CompiledBinding ErrorCount, StringFormat={x:Static loc:UiStrings.ErrorsCountFormat}}"
                        Foreground="Red" VerticalAlignment="Center" Margin="4,0" />
-            <TextBlock Text="{CompiledBinding WarningCount, StringFormat='Warnings: {0}'}"
+            <TextBlock Text="{CompiledBinding WarningCount, StringFormat={x:Static loc:UiStrings.WarningsCountFormat}}"
                        Foreground="Orange" VerticalAlignment="Center" Margin="4,0" />
             <Separator />
-            <Button Content="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
-            <Button Content="Copy All" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
-            <Button Content="Clear" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
+            <Button Content="{x:Static loc:UiStrings.CopySelectedTitle}" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
+            <Button Content="{x:Static loc:UiStrings.CopyAllTitle}" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
+            <Button Content="{x:Static loc:UiStrings.Clear}" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
         </StackPanel>
 
         <!-- Message list -->
@@ -28,21 +29,21 @@
                      IsReadOnly="True">
             <dg:DataGrid.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" />
-                    <MenuItem Header="Copy All" Command="{CompiledBinding CopyAllCommand}" />
+                    <MenuItem Header="{x:Static loc:UiStrings.CopySelectedTitle}" Command="{CompiledBinding CopySelectedCommand}" />
+                    <MenuItem Header="{x:Static loc:UiStrings.CopyAllTitle}" Command="{CompiledBinding CopyAllCommand}" />
                 </ContextMenu>
             </dg:DataGrid.ContextMenu>
             <dg:DataGrid.Columns>
-                <dg:DataGridTextColumn Header="Level" Binding="{CompiledBinding Level}" Width="80" />
-                <dg:DataGridTemplateColumn Header="Message" Width="2*">
+                <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Level}" Binding="{CompiledBinding Level}" Width="80" />
+                <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Message}" Width="2*">
                     <dg:DataGridTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:OutputMessage">
                             <TextBlock Text="{CompiledBinding Text}" TextWrapping="Wrap" />
                         </DataTemplate>
                     </dg:DataGridTemplateColumn.CellTemplate>
                 </dg:DataGridTemplateColumn>
-                <dg:DataGridTextColumn Header="Line" Binding="{CompiledBinding Line}" Width="80" />
-                <dg:DataGridTextColumn Header="Column" Binding="{CompiledBinding Column}" Width="80" />
+                <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Line}" Binding="{CompiledBinding Line}" Width="80" />
+                <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Column}" Binding="{CompiledBinding Column}" Width="80" />
             </dg:DataGrid.Columns>
         </dg:DataGrid>
     </DockPanel>

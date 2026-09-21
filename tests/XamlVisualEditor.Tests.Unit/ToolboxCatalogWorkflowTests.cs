@@ -1,4 +1,4 @@
-using System.Reactive.Concurrency;
+﻿using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using Avalonia;
@@ -17,6 +17,8 @@ using XamlVisualEditor.ToolboxExtension.Views;
 using XamlVisualEditor.Workspace;
 using XamlVisualEditor.Xaml.Ast;
 using Xunit;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Tests.Unit;
 
@@ -118,9 +120,9 @@ public sealed class ToolboxCatalogWorkflowTests
             Assert.Empty(model.AssemblyGroups);
             Assert.Null(model.SelectedItem);
             Assert.True(Assert.Single(view.GetVisualDescendants().OfType<TextBlock>(),
-                block => block.Text == "No matching controls").IsVisible);
+                block => block.Text == UiStrings.NoMatchingControls).IsVisible);
             Assert.False(Assert.Single(view.GetVisualDescendants().OfType<Avalonia.Controls.Button>(),
-                button => Equals(button.Content, "Insert Selected")).IsEffectivelyEnabled);
+                button => Equals(button.Content, UiStrings.InsertSelected)).IsEffectivelyEnabled);
             await model.ClearFiltersCommand.Execute().ToTask();
 
             FlushLayout(window);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +8,8 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -152,7 +154,7 @@ public sealed partial class MainWindowViewModel
 
             ActiveDocument = document;
             DesignerNameEditor.RenameWithCodeBehind(document, node, value, changes);
-            StatusText = "Control and C# references renamed.";
+            StatusText = UiStrings.ControlReferencesRenamed;
             return true;
         }
         finally

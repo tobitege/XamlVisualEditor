@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
@@ -6,6 +6,8 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.LspSettingsExtension;
 
@@ -116,7 +118,7 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
                 Servers.Add(LspServerEntryViewModel.FromServer(server));
             }
 
-            StatusText = servers.Count == 0 ? "No LSP servers configured." : "LSP settings loaded.";
+            StatusText = servers.Count == 0 ? UiStrings.NoLspServers : UiStrings.LspSettingsLoaded;
             RequiresRestart = false;
             return Disposable.Empty;
         });
@@ -132,7 +134,7 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
 
         _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
-            StatusText = "LSP settings saved. Restart required.";
+            StatusText = UiStrings.LspSettingsSaved;
             RequiresRestart = true;
             return Disposable.Empty;
         });
@@ -148,7 +150,7 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
                 Servers.Add(LspServerEntryViewModel.FromServer(server));
             }
 
-            StatusText = "LSP settings updated.";
+            StatusText = UiStrings.LspSettingsUpdated;
             return Disposable.Empty;
         });
     }

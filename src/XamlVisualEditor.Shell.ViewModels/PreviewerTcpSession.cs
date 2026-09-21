@@ -1,12 +1,18 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Linq;
 using Avalonia.Remote.Protocol;
 using Avalonia.Remote.Protocol.Designer;
 using Avalonia.Remote.Protocol.Viewport;
 using XamlVisualEditor.Core;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -23,6 +29,8 @@ public sealed class PreviewerTcpSession : IDisposable
     private readonly object _gate = new();
     private IAvaloniaRemoteTransportConnection? _connection;
     private string? _pendingXaml;
+    private string? _latestXaml;
+    private readonly Queue<string> _submittedXaml = new();
     private string? _pendingAssemblyPath;
     private string? _pendingProjectPath;
     private double? _pendingViewportWidth;
@@ -83,6 +91,17 @@ public sealed class PreviewerTcpSession : IDisposable
     public DesignerHostSnapshot? LastDesignTree
     {
         get { lock (_gate) return _lastDesignTree; }
+    }
+
+    internal void InvalidateDesignTree()
+    {
+        lock (_gate)
+        {
+            if (_expectedRenderId is null && _lastDesignTree is null) return;
+            _expectedRenderId = null;
+            _lastDesignTree = null;
+        }
+        DesignTreeChanged?.Invoke(null);
     }
 
     internal bool TryReceiveDesignTree(string message)
@@ -152,14 +171,15 @@ public sealed class PreviewerTcpSession : IDisposable
         }
     }
 
-    public Task SendUpdateXamlAsync(
+    public async Task SendUpdateXamlAsync(
         string xaml,
         string assemblyPath,
         string xamlFileProjectPath,
         double? viewportWidth,
         double? viewportHeight,
         Guid? renderId = null,
-        Guid? themeRequestId = null)
+        Guid? themeRequestId = null,
+        Func<Task<bool>>? applyIncremental = null)
     {
         if (viewportWidth is { } width && (!double.IsFinite(width) || width <= 0)) viewportWidth = null;
         if (viewportHeight is { } height && (!double.IsFinite(height) || height <= 0)) viewportHeight = null;
@@ -168,6 +188,7 @@ public sealed class PreviewerTcpSession : IDisposable
         bool invalidateThemes;
         lock (_gate)
         {
+            _latestXaml = xaml;
             invalidateThemes = _expectedThemeRequestId != themeRequestId;
             _expectedThemeRequestId = themeRequestId;
             if (invalidateThemes) _lastThemeCatalog = null;
@@ -188,10 +209,16 @@ public sealed class PreviewerTcpSession : IDisposable
 
         if (invalidateTree) DesignTreeChanged?.Invoke(null);
         if (invalidateThemes) ThemeCatalogChanged?.Invoke(null);
-        if (connection is null) return Task.CompletedTask;
+        if (connection is null) return;
 
         UpdateViewportIfNeeded(connection);
-        return connection.Send(new UpdateXamlMessage
+        if (applyIncremental is not null && await applyIncremental())
+        {
+            SetError(null, connection);
+            _log?.Invoke("Info", "Previewer controls updated without rebuilding the document");
+            return;
+        }
+        await SendTrackedUpdate(connection, new UpdateXamlMessage
         {
             Xaml = xaml,
             AssemblyPath = assemblyPath,
@@ -225,6 +252,22 @@ public sealed class PreviewerTcpSession : IDisposable
                 return _lastFrame;
             }
         }
+    }
+
+    internal void ReportStandardErrorLine(string message)
+    {
+        string line = message.Trim();
+        if (((line.StartsWith("at ", StringComparison.Ordinal) || line.StartsWith("bei ", StringComparison.Ordinal))
+                && line.Contains('('))
+            || (line.StartsWith("---", StringComparison.Ordinal) && !line.StartsWith("--->", StringComparison.Ordinal)))
+            return;
+        if ((line.StartsWith("File name:", StringComparison.Ordinal) || line.StartsWith("Dateiname:", StringComparison.Ordinal))
+            && LastError is not null)
+            return;
+        const string unhandled = "Unhandled exception.";
+        if (line.StartsWith(unhandled, StringComparison.Ordinal)) line = line[unhandled.Length..].TrimStart();
+        if (line.StartsWith("--->", StringComparison.Ordinal)) line = line[4..].TrimStart();
+        ReportError(line);
     }
 
     internal void ReportError(string message)
@@ -281,6 +324,7 @@ public sealed class PreviewerTcpSession : IDisposable
         {
             _connection?.Dispose();
             _connection = connection;
+            _submittedXaml.Clear();
         }
 
         _log?.Invoke("Info", "Previewer transport connected");
@@ -289,7 +333,7 @@ public sealed class PreviewerTcpSession : IDisposable
         connection.OnMessage += OnMessage;
         connection.OnException += (_, ex) =>
         {
-            string message = $"Previewer transport error: {ex.Message}";
+            string message = string.Format(UiStrings.PreviewerTransportError, (object?)(ex.Message));
             _log?.Invoke("Error", message);
             SetError(new PreviewerErrorInfo(message, null, null, _xamlFilePath), connection);
         };
@@ -339,12 +383,17 @@ public sealed class PreviewerTcpSession : IDisposable
 
         if (message is UpdateXamlResultMessage updateResult)
         {
+            string? xaml;
+            lock (_gate)
+            {
+                if (!ReferenceEquals(connection, _connection)) return;
+                xaml = _submittedXaml.Count > 0 ? _submittedXaml.Dequeue() : null;
+                if (xaml != _latestXaml) return;
+            }
             if (!string.IsNullOrWhiteSpace(updateResult.Error))
             {
                 _log?.Invoke("Error", updateResult.Error);
-                int? line = TryGetPositiveInt(updateResult, "LineNumber", "Line");
-                int? column = TryGetPositiveInt(updateResult, "LinePosition", "Position", "Column");
-                SetError(new PreviewerErrorInfo(updateResult.Error, line, column, _xamlFilePath), connection);
+                SetError(CreateXamlError(updateResult, xaml, _xamlFilePath), connection);
                 return;
             }
 
@@ -393,12 +442,23 @@ public sealed class PreviewerTcpSession : IDisposable
         }
 
         UpdateViewportIfNeeded(connection);
-        _ = connection.Send(new UpdateXamlMessage
+        _ = SendTrackedUpdate(connection, new UpdateXamlMessage
         {
             Xaml = xaml,
             AssemblyPath = assemblyPath,
             XamlFileProjectPath = projectPath
         });
+    }
+
+    private Task SendTrackedUpdate(IAvaloniaRemoteTransportConnection connection, UpdateXamlMessage update)
+    {
+        lock (_gate)
+        {
+            if (!ReferenceEquals(connection, _connection) || update.Xaml != _latestXaml)
+                return Task.CompletedTask;
+            _submittedXaml.Enqueue(update.Xaml);
+            return connection.Send(update);
+        }
     }
 
     private void UpdateViewportIfNeeded(IAvaloniaRemoteTransportConnection connection, bool force = false)
@@ -425,25 +485,33 @@ public sealed class PreviewerTcpSession : IDisposable
         }
     }
 
-    private static int? TryGetPositiveInt(object source, params string[] propertyNames)
+    internal static PreviewerErrorInfo CreateXamlError(UpdateXamlResultMessage result, string? xaml, string filePath)
     {
-        foreach (string name in propertyNames)
+        int? line = result.Exception?.LineNumber is > 0 ? result.Exception.LineNumber : null;
+        int? column = result.Exception?.LinePosition is > 0 ? result.Exception.LinePosition : null;
+        PreviewerElementPathSegment[]? path = null;
+        if (line is not null && xaml is not null)
         {
-            System.Reflection.PropertyInfo? property = source.GetType().GetProperty(name);
-            if (property is null)
+            try
             {
-                continue;
+                XDocument document = XDocument.Parse(xaml, LoadOptions.SetLineInfo);
+                XElement? element = document.Descendants().LastOrDefault(candidate =>
+                {
+                    IXmlLineInfo location = candidate;
+                    return location.LineNumber < line || location.LineNumber == line
+                        && (column is null || location.LinePosition <= (long)column + 1);
+                });
+                path = element?.AncestorsAndSelf().Reverse().Select(candidate =>
+                    new PreviewerElementPathSegment(candidate.Name.NamespaceName, candidate.Name.LocalName,
+                        candidate.ElementsBeforeSelf(candidate.Name).Count())).ToArray();
             }
-
-            object? value = property.GetValue(source);
-            if (value is int intValue && intValue > 0)
-            {
-                return intValue;
-            }
-
+            catch (XmlException) { }
         }
-
-        return null;
+        string message = result.Exception?.Message ?? result.Error;
+        string positionSuffix = $" Line {line}, position {column}.";
+        if (line is not null && column is not null && message.EndsWith(positionSuffix, StringComparison.Ordinal))
+            message = message[..^positionSuffix.Length];
+        return new PreviewerErrorInfo(message, line, column, filePath, path);
     }
 
     private static void SendViewportMessage(

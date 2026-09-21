@@ -1,8 +1,10 @@
-using System.Reactive.Threading.Tasks;
+﻿using System.Reactive.Threading.Tasks;
 using XamlVisualEditor.CollaborationExtension;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using Xunit;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
@@ -46,7 +48,7 @@ public sealed class CollaborationPanelToolViewModelTests
         await viewModel.JoinSessionCommand.Execute().ToTask();
 
         Assert.Equal("session-a", host.LastJoinSessionId);
-        Assert.Contains(window.Messages, message => message.Contains("Unable to join", StringComparison.Ordinal));
+        Assert.Contains(UiStrings.JoinCollaborationFailed, window.Messages);
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public sealed class CollaborationPanelToolViewModelTests
 
         Assert.Equal("teammate@example.com", host.LastInvitee);
         Assert.Equal(string.Empty, viewModel.Invitee);
-        Assert.Contains(window.Messages, message => message.Contains("Invite prepared", StringComparison.Ordinal));
+        Assert.Contains(UiStrings.InvitePreparedPrefix + "teammate@example.com", window.Messages);
     }
 
     [Fact]

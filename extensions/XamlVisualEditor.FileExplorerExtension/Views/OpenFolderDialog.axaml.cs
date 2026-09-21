@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
 using XamlVisualEditor.FileExplorerExtension.ViewModels;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.FileExplorerExtension.Views;
 
@@ -41,7 +43,7 @@ public sealed partial class OpenFolderDialog : Window
             {
                 FolderPickerOpenOptions options = new()
                 {
-                    Title = "Select Folder",
+                    Title = UiStrings.SelectFolder,
                     AllowMultiple = false
                 };
 

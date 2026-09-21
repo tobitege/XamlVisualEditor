@@ -1,9 +1,11 @@
-using System.Text;
+﻿using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Xaml.Parsing;
 
@@ -36,7 +38,7 @@ public sealed class XamlParsingService : IXamlParsingService
                 diagnostics.Add(new XamlDiagnostic
                 {
                     Severity = DiagnosticSeverity.Error,
-                    Message = "XAML document has no root element.",
+                    Message = UiStrings.XamlRootMissing,
                     Line = 1,
                     Column = 1,
                     Length = 0
@@ -347,7 +349,7 @@ public sealed class XamlParsingService : IXamlParsingService
                     diagnostics.Add(new XamlDiagnostic
                     {
                         Severity = DiagnosticSeverity.Warning,
-                        Message = "Document was repaired automatically (unclosed tags).",
+                        Message = UiStrings.XamlTagsRepaired,
                         Line = 1,
                         Column = 1,
                         Length = 0
@@ -379,7 +381,7 @@ public sealed class XamlParsingService : IXamlParsingService
                         diagnostics.Add(new XamlDiagnostic
                         {
                             Severity = DiagnosticSeverity.Warning,
-                            Message = "Partial document parsed (truncated at error).",
+                            Message = UiStrings.XamlPartialParse,
                             Line = 1,
                             Column = 1,
                             Length = 0

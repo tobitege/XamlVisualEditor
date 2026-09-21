@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using XamlVisualEditor.Xaml.Ast;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Animation;
 
@@ -20,25 +22,25 @@ public static class AnimationResourceWriter
 
         if (document is null)
         {
-            error = "Missing document.";
+            error = UiStrings.MissingDocument;
             return false;
         }
 
         if (document.Root is null)
         {
-            error = "Document root is missing.";
+            error = UiStrings.DocumentRootMissing;
             return false;
         }
 
         if (string.IsNullOrWhiteSpace(definition.Key))
         {
-            error = "Animation key is required.";
+            error = UiStrings.AnimationKeyRequired;
             return false;
         }
 
         if (definition.Tracks is null || definition.Tracks.Count == 0)
         {
-            error = "At least one track is required.";
+            error = UiStrings.TrackRequired;
             return false;
         }
 
@@ -66,13 +68,13 @@ public static class AnimationResourceWriter
 
         if (document is null)
         {
-            error = "Missing document.";
+            error = UiStrings.MissingDocument;
             return false;
         }
 
         if (definition.Tracks is null || definition.Tracks.Count == 0)
         {
-            error = "At least one track is required.";
+            error = UiStrings.TrackRequired;
             return false;
         }
 
@@ -104,13 +106,13 @@ public static class AnimationResourceWriter
         error = null;
         if (document is null)
         {
-            error = "Missing document.";
+            error = UiStrings.MissingDocument;
             return false;
         }
 
         if (string.IsNullOrWhiteSpace(newKey))
         {
-            error = "New key is required.";
+            error = UiStrings.NewKeyRequired;
             return false;
         }
 
@@ -121,7 +123,7 @@ public static class AnimationResourceWriter
 
         if (existing is null)
         {
-            error = "Animation resource not found.";
+            error = UiStrings.AnimationResourceNotFound;
             return false;
         }
 
@@ -137,7 +139,7 @@ public static class AnimationResourceWriter
         error = null;
         if (document is null)
         {
-            error = "Missing document.";
+            error = UiStrings.MissingDocument;
             return false;
         }
 
@@ -148,7 +150,7 @@ public static class AnimationResourceWriter
 
         if (existing is null)
         {
-            error = "Animation resource not found.";
+            error = UiStrings.AnimationResourceNotFound;
             return false;
         }
 
@@ -180,12 +182,12 @@ public static class AnimationResourceWriter
                     return selected;
                 }
 
-                error = "No selected element is available for resources.";
+                error = UiStrings.NoSelectedResourceElement;
                 return document.Root!;
             case AnimationResourceScope.StylesResources:
                 return ResolveStylesOwner(document, definition, out error);
             default:
-                error = "Unknown resource scope.";
+                error = UiStrings.UnknownResourceScope;
                 return document.Root!;
         }
     }
@@ -212,7 +214,7 @@ public static class AnimationResourceWriter
             return document.Root;
         }
 
-        error = "No styles scope available for resources.";
+        error = UiStrings.NoResourceStylesScope;
         return document.Root!;
     }
 
@@ -231,7 +233,7 @@ public static class AnimationResourceWriter
 
         if (document.Root is null)
         {
-            error = "Document root is missing.";
+            error = UiStrings.DocumentRootMissing;
             return false;
         }
 
@@ -245,7 +247,7 @@ public static class AnimationResourceWriter
 
         if (owner is null)
         {
-            error = "Resource owner not found.";
+            error = UiStrings.ResourceOwnerNotFound;
             return false;
         }
 
@@ -255,7 +257,7 @@ public static class AnimationResourceWriter
             MutableAstObjectNode? stylesNode = TryGetStylesNode(owner);
             if (stylesNode is null)
             {
-                error = "Styles scope not found.";
+                error = UiStrings.StylesScopeNotFound;
                 return false;
             }
 
@@ -265,7 +267,7 @@ public static class AnimationResourceWriter
         MutableAstObjectNode? resourcesContainer = TryGetResourcesContainer(resourcesOwner);
         if (resourcesContainer is null)
         {
-            error = "Resources container not found.";
+            error = UiStrings.ResourcesContainerNotFound;
             return false;
         }
 
@@ -293,7 +295,7 @@ public static class AnimationResourceWriter
             return true;
         }
 
-        error = "Animation resource not found.";
+        error = UiStrings.AnimationResourceNotFound;
         return false;
     }
 

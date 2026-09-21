@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;
@@ -70,14 +70,25 @@ public sealed class McpJsonRpcConnection : IAsyncDisposable
     private async Task ReadLoopAsync(CancellationToken ct)
     {
         Exception? error = null;
+        using StreamReader reader = new(_input, System.Text.Encoding.UTF8, false, 4096, leaveOpen: true);
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                using JsonDocument message = await McpMessageFraming.ReadMessageAsync(_input, ct).ConfigureAwait(false);
-                JsonElement root = message.RootElement;
-                if (root.ValueKind != JsonValueKind.Object)
+                JsonDocument message;
+                try { message = await McpMessageFraming.ReadMessageAsync(reader, ct).ConfigureAwait(false); }
+                catch (JsonException)
                 {
+                    await SendErrorAsync(null, -32700, "Parse error", ct).ConfigureAwait(false);
+                    continue;
+                }
+                using JsonDocument messageLifetime = message;
+                JsonElement root = message.RootElement;
+                if (root.ValueKind != JsonValueKind.Object
+                    || !root.TryGetProperty("jsonrpc", out JsonElement version)
+                    || version.ValueKind != JsonValueKind.String || version.GetString() != "2.0")
+                {
+                    await SendErrorAsync(null, -32600, "Invalid Request", ct).ConfigureAwait(false);
                     continue;
                 }
 
@@ -107,11 +118,18 @@ public sealed class McpJsonRpcConnection : IAsyncDisposable
                         continue;
                     }
 
+                    if (method == McpProtocol.InitializedNotification)
+                    {
+                        await _router.DispatchAsync(method, new McpRequestContext(this, null), parameters, ct).ConfigureAwait(false);
+                    }
                     NotificationReceived?.Invoke(method, parameters);
                 }
             }
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch (EndOfStreamException)
         {
         }
         catch (Exception ex)
@@ -159,13 +177,13 @@ public sealed class McpJsonRpcConnection : IAsyncDisposable
         return SendAsync(payload, ct);
     }
 
-    private Task SendErrorAsync(object idValue, int code, string message, CancellationToken ct)
+    private Task SendErrorAsync(object? idValue, int code, string message, CancellationToken ct)
     {
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            jsonrpc = "2.0",
-            id = idValue,
-            error = new
+            ["jsonrpc"] = "2.0",
+            ["id"] = idValue,
+            ["error"] = new
             {
                 code,
                 message

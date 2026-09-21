@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -24,6 +24,8 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Xaml.Intellisense;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -873,7 +875,7 @@ internal sealed class MarkupExtensionInsightProvider : IOverloadProvider
 
     public object CurrentHeader => s_hints[SelectedIndex];
 
-    public object CurrentContent => "Markup extension parameter hints";
+    public object CurrentContent => UiStrings.MarkupParameterHints;
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 

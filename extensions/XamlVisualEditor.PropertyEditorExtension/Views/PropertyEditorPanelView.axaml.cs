@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Reactive;
 using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.PropertyEditorExtension.Views;
 
@@ -58,11 +60,12 @@ public sealed partial class PropertyEditorPanelView : UserControl
         _structureInteraction = viewModel.EditStructureInteraction.RegisterHandler(async context =>
         {
             if (TopLevel.GetTopLevel(this) is not Window owner)
-                throw new InvalidOperationException("The structure editor requires a desktop window.");
+                throw new InvalidOperationException(UiStrings.StructureEditorRequiresWindow);
             PropertyStructureEditorViewModel editor = context.Input;
             Window dialog = new()
             {
                 Title = editor.Title, Width = 860, Height = 720, MinWidth = 600, MinHeight = 480,
+                Classes = { "editor-chrome" },
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Content = new PropertyStructureEditorView { DataContext = editor }
             };

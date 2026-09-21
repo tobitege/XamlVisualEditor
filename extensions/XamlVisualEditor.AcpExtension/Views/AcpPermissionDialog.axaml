@@ -1,6 +1,7 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.AcpExtension"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.AcpExtension.Views.AcpPermissionDialog"
         x:DataType="vm:AcpPermissionDialogViewModel"
         Width="560" Height="360"
@@ -11,10 +12,10 @@
     <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
     <Border Background="#22000000" Padding="8" CornerRadius="4">
       <StackPanel Spacing="4">
-        <TextBlock Text="{CompiledBinding SessionId, StringFormat=Session: {0}}" />
-        <TextBlock Text="{CompiledBinding ToolKind, StringFormat=Kind: {0}}" />
-        <TextBlock Text="{CompiledBinding ToolTitle, StringFormat=Title: {0}}" TextWrapping="Wrap" />
-        <TextBlock Text="{CompiledBinding ToolCallId, StringFormat=ToolCall: {0}}" />
+        <TextBlock Text="{CompiledBinding SessionId, StringFormat={x:Static loc:UiStrings.SessionFormat}}" />
+        <TextBlock Text="{CompiledBinding ToolKind, StringFormat={x:Static loc:UiStrings.KindFormat}}" />
+        <TextBlock Text="{CompiledBinding ToolTitle, StringFormat={x:Static loc:UiStrings.TitleFormat}}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding ToolCallId, StringFormat={x:Static loc:UiStrings.ToolCallFormat}}" />
       </StackPanel>
     </Border>
     <StackPanel Spacing="6">
@@ -27,7 +28,7 @@
       </ItemsControl>
     </StackPanel>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+      <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
     </StackPanel>
   </StackPanel>
 </Window>

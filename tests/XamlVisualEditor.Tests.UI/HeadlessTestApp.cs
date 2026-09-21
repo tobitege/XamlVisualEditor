@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 
@@ -14,6 +14,7 @@ public static class HeadlessTestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp()
     {
+        XamlVisualEditor.Core.Localization.UiStrings.Culture = System.Globalization.CultureInfo.GetCultureInfo("en");
         return AppBuilder.Configure<HeadlessTestApp>()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions());
     }

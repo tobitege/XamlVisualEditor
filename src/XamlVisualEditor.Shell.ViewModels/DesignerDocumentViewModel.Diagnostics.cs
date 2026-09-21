@@ -1,6 +1,8 @@
-using System.Reactive.Disposables;
+﻿using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
+using System.Xml;
+using System.Xml.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.Xaml.Ast;
@@ -46,10 +48,11 @@ public sealed partial class DesignerDocumentViewModel
             .Subscribe(error =>
             {
                 if (IsDisposed || !Equals(PreviewerSession?.LastErrorInfo, error)) return;
+                (int line, int column) = ResolvePreviewerErrorPosition(error, SyncEngine.CurrentText);
                 _previewerDiagnostics = error is null
                     ? Array.Empty<LanguageDiagnostic>()
                     : new[] { CreateDesignerDiagnostic(error.Message, DiagnosticSeverity.Error,
-                        "Previewer", "XVE_PREVIEW", error.Line ?? 1, error.Column ?? 1, 1) };
+                        "Previewer", "XVE_PREVIEW", line, column, 1) };
                 PublishDesignerDiagnostics();
             }));
 
@@ -79,6 +82,28 @@ public sealed partial class DesignerDocumentViewModel
                 DiagnosticSeverity.Error, "Designer", "XVE_RENDER_CONTROL", node?.Line ?? 1, node?.Column ?? 1, 1);
         }).ToArray();
         PublishDesignerDiagnostics();
+    }
+
+    internal static (int Line, int Column) ResolvePreviewerErrorPosition(PreviewerErrorInfo? error, string? sourceText)
+    {
+        if (sourceText is not null && error?.ElementPath is { Count: > 0 } path)
+        {
+            try
+            {
+                XContainer parent = XDocument.Parse(sourceText, LoadOptions.SetLineInfo);
+                foreach (PreviewerElementPathSegment segment in path)
+                {
+                    XElement? element = parent.Elements(XName.Get(segment.Name, segment.Namespace))
+                        .ElementAtOrDefault(segment.Index);
+                    if (element is null) return (1, 1);
+                    parent = element;
+                }
+                IXmlLineInfo location = (IXmlLineInfo)parent;
+                return (location.LineNumber, location.LinePosition);
+            }
+            catch (XmlException) { }
+        }
+        return (error?.Line ?? 1, error?.Column ?? 1);
     }
 
     public void SetRuntimeRenderFailure(Exception exception)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -15,15 +15,16 @@ internal sealed class DocumentFileState
 
     public bool IsModified(string text) => !string.Equals(text, _persistedText, StringComparison.Ordinal);
 
-    public async Task<string> ReadAsync(string filePath)
+    public async Task<string> ReadAsync(string filePath, CancellationToken cancellationToken = default)
     {
-        await _fileGate.WaitAsync();
+        await _fileGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            byte[] bytes = await File.ReadAllBytesAsync(filePath);
+            byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
             using MemoryStream stream = new(bytes, writable: false);
             using StreamReader reader = new(stream, new UTF8Encoding(false, true), detectEncodingFromByteOrderMarks: true);
-            string text = await reader.ReadToEndAsync();
+            string text = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             _encoding = reader.CurrentEncoding;
             _persistedBytes = bytes;
             _persistedText = text;

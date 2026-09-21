@@ -1,4 +1,6 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Acp;
 
@@ -42,15 +44,9 @@ public sealed class AcpProfile
         {
             Id = "codex",
             Name = "OpenAI Codex",
-            Description = "OpenAI Codex ACP agent",
-            Command = "codex",
-            Arguments = new List<string> { "--stdio" },
-            Model = "gpt-5-codex",
-            ModelEnvVar = "OPENAI_MODEL",
+            Description = UiStrings.OpenAiAcpAgent,
+            Command = "codex-acp",
             ApiKeyEnvVar = "OPENAI_API_KEY",
-            OAuthDeviceCodeUrl = "https://api.openai.com/v1/oauth/device/code",
-            OAuthTokenUrl = "https://api.openai.com/v1/oauth/token",
-            OAuthScopes = "openid profile email offline_access",
             UseKeychain = true,
             IsBuiltIn = true
         };
@@ -62,9 +58,8 @@ public sealed class AcpProfile
         {
             Id = "claude",
             Name = "Anthropic Claude",
-            Description = "Anthropic Claude ACP agent",
-            Command = "claude",
-            Arguments = new List<string> { "--stdio" },
+            Description = UiStrings.AnthropicAcpAgent,
+            Command = "claude-agent-acp",
             ModelEnvVar = "ANTHROPIC_MODEL",
             ApiKeyEnvVar = "ANTHROPIC_API_KEY",
             UseKeychain = true,

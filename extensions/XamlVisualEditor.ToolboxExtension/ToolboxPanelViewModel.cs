@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
@@ -8,6 +8,8 @@ using System.Text.Json;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Designer.DragDrop;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.ToolboxExtension;
 
@@ -59,7 +61,8 @@ public sealed class ToolboxPanelItem : IToolboxDragItem
     public string Category { get; }
 
     /// <summary>Gets the library and category displayed below the control name.</summary>
-    public string Subtitle => string.IsNullOrEmpty(AssemblyName) ? Category : AssemblyName + " / " + Category;
+    public string CategoryDisplayName => UiLabels.Category(Category);
+    public string Subtitle => string.IsNullOrEmpty(AssemblyName) ? CategoryDisplayName : AssemblyName + " / " + CategoryDisplayName;
 
     /// <summary>Gets the full identity displayed in the tooltip.</summary>
     public string Description => FullName + Environment.NewLine + Subtitle;
@@ -83,14 +86,14 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
     }
 
     public string AssemblyName { get; }
-    public string DisplayName => string.IsNullOrEmpty(AssemblyName) ? "Custom entries" : AssemblyName;
+    public string DisplayName => string.IsNullOrEmpty(AssemblyName) ? UiStrings.CustomEntries : AssemblyName;
     public string Header => $"{DisplayName} ({Items.Count})";
     public IReadOnlyList<ToolboxPanelItem> Items => _items;
     public string CatalogHeader => $"{DisplayName} ({_catalogCount})";
     public bool CanFavorite => _canFavorite;
     public bool CanEditPreferences => _owner.CanEditAssemblyPreferences;
     public string FavoriteGlyph => IsFavorite ? "\u2605" : "\u2606";
-    public string FavoriteToolTip => IsFavorite ? "Remove assembly from favorites" : "Keep this assembly with favorites at the top";
+    public string FavoriteToolTip => IsFavorite ? UiStrings.FavoriteAssemblyRemove : UiStrings.FavoriteAssemblyKeep;
 
     public bool IsIncluded
     {
@@ -181,8 +184,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private readonly ISettings _settings;
     private readonly IControlCatalog? _catalog;
     private readonly IScheduler _uiScheduler;
-    private readonly ToolboxFilterOption _allLibraries = new(null, "All libraries");
-    private readonly ToolboxFilterOption _allCategories = new(null, "All categories");
+    private readonly ToolboxFilterOption _allLibraries = new(null, UiStrings.AllLibraries);
+    private readonly ToolboxFilterOption _allCategories = new(null, UiStrings.AllCategories);
     private ToolboxPanelItem? _selectedItem;
     private ToolboxFilterOption? _selectedLibrary;
     private ToolboxFilterOption? _selectedCategory;
@@ -212,7 +215,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         if (_workspaceInfo is not null) _workspaceInfo.WorkspaceChanged += OnPreferencesWorkspaceChanged;
 
         ReplaceItems(TryLoadCatalogFromSettings());
-        StatusText = catalog is null ? "No project control catalog is available in this host." : "Control catalog not loaded yet.";
+        StatusText = catalog is null ? UiStrings.ControlCatalogUnavailable : UiStrings.ControlCatalogNotLoaded;
 
         IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.IsLoading, x => x.CanEditAssemblyPreferences,
             (item, loading, ready) => item is not null && !loading && ready);
@@ -387,7 +390,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         }
         catch (Exception error)
         {
-            StatusText = $"Cannot insert {item.DisplayName}: {error.Message}";
+            StatusText = string.Format(UiStrings.CannotInsertControl, (object?)(item.DisplayName), (object?)(error.Message));
         }
     }
 
@@ -408,7 +411,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 _loadCancellation?.Cancel();
                 _loadCancellation = request;
                 IsLoading = true;
-                StatusText = "Loading project controls...";
+                StatusText = UiStrings.LoadingProjectControls;
             }).ConfigureAwait(false);
             if (!IsCurrent(version)) return;
             request.Token.ThrowIfCancellationRequested();
@@ -424,8 +427,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                         new[] { control.TypeName, control.XmlNamespace }, control.IsStandardControl,
                         control.FullName, control.AssemblyName, control.Category));
                 ReplaceItems(discovered.Concat(TryLoadCatalogFromSettings()));
-                StatusText = _catalog is null ? "No project control catalog is available in this host."
-                    : $"{Items.Count} controls available.";
+                StatusText = _catalog is null ? UiStrings.ControlCatalogUnavailable
+                    : string.Format(UiStrings.ControlsAvailable, (object?)(Items.Count));
                 if (snapshot.Diagnostics.Count > 0)
                 {
                     StatusText += Environment.NewLine + string.Join(Environment.NewLine, snapshot.Diagnostics);
@@ -434,7 +437,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)
         {
-            await UpdateUiAsync(() => { if (IsCurrent(version)) StatusText = "Control discovery cancelled."; }).ConfigureAwait(false);
+            await UpdateUiAsync(() => { if (IsCurrent(version)) StatusText = UiStrings.ControlDiscoveryCanceled; }).ConfigureAwait(false);
         }
         catch (Exception error)
         {
@@ -442,7 +445,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             {
                 if (!IsCurrent(version)) return;
                 ReplaceItems(Array.Empty<ToolboxPanelItem>());
-                StatusText = "Cannot load project controls: " + error.Message;
+                StatusText = UiStrings.ControlLoadingFailedPrefix + error.Message;
             }).ConfigureAwait(false);
         }
         finally
@@ -507,7 +510,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             foreach (string name in Items.Select(item => item.Category).Distinct(StringComparer.Ordinal)
                 .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase))
             {
-                Categories.Add(new ToolboxFilterOption(name, name));
+                Categories.Add(new ToolboxFilterOption(name, UiLabels.Category(name)));
             }
             SelectedLibrary = Libraries.FirstOrDefault(option => option.Value == library) ?? _allLibraries;
             SelectedCategory = Categories.FirstOrDefault(option => option.Value == category) ?? _allCategories;

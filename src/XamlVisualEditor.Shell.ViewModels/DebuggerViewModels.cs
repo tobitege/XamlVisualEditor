@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions.Debugging;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -714,7 +716,7 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
         IDebuggerService? service = _debuggerRegistry.GetActiveService();
         if (service is null)
         {
-            throw new InvalidOperationException("No debugger service is configured.");
+            throw new InvalidOperationException(UiStrings.DebuggerNotConfigured);
         }
 
         return service;

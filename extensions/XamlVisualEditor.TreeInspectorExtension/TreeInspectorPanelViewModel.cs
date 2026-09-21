@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using Avalonia.Controls.DataGridHierarchical;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.TreeInspectorExtension;
 
@@ -169,7 +171,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     }
 
     public TreeInspectorGridViewModel TreeModel { get; }
-    public string PanelTitle => _kind == TreeKind.Visual ? "Visual Tree" : "Logical Tree";
+    public string PanelTitle => _kind == TreeKind.Visual ? UiStrings.VisualTree : UiStrings.LogicalTree;
 
     public string? StatusText
     {
@@ -316,7 +318,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         {
             string nodeName = _nodeIndex.TryGetValue(nodeId, out TreeInspectorNodeViewModel? node)
                 ? node.DisplayText : nodeId;
-            StatusText = $"Could not select {nodeName} in {_designer.ActiveDocumentPath}: {exception.Message}";
+            StatusText = string.Format(UiStrings.SelectTreeNodeFailed, (object?)(nodeName), (object?)(_designer.ActiveDocumentPath), (object?)(exception.Message));
         }
     }
 

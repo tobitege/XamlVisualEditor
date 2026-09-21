@@ -1,9 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.ReactiveUI;
 using Dock.Model.ReactiveUI.Controls;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -14,12 +16,18 @@ public sealed class CanvasDockFactory : Factory
 {
     public DocumentDock? DocumentDock { get; private set; }
 
+    public override IDocumentDock CreateDocumentDock() => new DocumentDock
+    {
+        EmptyContent = UiStrings.NoDocumentsOpen
+    };
+
     public override IRootDock CreateLayout()
     {
         DocumentDock = new DocumentDock
         {
             Id = "CanvasDocumentDock",
-            Title = "Canvas Documents",
+            Title = UiStrings.CanvasDocuments,
+            EmptyContent = UiStrings.NoDocumentsOpen,
             CanCreateDocument = false,
             LayoutMode = DocumentLayoutMode.Mdi,
             VisibleDockables = new ObservableCollection<IDockable>()
@@ -28,7 +36,7 @@ public sealed class CanvasDockFactory : Factory
         RootDock rootDock = new()
         {
             Id = "CanvasRoot",
-            Title = "Canvas",
+            Title = UiStrings.Canvas,
             DefaultDockable = DocumentDock,
             ActiveDockable = DocumentDock,
             VisibleDockables = CreateList<IDockable>(DocumentDock)

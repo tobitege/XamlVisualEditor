@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text.Json;
 using System.Linq;
 using System.Threading;
@@ -16,6 +17,116 @@ namespace XamlVisualEditor.Tests.Integration;
 
 public sealed class PreviewerLaunchTests
 {
+    [Fact]
+    public async Task FloweryThemePackageRendersTargetLibraryPalettesInTheSameHost()
+    {
+        string repoRoot = FindRepoRoot();
+        string extensionDirectory = Path.Combine(repoRoot, "extensions", "XamlVisualEditor.FloweryThemeExtension");
+        string extensionProject = Path.Combine(extensionDirectory, "XamlVisualEditor.FloweryThemeExtension.csproj");
+        string configuration = typeof(PreviewerLaunchTests).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
+        DotNetCliResult packed = await new DotNetCliRunner().RunAsync(new[]
+        {
+            "pack", extensionProject, "--configuration", configuration, "--no-build", "--no-restore"
+        }, repoRoot);
+        Assert.True(packed.Success, packed.StandardError + Environment.NewLine + packed.StandardOutput);
+        using JsonDocument manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(extensionDirectory, "xve.extension.json")));
+        string version = manifest.RootElement.GetProperty("version").GetString()!;
+        string packagePath = Path.Combine(extensionDirectory, "bin", configuration,
+            $"XamlVisualEditor.FloweryThemeExtension.{version}.nupkg");
+        Assert.True(File.Exists(packagePath), packagePath);
+        using (ZipArchive archive = ZipFile.OpenRead(packagePath))
+        {
+            Assert.Contains(archive.Entries, entry => entry.FullName == "xve.extension.json");
+            Assert.Contains(archive.Entries, entry => entry.FullName == "lib/net10.0/XamlVisualEditor.FloweryThemeExtension.dll");
+            Assert.DoesNotContain(archive.Entries, entry => entry.FullName.EndsWith("/Flowery.NET.dll", StringComparison.OrdinalIgnoreCase)
+                || entry.FullName.EndsWith("/XamlVisualEditor.Core.dll", StringComparison.OrdinalIgnoreCase));
+        }
+        string artifactRoot = Path.Combine(Path.GetTempPath(), "XamlVisualEditor-preview-artifacts", "flowery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(artifactRoot);
+        ExtensionPackageStore packages = new(Path.Combine(artifactRoot, "installed"), new ExtensionPackageLoader());
+        var installed = await packages.InstallAsync(packagePath, CancellationToken.None);
+        DesignerThemeProviderRegistration provider = Assert.Single(DesignerThemePackageContributions.Read(installed));
+        Assert.Equal("xamlvisualeditor.flowery-themes/palette", provider.Id);
+        Assert.StartsWith(installed.InstallationDirectory!, provider.AssemblyPath, StringComparison.Ordinal);
+
+        const string source = """
+            <UserControl xmlns="https://github.com/avaloniaui"
+                         xmlns:fixture="clr-namespace:XamlVisualEditor.TestControls;assembly=XamlVisualEditor.TestControls"
+                         Width="180" Height="112" Background="{DynamicResource DaisyBase100Brush}">
+              <fixture:FloweryFixtureControl Name="FloweryPreview" Content="Palette" Width="120" Height="64"
+                                            Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top" />
+            </UserControl>
+            """;
+        string xamlPath = Path.Combine(artifactRoot, "FloweryPreview.axaml");
+        await File.WriteAllTextAsync(xamlPath, source);
+        string targetAssembly = typeof(XamlVisualEditor.TestControls.FloweryFixtureControl).Assembly.Location;
+        WorkspaceModel workspace = new()
+        {
+            Projects = new[]
+            {
+                new ProjectModel
+                {
+                    Name = "XamlVisualEditor.TestControls",
+                    ProjectPath = Path.Combine(repoRoot, "tests", "XamlVisualEditor.TestControls", "XamlVisualEditor.TestControls.csproj"),
+                    OutputAssemblyPath = targetAssembly,
+                    XamlFiles = new[] { new XamlFileModel { FilePath = xamlPath, RelativePath = "FloweryPreview.axaml" } },
+                    Files = Array.Empty<ProjectFileModel>(), References = Array.Empty<AssemblyReference>()
+                }
+            },
+            ProjectFolders = new System.Collections.Generic.Dictionary<string, string>()
+        };
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(targetAssembly);
+        metadata.LoadAssembly(typeof(Flowery.Controls.DaisyButton).Assembly.Location);
+        var renderer = new XamlVisualEditor.Designer.Rendering.RuntimeDesignRenderer(metadata);
+        var document = Assert.IsType<XamlVisualEditor.Xaml.Ast.MutableAstDocument>(
+            new XamlVisualEditor.Xaml.Parsing.XamlParsingService().Parse(source).Document);
+        var serializer = new XamlVisualEditor.Xaml.Serialization.XamlSerializationService();
+        string original = serializer.Serialize(document);
+        DesignerThemeRequest request = new(Guid.NewGuid(), new[] { provider }, new(provider.Id, "light"));
+        using PreviewerLaunchService previewerService = new();
+        System.Collections.Concurrent.ConcurrentQueue<string> hostMessages = new();
+        PreviewerLaunchResult started = await previewerService.StartPreviewerAsync(xamlPath,
+            renderer.PrepareXaml(document, themeRequest: request), workspace, null, null,
+            (level, message) => hostMessages.Enqueue(level + ": " + message));
+        Assert.True(started.Success, started.ErrorMessage);
+        Process process = Assert.IsType<Process>(started.Process);
+        PreviewerTcpSession session = GetSession(previewerService, xamlPath);
+        try { await WaitForFrameAsync(session); }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Flowery preview did not produce its first frame. "
+                + $"Host error: {session.LastError ?? "<none>"}. Exited: {process.HasExited}. "
+                + string.Join(Environment.NewLine, hostMessages.TakeLast(30)), exception);
+        }
+        foreach (string theme in new[] { "light", "dark", "light" })
+        {
+            request = request with { RequestId = Guid.NewGuid(), Selection = new(provider.Id, theme) };
+            string prepared = renderer.PrepareXaml(document, themeRequest: request);
+            (byte red, byte green, byte blue) = theme == "light"
+                ? ((byte)255, (byte)255, (byte)255) : ((byte)0x1D, (byte)0x23, (byte)0x2A);
+            await AssertThemeFrameAsync(session,
+                () => previewerService.SendUpdateXamlAsync(xamlPath, prepared, workspace, null), red, green, blue);
+            Guid renderId = Guid.Parse(Assert.Single(System.Xml.Linq.XDocument.Parse(prepared).Root!.Attributes(),
+                attribute => attribute.Name.LocalName == "DesignNodeIdentity.RenderId").Value);
+            DesignerHostSnapshot tree = await WaitForDesignTreeAsync(session, renderId);
+            DesignerHostNode control = Assert.Single(tree.Nodes, node => node.Name == "FloweryPreview");
+            Assert.Equal(typeof(XamlVisualEditor.TestControls.FloweryFixtureControl).FullName, control.TypeName);
+            Assert.Equal(120, control.Width);
+            Assert.Equal(64, control.Height);
+            DesignerThemeCatalog catalog = Assert.IsType<DesignerThemeCatalog>(session.LastThemeCatalog);
+            Assert.Equal(request.RequestId, catalog.RequestId);
+            var paletteProvider = Assert.Single(catalog.Providers);
+            Assert.Null(paletteProvider.Error);
+            Assert.Contains(paletteProvider.Themes, item => item.Id == "light");
+            Assert.Contains(paletteProvider.Themes, item => item.Id == "dark");
+            Assert.Same(session, GetSession(previewerService, xamlPath));
+            Assert.False(process.HasExited);
+            Assert.Equal(original, serializer.Serialize(document));
+        }
+        Assert.Equal(source, await File.ReadAllTextAsync(xamlPath));
+    }
+
     [Fact]
     public async Task PreviewerLaunchService_StartsPreviewerForAppProject()
     {
@@ -125,12 +236,15 @@ public sealed class PreviewerLaunchTests
         previewMetadata.LoadAssembly(typeof(Avalonia.Media.Brush).Assembly.Location);
         previewMetadata.LoadAssembly(typeof(XamlVisualEditor.TestControls.SampleThemeProvider).Assembly.Location);
         XamlVisualEditor.Designer.Rendering.RuntimeDesignRenderer renderer = new(previewMetadata);
+        static Guid PreparedRenderId(string prepared) => Guid.Parse(Assert.Single(
+            System.Xml.Linq.XDocument.Parse(prepared).Descendants().SelectMany(element => element.Attributes()),
+            attribute => attribute.Name.LocalName == "DesignNodeIdentity.RenderId").Value);
         foreach (string rootType in new[] { "Styles", "ResourceDictionary" })
         {
             const string palette = "<ResourceDictionary.ThemeDictionaries><ResourceDictionary x:Key=\"Light\"><SolidColorBrush x:Key=\"PreviewBackground\" Color=\"#EEF4FA\" /></ResourceDictionary><ResourceDictionary x:Key=\"Dark\"><SolidColorBrush x:Key=\"PreviewBackground\" Color=\"#102030\" /></ResourceDictionary></ResourceDictionary.ThemeDictionaries>";
             string definitions = rootType == "Styles"
                 ? $"<Styles.Resources><ResourceDictionary>{palette}</ResourceDictionary></Styles.Resources>" : palette;
-            string source = $"<{rootType} xmlns=\"https://github.com/avaloniaui\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"><Design.PreviewWith><Border Width=\"160\" Height=\"80\" Background=\"{{DynamicResource PreviewBackground}}\" /></Design.PreviewWith>{definitions}</{rootType}>";
+            string source = $"<{rootType} xmlns=\"https://github.com/avaloniaui\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"><Design.PreviewWith><Border Name=\"PreviewSample\" Width=\"160\" Height=\"80\" Background=\"{{DynamicResource PreviewBackground}}\" /></Design.PreviewWith>{definitions}</{rootType}>";
             var parsed = new XamlVisualEditor.Xaml.Parsing.XamlParsingService().Parse(source);
             var document = Assert.IsType<XamlVisualEditor.Xaml.Ast.MutableAstDocument>(parsed.Document);
             foreach (var theme in new[] { Avalonia.Styling.ThemeVariant.Light, Avalonia.Styling.ThemeVariant.Dark })
@@ -140,6 +254,15 @@ public sealed class PreviewerLaunchTests
                     ? ((byte)0xEE, (byte)0xF4, (byte)0xFA) : ((byte)0x10, (byte)0x20, (byte)0x30);
                 await AssertThemeFrameAsync(firstSession,
                     () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue);
+                DesignerHostSnapshot previewTree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
+                DesignerHostNode previewNode = Assert.Single(previewTree.Nodes);
+                var previewObject = Assert.IsType<XamlVisualEditor.Xaml.Ast.MutableAstObjectNode>(
+                    document.Root!.Properties.Single(property => property.PropertyName == "Design.PreviewWith").Value);
+                Assert.Equal(previewObject.Id, previewNode.NodeId);
+                Assert.Equal("PreviewSample", previewNode.Name);
+                Assert.Equal(160, previewNode.Width);
+                Assert.Equal(80, previewNode.Height);
+                Assert.True(previewNode.IsVisible);
                 Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
                 Assert.False(firstProcess.HasExited);
             }
@@ -166,27 +289,60 @@ public sealed class PreviewerLaunchTests
         var installed = await packages.InstallAsync(packagePath, CancellationToken.None);
         DesignerThemeProviderRegistration provider = Assert.Single(DesignerThemePackageContributions.Read(installed));
         Assert.StartsWith(installed.InstallationDirectory!, provider.AssemblyPath, StringComparison.Ordinal);
-        const string themedSource = "<UserControl xmlns=\"https://github.com/avaloniaui\" xmlns:sample=\"clr-namespace:XamlVisualEditor.TestControls;assembly=XamlVisualEditor.TestControls\" Width=\"160\" Height=\"80\"><sample:ThemeSensitiveControl /></UserControl>";
+        const string themedSource = "<UserControl xmlns=\"https://github.com/avaloniaui\" xmlns:sample=\"clr-namespace:XamlVisualEditor.TestControls;assembly=XamlVisualEditor.TestControls\" Width=\"160\" Height=\"80\"><sample:ThemeSensitiveControl Name=\"ThemeSample\" /></UserControl>";
         var themedDocument = Assert.IsType<XamlVisualEditor.Xaml.Ast.MutableAstDocument>(
             new XamlVisualEditor.Xaml.Parsing.XamlParsingService().Parse(themedSource).Document);
-        foreach (string? themeId in new string?[] { "harbor", "clay", null })
+        foreach (string rootType in new[] { "UserControl", "Styles", "ResourceDictionary", "DataTemplate" })
         {
-            DesignerThemeRequest request = new(Guid.NewGuid(), new[] { provider },
-                themeId is null ? null : new DesignerThemeSelection(provider.Id, themeId));
-            string prepared = renderer.PrepareXaml(themedDocument, themeRequest: request);
-            (byte red, byte green, byte blue) = themeId switch
+            string previewSource = rootType switch
             {
-                "harbor" => ((byte)0x12, (byte)0x34, (byte)0x56),
-                "clay" => ((byte)0xC0, (byte)0x80, (byte)0x50),
-                _ => ((byte)0x33, (byte)0x44, (byte)0x55)
+                "UserControl" => themedSource,
+                "DataTemplate" => """
+                    <DataTemplate xmlns="https://github.com/avaloniaui"
+                                  xmlns:sample="clr-namespace:XamlVisualEditor.TestControls;assembly=XamlVisualEditor.TestControls">
+                      <Design.PreviewWith>
+                        <ContentControl Name="TemplatePreview" Width="160" Height="80" DataContext="Preview data">
+                          <ContentControl.Template>
+                            <ControlTemplate>
+                              <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+                            </ControlTemplate>
+                          </ContentControl.Template>
+                        </ContentControl>
+                      </Design.PreviewWith>
+                      <sample:ThemeSensitiveControl Name="ThemeSample" />
+                    </DataTemplate>
+                    """,
+                _ => $"<{rootType} xmlns=\"https://github.com/avaloniaui\" xmlns:sample=\"clr-namespace:XamlVisualEditor.TestControls;assembly=XamlVisualEditor.TestControls\"><Design.PreviewWith><sample:ThemeSensitiveControl Name=\"ThemeSample\" Width=\"160\" Height=\"80\" /></Design.PreviewWith></{rootType}>"
             };
-            await AssertThemeFrameAsync(firstSession,
-                () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue);
-            DesignerThemeCatalog catalog = Assert.IsType<DesignerThemeCatalog>(firstSession.LastThemeCatalog);
-            Assert.Equal(request.RequestId, catalog.RequestId);
-            Assert.Equal(new[] { "harbor", "clay" }, Assert.Single(catalog.Providers).Themes.Select(theme => theme.Id));
-            Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
-            Assert.False(firstProcess.HasExited);
+            var previewDocument = Assert.IsType<XamlVisualEditor.Xaml.Ast.MutableAstDocument>(
+                new XamlVisualEditor.Xaml.Parsing.XamlParsingService().Parse(previewSource).Document);
+            string original = new XamlVisualEditor.Xaml.Serialization.XamlSerializationService().Serialize(previewDocument);
+            foreach (string? themeId in new string?[] { "harbor", "clay", null })
+            {
+                DesignerThemeRequest request = new(Guid.NewGuid(), new[] { provider },
+                    themeId is null ? null : new DesignerThemeSelection(provider.Id, themeId));
+                string prepared = renderer.PrepareXaml(previewDocument, themeRequest: request);
+                (byte red, byte green, byte blue) = themeId switch
+                {
+                    "harbor" => ((byte)0x12, (byte)0x34, (byte)0x56),
+                    "clay" => ((byte)0xC0, (byte)0x80, (byte)0x50),
+                    _ => ((byte)0x33, (byte)0x44, (byte)0x55)
+                };
+                await AssertThemeFrameAsync(firstSession,
+                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue);
+                DesignerHostSnapshot tree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
+                DesignerHostNode sample = Assert.Single(tree.Nodes, node => node.Name == "ThemeSample");
+                Assert.Equal(160, sample.Width);
+                Assert.Equal(80, sample.Height);
+                Assert.NotNull(sample.Layout);
+                Assert.True(sample.IsVisible);
+                DesignerThemeCatalog catalog = Assert.IsType<DesignerThemeCatalog>(firstSession.LastThemeCatalog);
+                Assert.Equal(request.RequestId, catalog.RequestId);
+                Assert.Equal(new[] { "harbor", "clay" }, Assert.Single(catalog.Providers).Themes.Select(theme => theme.Id));
+                Assert.Equal(original, new XamlVisualEditor.Xaml.Serialization.XamlSerializationService().Serialize(previewDocument));
+                Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
+                Assert.False(firstProcess.HasExited);
+            }
         }
         DesignerThemeProviderRegistration unavailable = provider with
         {
@@ -348,14 +504,21 @@ public sealed class PreviewerLaunchTests
     {
         TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame) => ready.TrySetResult(true);
+        void OnError(PreviewerErrorInfo error) => ready.TrySetException(new InvalidOperationException(error.Message));
         session.FrameReceived += OnFrame;
+        session.ErrorReceived += OnError;
         try
         {
             if (session.LastFrame is not null) ready.TrySetResult(true);
+            else if (session.LastErrorInfo is { } error) OnError(error);
             await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
             Assert.True(session.LastFrame!.Width > 0 && session.LastFrame.Height > 0);
         }
-        finally { session.FrameReceived -= OnFrame; }
+        finally
+        {
+            session.FrameReceived -= OnFrame;
+            session.ErrorReceived -= OnError;
+        }
     }
 
 }

@@ -120,17 +120,21 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
     private async Task<WorkspaceModel> LoadSolutionCoreAsync(string solutionPath, CancellationToken ct)
     {
+        AssemblySnapshotSettings? snapshot = AssemblySnapshotSettings.FindForWorkspace(solutionPath);
         IDisposable? workspaceFailed = null;
         try
         {
             EnsureMSBuildRegistered();
 
-            _workspace = MSBuildWorkspace.Create();
+            _workspace = snapshot is null ? MSBuildWorkspace.Create()
+                : MSBuildWorkspace.Create(snapshot.CreateMSBuildProperties());
             workspaceFailed = _workspace.RegisterWorkspaceFailedHandler(OnWorkspaceFailed);
             _logger.LogInformation("Loading solution: {Path}", solutionPath);
             Progress<ProjectLoadProgress> progress = new(p =>
                 _logger.LogInformation("Workspace load: {Progress}", FormatProgress(p)));
             _solution = await _workspace.OpenSolutionAsync(solutionPath, progress, ct).ConfigureAwait(false);
+            snapshot?.EnsureNoLiveReferences(_solution.Projects.SelectMany(project => project.MetadataReferences)
+                .OfType<PortableExecutableReference>().Select(reference => reference.FilePath).OfType<string>());
         }
         finally
         {
@@ -179,7 +183,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 if (metaRef is PortableExecutableReference peRef && peRef.FilePath is not null)
                 {
                     string name = System.IO.Path.GetFileNameWithoutExtension(peRef.FilePath);
-                    references.Add(new AssemblyReference { Name = name, Path = peRef.FilePath });
+                    references.Add(new AssemblyReference { Name = name, Path = snapshot?.ResolveAssemblyPath(peRef.FilePath) ?? peRef.FilePath });
                 }
             }
 
@@ -190,7 +194,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 XamlFiles = xamlFiles.Values.ToList(),
                 Files = files.Values.ToList(),
                 References = references,
-                OutputAssemblyPath = project.OutputFilePath,
+                OutputAssemblyPath = snapshot?.ResolveOutputAssembly(project.OutputFilePath, project.AssemblyName ?? project.Name) ?? project.OutputFilePath,
+                AssemblySnapshotDirectory = snapshot?.SnapshotDirectory,
+                PreviewApplicationAssemblyPath = snapshot?.ResolvePreviewApplication(),
                 TargetFramework = TryGetTargetFrameworkFromOutputPath(project.OutputFilePath),
                 IsExecutable = IsExecutableProject(project)
             });
@@ -211,13 +217,15 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
     private async Task<WorkspaceModel> LoadProjectCoreAsync(string projectPath, CancellationToken ct)
     {
+        AssemblySnapshotSettings? snapshot = AssemblySnapshotSettings.FindForWorkspace(projectPath);
         IDisposable? workspaceFailed = null;
         Project? project = null;
         try
         {
             EnsureMSBuildRegistered();
 
-            _workspace = MSBuildWorkspace.Create();
+            _workspace = snapshot is null ? MSBuildWorkspace.Create()
+                : MSBuildWorkspace.Create(snapshot.CreateMSBuildProperties());
             workspaceFailed = _workspace.RegisterWorkspaceFailedHandler(OnWorkspaceFailed);
             _logger.LogInformation("Loading project: {Path}", projectPath);
             Progress<ProjectLoadProgress> progress = new(p =>
@@ -227,6 +235,8 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             try
             {
                 project = await _workspace.OpenProjectAsync(projectPath, progress, linked.Token).ConfigureAwait(false);
+                snapshot?.EnsureNoLiveReferences(project.Solution.Projects.SelectMany(item => item.MetadataReferences)
+                    .OfType<PortableExecutableReference>().Select(reference => reference.FilePath).OfType<string>());
             }
             catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
             {
@@ -243,6 +253,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                     ex.Message);
                 _workspace.Dispose();
                 _workspace = null;
+                project = null;
             }
         }
         finally
@@ -284,7 +295,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 if (metaRef is PortableExecutableReference peRef && peRef.FilePath is not null)
                 {
                     string name = System.IO.Path.GetFileNameWithoutExtension(peRef.FilePath);
-                    references.Add(new AssemblyReference { Name = name, Path = peRef.FilePath });
+                    references.Add(new AssemblyReference { Name = name, Path = snapshot?.ResolveAssemblyPath(peRef.FilePath) ?? peRef.FilePath });
                 }
             }
 
@@ -295,7 +306,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 XamlFiles = xamlFiles.Values.ToList(),
                 Files = files.Values.ToList(),
                 References = references,
-                OutputAssemblyPath = project.OutputFilePath,
+                OutputAssemblyPath = snapshot?.ResolveOutputAssembly(project.OutputFilePath, project.AssemblyName ?? project.Name) ?? project.OutputFilePath,
+                AssemblySnapshotDirectory = snapshot?.SnapshotDirectory,
+                PreviewApplicationAssemblyPath = snapshot?.ResolvePreviewApplication(),
                 TargetFramework = TryGetTargetFrameworkFromOutputPath(project.OutputFilePath),
                 IsExecutable = IsExecutableProject(project)
             };
@@ -319,6 +332,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
     internal static WorkspaceModel CreateFallbackWorkspace(string projectPath)
     {
+        AssemblySnapshotSettings? snapshot = AssemblySnapshotSettings.FindForWorkspace(projectPath);
         string projectName = Path.GetFileNameWithoutExtension(projectPath);
         string assemblyName = projectName;
         string? targetFramework = null;
@@ -341,7 +355,8 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         {
         }
 
-        string? outputAssemblyPath = FindFallbackOutputAssembly(projectPath, assemblyName, targetFramework);
+        string? outputAssemblyPath = snapshot?.ResolveOutputAssembly(null, assemblyName)
+            ?? FindFallbackOutputAssembly(projectPath, assemblyName, targetFramework);
         ProjectModel project = new()
         {
             Name = projectName,
@@ -355,8 +370,10 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                     RelativePath = Path.GetFileName(projectPath)
                 }
             },
-            References = Array.Empty<AssemblyReference>(),
+            References = snapshot?.GetAssemblyReferences() ?? Array.Empty<AssemblyReference>(),
             OutputAssemblyPath = outputAssemblyPath,
+            AssemblySnapshotDirectory = snapshot?.SnapshotDirectory,
+            PreviewApplicationAssemblyPath = snapshot?.ResolvePreviewApplication(),
             TargetFramework = targetFramework,
             IsExecutable = isExecutable
         };

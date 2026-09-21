@@ -1,9 +1,11 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Reactive.Disposables;
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CollaborationExtension;
 
@@ -23,7 +25,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
     private readonly CompositeDisposable _disposables = new();
     private bool _isSessionActive;
     private string? _sessionId;
-    private string _statusMessage = "Not connected";
+    private string _statusMessage = UiStrings.NotConnected;
     private string? _joinSessionId;
     private string? _invitee;
 
@@ -113,7 +115,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
 
     private static string CreateShareLinkDisplay(string link)
     {
-        return "Share link: " + link;
+        return UiStrings.ShareLinkPrefix + link;
     }
 
     private async Task StartSessionAsync()
@@ -133,7 +135,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
         if (!joined)
         {
             await _window.ShowWarningMessageAsync(
-                "Unable to join the collaboration session.",
+                UiStrings.JoinCollaborationFailed,
                 CancellationToken.None);
         }
     }
@@ -149,7 +151,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
         if (string.IsNullOrWhiteSpace(link))
         {
             await _window.ShowWarningMessageAsync(
-                "Start or join a session before sharing a link.",
+                UiStrings.ShareSessionRequired,
                 CancellationToken.None);
             return;
         }
@@ -172,13 +174,13 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
         if (!invited)
         {
             await _window.ShowWarningMessageAsync(
-                "Unable to send invite. Start or join a collaboration session first.",
+                UiStrings.InviteSessionRequired,
                 CancellationToken.None);
             return;
         }
 
         await _window.ShowInformationMessageAsync(
-            "Invite prepared for " + trimmedInvitee,
+            UiStrings.InvitePreparedPrefix + trimmedInvitee,
             CancellationToken.None);
         Invitee = string.Empty;
     }
@@ -207,7 +209,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
         IsSessionActive = isSessionActive;
         SessionId = sessionId;
         StatusMessage = string.IsNullOrWhiteSpace(statusMessage)
-            ? "Not connected"
+            ? UiStrings.NotConnected
             : statusMessage;
 
         if (!isSessionActive)

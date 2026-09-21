@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -15,6 +15,8 @@ using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.NavigationExtension;
 
@@ -170,7 +172,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         IReadOnlyList<LanguageLocation> locations = await _navigation.FindReferencesAsync(context, cancellationToken).ConfigureAwait(false);
         if (locations.Count == 0)
         {
-            await _window.ShowInformationMessageAsync("No references found.", cancellationToken);
+            await _window.ShowInformationMessageAsync(UiStrings.NoReferencesFound, cancellationToken);
         }
 
         ReplaceItems(BuildReferenceItems(locations));
@@ -187,7 +189,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         IReadOnlyList<LanguageLocation> locations = await _navigation.FindDefinitionsAsync(context, cancellationToken).ConfigureAwait(false);
         if (locations.Count == 0)
         {
-            await _window.ShowInformationMessageAsync("No definitions found.", cancellationToken);
+            await _window.ShowInformationMessageAsync(UiStrings.NoDefinitionsFound, cancellationToken);
             return;
         }
 
@@ -209,7 +211,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
 
         QuickPickItem? selection = await _window.ShowQuickPickAsync(
             items,
-            new QuickPickOptions("Select Definition", CanPickMany: false),
+            new QuickPickOptions(UiStrings.SelectDefinition, CanPickMany: false),
             cancellationToken);
         if (selection is null)
         {
@@ -377,7 +379,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         if (document is null)
         {
             await _window.ShowWarningMessageAsync(
-                "No active document. Open a document and place the caret on a symbol first.",
+                UiStrings.OpenDocumentForNavigation,
                 cancellationToken);
             return null;
         }

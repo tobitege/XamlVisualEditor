@@ -1,35 +1,36 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.CollaborationExtension"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.CollaborationExtension.Views.CollaborationToolPanelView"
              x:DataType="vm:CollaborationPanelToolViewModel">
   <Grid Margin="8" RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
-    <TextBlock Text="Collaboration"
+    <TextBlock Text="{x:Static loc:UiStrings.Collaboration}"
                FontWeight="SemiBold"
                FontSize="14" />
 
     <StackPanel Grid.Row="1"
                 Orientation="Horizontal"
                 Spacing="6">
-      <Button Content="Start Session"
+      <Button Content="{x:Static loc:UiStrings.StartSession}"
               Command="{CompiledBinding StartSessionCommand}"
               IsVisible="{CompiledBinding !IsSessionActive}" />
-      <Button Content="Join Session"
+      <Button Content="{x:Static loc:UiStrings.JoinSession}"
               Command="{CompiledBinding JoinSessionCommand}"
               IsVisible="{CompiledBinding !IsSessionActive}" />
-      <Button Content="Leave Session"
+      <Button Content="{x:Static loc:UiStrings.LeaveSession}"
               Command="{CompiledBinding LeaveSessionCommand}"
               IsVisible="{CompiledBinding IsSessionActive}" />
-      <Button Content="Share Link"
+      <Button Content="{x:Static loc:UiStrings.ShareLink}"
               Command="{CompiledBinding ShareSessionCommand}"
               IsVisible="{CompiledBinding IsSessionActive}" />
     </StackPanel>
 
     <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="6">
-      <TextBlock Text="Session"
+      <TextBlock Text="{x:Static loc:UiStrings.Session}"
                  VerticalAlignment="Center" />
       <TextBox Grid.Column="1"
-               PlaceholderText="Session id"
+               PlaceholderText="{x:Static loc:UiStrings.SessionId}"
                Text="{CompiledBinding JoinSessionId, Mode=TwoWay}"
                IsVisible="{CompiledBinding !IsSessionActive}" />
       <TextBlock Grid.Column="1"
@@ -40,11 +41,11 @@
     </Grid>
 
     <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="6">
-      <TextBox PlaceholderText="Invite participant"
+      <TextBox PlaceholderText="{x:Static loc:UiStrings.InviteParticipant}"
                Text="{CompiledBinding Invitee, Mode=TwoWay}"
                IsVisible="{CompiledBinding IsSessionActive}" />
       <Button Grid.Column="1"
-              Content="Invite"
+              Content="{x:Static loc:UiStrings.Invite}"
               Command="{CompiledBinding InviteParticipantCommand}"
               IsVisible="{CompiledBinding IsSessionActive}" />
     </Grid>

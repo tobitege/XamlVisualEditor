@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.IO;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -13,6 +14,8 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.Mcp;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.McpExtension;
 
@@ -59,7 +62,7 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
     public partial string? HttpPath { get; set; }
 
     [Reactive]
-    public partial string StatusText { get; private set; } = "Stopped";
+    public partial string StatusText { get; private set; } = UiStrings.Stopped;
 
     [Reactive]
     public partial string EndpointText { get; private set; } = "stdio + http";
@@ -146,21 +149,21 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
     private async Task ApplySettingsAsync()
     {
         McpSettings settings = BuildSettings();
-        await _controller.ApplySettingsAsync(settings, CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Applied settings.");
+        await _controller.ApplySettingsAsync(settings, CancellationToken.None);
+        AppendLog(UiStrings.SettingsApplied);
         UpdateStatus();
     }
 
     private async Task RestartAsync()
     {
-        await _controller.RestartAsync(CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Restarted server.");
+        await _controller.RestartAsync(CancellationToken.None);
+        AppendLog(_controller.LastError ?? UiStrings.ServerRestarted);
         UpdateStatus();
     }
 
     private async Task RefreshPermissionsAsync()
     {
-        IReadOnlyList<McpWorkspacePermissionEntry> entries = await _permissions.GetPermissionsAsync(CancellationToken.None).ConfigureAwait(false);
+        IReadOnlyList<McpWorkspacePermissionEntry> entries = await _permissions.GetPermissionsAsync(CancellationToken.None);
         _permissionEntries.Clear();
         foreach (McpWorkspacePermissionEntry entry in entries.OrderBy(e => e.WorkspaceId, StringComparer.OrdinalIgnoreCase))
         {
@@ -177,16 +180,16 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await _permissions.ClearPermissionAsync(SelectedPermission.WorkspaceId, CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Revoked permission for " + SelectedPermission.WorkspaceId + ".");
-        await RefreshPermissionsAsync().ConfigureAwait(false);
+        await _permissions.ClearPermissionAsync(SelectedPermission.WorkspaceId, CancellationToken.None);
+        AppendLog(UiStrings.PermissionRevokedPrefix + SelectedPermission.WorkspaceId + ".");
+        await RefreshPermissionsAsync();
     }
 
     private async Task ClearPermissionsAsync()
     {
-        await _permissions.ClearAllAsync(CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Cleared all permissions.");
-        await RefreshPermissionsAsync().ConfigureAwait(false);
+        await _permissions.ClearAllAsync(CancellationToken.None);
+        AppendLog(UiStrings.PermissionsCleared);
+        await RefreshPermissionsAsync();
     }
 
     private async Task CopyTokenAsync()
@@ -197,19 +200,19 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
         }
 
         await CopyToClipboardInteraction.Handle(SessionToken).ToTask().ConfigureAwait(false);
-        AppendLog("Copied session token.");
+        AppendLog(UiStrings.SessionTokenCopied);
     }
 
     private async Task CopyHttpEndpointAsync()
     {
         string endpoint = BuildHttpEndpoint(BuildSettings());
         await CopyToClipboardInteraction.Handle(endpoint).ToTask().ConfigureAwait(false);
-        AppendLog("Copied HTTP endpoint.");
+        AppendLog(UiStrings.HttpEndpointCopied);
     }
 
     private void UpdateStatus()
     {
-        StatusText = _controller.IsRunning ? "Running" : "Stopped";
+        StatusText = _controller.LastError ?? (_controller.IsRunning ? UiStrings.Running : UiStrings.Stopped);
         EndpointText = _controller.EndpointSummary;
         ConnectionCount = _controller.ConnectionCount;
         LastConnectionAt = _controller.LastConnectionAt?.ToLocalTime().ToString("u");
@@ -272,13 +275,12 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
 
     private void OnWorkspaceChanged(object? sender, WorkspaceChangedEventArgs args)
     {
-        UpdateWorkspaceId();
-        UpdateSessionToken();
+        RxSchedulers.MainThreadScheduler.Schedule(() => { UpdateWorkspaceId(); UpdateSessionToken(); });
     }
 
     private void OnStatusChanged(object? sender, EventArgs args)
     {
-        UpdateStatus();
+        RxSchedulers.MainThreadScheduler.Schedule(UpdateStatus);
     }
 
     private void AppendLog(string message)

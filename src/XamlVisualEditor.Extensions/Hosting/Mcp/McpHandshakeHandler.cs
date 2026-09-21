@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;
@@ -18,6 +18,8 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
     public void Register(McpRequestRouter router)
     {
         router.Register(McpProtocol.InitializeMethod, (context, paramsElement, ct) => HandleInitializeAsync(context, paramsElement, ct));
+        router.Register(McpProtocol.InitializedNotification, (_, _, _) => Task.FromResult<object?>(null));
+        router.Register("ping", (_, _, _) => Task.FromResult<object?>(new { }));
     }
 
     private async Task<object?> HandleInitializeAsync(McpRequestContext context, JsonElement? parameters, CancellationToken ct)
@@ -34,8 +36,10 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
         {
             _registry.Set(context.Connection, session);
         }
-
-        _registry.Set(result.SessionToken, session);
+        else
+        {
+            _registry.Set(result.SessionToken, session);
+        }
 
         return result;
     }

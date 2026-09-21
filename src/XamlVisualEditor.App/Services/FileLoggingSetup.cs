@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Serilog;
 using Serilog.Core;
@@ -33,7 +33,7 @@ public static class FileLoggingSetup
         LoggerConfiguration configuration = new LoggerConfiguration()
             .MinimumLevel.Verbose()
             .Enrich.FromLogContext()
-            .WriteTo.Console(outputTemplate: OutputTemplate)
+            .WriteTo.Console(outputTemplate: OutputTemplate, standardErrorFromLevel: Serilog.Events.LogEventLevel.Verbose)
             .WriteTo.File(
                 Path.Combine(LogDirectory, "xve-.log"),
                 outputTemplate: OutputTemplate,

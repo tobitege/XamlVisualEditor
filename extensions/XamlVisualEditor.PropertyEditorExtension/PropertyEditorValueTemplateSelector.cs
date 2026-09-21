@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -7,6 +7,8 @@ using Avalonia.Media;
 using Avalonia.Metadata;
 using System.Windows.Input;
 using XamlVisualEditor.Extensions;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
@@ -96,9 +98,10 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
 
         typedEditor.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         StackPanel field = new() { Spacing = 3, Margin = new Avalonia.Thickness(0, 2) };
-        if (entry.EditorKind is not PropertyEditorKind.Collection and not PropertyEditorKind.Template)
+        bool hasTextInput = typedEditor is TextBox or ComboBox { IsEditable: true };
+        if (!hasTextInput && entry.EditorKind is not PropertyEditorKind.Collection and not PropertyEditorKind.Template)
         {
-            TextBox expressionEditor = new() { IsReadOnly = entry.IsReadOnly, PlaceholderText = "Binding or resource expression" };
+            TextBox expressionEditor = new() { IsReadOnly = entry.IsReadOnly, PlaceholderText = UiStrings.BindingResourceExpression };
             expressionEditor.Bind(TextBox.TextProperty, new Binding(nameof(PropertyEntryViewModel.Value))
             {
                 Source = entry, Mode = BindingMode.TwoWay
@@ -113,10 +116,6 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
         if (entry.EditorKind == PropertyEditorKind.GridLength)
         {
             DockPanel gridLengthEditor = new();
-            gridLengthEditor.Bind(Control.IsVisibleProperty, new Binding(nameof(PropertyEntryViewModel.IsExpression))
-            {
-                Source = entry, Converter = new BooleanInverseConverter()
-            });
             ComboBox units = new()
             {
                 ItemsSource = Enum.GetValues<GridUnitType>(),
@@ -124,11 +123,15 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
                 Margin = new Avalonia.Thickness(6, 0, 0, 0),
                 IsEnabled = !entry.IsReadOnly
             };
+            units.Bind(Control.IsVisibleProperty, new Binding(nameof(PropertyEntryViewModel.IsExpression))
+            {
+                Source = entry, Converter = new BooleanInverseConverter()
+            });
             units.Bind(ComboBox.SelectedItemProperty, new Binding(nameof(PropertyEntryViewModel.Value))
             {
                 Source = entry, Mode = BindingMode.TwoWay, Converter = new GridLengthUnitConverter(entry)
             });
-            ToolTip.SetTip(units, "Auto size, fixed pixels, or proportional star (*) sizing");
+            ToolTip.SetTip(units, UiStrings.GridLengthHelp);
             units.DropDownClosed += (_, _) =>
             {
                 if (!entry.IsReadOnly && !entry.IsExpression) ((ICommand)entry.CommitCommand).Execute(null);

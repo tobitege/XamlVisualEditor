@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Headless.XUnit;
@@ -8,7 +8,9 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading;
+using ReactiveUI;
 using Xunit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -24,6 +26,7 @@ using XamlVisualEditor.TreeView;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Workspace;
 
 namespace XamlVisualEditor.Tests.UI;
 
@@ -168,7 +171,37 @@ public sealed class DesignerSurfaceTests
     }
 
     [AvaloniaFact]
-    public async System.Threading.Tasks.Task PreviewerStartup_WaitsForLoadedDocumentAndKeepsItsOwner()
+    public async System.Threading.Tasks.Task CancelingDocumentLoadDoesNotReopenTheClosedDocument()
+    {
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-cancel-load-" + Guid.NewGuid().ToString("N") + ".axaml");
+        const string original = "<UserControl xmlns=\"https://github.com/avaloniaui\"><Button Content=\"Unchanged\" /></UserControl>";
+        await System.IO.File.WriteAllTextAsync(path, original);
+        using MainWindowViewModel main = new(metadataService: new TypeMetadataService());
+        System.Threading.Tasks.Task opening = main.OpenFileAsync(path);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(Assert.Single(main.Documents));
+        Assert.True(document.IsLoading);
+        Assert.False(document.IsLoaded);
+        Assert.False(((System.Windows.Input.ICommand)document.SaveCommand).CanExecute(null));
+        document.UseExternalPreviewer = true;
+
+        await document.CloseCommand.Execute();
+        await opening.WaitAsync(TimeSpan.FromSeconds(5));
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+        Assert.True(document.IsDisposed);
+        Assert.False(document.IsLoading);
+        Assert.False(document.IsLoaded);
+        Assert.Null(document.PreviewerSession);
+        Assert.Empty(main.Documents);
+        Assert.Null(main.ActiveDesignerDocument);
+        Assert.StartsWith("Closed ", main.StatusText);
+        Assert.Equal(original, await System.IO.File.ReadAllTextAsync(path));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async System.Threading.Tasks.Task PreviewerStartup_WaitsForLoadedDocumentAndKeepsItsOwner(bool projectWorkspace)
     {
         string firstPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-preview-first-" + Guid.NewGuid().ToString("N") + ".axaml");
         string secondPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-preview-second-" + Guid.NewGuid().ToString("N") + ".axaml");
@@ -183,10 +216,24 @@ public sealed class DesignerSurfaceTests
             return System.Threading.Tasks.Task.CompletedTask;
         }
 
-        using DesignerDocumentViewModel first = new(firstPath, startPreviewerAsync: Start);
-        using DesignerDocumentViewModel second = new(secondPath, startPreviewerAsync: Start);
-        first.UseExternalPreviewer = true;
-        second.UseExternalPreviewer = true;
+        WorkspaceModel? workspace = projectWorkspace ? new WorkspaceModel
+        {
+            Projects = new[] { new ProjectModel
+            {
+                Name = "PreviewLibrary", ProjectPath = System.IO.Path.ChangeExtension(firstPath, ".csproj"),
+                XamlFiles = Array.Empty<XamlFileModel>(), Files = Array.Empty<ProjectFileModel>(),
+                References = Array.Empty<AssemblyReference>()
+            } }
+        } : null;
+        using DesignerDocumentViewModel first = new(firstPath, workspaceProvider: () => workspace, startPreviewerAsync: Start);
+        using DesignerDocumentViewModel second = new(secondPath, workspaceProvider: () => workspace, startPreviewerAsync: Start);
+        Assert.Equal(projectWorkspace, first.UseExternalPreviewer);
+        Assert.Equal(projectWorkspace, second.UseExternalPreviewer);
+        if (!projectWorkspace)
+        {
+            first.UseExternalPreviewer = true;
+            second.UseExternalPreviewer = true;
+        }
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
         Assert.Empty(starts);
 
@@ -538,6 +585,95 @@ public sealed class MainWindowTests
 
 public sealed class HeadlessUiTests
 {
+    [AvaloniaFact]
+    public async System.Threading.Tasks.Task SaveShortcutPersistsTheActiveDocumentWithClosedMenus()
+    {
+        Avalonia.Themes.Fluent.FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-save-shortcut-" + Guid.NewGuid().ToString("N") + ".axaml");
+        const string original = "<Canvas xmlns=\"https://github.com/avaloniaui\"><Button Width=\"100\" /></Canvas>";
+        string edited = original.Replace("100", "140", StringComparison.Ordinal);
+        await System.IO.File.WriteAllTextAsync(path, original);
+        using MainWindowViewModel viewModel = new();
+        MainWindow window = new(viewModel) { Focusable = true };
+        try
+        {
+            window.Show();
+            await viewModel.OpenFileAsync(path);
+            DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(viewModel.ActiveDocument);
+            document.CodeEditor.Document.Text = edited;
+            await document.WhenAnyValue(item => item.IsModified).Where(value => value)
+                .FirstAsync().Timeout(TimeSpan.FromSeconds(5)).ToTask();
+            Assert.True(window.Focus());
+
+            window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+
+            await document.WhenAnyValue(item => item.IsModified).Where(value => !value)
+                .FirstAsync().Timeout(TimeSpan.FromSeconds(5)).ToTask();
+            Assert.Equal(edited, await System.IO.File.ReadAllTextAsync(path));
+            Assert.DoesNotContain(window.GetVisualDescendants().OfType<MenuItem>(), item => item.IsSubMenuOpen);
+        }
+        finally
+        {
+            window.Close();
+            Application.Current.Styles.Remove(theme);
+        }
+    }
+
+    [AvaloniaFact]
+    public async System.Threading.Tasks.Task ExtensionsDialog_OpensAndClosesWithoutChangingDockLayout()
+    {
+        Avalonia.Themes.Fluent.FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        using MainWindowViewModel viewModel = new();
+        MainWindow window = new(viewModel);
+        var layout = viewModel.DockLayout;
+        var mainLayout = layout.ActiveDockable;
+        var left = XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.ReactiveUI.Controls.ToolDock>(layout, "LeftToolDock")!;
+        left.Proportion = 0.18;
+        try
+        {
+            window.Show();
+            for (int iteration = 0; iteration < 2; iteration++)
+            {
+                var execution = viewModel.OpenExtensionManagerCommand.Execute().ToTask();
+                await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                XamlVisualEditor.App.Views.ExtensionManagerDialog dialog = Assert.Single(
+                    window.OwnedWindows.OfType<XamlVisualEditor.App.Views.ExtensionManagerDialog>());
+                Assert.True(dialog.IsVisible);
+                Assert.Same(viewModel.ExtensionManager, dialog.DataContext);
+                Assert.Same(layout, viewModel.DockLayout);
+                Assert.Same(mainLayout, layout.ActiveDockable);
+                Assert.Equal(0.18, left.Proportion);
+                Assert.Null(XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.Core.IDockable>(layout, "ExtensionsManager"));
+
+                dialog.UpdateLayout();
+                if (iteration == 0)
+                {
+                    Button close = dialog.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, "Close"));
+                    Point center = close.TranslatePoint(new Point(close.Bounds.Width / 2, close.Bounds.Height / 2), dialog)!.Value;
+                    dialog.MouseDown(center, MouseButton.Left);
+                    dialog.MouseUp(center, MouseButton.Left);
+                }
+                else
+                {
+                    dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+                }
+                await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                Assert.False(dialog.IsVisible);
+                await execution.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(mainLayout, layout.ActiveDockable);
+                Assert.Equal(0.18, left.Proportion);
+            }
+        }
+        finally
+        {
+            foreach (Window owned in window.OwnedWindows.ToArray()) owned.Close();
+            window.Close();
+            Application.Current!.Styles.Remove(theme);
+        }
+    }
+
     [AvaloniaFact]
     public void MainWindow_Creates_With_DataContext()
     {

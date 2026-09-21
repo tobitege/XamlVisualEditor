@@ -27,6 +27,118 @@ namespace XamlVisualEditor.Tests.UI;
 public sealed class PropertyStructureDialogTests
 {
     [AvaloniaTheory]
+    [InlineData("Canvas.Left", false)]
+    [InlineData("av:Grid.Row", false)]
+    [InlineData("Width", true)]
+    [InlineData("Canvas.Left", true)]
+    [InlineData("av:Grid.Row", true)]
+    public async Task Structure_Draft_Rejects_Invalid_Attached_Values_And_Duplicate_Assignments(
+        string member, bool duplicate)
+    {
+        const string original = "<Button xmlns=\"https://github.com/avaloniaui\" xmlns:av=\"https://github.com/avaloniaui\"><Button.Template><ControlTemplate TargetType=\"Button\"><Border Width=\"80\" Height=\"40\" /></ControlTemplate></Button.Template></Button>";
+        string path = Path.Combine(Path.GetTempPath(), $"xve-structure-validation-{Guid.NewGuid():N}.axaml");
+        await File.WriteAllTextAsync(path, original);
+        using MainWindowViewModel main = new(metadataService: new TypeMetadataService());
+        await main.OpenFileAsync(path);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDesignerDocument);
+        using ShellDesignerHost host = new(main);
+        DesignerPropertyStructure snapshot = await host.OpenPropertyStructureAsync(
+            document.SyncEngine.CurrentDocument!.Root!.Id.ToString("D"), "Template", CancellationToken.None);
+        using PropertyStructureEditorViewModel editor = new(host, snapshot);
+        bool closed = false;
+        editor.CloseRequested += () => closed = true;
+        editor.SelectedNode = editor.Roots.SelectMany(node => node.DescendantsAndSelf()).Single(node => node.Label == "Border");
+        editor.AttributeName = member;
+        editor.AttributeValue = duplicate ? "20" : "invalid";
+        await editor.SetAttributeCommand.Execute();
+        if (duplicate)
+        {
+            editor.PropertyName = member;
+            await editor.AddPropertyCommand.Execute();
+            Assert.Null(editor.Error);
+            editor.TextValue = "40";
+        }
+
+        await editor.ApplyCommand.Execute();
+        Assert.Contains(member[(member.IndexOf(':') + 1)..], editor.Error);
+        if (duplicate) Assert.Contains("more than once", editor.Error);
+        Assert.False(closed);
+        Assert.Equal(original, document.SyncEngine.CurrentText);
+        Assert.Equal(original, document.CodeEditor.Document.Text);
+        Assert.Equal(0, document.SyncEngine.UndoRedo.UndoCount);
+
+        if (duplicate) await editor.RemoveCommand.Execute();
+        else
+        {
+            editor.AttributeValue = "20";
+            await editor.SetAttributeCommand.Execute();
+        }
+        await editor.ApplyCommand.Execute();
+        Assert.Null(editor.Error);
+        Assert.True(closed);
+        Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
+        string applied = document.SyncEngine.GetCurrentText();
+        Assert.NotEqual(original, applied);
+        document.SyncEngine.Undo();
+        Assert.Equal(original, document.SyncEngine.CurrentText);
+        document.SyncEngine.Redo();
+        Assert.Equal(applied, document.SyncEngine.CurrentText);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Structure_Draft_Cannot_Overwrite_Changed_Or_Switched_Document(bool switchDocument)
+    {
+        const string original = "<Button xmlns=\"https://github.com/avaloniaui\"><Button.Template><ControlTemplate TargetType=\"Button\"><Border Width=\"80\" /></ControlTemplate></Button.Template></Button>";
+        string path = Path.Combine(Path.GetTempPath(), $"xve-structure-lifetime-{Guid.NewGuid():N}.axaml");
+        await File.WriteAllTextAsync(path, original);
+        using MainWindowViewModel main = new(metadataService: new TypeMetadataService());
+        await main.OpenFileAsync(path);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDesignerDocument);
+        using ShellDesignerHost host = new(main);
+        DesignerPropertyStructure snapshot = await host.OpenPropertyStructureAsync(
+            document.SyncEngine.CurrentDocument!.Root!.Id.ToString("D"), "Template", CancellationToken.None);
+        using PropertyStructureEditorViewModel editor = new(host, snapshot);
+        bool closed = false;
+        editor.CloseRequested += () => closed = true;
+        editor.SelectedNode = editor.Roots.SelectMany(node => node.DescendantsAndSelf()).Single(node => node.Label == "Border");
+        editor.AttributeName = "Width";
+        editor.AttributeValue = "120";
+        await editor.SetAttributeCommand.Execute();
+
+        if (switchDocument)
+        {
+            string otherPath = Path.Combine(Path.GetTempPath(), $"xve-structure-other-{Guid.NewGuid():N}.axaml");
+            await File.WriteAllTextAsync(otherPath, original);
+            await main.OpenFileAsync(otherPath);
+        }
+        else
+        {
+            using var edit = document.SyncEngine.BeginEditTransaction("Change outside structure editor");
+            document.SyncEngine.CurrentDocument!.Root!.SetPropertyValue("Tag", "Changed elsewhere");
+            edit.Commit();
+        }
+        DesignerDocumentViewModel active = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDesignerDocument);
+        string documentText = document.SyncEngine.GetCurrentText();
+        string activeText = active.SyncEngine.GetCurrentText();
+        int undoCount = document.SyncEngine.UndoRedo.UndoCount;
+        int activeUndoCount = active.SyncEngine.UndoRedo.UndoCount;
+
+        await editor.ApplyCommand.Execute();
+        Assert.Contains("document changed", editor.Error);
+        Assert.False(closed);
+        Assert.Equal(documentText, document.SyncEngine.CurrentText);
+        Assert.Equal(activeText, active.SyncEngine.CurrentText);
+        Assert.Equal(undoCount, document.SyncEngine.UndoRedo.UndoCount);
+        Assert.Equal(activeUndoCount, active.SyncEngine.UndoRedo.UndoCount);
+        await editor.CancelCommand.Execute();
+        Assert.True(closed);
+        Assert.Equal(documentText, document.SyncEngine.CurrentText);
+        Assert.Equal(activeText, active.SyncEngine.CurrentText);
+    }
+
+    [AvaloniaTheory]
     [InlineData("TabControl", "Items", "TabItem")]
     [InlineData("Menu", "Items", "MenuItem")]
     [InlineData("Button", "Template", "Border")]

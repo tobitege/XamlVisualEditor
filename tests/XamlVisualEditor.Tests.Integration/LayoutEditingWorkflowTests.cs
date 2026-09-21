@@ -1,4 +1,4 @@
-using XamlVisualEditor.Core;
+﻿using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Sync;
@@ -13,6 +13,40 @@ namespace XamlVisualEditor.Tests.Integration;
 
 public sealed class LayoutEditingWorkflowTests
 {
+    [Theory]
+    [InlineData("Canvas")]
+    [InlineData("Grid")]
+    [InlineData("StackPanel")]
+    public async Task NewControlNamespaceIsDeclaredAtTheRootAndSurvivesUndoAndReopen(string panel)
+    {
+        const string libraryNamespace = "clr-namespace:Sample.Controls;assembly=Sample.Controls";
+        string original = $"<UserControl xmlns='https://github.com/avaloniaui' xmlns:ns1='using:Existing.Controls'>\n  <!-- Keep this comment. -->\n  <{panel} Name='target' />\n</UserControl>";
+        using SyncEngine engine = new(new XamlParsingService(), new XamlSerializationService());
+        await engine.LoadAsync(original);
+        MutableAstObjectNode target = Find(engine.CurrentDocument!.Root!, "target");
+        MutableAstObjectNode added = new() { TypeName = "LibraryButton", XmlNamespace = libraryNamespace };
+        using (DocumentEditTransaction edit = engine.BeginEditTransaction("Insert library control"))
+        {
+            Assert.True(new LayoutEditService().TryInsert(target, added, out string? error), error);
+            edit.Commit();
+        }
+        string inserted = engine.GetCurrentText();
+        System.Xml.Linq.XDocument xml = System.Xml.Linq.XDocument.Parse(inserted);
+        Assert.Equal(libraryNamespace, xml.Root!.GetNamespaceOfPrefix("ns2")!.NamespaceName);
+        Assert.Equal("using:Existing.Controls", xml.Root.GetNamespaceOfPrefix("ns1")!.NamespaceName);
+        Assert.Contains("<!-- Keep this comment. -->", inserted);
+        Assert.DoesNotContain(xml.Root.Descendants().SelectMany(element => element.Attributes()), attribute => attribute.IsNamespaceDeclaration);
+        Assert.Equal(1, engine.UndoRedo.UndoCount);
+        engine.Undo();
+        Assert.Equal(original, engine.GetCurrentText());
+        engine.Redo();
+        Assert.Equal(inserted, await engine.SaveAsync());
+        using SyncEngine reopened = new(new XamlParsingService(), new XamlSerializationService());
+        await reopened.LoadAsync(inserted);
+        MutableAstObjectNode savedControl = Assert.Single(Find(reopened.CurrentDocument!.Root!, "target").Children.OfType<MutableAstObjectNode>());
+        Assert.Equal(libraryNamespace, savedControl.XmlNamespace);
+    }
+
     [Fact]
     public async Task ReparentWrapUndoAndReopenPreserveBindingsAndContainerRules()
     {

@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Terminal;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -17,13 +19,14 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
     private readonly Action<string> _clipboardHandler;
     private readonly Action<ReadOnlyMemory<byte>> _outputHandler;
     private readonly Action<int?> _exitHandler;
+    private readonly Action<string> _titleHandler;
     private int _columns;
     private int _rows;
 
     public Guid Id { get; } = Guid.NewGuid();
 
     [Reactive]
-    public partial string Title { get; private set; } = "Terminal";
+    public partial string Title { get; private set; } = UiStrings.TerminalGroup;
 
     [Reactive]
     public partial bool IsConnected { get; private set; }
@@ -50,13 +53,15 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
 
     public ReactiveCommand<Unit, Unit> ClearSelectionCommand { get; }
 
-    public TerminalViewModel(ITerminalSession session)
+    public TerminalViewModel(ITerminalSession session, string? title = null)
     {
         _session = session;
+        Title = ShortTitle(title);
         _columns = Emulator.ActiveBuffer.Columns;
         _rows = Emulator.ActiveBuffer.Rows;
         _session.ScreenUpdated += OnScreenUpdated;
-        _session.TitleChanged += title => Title = string.IsNullOrWhiteSpace(title) ? "Terminal" : title;
+        _titleHandler = value => Title = ShortTitle(value);
+        _session.TitleChanged += _titleHandler;
         _outputHandler = data =>
         {
             if (data.IsEmpty)
@@ -81,6 +86,9 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
         Emulator.ClipboardCopyRequested += _clipboardHandler;
         ClearSelectionCommand = ReactiveCommand.Create(ClearSelection);
     }
+
+    private static string ShortTitle(string? title) => string.IsNullOrWhiteSpace(title)
+        ? "Terminal" : System.IO.Path.GetFileName(title.Replace('\\', '/').TrimEnd('/'));
 
     public void Start()
     {
@@ -433,9 +441,11 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
     public void Dispose()
     {
         _session.ScreenUpdated -= OnScreenUpdated;
+        _session.TitleChanged -= _titleHandler;
         _session.OutputReceived -= _outputHandler;
         _session.Exited -= _exitHandler;
         Emulator.ClipboardCopyRequested -= _clipboardHandler;
         _session.Dispose();
+        IsConnected = false;
     }
 }

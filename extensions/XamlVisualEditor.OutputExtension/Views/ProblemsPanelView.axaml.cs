@@ -1,15 +1,20 @@
-using System;
+﻿using System;
 using System.Reactive;
 using Avalonia.Controls;
+using Avalonia.Data.Converters;
 using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
 using ReactiveUI;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.OutputExtension.Views;
 
 public sealed partial class ProblemsPanelView : UserControl
 {
+    public static FuncValueConverter<string, string> FilterLabelConverter { get; } =
+        new(value => value is null ? string.Empty : UiLabels.DiagnosticFilter(value));
+
     private IDisposable? _clipboardHandler;
 
     public ProblemsPanelView()

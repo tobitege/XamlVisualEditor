@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,10 +13,13 @@ public sealed class McpRuntimeController : IAsyncDisposable
     private const string SettingsSection = "mcp";
     private readonly ISettings _settings;
     private readonly IWorkspace _workspace;
+    private readonly IWorkspaceInfo _workspaceInfo;
     private readonly McpPermissionService _permissions;
     private readonly McpSessionRegistry _registry;
     private readonly IMcpRequestHandler[] _handlers;
     private readonly object _gate = new();
+    private readonly SemaphoreSlim _lifecycle = new(1, 1);
+    private bool _disposed;
     private McpServer? _server;
     private CancellationTokenSource? _serverLifetime;
     private McpSettings _currentSettings = new();
@@ -37,8 +40,11 @@ public sealed class McpRuntimeController : IAsyncDisposable
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _workspaceInfo = workspaceInfo;
         _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
         _registry = new McpSessionRegistry();
+        _permissions.PermissionsRevoked += _registry.Revoke;
+        _workspaceInfo.WorkspaceChanged += OnWorkspaceChanged;
 
         McpSessionService sessions = new(_permissions, workspaceInfo);
         McpHandshakeHandler handshake = new(sessions, _registry);
@@ -54,6 +60,8 @@ public sealed class McpRuntimeController : IAsyncDisposable
 
     public bool IsRunning => _server is not null;
 
+    public string? LastError { get; private set; }
+
     public int ConnectionCount => _connectionCount;
 
     public DateTimeOffset? LastConnectionAt => _lastConnectionAt;
@@ -66,12 +74,7 @@ public sealed class McpRuntimeController : IAsyncDisposable
     {
         _currentSettings = LoadSettings();
         _workspace.ConfigurationChanged += OnConfigurationChanged;
-        if (_currentSettings.Enabled)
-        {
-            await StartAsync().ConfigureAwait(false);
-        }
-
-        RaiseStatusChanged();
+        await RestartAsync(ct).ConfigureAwait(false);
     }
 
     public async Task ApplySettingsAsync(McpSettings settings, CancellationToken ct)
@@ -92,16 +95,27 @@ public sealed class McpRuntimeController : IAsyncDisposable
 
     public async Task RestartAsync(CancellationToken ct)
     {
-        await StopAsync().ConfigureAwait(false);
-        if (_currentSettings.Enabled)
+        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await StartAsync().ConfigureAwait(false);
+            if (_disposed) return;
+            await StopCoreAsync().ConfigureAwait(false);
+            LastError = null;
+            if (_currentSettings.Enabled)
+                await StartAsync().ConfigureAwait(false);
         }
-
-        RaiseStatusChanged();
+        catch (Exception ex) when (ex is not OperationCanceledException) { LastError = ex.Message; }
+        finally { _lifecycle.Release(); RaiseStatusChanged(); }
     }
 
     public async Task StopAsync()
+    {
+        await _lifecycle.WaitAsync().ConfigureAwait(false);
+        try { await StopCoreAsync().ConfigureAwait(false); }
+        finally { _lifecycle.Release(); }
+    }
+
+    private async Task StopCoreAsync()
     {
         McpServer? server = null;
         CancellationTokenSource? lifetime = null;
@@ -129,13 +143,21 @@ public sealed class McpRuntimeController : IAsyncDisposable
         RaiseStatusChanged();
     }
 
-    private Task StartAsync()
+    private async Task StartAsync()
     {
         CancellationTokenSource lifetime = new();
         McpServerOptions options = BuildOptions(_currentSettings);
         McpServer server = new(options, _handlers, _registry);
         server.ConnectionChanged += OnConnectionChanged;
-        server.Start(lifetime.Token);
+        try { server.Start(lifetime.Token); }
+        catch
+        {
+            lifetime.Cancel();
+            server.ConnectionChanged -= OnConnectionChanged;
+            await server.DisposeAsync().ConfigureAwait(false);
+            lifetime.Dispose();
+            throw;
+        }
 
         lock (_gate)
         {
@@ -145,7 +167,6 @@ public sealed class McpRuntimeController : IAsyncDisposable
 
         _connectionCount = server.ConnectionCount;
         RaiseStatusChanged();
-        return Task.CompletedTask;
     }
 
     private McpSettings LoadSettings()
@@ -183,6 +204,8 @@ public sealed class McpRuntimeController : IAsyncDisposable
         _lastConnectionAt = e.Timestamp;
         RaiseStatusChanged();
     }
+
+    private void OnWorkspaceChanged(object? sender, WorkspaceChangedEventArgs e) => _registry.Revoke(null);
 
     private void RaiseStatusChanged()
     {
@@ -224,7 +247,10 @@ public sealed class McpRuntimeController : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        _disposed = true;
         _workspace.ConfigurationChanged -= OnConfigurationChanged;
+        _workspaceInfo.WorkspaceChanged -= OnWorkspaceChanged;
+        _permissions.PermissionsRevoked -= _registry.Revoke;
         return new ValueTask(StopAsync());
     }
 }

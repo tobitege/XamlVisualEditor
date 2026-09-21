@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.Mcp;
+
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.McpExtension;
 
@@ -33,7 +35,7 @@ public sealed class McpExtension : IXveExtension
 
         ExtensionViewContribution view = new(
             ViewId,
-            "MCP",
+            UiStrings.Mcp,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Right,
             36);

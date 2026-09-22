@@ -78,6 +78,7 @@
                     SelectedItem="{CompiledBinding SelectedTemplate, Mode=TwoWay}"
                     AutoGenerateColumns="False"
                     HeadersVisibility="All"
+                    CanUserResizeColumns="True"
                     GridLinesVisibility="None"
                     IsReadOnly="True">
           <i:Interaction.Behaviors>
@@ -150,6 +151,7 @@
                         SelectedItem="{CompiledBinding SelectedProjectRow, Mode=TwoWay}"
                         AutoGenerateColumns="False"
                         HeadersVisibility="All"
+                        CanUserResizeColumns="True"
                         GridLinesVisibility="None">
               <dg:DataGrid.Columns>
                 <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Project}" Binding="{CompiledBinding ProjectName}" Width="3*" />

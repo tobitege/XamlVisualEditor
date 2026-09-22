@@ -16,6 +16,7 @@
                 SelectedItem="{CompiledBinding SelectedBreakpoint, Mode=TwoWay}"
                 AutoGenerateColumns="False"
                 GridLinesVisibility="None"
+                CanUserResizeColumns="True"
                 CanUserSortColumns="True">
       <dg:DataGrid.ContextMenu>
         <ContextMenu>

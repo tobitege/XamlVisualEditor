@@ -15,6 +15,7 @@
                 SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
+                CanUserResizeColumns="True"
                 CanUserSortColumns="False"
                 IsReadOnly="True">
         <dg:DataGrid.Columns>

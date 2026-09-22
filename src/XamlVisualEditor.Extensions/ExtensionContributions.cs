@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using XamlVisualEditor.Core;
 
@@ -54,7 +54,11 @@ public sealed record ExtensionViewContribution(
     int Priority,
     bool ActivateByDefault = false,
     string? ContainerId = null,
-    bool PersistDockState = true);
+    bool PersistDockState = true)
+{
+    /// <summary>Legt neue Panels standardmäßig in der eingeklappten Seitenleiste ab.</summary>
+    public bool AutoHideByDefault { get; init; }
+}
 
 /// <summary>Known menu locations for extensions.</summary>
 public static class ExtensionMenuLocations
@@ -63,6 +67,7 @@ public static class ExtensionMenuLocations
     public const string FileNew = "menu.file.new";
     public const string Edit = "menu.edit";
     public const string View = "menu.view";
+    public const string ViewServers = "menu.view.servers";
     public const string Debug = "menu.debug";
     public const string Tools = "menu.tools";
     public const string ToolsWorkspace = "menu.tools.workspace";

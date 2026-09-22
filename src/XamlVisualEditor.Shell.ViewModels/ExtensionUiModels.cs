@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -397,6 +397,7 @@ public abstract partial class ExtensionViewModel : ReactiveObject
         ActivateByDefault = contribution.ActivateByDefault;
         ContainerId = contribution.ContainerId;
         PersistDockState = contribution.PersistDockState;
+        AutoHideByDefault = contribution.AutoHideByDefault;
     }
 
     public string ViewId { get; }
@@ -414,6 +415,9 @@ public abstract partial class ExtensionViewModel : ReactiveObject
     public string? ContainerId { get; }
 
     public bool PersistDockState { get; }
+
+    /// <summary>Gibt an, ob ein neues Panel standardmäßig eingeklappt bleibt.</summary>
+    public bool AutoHideByDefault { get; }
 }
 
 public sealed partial class ExtensionWebviewViewModel : ExtensionViewModel

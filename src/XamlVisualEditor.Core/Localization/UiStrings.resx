@@ -45,6 +45,7 @@
   <data name="MenuEdit" xml:space="preserve"><value>_Edit</value></data>
   <data name="MenuView" xml:space="preserve"><value>_View</value></data>
   <data name="MenuPanels" xml:space="preserve"><value>_Panels</value></data>
+  <data name="MenuServers" xml:space="preserve"><value>_Servers</value></data>
   <data name="MenuDocumentCanvas" xml:space="preserve"><value>Document _Canvas</value></data>
   <data name="MenuResetLayout" xml:space="preserve"><value>Reset _Layout</value></data>
   <data name="MenuDebug" xml:space="preserve"><value>_Debug</value></data>

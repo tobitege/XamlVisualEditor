@@ -2294,6 +2294,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ViewMenuItems { get; } = new();
 
+    /// <summary>Enthält die Einträge unter Ansicht → Server.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> ServerMenuItems { get; } = new();
+
     /// <summary>
     /// Gets extension-provided Debug menu items.
     /// </summary>
@@ -4374,6 +4377,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             DisposeCollectionItems(FileNewMenuItems);
             DisposeCollectionItems(FileNewMenuEntries);
             DisposeCollectionItems(ViewMenuItems);
+            DisposeCollectionItems(ServerMenuItems);
             DisposeCollectionItems(DebugMenuItems);
             DisposeCollectionItems(EditMenuItems);
             DisposeCollectionItems(WorkspaceMenuItems);
@@ -4488,6 +4492,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DisposeCollectionItems(FileMenuItems);
         DisposeCollectionItems(FileNewMenuItems);
         DisposeCollectionItems(ViewMenuItems);
+        DisposeCollectionItems(ServerMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);
@@ -4514,6 +4519,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 ExtensionMenuLocations.FileNew => FileNewMenuItems,
                 ExtensionMenuLocations.Edit => EditMenuItems,
                 ExtensionMenuLocations.View => ViewMenuItems,
+                ExtensionMenuLocations.ViewServers => ServerMenuItems,
                 ExtensionMenuLocations.Debug => DebugMenuItems,
                 ExtensionMenuLocations.Tools => ExtensionMenuItems,
                 ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
@@ -4796,6 +4802,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         foreach (ExtensionMenuItemViewModel item in ViewMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in ServerMenuItems)
         {
             activeCommandIds.Add(item.CommandId);
         }
@@ -8354,6 +8365,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DisposeCollectionItems(FileNewMenuItems);
         DisposeCollectionItems(FileNewMenuEntries);
         DisposeCollectionItems(ViewMenuItems);
+        DisposeCollectionItems(ServerMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);

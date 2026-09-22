@@ -25,6 +25,7 @@
         <dg:DataGrid ItemsSource="{CompiledBinding Messages}"
                      SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}"
                      AutoGenerateColumns="False"
+                     CanUserResizeColumns="True"
                      GridLinesVisibility="None"
                      IsReadOnly="True">
             <dg:DataGrid.ContextMenu>

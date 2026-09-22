@@ -14,12 +14,11 @@
   <DockPanel LastChildFill="True">
     <Border DockPanel.Dock="Top" Background="#1B1E24" Padding="10" CornerRadius="8" Margin="8,8,8,6">
       <WrapPanel Orientation="Horizontal">
-          <TextBlock Text="{x:Static loc:UiStrings.Mcp}" FontWeight="SemiBold" FontSize="14" />
           <Border Background="#2A2F39" CornerRadius="10" Padding="8,2">
-            <TextBlock Text="{CompiledBinding StatusText}" TextWrapping="Wrap" MaxWidth="260" />
+            <TextBlock Name="McpStatus" Text="{CompiledBinding StatusText}" TextWrapping="Wrap" MaxWidth="260" />
           </Border>
           <TextBlock Text="{x:Static loc:UiStrings.EndpointLabel}" Opacity="0.7" Margin="8,0,0,0" />
-          <TextBlock Text="{CompiledBinding EndpointText}" TextTrimming="CharacterEllipsis" MaxWidth="240"
+          <TextBlock Name="McpEndpoint" Text="{CompiledBinding EndpointText}" TextTrimming="CharacterEllipsis" MaxWidth="240"
                      ToolTip.Tip="{CompiledBinding EndpointText}" />
           <Button Content="{x:Static loc:UiStrings.CopyHttp}" Command="{CompiledBinding CopyHttpEndpointCommand}" Padding="6,2" />
           <Button Name="McpApply" Content="{x:Static loc:UiStrings.Apply}" Command="{CompiledBinding ApplySettingsCommand}" Padding="8,2" />
@@ -38,7 +37,7 @@
                     SelectedItem="{CompiledBinding SelectedTransport, Mode=TwoWay}"
                     HorizontalAlignment="Stretch" />
           <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:UiStrings.HttpPort}" VerticalAlignment="Center" />
-          <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="65535" Value="{CompiledBinding HttpPort, Mode=TwoWay}" Width="120" />
+          <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="65535" Value="{CompiledBinding HttpPort, Mode=TwoWay}" Width="120" HorizontalAlignment="Left" />
           <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:UiStrings.HttpPath}" VerticalAlignment="Center" />
           <TextBox Grid.Row="4" Grid.Column="1" Text="{CompiledBinding HttpPath, Mode=TwoWay}" HorizontalAlignment="Stretch" />
         </Grid>
@@ -48,15 +47,15 @@
         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" RowSpacing="8">
           <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="{x:Static loc:UiStrings.Session}" FontWeight="SemiBold" />
           <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{x:Static loc:UiStrings.Workspace}" VerticalAlignment="Center" />
-          <TextBlock Grid.Row="2" Grid.ColumnSpan="3" Text="{CompiledBinding WorkspaceId}" TextWrapping="Wrap" />
+          <TextBlock Name="McpWorkspace" Grid.Row="2" Grid.ColumnSpan="3" Text="{CompiledBinding WorkspaceId}" TextWrapping="Wrap" />
           <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:UiStrings.Token}" VerticalAlignment="Center" />
-          <TextBox Grid.Row="3" Grid.Column="1" Text="{CompiledBinding SessionToken}" IsReadOnly="True" HorizontalAlignment="Stretch" />
+          <TextBox Name="McpToken" Grid.Row="3" Grid.Column="1" Text="{CompiledBinding SessionToken}" IsReadOnly="True" HorizontalAlignment="Stretch" />
           <Button Grid.Row="3" Grid.Column="2" Content="{x:Static loc:UiStrings.Copy}" Command="{CompiledBinding CopyTokenCommand}" Padding="6,2" />
           <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:UiStrings.Clients}" VerticalAlignment="Center" />
           <WrapPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal">
             <TextBlock Text="{CompiledBinding ConnectionCount}" />
             <TextBlock Text="{x:Static loc:UiStrings.Last}" Opacity="0.6" Margin="12,0,0,0" />
-            <TextBlock Text="{CompiledBinding LastConnectionAt}" />
+            <TextBlock Text="{CompiledBinding LastConnectionAt}" TextWrapping="Wrap" />
           </WrapPanel>
         </Grid>
       </Border>
@@ -74,6 +73,7 @@
               <dg:DataGrid ItemsSource="{CompiledBinding Permissions}"
                            SelectedItem="{CompiledBinding SelectedPermission, Mode=TwoWay}"
                            AutoGenerateColumns="False"
+                           CanUserResizeColumns="True"
                            GridLinesVisibility="None"
                            IsReadOnly="True"
                            Margin="0,8,0,0">
@@ -93,6 +93,7 @@
               <TextBlock DockPanel.Dock="Top" Text="{x:Static loc:UiStrings.Activity}" FontWeight="SemiBold" />
               <dg:DataGrid ItemsSource="{CompiledBinding ActivityLog}"
                            AutoGenerateColumns="False"
+                           CanUserResizeColumns="True"
                            GridLinesVisibility="None"
                            IsReadOnly="True"
                            Margin="0,8,0,0">

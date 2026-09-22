@@ -705,7 +705,12 @@ public sealed partial class XamlEditorDockFactory : Factory
                 }
             }
 
-            if (wasBottomCollapsed)
+            if (viewModel.AutoHideByDefault)
+            {
+                PinDockable(tool);
+                EnsurePinnedToolSize(tool);
+            }
+            else if (wasBottomCollapsed)
             {
                 CollapseBottomToolDock(rootDock);
                 if (double.IsFinite(collapsedProportion) && collapsedProportion > 0)

@@ -63,6 +63,7 @@
                  HierarchicalRowsEnabled="True"
                  SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
                  AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
                  CanUserSortColumns="True"
                  IsReadOnly="True"
                  GridLinesVisibility="None">

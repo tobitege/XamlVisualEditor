@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>XamlVisualEditor.Tests.UI</RootNamespace>
     <IsPackable>false</IsPackable>
@@ -29,6 +29,8 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.GitExtension\XamlVisualEditor.GitExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.McpExtension\XamlVisualEditor.McpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.PropertyEditorExtension\XamlVisualEditor.PropertyEditorExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.OutputExtension\XamlVisualEditor.OutputExtension.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Workspace\XamlVisualEditor.Workspace.csproj" />

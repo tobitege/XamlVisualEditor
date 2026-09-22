@@ -28,6 +28,7 @@
                  ItemsSource="{CompiledBinding ChannelsView}"
                  SelectedItem="{CompiledBinding SelectedChannel, Mode=TwoWay}"
                  AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
                  CanUserSortColumns="True"
                  IsReadOnly="True"
                  GridLinesVisibility="None">
@@ -43,6 +44,7 @@
                  ItemsSource="{CompiledBinding MessagesView}"
                  SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}"
                  AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
                  CanUserSortColumns="True"
                  IsReadOnly="True"
                  GridLinesVisibility="None">

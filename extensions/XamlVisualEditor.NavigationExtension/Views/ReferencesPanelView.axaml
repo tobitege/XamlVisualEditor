@@ -28,6 +28,7 @@
                 SearchModel="{CompiledBinding SearchModel}"
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
+                CanUserResizeColumns="True"
                 CanUserSortColumns="True"
                 IsReadOnly="True">
       <i:Interaction.Behaviors>

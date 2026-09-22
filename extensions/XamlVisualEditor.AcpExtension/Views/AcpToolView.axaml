@@ -72,11 +72,10 @@
             <Setter Property="Margin" Value="0,0,6,6" />
           </Style>
         </WrapPanel.Styles>
-          <TextBlock Text="{x:Static loc:UiStrings.Acp}" FontWeight="SemiBold" FontSize="14" />
           <Border Background="#2A2F39" CornerRadius="10" Padding="8,2">
-            <TextBlock Text="{CompiledBinding StatusText}" />
+            <TextBlock Name="AcpStatus" Text="{CompiledBinding StatusText}" TextWrapping="Wrap" MaxWidth="260" />
           </Border>
-          <TextBlock Text="{CompiledBinding AgentName}" Opacity="0.8" />
+          <TextBlock Name="AcpAgentName" Text="{CompiledBinding AgentName}" Opacity="0.8" TextTrimming="CharacterEllipsis" MaxWidth="260" />
           <Button Content="{x:Static loc:UiStrings.Profile}" Padding="8,2">
             <Button.Flyout>
               <Flyout Placement="Bottom">

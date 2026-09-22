@@ -26,6 +26,7 @@
                 SearchModel="{CompiledBinding SearchModel}"
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
+                CanUserResizeColumns="True"
                 CanUserSortColumns="True"
                 IsReadOnly="True">
       <dg:DataGrid.DataTemplates>

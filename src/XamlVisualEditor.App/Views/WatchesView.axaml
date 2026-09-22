@@ -20,6 +20,7 @@
     <dg:DataGrid ItemsSource="{CompiledBinding Items}"
                 SelectedItem="{CompiledBinding SelectedWatch, Mode=TwoWay}"
                 AutoGenerateColumns="False"
+                CanUserResizeColumns="True"
                 GridLinesVisibility="None"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>

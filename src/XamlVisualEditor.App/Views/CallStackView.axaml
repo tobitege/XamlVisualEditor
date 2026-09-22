@@ -13,6 +13,7 @@
     <dg:DataGrid ItemsSource="{CompiledBinding Frames}"
                 SelectedItem="{CompiledBinding SelectedFrame, Mode=TwoWay}"
                 AutoGenerateColumns="False"
+                CanUserResizeColumns="True"
                 GridLinesVisibility="None"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>

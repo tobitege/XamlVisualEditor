@@ -12,6 +12,7 @@
 
     <dg:DataGrid ItemsSource="{CompiledBinding Items}"
                 AutoGenerateColumns="False"
+                CanUserResizeColumns="True"
                 GridLinesVisibility="None"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>

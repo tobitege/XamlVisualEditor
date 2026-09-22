@@ -104,6 +104,8 @@
             <MenuItem Header="{x:Static loc:UiStrings.MenuView}">
                 <MenuItem Header="{x:Static loc:UiStrings.MenuPanels}" ItemsSource="{CompiledBinding ViewMenuItems}"
                           Classes="extension-menu" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuServers}" ItemsSource="{CompiledBinding ServerMenuItems}"
+                          Classes="extension-menu" />
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuDocumentCanvas}" Command="{CompiledBinding OpenCanvasCommand}" />
                 <Separator />

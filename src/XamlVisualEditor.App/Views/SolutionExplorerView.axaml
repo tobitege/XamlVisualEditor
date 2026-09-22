@@ -23,6 +23,7 @@
                 SearchModel="{CompiledBinding SearchModel}"
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
+                CanUserResizeColumns="True"
                 CanUserSortColumns="True"
                 IsReadOnly="True"
                 v:SolutionExplorerDragBehavior.IsEnabled="True"

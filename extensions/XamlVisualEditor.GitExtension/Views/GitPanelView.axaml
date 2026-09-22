@@ -54,6 +54,7 @@
                     <dg:DataGrid ItemsSource="{CompiledBinding StagedView}"
                                  SelectedItem="{CompiledBinding SelectedStagedChange, Mode=TwoWay}"
                                  AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
                                  CanUserSortColumns="True"
                                  GridLinesVisibility="None"
                                  IsReadOnly="True">
@@ -73,6 +74,7 @@
                     <dg:DataGrid ItemsSource="{CompiledBinding UnstagedView}"
                                  SelectedItem="{CompiledBinding SelectedUnstagedChange, Mode=TwoWay}"
                                  AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
                                  CanUserSortColumns="True"
                                  GridLinesVisibility="None"
                                  IsReadOnly="True">

@@ -1,4 +1,11 @@
 <Project>
+  <Import Project="Directory.Build.local.props" Condition="Exists('Directory.Build.local.props')" />
+
+  <ItemGroup Condition="'$(ProDataGridProject)' != '' and '@(PackageReference->WithMetadataValue('Identity', 'ProDataGrid'))' != ''">
+    <PackageReference Remove="ProDataGrid" />
+    <ProjectReference Include="$(ProDataGridProject)" />
+  </ItemGroup>
+
   <Target Name="SetPackageReleaseNotes" BeforeTargets="GenerateNuspec">
     <PropertyGroup>
       <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v$(PackageVersion)</PackageReleaseNotes>

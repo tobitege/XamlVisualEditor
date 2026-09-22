@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
@@ -71,6 +72,49 @@ public sealed class LayoutActionsWorkflowTests
             await FinishLayoutAsync(host);
             Assert.Equal(original, serializer.Serialize(document.SyncEngine.CurrentDocument!));
             Assert.All(selected, id => Assert.Contains(id, document.DesignSurface.ItemMap.Keys));
+        }
+        finally { host.Close(); }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Align_left_in_grid_moves_edges_to_the_primary_control_via_margins()
+    {
+        string xaml = "<UserControl xmlns=\"https://github.com/avaloniaui\" Width=\"600\" Height=\"300\"><Grid ColumnDefinitions=\"300,*\">"
+            + "<Button Width=\"50\" Height=\"30\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Top\" Margin=\"20,10,0,0\" />"
+            + "<Button Grid.Column=\"1\" Width=\"50\" Height=\"30\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Top\" Margin=\"40,60,0,0\" />"
+            + "<Button Width=\"50\" Height=\"30\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Top\" Margin=\"0,110,30,0\" />"
+            + "</Grid></UserControl>";
+        string path = Path.Combine(Path.GetTempPath(), "xve-layout-" + Guid.NewGuid().ToString("N") + ".axaml");
+        await File.WriteAllTextAsync(path, xaml);
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(typeof(Control).Assembly.Location);
+        metadata.LoadAssembly(typeof(Brush).Assembly.Location);
+        using DesignerDocumentViewModel document = new(path, metadata);
+        await document.LoadAsync();
+        DesignSurfaceView view = new() { DataContext = document.DesignSurface };
+        Window host = new() { Content = new Border { DataContext = document, Child = view }, Width = 800, Height = 600 };
+        try
+        {
+            host.Show();
+            await FinishLayoutAsync(host);
+            MutableAstObjectNode grid = Assert.Single(document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>());
+            Guid[] selected = grid.Children.OfType<MutableAstObjectNode>().Select(node => node.Id).ToArray();
+            document.DesignSurface.SelectNodesFromSync(selected);
+            Assert.Equal(selected[0], ((XamlVisualEditor.Designer.Core.DesignItem)document.DesignSurface.Selection.PrimarySelection!).AstNodeId);
+
+            new DesignerLayoutEditor(document).Apply(DesignerLayoutOperation.AlignLeft);
+            await FinishLayoutAsync(host);
+
+            MutableAstObjectNode[] nodes = grid.Children.OfType<MutableAstObjectNode>().ToArray();
+            Assert.Equal("20,10,0,0", nodes[0].GetPropertyValue("Margin"));
+            Assert.Equal("-280,60,0,0", nodes[1].GetPropertyValue("Margin"));
+            Assert.Equal("0,110,230,0", nodes[2].GetPropertyValue("Margin"));
+            Assert.All(nodes, node => Assert.Equal(node == nodes[2] ? "Right" : "Left", node.GetPropertyValue("HorizontalAlignment")));
+
+            Control gridControl = document.DesignSurface.ItemMap[grid.Id].VisualElement!;
+            double[] lefts = selected.Select(id => document.DesignSurface.ItemMap[id].VisualElement!.TranslatePoint(default, gridControl)!.Value.X).ToArray();
+            Assert.True(lefts.All(left => Math.Abs(left - 20) < 0.001), string.Join(",", lefts));
+            Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
         }
         finally { host.Close(); }
     }

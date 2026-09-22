@@ -1924,12 +1924,11 @@ public sealed partial class DesignSurfaceView : UserControl
             if (state.DropPosition == DropPosition.After) sources = sources.Reverse();
             bool moved = sources.All(item => _surfaceDropHandler.Move(item, target, state.DropPosition.Value, docVm.MetadataService));
             commit = moved;
-            if (moved && docVm.SyncEngine.CurrentDocument is not null)
-            {
-                docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
-            }
         }
-        else if (state.HasMoved && docVm.SyncEngine.CurrentDocument is not null)
+
+        // Committing the transaction synchronizes and publishes the edit once; an explicit NotifyAstChanged
+        // would serialize, parse and rebuild the surface a second time for the same drop.
+        if (state.Transaction is null && commit && state.HasMoved && docVm.SyncEngine.CurrentDocument is not null)
         {
             docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
         }

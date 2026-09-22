@@ -126,7 +126,7 @@ public sealed class DesignerLayoutEditor
             bool horizontal = operation == DesignerLayoutOperation.DistributeHorizontally;
             Distribute(items, parent, parentControl, layout, kind, horizontal, writes);
         }
-        else if (kind == LayoutContainerKind.Canvas)
+        else
         {
             foreach (Item item in items)
             {
@@ -140,22 +140,9 @@ public sealed class DesignerLayoutEditor
                     DesignerLayoutOperation.AlignBottom => (false, primary.Bounds.Bottom - item.Bounds.Bottom),
                     _ => throw new ArgumentOutOfRangeException(nameof(operation))
                 };
-                MoveCanvas(item, horizontal, delta, writes);
+                if (kind == LayoutContainerKind.Canvas) MoveCanvas(item, horizontal, delta, writes);
+                else ShiftMargin(item, horizontal, delta, operation, parentControl, writes);
             }
-        }
-        else
-        {
-            (string property, string value) = operation switch
-            {
-                DesignerLayoutOperation.AlignLeft => ("HorizontalAlignment", "Left"),
-                DesignerLayoutOperation.CenterHorizontally => ("HorizontalAlignment", "Center"),
-                DesignerLayoutOperation.AlignRight => ("HorizontalAlignment", "Right"),
-                DesignerLayoutOperation.AlignTop => ("VerticalAlignment", "Top"),
-                DesignerLayoutOperation.CenterVertically => ("VerticalAlignment", "Center"),
-                DesignerLayoutOperation.AlignBottom => ("VerticalAlignment", "Bottom"),
-                _ => throw new ArgumentOutOfRangeException(nameof(operation))
-            };
-            foreach (Item item in items) writes.Add(new(item.Node, property, value));
         }
 
         foreach (Write write in writes) EnsureLiteral(write.Node, write.Property);
@@ -230,6 +217,45 @@ public sealed class DesignerLayoutEditor
         writes.Add(new(item.Node, horizontal ? "Canvas.Left" : "Canvas.Top", Number(current + delta)));
         writes.Add(new(item.Node, horizontal ? "Canvas.Right" : "Canvas.Bottom", null));
     }
+
+    private static void ShiftMargin(Item item, bool horizontal, double delta, DesignerLayoutOperation operation,
+        Control parentControl, List<Write> writes)
+    {
+        if (Math.Abs(delta) < 0.000001) return;
+        Thickness margin = item.Control.Margin;
+        double leading = horizontal ? margin.Left : margin.Top;
+        double trailing = horizontal ? margin.Right : margin.Bottom;
+        bool stackAxis = parentControl is StackPanel stack && (stack.Orientation == Orientation.Horizontal) == horizontal;
+        string alignment = horizontal ? item.Control.HorizontalAlignment.ToString() : item.Control.VerticalAlignment.ToString();
+        ShiftMargins(ref leading, ref trailing, delta, operation, alignment, stackAxis);
+        writes.Add(new(item.Node, "Margin", horizontal
+            ? FormatMargin(leading, margin.Top, trailing, margin.Bottom)
+            : FormatMargin(margin.Left, leading, margin.Right, trailing)));
+    }
+
+    /// <summary>
+    /// Moves a control's measured edge by <paramref name="delta"/> inside a non-Canvas container by adjusting its
+    /// margins along one axis, keeping the control's own alignment semantics intact.
+    /// </summary>
+    internal static void ShiftMargins(ref double leading, ref double trailing, double delta,
+        DesignerLayoutOperation operation, string alignment, bool stackAxis)
+    {
+        if (stackAxis || alignment is "Left" or "Top") leading += delta;
+        else if (alignment is "Right" or "Bottom") trailing -= delta;
+        else if (alignment is "Center")
+        {
+            leading += delta;
+            trailing -= delta;
+        }
+        else
+        {
+            if (operation is not (DesignerLayoutOperation.AlignRight or DesignerLayoutOperation.AlignBottom)) leading += delta;
+            if (operation is not (DesignerLayoutOperation.AlignLeft or DesignerLayoutOperation.AlignTop)) trailing -= delta;
+        }
+    }
+
+    internal static string FormatMargin(double left, double top, double right, double bottom) =>
+        string.Join(",", new[] { left, top, right, bottom }.Select(value => value.ToString("0.####", CultureInfo.InvariantCulture)));
 
     private static Rect BoundsInParent(Control control, Control parent)
     {

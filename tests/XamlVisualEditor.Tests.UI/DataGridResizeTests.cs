@@ -31,11 +31,18 @@ public sealed class DataGridResizeTests
         Window? window = null;
         try
         {
-            XamlVisualEditor.App.App app = new();
-            app.Initialize();
-            styles = app.Styles.ToArray();
-            Assert.NotEmpty(styles);
-            app.Styles.Clear();
+            // Mirrors Application.Styles from App.axaml. App.Initialize() is not used here because it
+            // also installs the process-wide DialogAppearance handler, which would re-wrap every owned
+            // dialog opened by later tests.
+            Uri baseUri = new("avares://XamlVisualEditor.App/");
+            styles =
+            [
+                new Avalonia.Themes.Fluent.FluentTheme(),
+                new Dock.Avalonia.Themes.Fluent.DockFluentTheme(),
+                new Avalonia.Markup.Xaml.Styling.StyleInclude(baseUri) { Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml") },
+                new Avalonia.Markup.Xaml.Styling.StyleInclude(baseUri) { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml") },
+                new Avalonia.Markup.Xaml.Styling.StyleInclude(baseUri) { Source = new Uri("avares://XamlVisualEditor.App/Styles/EditorDensity.axaml") },
+            ];
             Application.Current!.Styles.AddRange(styles);
             string[] items = Enumerable.Range(0, rowCount)
                 .Select(index => $"Property {index}: a value that wraps in a narrow column").ToArray();

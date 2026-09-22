@@ -202,6 +202,27 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             .Subscribe(SubscribeKeyframeChanges);
         _disposables.Add(selectedKeyframeSubscription);
 
+        IDisposable selectedTrackSubscription = this.WhenAnyValue(x => x.SelectedTrack)
+            .Buffer(2, 1)
+            .Subscribe(pair =>
+            {
+                if (pair.Count < 2)
+                {
+                    return;
+                }
+
+                if (pair[0] is AnimationTrackViewModel previous)
+                {
+                    previous.IsSelected = false;
+                }
+
+                if (pair[1] is AnimationTrackViewModel current)
+                {
+                    current.IsSelected = true;
+                }
+            });
+        _disposables.Add(selectedTrackSubscription);
+
         IDisposable selectedTimelineValidationSubscription = this.WhenAnyValue(x => x.SelectedTimeline)
             .Select(timeline => timeline is null
                 ? Observable.Return(0.0)
@@ -1195,6 +1216,10 @@ public sealed partial class AnimationTrackViewModel : ReactiveObject
 {
     [Reactive]
     public partial string PropertyName { get; set; } = string.Empty;
+
+    /// <summary>True while this track is the editor's <see cref="AnimationEditorViewModel.SelectedTrack"/>.</summary>
+    [Reactive]
+    public partial bool IsSelected { get; internal set; }
 
     public ObservableCollection<AnimationKeyframeViewModel> Keyframes { get; } = new();
 }

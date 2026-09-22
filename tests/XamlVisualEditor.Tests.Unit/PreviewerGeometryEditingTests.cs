@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Headless.XUnit;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
@@ -329,8 +329,15 @@ public sealed class PreviewerGeometryEditingTests
         PreviewerGeometryEditor editor = new(document, new DesignerHostSnapshot(Guid.NewGuid(), 500, 300, nodes));
         editor.Arrange(selection, DesignerLayoutOperation.AlignLeft);
         Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
-        Assert.All(children, node => Assert.Equal(container == "Canvas" ? "10" : "Left",
-            node.GetPropertyValue(container == "Canvas" ? "Canvas.Left" : "HorizontalAlignment")));
+        if (container == "Canvas") Assert.All(children, node => Assert.Equal("10", node.GetPropertyValue("Canvas.Left")));
+        else
+        {
+            // Edges move to the primary control's left edge through margins; alignment properties stay untouched.
+            Assert.Null(children[0].GetPropertyValue("Margin"));
+            Assert.Equal("-90,0,0,0", children[1].GetPropertyValue("Margin"));
+            Assert.Equal("-290,0,0,0", children[2].GetPropertyValue("Margin"));
+            Assert.All(children, node => Assert.Null(node.GetPropertyValue("HorizontalAlignment")));
+        }
         document.SyncEngine.Undo();
         Assert.Equal(xaml, document.SyncEngine.GetCurrentText());
         editor.Arrange(selection, DesignerLayoutOperation.SameWidth);

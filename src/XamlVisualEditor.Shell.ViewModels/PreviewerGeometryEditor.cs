@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
@@ -207,19 +207,9 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         else
         {
             bool horizontal = operation is DesignerLayoutOperation.AlignLeft or DesignerLayoutOperation.CenterHorizontally or DesignerLayoutOperation.AlignRight;
-            string alignment = operation switch
-            {
-                DesignerLayoutOperation.AlignLeft => "Left", DesignerLayoutOperation.AlignRight => "Right",
-                DesignerLayoutOperation.AlignTop => "Top", DesignerLayoutOperation.AlignBottom => "Bottom", _ => "Center"
-            };
             foreach (var entry in nodes)
             {
                 DesignerHostLayout layout = entry.View.Layout!;
-                if (parentLayout.Kind != "Canvas")
-                {
-                    SetValue(entry.Node, horizontal ? "HorizontalAlignment" : "VerticalAlignment", alignment);
-                    continue;
-                }
                 double delta = operation switch
                 {
                     DesignerLayoutOperation.AlignLeft => primaryLayout.X - layout.X,
@@ -230,6 +220,18 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
                     DesignerLayoutOperation.AlignBottom => primaryLayout.Y + primaryLayout.Height - layout.Y - layout.Height,
                     _ => throw new ArgumentOutOfRangeException(nameof(operation))
                 };
+                if (parentLayout.Kind != "Canvas")
+                {
+                    if (Math.Abs(delta) < 0.000001) continue;
+                    double left = layout.MarginLeft, right = layout.MarginRight;
+                    double top = layout.MarginTop, bottom = layout.MarginBottom;
+                    if (horizontal) DesignerLayoutEditor.ShiftMargins(ref left, ref right, delta, operation,
+                        layout.HorizontalAlignment, parentLayout.Kind == "Stack" && parentLayout.IsHorizontal);
+                    else DesignerLayoutEditor.ShiftMargins(ref top, ref bottom, delta, operation,
+                        layout.VerticalAlignment, parentLayout.Kind == "Stack" && !parentLayout.IsHorizontal);
+                    SetValue(entry.Node, "Margin", DesignerLayoutEditor.FormatMargin(left, top, right, bottom));
+                    continue;
+                }
                 MoveCanvasAxis(entry.Node, horizontal ? layout.CanvasLeft : layout.CanvasTop,
                     horizontal ? layout.CanvasRight : layout.CanvasBottom,
                     horizontal ? layout.X - layout.MarginLeft : layout.Y - layout.MarginTop, delta,

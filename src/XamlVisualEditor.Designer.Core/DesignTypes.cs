@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -417,6 +417,9 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// </summary>
     [Reactive]
     public partial ThemeVariant PreviewThemeVariant { get; set; } = ThemeVariant.Default;
+
+    /// <summary>Ermöglicht der View die Trennung ihrer Vorschau-Ressourcen vom Editor-Theme.</summary>
+    public IEditorThemeService? EditorThemeService { get; set; }
 
     /// <summary>
     /// Gets or sets whether guide lines are visible.

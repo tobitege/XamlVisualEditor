@@ -26,6 +26,7 @@
               MinWidth="80" />
       <Button Content="{x:Static loc:UiStrings.Cancel}"
               Command="{CompiledBinding CancelCommand}"
+              IsCancel="True"
               MinWidth="80" />
     </StackPanel>
 

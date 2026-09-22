@@ -44,4 +44,32 @@
     <Style Selector=".editor-chrome DataGridRow">
         <Setter Property="MinHeight" Value="24" />
     </Style>
+
+    <!-- Kompakte Zeilen ausschließlich für Datei- und Solution-Explorer. -->
+    <Style Selector="DataGrid.explorer-compact">
+        <Setter Property="RowHeight" Value="24" />
+        <Setter Property="ColumnHeaderHeight" Value="24" />
+    </Style>
+    <Style Selector="DataGrid.explorer-compact DataGridRow, DataGrid.explorer-compact DataGridCell">
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+    <Style Selector="DataGrid.explorer-compact DataGridCell">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="2,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="DataGrid.explorer-compact DataGridCell ToggleButton">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="MinWidth" Value="20" />
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="StackPanel.explorer-row">
+        <Setter Property="Spacing" Value="6" />
+    </Style>
+    <Style Selector="DataGrid.explorer-compact StackPanel.explorer-row">
+        <Setter Property="Spacing" Value="3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
 </Styles>

@@ -1,9 +1,19 @@
-<Application xmlns="https://github.com/avaloniaui"
+﻿<Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:XamlVisualEditor.App"
              xmlns:dockFluent="clr-namespace:Dock.Avalonia.Themes.Fluent;assembly=Dock.Avalonia.Themes.Fluent"
              x:Class="XamlVisualEditor.App.App"
              RequestedThemeVariant="Dark">
+    <Application.Resources>
+        <SolidColorBrush x:Key="EditorWindowBackgroundBrush" Color="{DynamicResource SystemAltHighColor}" />
+        <SolidColorBrush x:Key="EditorWindowForegroundBrush" Color="{DynamicResource SystemBaseHighColor}" />
+        <SolidColorBrush x:Key="EditorStatusBarBackgroundBrush" Color="#007ACC" />
+        <SolidColorBrush x:Key="EditorStatusBarForegroundBrush" Color="White" />
+        <SolidColorBrush x:Key="EditorStatusBarSeparatorBrush" Color="#66FFFFFF" />
+        <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#1E1E1E" />
+        <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D01E1E1E" />
+        <SolidColorBrush x:Key="EditorErrorBrush" Color="Tomato" />
+    </Application.Resources>
     <Application.DataTemplates>
         <local:ViewLocator />
     </Application.DataTemplates>
@@ -13,5 +23,6 @@
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml" />
         <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorDensity.axaml" />
+        <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorTheme.axaml" />
     </Application.Styles>
 </Application>

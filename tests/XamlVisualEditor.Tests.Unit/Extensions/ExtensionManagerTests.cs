@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using Xunit;
@@ -16,7 +16,8 @@ public sealed class ExtensionManagerTests
             Name = "sample", Publisher = "example", Version = "1.0.0",
             Contributes = System.Text.Json.JsonSerializer.SerializeToElement(new
             {
-                designerThemes = new[] { new { id = "palette", name = "Sample", assembly = "lib/net10.0/Provider.dll", type = "Missing.Provider" } }
+                designerThemes = new[] { new { id = "palette", name = "Sample", assembly = "lib/net10.0/Provider.dll", type = "Missing.Provider" } },
+                editorThemes = new[] { new { id = "editor", name = "Sample Editor", assembly = "lib/net10.0/Provider.dll", type = "Missing.EditorProvider" } }
             })
         };
         FakeStore store = new() { Packages = new[] { new ExtensionPackageInfo(Path.Combine(directory, "package.nupkg"), manifest, directory) } };
@@ -29,19 +30,23 @@ public sealed class ExtensionManagerTests
         manager.ThemeProvidersChanged += (id, ct) => { lifecycle.Add("resume:" + id); return Task.CompletedTask; };
         await manager.GetInstalledAsync(CancellationToken.None);
         Assert.Empty(contributions.DesignerThemeProviders);
+        Assert.Empty(contributions.EditorThemeProviders);
         await manager.SetEnabledAsync(manifest.ExtensionId, true, CancellationToken.None);
         Assert.Equal("example.sample/palette", Assert.Single(contributions.DesignerThemeProviders).Id);
+        Assert.Equal("example.sample/editor", Assert.Single(contributions.EditorThemeProviders).Id);
         int changeCount = lifecycle.Count;
         await manager.GetInstalledAsync(CancellationToken.None);
         Assert.Equal(changeCount, lifecycle.Count);
         await manager.SetEnabledAsync(manifest.ExtensionId, false, CancellationToken.None);
         Assert.Empty(contributions.DesignerThemeProviders);
+        Assert.Empty(contributions.EditorThemeProviders);
         await manager.SetEnabledAsync(manifest.ExtensionId, true, CancellationToken.None);
         lifecycle.Clear();
         store.BeforeUninstall = () => lifecycle.Add("remove files");
         await manager.UninstallAsync(manifest.ExtensionId, CancellationToken.None);
         Assert.Equal(new[] { "stop:example.sample", "remove files", "resume:example.sample" }, lifecycle);
         Assert.Empty(contributions.DesignerThemeProviders);
+        Assert.Empty(contributions.EditorThemeProviders);
     }
 
     [Fact]

@@ -2179,6 +2179,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private const int RecentFilesLimit = 10;
     private readonly string? _recentFilesPath;
     private readonly EditorOptionsStore _editorOptions;
+    private readonly IEditorThemeService? _editorThemes;
 
     public ReactiveCommand<Unit, Unit> OpenOptionsCommand { get; }
     public Interaction<OptionsDialogViewModel, bool> OptionsInteraction { get; } = new();
@@ -2644,7 +2645,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>
     /// Interaction for applying theme variants.
     /// </summary>
-    public Interaction<ThemeVariantOption, Unit> ThemeVariantInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for debug tool download consent.
@@ -2801,10 +2801,37 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         Func<string, IExtensionStorage>? extensionStorageFactory = null,
         string? recentFilesPath = null,
         EditorOptionsStore? editorOptions = null,
-        IUserLayoutStore? userLayoutStore = null)
+        IUserLayoutStore? userLayoutStore = null,
+        IEditorThemeService? editorThemes = null)
     {
         _recentFilesPath = recentFilesPath;
         _editorOptions = editorOptions ?? new EditorOptionsStore();
+        _editorThemes = editorThemes;
+        if (_editorThemes is not null)
+        {
+            string? themeStatusError = null;
+            EventHandler themeChanged = (_, _) =>
+            {
+                if (_editorThemes.Error is { } error)
+                {
+                    StatusText = error;
+                    themeStatusError = error;
+                }
+                else
+                {
+                    if (themeStatusError is not null && StatusText == themeStatusError)
+                        StatusText = XamlVisualEditor.Core.Localization.UiStrings.Ready;
+                    themeStatusError = null;
+                }
+                if (_editorThemes.Selection.ProviderId == "builtin")
+                    SelectedThemeVariant = _editorThemes.Selection.ThemeId switch
+                    {
+                        "light" => ThemeVariantOption.Light, "dark" => ThemeVariantOption.Dark, _ => ThemeVariantOption.Default
+                    };
+            };
+            _editorThemes.Changed += themeChanged;
+            _disposables.Add(System.Reactive.Disposables.Disposable.Create(() => _editorThemes.Changed -= themeChanged));
+        }
         _userLayoutStore = userLayoutStore ?? UserLayoutStore.CreateDefault();
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
@@ -2974,7 +3001,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _disposables.Add(ManageRecentFilesCommand);
         OpenOptionsCommand = ReactiveCommand.CreateFromTask(async () =>
         {
-            using OptionsDialogViewModel dialog = new(_editorOptions);
+            using OptionsDialogViewModel dialog = new(_editorOptions, _editorThemes);
             if (await OptionsInteraction.Handle(dialog)) StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
         });
         _disposables.Add(OpenOptionsCommand);
@@ -3060,18 +3087,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         SetThemeDefaultCommand = ReactiveCommand.Create(() =>
         {
-            SelectedThemeVariant = ThemeVariantOption.Default;
-            StatusText = UiStrings.ThemeDefaultStatus;
+            ApplyEditorThemeVariant(ThemeVariantOption.Default);
         });
         SetThemeLightCommand = ReactiveCommand.Create(() =>
         {
-            SelectedThemeVariant = ThemeVariantOption.Light;
-            StatusText = UiStrings.ThemeLightStatus;
+            ApplyEditorThemeVariant(ThemeVariantOption.Light);
         });
         SetThemeDarkCommand = ReactiveCommand.Create(() =>
         {
-            SelectedThemeVariant = ThemeVariantOption.Dark;
-            StatusText = UiStrings.ThemeDarkStatus;
+            ApplyEditorThemeVariant(ThemeVariantOption.Dark);
         });
 
         RenameSymbolCommand = ReactiveCommand.CreateFromTask(RenameSymbolAsync, hasTextDoc);
@@ -3371,12 +3395,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             });
         _disposables.Add(themeVariantSubscription);
 
-        IDisposable themeVariantInteractionSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
-            .Skip(1)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(option => _ = ThemeVariantInteraction.Handle(option));
-        _disposables.Add(themeVariantInteractionSubscription);
-
         // Sync tree selection when active document selection changes
         IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null || doc.IsDisposed
@@ -3538,6 +3556,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void ConfigureDesignerCommands(DesignerDocumentViewModel document)
     {
+        document.DesignSurface.EditorThemeService = _editorThemes;
         document.DesignSurface.CutCommand = CutCommand;
         document.DesignSurface.CopyCommand = CopyCommand;
         document.DesignSurface.PasteCommand = PasteCommand;
@@ -3838,6 +3857,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             _logger.LogWarning("Failed to load new document: {Message}", ex.Message);
             StatusText = string.Format(UiStrings.DocumentCreateFailed, (object?)(ex.Message));
         }
+    }
+
+    private void ApplyEditorThemeVariant(ThemeVariantOption option)
+    {
+        EditorThemeSelection selection = new("builtin", option switch
+        {
+            ThemeVariantOption.Light => "light", ThemeVariantOption.Dark => "dark", _ => "system"
+        });
+        try
+        {
+            _editorThemes?.Apply(selection);
+            _editorOptions.Save(_editorOptions.Current with { EditorTheme = selection });
+            SelectedThemeVariant = option;
+            StatusText = UiStrings.OptionsSaved;
+        }
+        catch (Exception error) { StatusText = string.Format(UiStrings.OptionsSaveError, error.Message); }
     }
 
     private async System.Threading.Tasks.Task OpenDocumentAsync(bool openWorkspace)

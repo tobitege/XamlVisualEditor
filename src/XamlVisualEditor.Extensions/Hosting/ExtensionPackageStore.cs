@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
 
 namespace XamlVisualEditor.Extensions.Hosting;
@@ -62,7 +62,9 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
         string fileName = info.Manifest.ExtensionId + "." + info.Manifest.Version + ".nupkg";
         string targetPath = Path.Combine(extensionDir, fileName);
         ExtensionPackageInfo installed = new(targetPath, info.Manifest, extensionDir);
-        var providers = DesignerThemePackageContributions.Read(installed);
+        var providerAssemblies = DesignerThemePackageContributions.Read(installed).Select(provider => provider.AssemblyPath)
+            .Concat(DesignerThemePackageContributions.ReadEditor(installed).Select(provider => provider.AssemblyPath))
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
         string stagingDirectory = DesignerThemePackageContributions.ResolvePackagePath(_installRoot,
             Path.Combine(info.Manifest.ExtensionId, info.Manifest.Version + ".installing-" + Guid.NewGuid().ToString("N")));
         using (ZipArchive archive = ZipFile.OpenRead(packagePath))
@@ -74,9 +76,9 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
                 if (!files.Add(destination) || string.Equals(destination, targetPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                     throw new InvalidDataException("The package contains a duplicate or reserved destination.");
             }
-            foreach (var provider in providers)
+            foreach (string providerAssembly in providerAssemblies)
                 if (!archive.Entries.Any(entry => !entry.FullName.EndsWith('/') &&
-                    string.Equals(DesignerThemePackageContributions.ResolvePackagePath(extensionDir, entry.FullName), provider.AssemblyPath,
+                    string.Equals(DesignerThemePackageContributions.ResolvePackagePath(extensionDir, entry.FullName), providerAssembly,
                         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
                     throw new InvalidDataException("The package does not contain its declared theme provider assembly.");
             Directory.CreateDirectory(stagingDirectory);

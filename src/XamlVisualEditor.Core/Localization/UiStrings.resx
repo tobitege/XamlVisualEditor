@@ -3,6 +3,15 @@
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
   <data name="OptionsTitle" xml:space="preserve"><value>Options</value></data>
+  <data name="ResizeWindow" xml:space="preserve"><value>Resize window</value></data>
+  <data name="EditorThemeTitle" xml:space="preserve"><value>XVE theme</value></data>
+  <data name="EditorThemeHint" xml:space="preserve"><value>Theme changes appear immediately. Save keeps the selection; Cancel, Escape or closing the dialog restores the previous theme. Designer and preview keep their own theme selection.</value></data>
+  <data name="EditorThemeBuiltin" xml:space="preserve"><value>XVE default</value></data>
+  <data name="EditorThemeSystem" xml:space="preserve"><value>System</value></data>
+  <data name="EditorThemeLight" xml:space="preserve"><value>Light</value></data>
+  <data name="EditorThemeDark" xml:space="preserve"><value>Dark</value></data>
+  <data name="EditorThemeUnavailable" xml:space="preserve"><value>The selected editor theme is unavailable. Enable its extension or choose another theme.</value></data>
+  <data name="EditorThemeInvalidCatalog" xml:space="preserve"><value>The extension returned invalid or duplicate theme IDs.</value></data>
   <data name="OptionsMenu" xml:space="preserve"><value>_Options...</value></data>
   <data name="Language" xml:space="preserve"><value>Language</value></data>
   <data name="LanguageRestartHint" xml:space="preserve"><value>Language changes apply after restarting XVE.</value></data>

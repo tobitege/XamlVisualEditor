@@ -1,0 +1,79 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#333333" />
+                    <SolidColorBrush x:Key="EditorDialogButtonHoverBrush" Color="#424242" />
+                    <SolidColorBrush x:Key="EditorDialogButtonPressedBrush" Color="#292929" />
+                    <SolidColorBrush x:Key="EditorDialogButtonForegroundBrush" Color="#F2F2F2" />
+                    <SolidColorBrush x:Key="EditorDialogButtonBorderBrush" Color="#666666" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBackgroundBrush" Color="#272727" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledForegroundBrush" Color="#808080" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBorderBrush" Color="#3B3B3B" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryBrush" Color="#007ACC" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryHoverBrush" Color="#0784DB" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryPressedBrush" Color="#0063A6" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#F4F4F4" />
+                    <SolidColorBrush x:Key="EditorDialogButtonHoverBrush" Color="#E6E6E6" />
+                    <SolidColorBrush x:Key="EditorDialogButtonPressedBrush" Color="#D8D8D8" />
+                    <SolidColorBrush x:Key="EditorDialogButtonForegroundBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="EditorDialogButtonBorderBrush" Color="#929292" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBackgroundBrush" Color="#EEEEEE" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledForegroundBrush" Color="#929292" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBorderBrush" Color="#D0D0D0" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryBrush" Color="#006DB5" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryHoverBrush" Color="#005F9F" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryPressedBrush" Color="#004E83" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource EditorWindowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorWindowForegroundBrush}" />
+    </Style>
+
+    <!-- Nur Dialogbuttons; Designer-Controls und Dock-Toolbars behalten ihre Styles. -->
+    <Style Selector="Window.editor-chrome Button">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+    </Style>
+    <Style Selector="Window.editor-chrome Button[IsDefault=true]">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryBrush}" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryHoverBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryPressedBrush}" />
+        </Style>
+    </Style>
+    <Style Selector="Window.editor-chrome Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogButtonDisabledBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonDisabledForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonDisabledBorderBrush}" />
+    </Style>
+</Styles>

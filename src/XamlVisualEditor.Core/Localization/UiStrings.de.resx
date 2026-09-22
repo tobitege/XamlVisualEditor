@@ -3,6 +3,15 @@
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
   <data name="OptionsTitle" xml:space="preserve"><value>Optionen</value></data>
+  <data name="ResizeWindow" xml:space="preserve"><value>Fenstergröße ändern</value></data>
+  <data name="EditorThemeTitle" xml:space="preserve"><value>XVE-Theme</value></data>
+  <data name="EditorThemeHint" xml:space="preserve"><value>Theme-Wechsel werden sofort angezeigt. Speichern übernimmt die Auswahl; Abbrechen, ESC oder Schließen stellt das vorherige Theme wieder her. Designer und Vorschau behalten ihre eigene Theme-Auswahl.</value></data>
+  <data name="EditorThemeBuiltin" xml:space="preserve"><value>XVE-Standard</value></data>
+  <data name="EditorThemeSystem" xml:space="preserve"><value>System</value></data>
+  <data name="EditorThemeLight" xml:space="preserve"><value>Hell</value></data>
+  <data name="EditorThemeDark" xml:space="preserve"><value>Dunkel</value></data>
+  <data name="EditorThemeUnavailable" xml:space="preserve"><value>Das gewählte Editor-Theme ist nicht verfügbar. Aktiviere die zugehörige Extension oder wähle ein anderes Theme.</value></data>
+  <data name="EditorThemeInvalidCatalog" xml:space="preserve"><value>Die Extension liefert ungültige oder doppelte Theme-Kennungen.</value></data>
   <data name="OptionsMenu" xml:space="preserve"><value>_Optionen...</value></data>
   <data name="Language" xml:space="preserve"><value>Sprache</value></data>
   <data name="LanguageRestartHint" xml:space="preserve"><value>Die Sprachänderung gilt nach einem Neustart von XVE.</value></data>
@@ -99,7 +108,7 @@
   <data name="MenuPreviewer" xml:space="preserve"><value>_Vorschau</value></data>
   <data name="MenuStart" xml:space="preserve"><value>_Starten</value></data>
   <data name="MenuCommandPalette" xml:space="preserve"><value>_Befehlspalette...</value></data>
-  <data name="MenuWorkspace" xml:space="preserve"><value>_Arbeitsbereich</value></data>
+  <data name="MenuWorkspace" xml:space="preserve"><value>A_rbeitsbereich</value></data>
   <data name="MenuExtensions" xml:space="preserve"><value>_Erweiterungen</value></data>
   <data name="MenuHelp" xml:space="preserve"><value>_Hilfe</value></data>
   <data name="MenuAbout" xml:space="preserve"><value>_Über XVE</value></data>

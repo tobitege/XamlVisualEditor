@@ -31,7 +31,7 @@
                Margin="4,0,0,0" />
     </Grid>
 
-    <dg:DataGrid ItemsSource="{CompiledBinding Model.Flattened}"
+    <dg:DataGrid Classes.explorer-compact="{CompiledBinding IsFileExplorer}" ItemsSource="{CompiledBinding Model.Flattened}"
                 HierarchicalModel="{CompiledBinding Model}"
                 HierarchicalRowsEnabled="True"
                 SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
@@ -65,7 +65,7 @@
       </dg:DataGrid.ContextMenu>
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:ExtensionTreeNodeViewModel" x:DataType="vm:ExtensionTreeNodeViewModel">
-          <StackPanel Orientation="Horizontal" Spacing="6">
+          <StackPanel Classes="explorer-row" Orientation="Horizontal">
             <ContentControl Content="{CompiledBinding Icon}">
               <ContentControl.DataTemplates>
                 <DataTemplate x:DataType="media:IImage">

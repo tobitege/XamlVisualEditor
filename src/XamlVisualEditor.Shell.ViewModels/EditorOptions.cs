@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -9,6 +10,7 @@ public enum TerminalShell { CommandPrompt, WindowsPowerShell, PowerShell7 }
 /// <summary>Gespeicherte Sprachwahl und Windows-Terminalprofile.</summary>
 public sealed record EditorOptions
 {
+    public EditorThemeSelection EditorTheme { get; init; } = EditorThemeSelection.Default;
     public string Language { get; init; } = "en";
     public TerminalLocation TerminalLocation { get; init; }
     public TerminalShell TerminalShell { get; init; }
@@ -45,6 +47,8 @@ public sealed class EditorOptionsStore
             EditorOptions loaded = JsonSerializer.Deserialize<EditorOptions>(File.ReadAllText(path)) ?? new();
             if (loaded.Language is not ("en" or "de") || !Enum.IsDefined(loaded.TerminalLocation) || !Enum.IsDefined(loaded.TerminalShell))
                 throw new JsonException("Unsupported language or terminal option.");
+            if (loaded.EditorTheme is null || string.IsNullOrWhiteSpace(loaded.EditorTheme.ProviderId) || string.IsNullOrWhiteSpace(loaded.EditorTheme.ThemeId))
+                throw new JsonException("Invalid editor theme selection.");
             Current = loaded;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)

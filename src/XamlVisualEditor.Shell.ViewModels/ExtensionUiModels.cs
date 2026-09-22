@@ -444,6 +444,9 @@ public sealed partial class ExtensionCustomViewModel : ExtensionViewModel
 
 public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 {
+    /// <summary>Begrenzt die kompakte Explorer-Darstellung auf den Datei-Explorer.</summary>
+    public bool IsFileExplorer => ViewId == "fileExplorer.panel";
+
     private const string FilterPropertyPath = "Item.Label";
     private readonly IExtensionTreeDataProvider _provider;
     private bool _isDisposed;

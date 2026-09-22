@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Core.Logging;
@@ -128,6 +129,7 @@ public sealed class App : Application
             BuiltInExtensionHost extensionHost = services.GetRequiredService<BuiltInExtensionHost>();
             await extensionHost.ActivateAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            await services.GetRequiredService<IExtensionManager>().GetInstalledAsync(cancellationToken);
 
             if (services.GetService<IWindow>() is AppWindow appWindow)
             {
@@ -268,6 +270,8 @@ public sealed class App : Application
             ExtensionPackagePaths.GetStateFilePath()));
         services.AddSingleton<IExtensionUpdateService, ExtensionUpdateService>();
         services.AddSingleton<IExtensionManager, ExtensionManager>();
+        services.AddSingleton<EditorThemeService>();
+        services.AddSingleton<IEditorThemeService>(sp => sp.GetRequiredService<EditorThemeService>());
         services.AddSingleton<Func<string, IExtensionStorage>>(_ =>
             extensionId => new FileExtensionStorage(extensionId));
         services.AddSingleton<BuiltInExtensionHost>();

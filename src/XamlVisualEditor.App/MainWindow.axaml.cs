@@ -11,7 +11,6 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Dock.Avalonia.Themes.Fluent;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
@@ -27,8 +26,6 @@ namespace XamlVisualEditor.App;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
-    private const int DockVsCodeLightPresetIndex = 1;
-    private const int DockVsCodeDarkPresetIndex = 2;
     private IDisposable? _openFileHandler;
     private IDisposable? _saveFileHandler;
     private IDisposable? _renameSymbolHandler;
@@ -43,10 +40,8 @@ public sealed partial class MainWindow : Window
     private ExtensionManagerDialog? _extensionManagerDialog;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
-    private IDisposable? _themeVariantHandler;
     private MainWindowViewModel? _keyBindingsSource;
     private readonly List<KeyBinding> _extensionKeyBindings = new();
-    private readonly DockFluentThemeManager _dockThemeManager = new();
 
     public MainWindow()
         : this(null)
@@ -87,7 +82,6 @@ public sealed partial class MainWindow : Window
             _extensionManagerHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
-            _themeVariantHandler?.Dispose();
             UnbindExtensionKeyBindings();
         };
 
@@ -113,7 +107,6 @@ public sealed partial class MainWindow : Window
         _extensionManagerHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
-        _themeVariantHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
@@ -332,46 +325,7 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
-        _themeVariantHandler = vm.ThemeVariantInteraction.RegisterHandler(interaction =>
-        {
-            ApplyThemeVariant(interaction.Input);
-            interaction.SetOutput(Unit.Default);
-        });
-
-        ApplyThemeVariant(vm.SelectedThemeVariant);
         BindExtensionKeyBindings(vm);
-    }
-
-    private void ApplyThemeVariant(ThemeVariantOption option)
-    {
-        Application? application = Application.Current;
-        if (application is null)
-        {
-            return;
-        }
-
-        switch (option)
-        {
-            case ThemeVariantOption.Light:
-                _dockThemeManager.Switch(0);
-                _dockThemeManager.SwitchPreset(DockVsCodeLightPresetIndex);
-                break;
-            case ThemeVariantOption.Dark:
-                _dockThemeManager.Switch(1);
-                _dockThemeManager.SwitchPreset(DockVsCodeDarkPresetIndex);
-                break;
-            default:
-                application.RequestedThemeVariant = ThemeVariant.Default;
-                Dispatcher.UIThread.Post(() =>
-                {
-                    ThemeVariant actualTheme = application.ActualThemeVariant;
-                    int presetIndex = actualTheme == ThemeVariant.Light
-                        ? DockVsCodeLightPresetIndex
-                        : DockVsCodeDarkPresetIndex;
-                    _dockThemeManager.SwitchPreset(presetIndex);
-                }, DispatcherPriority.Render);
-                break;
-        }
     }
 
     private void BindExtensionKeyBindings(MainWindowViewModel vm)

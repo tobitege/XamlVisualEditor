@@ -4,10 +4,12 @@
              xmlns:input="using:Avalonia.Input"
              xmlns:ad="using:XamlVisualEditor.Designer.Adorners"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
+             xmlns:text="using:Avalonia.Controls.Documents"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.DesignSurfaceView"
              x:DataType="dc:DesignSurfaceViewModel"
-             Background="#1E1E1E"
+             Background="{DynamicResource EditorCanvasBackdropBrush}"
              Focusable="True"
              input:DragDrop.AllowDrop="True">
 
@@ -54,7 +56,11 @@
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           input:DragDrop.AllowDrop="True">
-                    <ThemeVariantScope RequestedThemeVariant="{CompiledBinding PreviewThemeVariant}">
+                    <ThemeVariantScope RequestedThemeVariant="{CompiledBinding PreviewThemeVariant}"
+                                       text:TextElement.Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}">
+                        <i:Interaction.Behaviors>
+                            <v:EditorThemeIsolationBehavior Service="{CompiledBinding EditorThemeService}" />
+                        </i:Interaction.Behaviors>
                         <Border Name="SurfaceBorder"
                             BorderBrush="#3F3F46"
                             BorderThickness="1"
@@ -105,7 +111,7 @@
             <Border Grid.Row="1"
                     Grid.Column="1"
                     ZIndex="1000"
-                    Background="#D01E1E1E"
+                    Background="{DynamicResource EditorBusyBackdropBrush}"
                     IsHitTestVisible="False"
                     IsVisible="{CompiledBinding IsRebuilding}">
                 <StackPanel HorizontalAlignment="Center"

@@ -119,6 +119,8 @@
                     <v:MenuItemsBehavior Items="{CompiledBinding FileMenuItems}" InsertIndex="3" />
                 </i:Interaction.Behaviors>
             </MenuItem>
+            <MenuItem Header="{x:Static loc:UiStrings.MenuWorkspace}" ItemsSource="{CompiledBinding WorkspaceMenuItems}"
+                      Classes="extension-menu" />
             <MenuItem Header="{x:Static loc:UiStrings.MenuEdit}" ItemsSource="{CompiledBinding EditMenuItems}"
                       Classes="extension-menu" />
             <MenuItem Header="{x:Static loc:UiStrings.MenuView}">
@@ -151,9 +153,6 @@
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuCommandPalette}" Command="{CompiledBinding ShowCommandPaletteCommand}" InputGesture="Ctrl+Shift+P" HotKey="Ctrl+Shift+P" />
-                <Separator />
-                <MenuItem Header="{x:Static loc:UiStrings.MenuWorkspace}" ItemsSource="{CompiledBinding WorkspaceMenuItems}"
-                          Classes="extension-menu" />
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.OptionsMenu}" Command="{CompiledBinding OpenOptionsCommand}" />
             </MenuItem>
@@ -239,10 +238,12 @@
 
         <!-- Status Bar -->
         <Border DockPanel.Dock="Bottom"
-                Background="#007ACC"
+                Background="{DynamicResource EditorStatusBarBackgroundBrush}"
                 Height="24"
-                Padding="8,2">
+                Padding="8,2,2,2">
             <DockPanel>
+                <v:WindowResizeGrip Name="StatusBarResizeGrip" DockPanel.Dock="Right" Margin="8,0,0,0"
+                                    GripBrush="{DynamicResource EditorStatusBarForegroundBrush}" />
                 <StackPanel DockPanel.Dock="Left"
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
@@ -250,7 +251,7 @@
                     <TextBlock Text="{CompiledBinding StatusText}"
                                VerticalAlignment="Center"
                                FontSize="12"
-                               Foreground="White" />
+                               Foreground="{DynamicResource EditorStatusBarForegroundBrush}" />
                     <ItemsControl ItemsSource="{CompiledBinding LeftStatusBarItems}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -266,11 +267,11 @@
                                         MinHeight="0"
                                         Background="Transparent"
                                         BorderThickness="0"
-                                        Foreground="White">
+                                        Foreground="{DynamicResource EditorStatusBarForegroundBrush}">
                                     <TextBlock Text="{CompiledBinding Text}"
                                                VerticalAlignment="Center"
                                                FontSize="12"
-                                               Foreground="White" />
+                                               Foreground="{DynamicResource EditorStatusBarForegroundBrush}" />
                                 </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -293,27 +294,27 @@
                                         MinHeight="0"
                                         Background="Transparent"
                                         BorderThickness="0"
-                                        Foreground="White">
+                                        Foreground="{DynamicResource EditorStatusBarForegroundBrush}">
                                     <TextBlock Text="{CompiledBinding Text}"
                                                VerticalAlignment="Center"
                                                FontSize="12"
-                                               Foreground="White" />
+                                               Foreground="{DynamicResource EditorStatusBarForegroundBrush}" />
                                 </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <Border Name="LayoutStatusSection"
                             IsVisible="{CompiledBinding LayoutStatusText, Converter={x:Static ObjectConverters.IsNotNull}}"
-                            BorderBrush="#66FFFFFF"
+                            BorderBrush="{DynamicResource EditorStatusBarSeparatorBrush}"
                             BorderThickness="1,0,0,0"
                             Padding="12,0,0,0">
                         <TextBlock Name="LayoutStatusText"
                                    Text="{CompiledBinding LayoutStatusText}"
                                    VerticalAlignment="Center"
                                    FontSize="12"
-                                   Foreground="White" />
+                                   Foreground="{DynamicResource EditorStatusBarForegroundBrush}" />
                     </Border>
-                    <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
+                    <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource EditorStatusBarForegroundBrush}">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="{x:Static loc:UiStrings.LineColumnFormat}">
                                 <Binding Path="ActiveLine" FallbackValue="1" />
@@ -323,7 +324,7 @@
                     </TextBlock>
                     <TextBlock Text="{CompiledBinding CollaborationStatusText}"
                                VerticalAlignment="Center" FontSize="12"
-                               Foreground="White"
+                               Foreground="{DynamicResource EditorStatusBarForegroundBrush}"
                                Opacity="0.8" />
                 </StackPanel>
             </DockPanel>

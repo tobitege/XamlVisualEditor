@@ -3,8 +3,13 @@ using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Dock.Model.ReactiveUI.Controls;
 using XamlVisualEditor.App;
 using XamlVisualEditor.App.Views;
@@ -66,6 +71,16 @@ public sealed class OptionsDialogTests
             await Idle();
             OptionsDialog dialog = Assert.Single(window.OwnedWindows.OfType<OptionsDialog>());
             OptionsDialogViewModel options = Assert.IsType<OptionsDialogViewModel>(dialog.DataContext);
+            dialog.Height = 440;
+            await Idle();
+            dialog.UpdateLayout();
+            ScrollViewer scroll = dialog.FindControl<ScrollViewer>("OptionsScrollViewer")!;
+            StackPanel content = dialog.FindControl<StackPanel>("OptionsContent")!;
+            ScrollBar verticalBar = scroll.GetVisualDescendants().OfType<ScrollBar>()
+                .First(bar => bar.Orientation == Orientation.Vertical && bar.IsEffectivelyVisible);
+            double contentRight = content.TranslatePoint(new Point(content.Bounds.Width, 0), dialog)!.Value.X;
+            double scrollbarLeft = verticalBar.TranslatePoint(default, dialog)!.Value.X;
+            Assert.True(contentRight <= scrollbarLeft, "The scrollbar must not cover option controls.");
             Assert.Equal(title, dialog.Title);
             Assert.Equal(internalLabel, options.Locations[0].ToString());
             ComboBox mode = dialog.FindControl<ComboBox>("TerminalLocationChoice")!;
@@ -97,7 +112,8 @@ public sealed class OptionsDialogTests
             OptionsDialog second = Assert.Single(window.OwnedWindows.OfType<OptionsDialog>());
             OptionsDialogViewModel secondOptions = Assert.IsType<OptionsDialogViewModel>(second.DataContext);
             secondOptions.PowerShell7Path = "discarded.exe";
-            await secondOptions.CancelCommand.Execute().FirstAsync();
+            second.FindControl<TextBox>("PowerShell7Path")!.Focus();
+            second.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
             await reopened;
             Assert.Equal(saved, new EditorOptionsStore(file).Current);
         }

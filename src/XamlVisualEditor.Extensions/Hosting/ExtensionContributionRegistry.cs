@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using XamlVisualEditor.Core;
 
@@ -13,12 +13,14 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     private readonly Dictionary<string, List<ExtensionPropertyEditorContribution>> _propertyEditorsByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ExtensionViewContribution>> _viewsByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<DesignerThemeProviderRegistration>> _themesByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<EditorThemeProviderRegistration>> _editorThemesByExtension = new(StringComparer.Ordinal);
     private List<ExtensionMenuContribution> _menuItems = new();
     private List<ExtensionToolbarContribution> _toolbarItems = new();
     private List<ExtensionCommandPaletteContribution> _paletteItems = new();
     private List<ExtensionPropertyEditorContribution> _propertyEditorItems = new();
     private List<ExtensionViewContribution> _viewItems = new();
     private List<DesignerThemeProviderRegistration> _themeItems = new();
+    private List<EditorThemeProviderRegistration> _editorThemeItems = new();
 
     public event EventHandler? Changed;
 
@@ -33,6 +35,23 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     public IReadOnlyList<ExtensionViewContribution> ViewContributions => _viewItems;
 
     public IReadOnlyList<DesignerThemeProviderRegistration> DesignerThemeProviders => _themeItems;
+
+    public IReadOnlyList<EditorThemeProviderRegistration> EditorThemeProviders => _editorThemeItems;
+
+    public IDisposable RegisterEditorThemeProviders(string extensionId, IReadOnlyList<EditorThemeProviderRegistration> providers)
+    {
+        ArgumentNullException.ThrowIfNull(providers);
+        HashSet<string> ids = new(StringComparer.Ordinal);
+        foreach (EditorThemeProviderRegistration provider in providers)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Id);
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.TypeName);
+            if (!ids.Add(provider.Id) || !System.IO.Path.IsPathFullyQualified(provider.AssemblyPath))
+                throw new ArgumentException("Theme providers require unique IDs and absolute assembly paths.", nameof(providers));
+        }
+        return RegisterItems(extensionId, providers, _editorThemesByExtension, () => _editorThemeItems = BuildList(_editorThemesByExtension));
+    }
 
     public IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers)
     {

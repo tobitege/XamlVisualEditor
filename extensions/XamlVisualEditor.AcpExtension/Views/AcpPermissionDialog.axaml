@@ -4,6 +4,7 @@
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.AcpExtension.Views.AcpPermissionDialog"
         x:DataType="vm:AcpPermissionDialogViewModel"
+        Classes="editor-chrome"
         Width="560" Height="360"
         WindowStartupLocation="CenterOwner"
         CanResize="False">

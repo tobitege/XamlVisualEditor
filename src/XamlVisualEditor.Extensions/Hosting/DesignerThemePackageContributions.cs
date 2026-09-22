@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
@@ -7,11 +7,19 @@ namespace XamlVisualEditor.Extensions.Hosting;
 public static class DesignerThemePackageContributions
 {
     public static IReadOnlyList<DesignerThemeProviderRegistration> Read(ExtensionPackageInfo package)
+        => Read(package, "designerThemes");
+
+    /// <summary>Liest die getrennte Editor-Registrierung mit denselben Paketpfad-Prüfungen.</summary>
+    public static IReadOnlyList<EditorThemeProviderRegistration> ReadEditor(ExtensionPackageInfo package)
+        => Read(package, "editorThemes").Select(provider => new EditorThemeProviderRegistration(
+            provider.Id, provider.Name, provider.AssemblyPath, provider.TypeName)).ToArray();
+
+    private static IReadOnlyList<DesignerThemeProviderRegistration> Read(ExtensionPackageInfo package, string contributionName)
     {
         if (package.Manifest.Contributes is not { ValueKind: JsonValueKind.Object } contributes
-            || !contributes.TryGetProperty("designerThemes", out JsonElement items))
+            || !contributes.TryGetProperty(contributionName, out JsonElement items))
             return Array.Empty<DesignerThemeProviderRegistration>();
-        if (items.ValueKind != JsonValueKind.Array) throw new InvalidDataException("designerThemes must be an array.");
+        if (items.ValueKind != JsonValueKind.Array) throw new InvalidDataException(contributionName + " must be an array.");
         List<DesignerThemeProviderRegistration> providers = new();
         HashSet<string> ids = new(StringComparer.Ordinal);
         foreach (JsonElement item in items.EnumerateArray())

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using XamlVisualEditor.Core;
 
@@ -14,7 +14,17 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
     private readonly Lazy<HashSet<string>> _builtInIds;
     private readonly IExtensionContributionRegistry? _contributions;
     private readonly SemaphoreSlim _operations = new(1, 1);
-    private readonly Dictionary<string, (IReadOnlyList<DesignerThemeProviderRegistration> Providers, IDisposable Registration)> _themePackages = new(StringComparer.OrdinalIgnoreCase);
+    private sealed record ThemePackage(IReadOnlyList<DesignerThemeProviderRegistration> Providers,
+        IReadOnlyList<EditorThemeProviderRegistration> EditorProviders, IDisposable DesignerRegistration, IDisposable EditorRegistration) : IDisposable
+    {
+        public void Dispose()
+        {
+            DesignerRegistration.Dispose();
+            EditorRegistration.Dispose();
+        }
+    }
+
+    private readonly Dictionary<string, ThemePackage> _themePackages = new(StringComparer.OrdinalIgnoreCase);
 
     public event Func<string, CancellationToken, Task>? ThemeProvidersChanging;
     public event Func<string, CancellationToken, Task>? ThemeProvidersChanged;
@@ -101,7 +111,7 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
             {
                 await NotifyAsync(ThemeProvidersChanging, extensionId, ct).ConfigureAwait(false);
                 await _store.UninstallAsync(extensionId, ct).ConfigureAwait(false);
-                if (_themePackages.Remove(extensionId, out var previous)) previous.Registration.Dispose();
+                if (_themePackages.Remove(extensionId, out var previous)) previous.Dispose();
             }
             finally { await NotifyAsync(ThemeProvidersChanged, extensionId, CancellationToken.None).ConfigureAwait(false); }
         }
@@ -145,23 +155,27 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
     private async Task SynchronizeThemeProvidersAsync(IReadOnlyList<ExtensionPackageInfo> packages, CancellationToken ct)
     {
         if (_contributions is null) return;
-        Dictionary<string, IReadOnlyList<DesignerThemeProviderRegistration>> desired = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, (IReadOnlyList<DesignerThemeProviderRegistration> Preview, IReadOnlyList<EditorThemeProviderRegistration> Editor)> desired = new(StringComparer.OrdinalIgnoreCase);
         foreach (ExtensionPackageInfo package in packages)
         {
             if (!await _stateStore.GetEnabledAsync(package.Manifest.ExtensionId, ct).ConfigureAwait(false)) continue;
             var providers = DesignerThemePackageContributions.Read(package);
-            if (providers.Count > 0) desired[package.Manifest.ExtensionId] = providers;
+            var editorProviders = DesignerThemePackageContributions.ReadEditor(package);
+            if (providers.Count > 0 || editorProviders.Count > 0) desired[package.Manifest.ExtensionId] = (providers, editorProviders);
         }
         foreach (string id in _themePackages.Keys.Union(desired.Keys, StringComparer.OrdinalIgnoreCase).ToArray())
         {
-            desired.TryGetValue(id, out var providers);
-            if (_themePackages.TryGetValue(id, out var previous) && providers is not null && previous.Providers.SequenceEqual(providers)) continue;
+            bool hasProviders = desired.TryGetValue(id, out var providers);
+            if (_themePackages.TryGetValue(id, out var previous) && hasProviders
+                && previous.Providers.SequenceEqual(providers.Preview) && previous.EditorProviders.SequenceEqual(providers.Editor)) continue;
             try
             {
                 await NotifyAsync(ThemeProvidersChanging, id, ct).ConfigureAwait(false);
-                if (_themePackages.Remove(id, out previous)) previous.Registration.Dispose();
-                if (providers is not null)
-                    _themePackages[id] = (providers, _contributions.RegisterDesignerThemeProviders(id, providers));
+                if (_themePackages.Remove(id, out previous)) previous.Dispose();
+                if (hasProviders)
+                    _themePackages[id] = new(providers.Preview, providers.Editor,
+                        _contributions.RegisterDesignerThemeProviders(id, providers.Preview),
+                        _contributions.RegisterEditorThemeProviders(id, providers.Editor));
             }
             finally { await NotifyAsync(ThemeProvidersChanged, id, CancellationToken.None).ConfigureAwait(false); }
         }

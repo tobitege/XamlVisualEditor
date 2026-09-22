@@ -1,6 +1,7 @@
 ﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:core="using:XamlVisualEditor.Core"
         xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.App.Views.OptionsDialog"
         x:DataType="vm:OptionsDialogViewModel"
@@ -15,9 +16,23 @@
       <Button Name="SaveOptions" Content="{x:Static loc:UiStrings.Save}" Command="{CompiledBinding SaveCommand}" IsDefault="True" MinWidth="90" />
       <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" MinWidth="90" />
     </StackPanel>
-    <TextBlock DockPanel.Dock="Bottom" Text="{CompiledBinding Error}" TextWrapping="Wrap" Foreground="Tomato" Margin="0,8,0,0" />
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-      <StackPanel Spacing="12">
+    <TextBlock DockPanel.Dock="Bottom" Text="{CompiledBinding Error}" IsVisible="{CompiledBinding Error, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap" Foreground="{DynamicResource EditorErrorBrush}" Margin="0,8,0,0" />
+    <ScrollViewer Name="OptionsScrollViewer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
+      <StackPanel Name="OptionsContent" Spacing="12" Margin="0,0,16,0">
+        <TextBlock Text="{x:Static loc:UiStrings.EditorThemeTitle}" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+          <ComboBox Name="EditorThemeProviderChoice" ItemsSource="{CompiledBinding EditorThemeProviders}"
+                    SelectedItem="{CompiledBinding SelectedEditorThemeProvider, Mode=TwoWay}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="core:EditorThemeProviderCatalog"><TextBlock Text="{CompiledBinding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <ComboBox Grid.Column="1" Name="EditorThemeChoice" ItemsSource="{CompiledBinding EditorThemes}"
+                    SelectedItem="{CompiledBinding SelectedEditorTheme, Mode=TwoWay}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="core:EditorTheme"><TextBlock Text="{CompiledBinding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+        </Grid>
+        <TextBlock Text="{x:Static loc:UiStrings.EditorThemeHint}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding EditorThemeError}" IsVisible="{CompiledBinding EditorThemeError, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap" Foreground="{DynamicResource EditorErrorBrush}" />
+        <Separator Margin="0,4" />
         <TextBlock Text="{x:Static loc:UiStrings.Language}" FontWeight="SemiBold" />
         <ComboBox Name="LanguageChoice" ItemsSource="{CompiledBinding Languages}" SelectedItem="{CompiledBinding SelectedLanguage, Mode=TwoWay}" MinWidth="240" />
         <TextBlock Text="{x:Static loc:UiStrings.LanguageRestartHint}" TextWrapping="Wrap" />

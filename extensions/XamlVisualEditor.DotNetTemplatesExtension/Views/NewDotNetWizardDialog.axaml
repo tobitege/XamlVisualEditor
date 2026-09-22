@@ -7,6 +7,7 @@
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.DotNetTemplatesExtension.Views.NewDotNetWizardDialog"
         x:DataType="vm:DotNetTemplateWizardViewModel"
+        Classes="editor-chrome"
         Width="960"
         Height="680"
         CanResize="True"
@@ -37,6 +38,7 @@
               MinWidth="90" />
       <Button Content="{x:Static loc:UiStrings.Cancel}"
               Command="{CompiledBinding CancelCommand}"
+              IsCancel="True"
               MinWidth="90" />
     </StackPanel>
 

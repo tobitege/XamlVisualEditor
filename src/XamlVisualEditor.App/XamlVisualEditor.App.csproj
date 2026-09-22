@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
@@ -97,7 +97,7 @@
   <Target Name="CopyPreviewerHost" AfterTargets="Build">
     <PropertyGroup>
       <_PreviewerHostOutputDirectory>..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\</_PreviewerHostOutputDirectory>
-      <_PreviewerHostOutputDirectory Condition="'$(RuntimeIdentifier)' != ''">$(_PreviewerHostOutputDirectory)$(RuntimeIdentifier)\</_PreviewerHostOutputDirectory>
+      <_PreviewerHostOutputDirectory Condition="'$(RuntimeIdentifier)' != '' and '$(AppendRuntimeIdentifierToOutputPath)' != 'false'">$(_PreviewerHostOutputDirectory)$(RuntimeIdentifier)\</_PreviewerHostOutputDirectory>
     </PropertyGroup>
     <MSBuild Projects="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj"
              Targets="Build"

@@ -4,6 +4,7 @@
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.FileExplorerExtension.Views.OpenFolderDialog"
         x:DataType="vm:OpenFolderDialogViewModel"
+        Classes="editor-chrome"
         Width="520"
         Height="180"
         CanResize="False"
@@ -34,6 +35,7 @@
                 MinWidth="90" />
         <Button Content="{x:Static loc:UiStrings.Cancel}"
                 Command="{CompiledBinding CancelCommand}"
+                IsCancel="True"
                 MinWidth="90" />
       </StackPanel>
     </StackPanel>

@@ -113,6 +113,7 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
     public Interaction<bool, Unit> CloseInteraction { get; } = new();
 
     public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
 
     public MessageDialogViewModel(string title, string message)
     {
@@ -121,6 +122,8 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
 
         ConfirmCommand = ReactiveCommand.CreateFromTask(async () =>
             await CloseInteraction.Handle(true));
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(false));
     }
 }
 

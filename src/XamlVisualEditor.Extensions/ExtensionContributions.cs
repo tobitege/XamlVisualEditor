@@ -98,6 +98,12 @@ public interface IExtensionContributionRegistry
     /// <summary>Gets theme providers to load in the isolated preview application.</summary>
     IReadOnlyList<DesignerThemeProviderRegistration> DesignerThemeProviders { get; }
 
+    /// <summary>Stellt Theme-Provider für die Editor-Oberfläche bereit.</summary>
+    IReadOnlyList<EditorThemeProviderRegistration> EditorThemeProviders { get; }
+
+    /// <summary>Registriert Editor-Themes unabhängig von den Vorschau-Themes.</summary>
+    IDisposable RegisterEditorThemeProviders(string extensionId, IReadOnlyList<EditorThemeProviderRegistration> providers);
+
     /// <summary>Registers globally unique provider IDs without loading their assemblies in the editor.</summary>
     IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers);
 

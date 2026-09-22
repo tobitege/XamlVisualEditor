@@ -9,6 +9,9 @@
         Height="180"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{CompiledBinding CancelCommand}" />
+  </Window.KeyBindings>
   <StackPanel Margin="16" Spacing="8">
     <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
     <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />

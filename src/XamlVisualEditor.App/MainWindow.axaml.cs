@@ -35,6 +35,8 @@ public sealed partial class MainWindow : Window
     private IDisposable? _definitionPickerHandler;
     private IDisposable? _codeActionPickerHandler;
     private IDisposable? _workspaceSymbolQueryHandler;
+    private IDisposable? _layoutNameHandler;
+    private IDisposable? _confirmLayoutDeleteHandler;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
     private IDisposable? _extensionManagerHandler;
@@ -78,6 +80,8 @@ public sealed partial class MainWindow : Window
             _definitionPickerHandler?.Dispose();
             _codeActionPickerHandler?.Dispose();
             _workspaceSymbolQueryHandler?.Dispose();
+            _layoutNameHandler?.Dispose();
+            _confirmLayoutDeleteHandler?.Dispose();
             _commandPaletteHandler?.Dispose();
             _extensionPackageOpenHandler?.Dispose();
             _extensionManagerHandler?.Dispose();
@@ -102,6 +106,8 @@ public sealed partial class MainWindow : Window
         _definitionPickerHandler?.Dispose();
         _codeActionPickerHandler?.Dispose();
         _workspaceSymbolQueryHandler?.Dispose();
+        _layoutNameHandler?.Dispose();
+        _confirmLayoutDeleteHandler?.Dispose();
         _commandPaletteHandler?.Dispose();
         _extensionPackageOpenHandler?.Dispose();
         _extensionManagerHandler?.Dispose();
@@ -211,6 +217,36 @@ public sealed partial class MainWindow : Window
             };
 
             string? result = await dialog.ShowDialog<string?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _layoutNameHandler = vm.LayoutNameInteraction.RegisterHandler(async interaction =>
+        {
+            InputBoxDialogViewModel dialogVm = new(new XamlVisualEditor.Extensions.InputBoxOptions(
+                UiStrings.LayoutSaveTitle,
+                UiStrings.LayoutSavePrompt,
+                interaction.Input));
+            InputBoxDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            string? result = await dialog.ShowDialog<string?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _confirmLayoutDeleteHandler = vm.ConfirmLayoutDeleteInteraction.RegisterHandler(async interaction =>
+        {
+            ConfirmDialogViewModel dialogVm = new(
+                UiStrings.ConfirmDelete,
+                string.Format(UiStrings.LayoutDeletePrompt, interaction.Input),
+                UiStrings.Delete);
+            ConfirmDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            bool result = await dialog.ShowDialog<bool>(this);
             interaction.SetOutput(result);
         });
 

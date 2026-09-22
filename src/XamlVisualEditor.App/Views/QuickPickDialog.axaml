@@ -2,10 +2,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dg="using:Avalonia.Controls"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:v="using:XamlVisualEditor.App.Views"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.App.Views.QuickPickDialog"
         Classes="editor-chrome"
         x:DataType="vm:QuickPickDialogViewModel"
+        Title="{CompiledBinding Title}"
         Width="520"
         Height="360"
         CanResize="True"
@@ -37,7 +39,8 @@
                 GridLinesVisibility="None"
                 AutoGenerateColumns="False"
                 CanUserSortColumns="False"
-                IsReadOnly="True">
+                IsReadOnly="True"
+                v:DataGridDoubleClickCommandBehavior.Command="{CompiledBinding ConfirmCommand}">
       <dg:DataGrid.Columns>
         <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Item}" Width="*">
           <dg:DataGridTemplateColumn.CellTemplate>

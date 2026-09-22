@@ -109,7 +109,19 @@
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuDocumentCanvas}" Command="{CompiledBinding OpenCanvasCommand}" />
                 <Separator />
-                <MenuItem Header="{x:Static loc:UiStrings.MenuResetLayout}" Command="{CompiledBinding ResetLayoutCommand}" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuLayout}">
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutSave}" Command="{CompiledBinding SaveLayoutCommand}" />
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutSaveAs}" Command="{CompiledBinding SaveLayoutAsCommand}" />
+                    <MenuItem Header="{CompiledBinding DeleteLayoutMenuHeader}" Command="{CompiledBinding DeleteLayoutCommand}" />
+                    <Separator />
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutLoad}" ItemsSource="{CompiledBinding SavedLayoutMenuItems}"
+                              IsEnabled="{CompiledBinding HasSavedLayouts}"
+                              Classes="extension-menu" />
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutLoadFromTemplates}" ItemsSource="{CompiledBinding LayoutPresetMenuItems}"
+                              Classes="extension-menu" />
+                    <Separator />
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuResetLayout}" Command="{CompiledBinding ResetLayoutCommand}" />
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="{x:Static loc:UiStrings.MenuDebug}" ItemsSource="{CompiledBinding DebugMenuItems}"
                       Classes="extension-menu" />
@@ -270,6 +282,17 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <Border Name="LayoutStatusSection"
+                            IsVisible="{CompiledBinding LayoutStatusText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            BorderBrush="#66FFFFFF"
+                            BorderThickness="1,0,0,0"
+                            Padding="12,0,0,0">
+                        <TextBlock Name="LayoutStatusText"
+                                   Text="{CompiledBinding LayoutStatusText}"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="White" />
+                    </Border>
                     <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="{x:Static loc:UiStrings.LineColumnFormat}">

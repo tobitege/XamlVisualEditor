@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -167,6 +167,33 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 File.Delete(filePath);
             }
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Main_Toolbar_Orders_Edit_Commands_Before_Terminal_And_Hides_Empty_Extension_Group()
+    {
+        using ExtensionMenuTestHost host = new();
+        await host.ActivateAsync();
+
+        string[] commandIds = await Dispatcher.UIThread.InvokeAsync(
+            () => host.ViewModel.MainToolbarItems.Select(item => item.CommandId).ToArray(),
+            DispatcherPriority.Background);
+
+        Assert.Equal(
+            new[]
+            {
+                "editing.undo",
+                "editing.redo",
+                "editing.cut",
+                "editing.copy",
+                "editing.paste",
+                "editing.delete",
+                "terminal.new"
+            },
+            commandIds);
+
+        Assert.Empty(host.ViewModel.ExtensionToolbarItems);
+        Assert.False(host.ViewModel.HasExtensionToolbarItems);
     }
 
     [AvaloniaFact]

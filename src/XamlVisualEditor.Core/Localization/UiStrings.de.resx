@@ -48,6 +48,29 @@
   <data name="MenuServers" xml:space="preserve"><value>_Server</value></data>
   <data name="MenuDocumentCanvas" xml:space="preserve"><value>_Dokumentfläche</value></data>
   <data name="MenuResetLayout" xml:space="preserve"><value>_Layout zurücksetzen</value></data>
+  <data name="MenuLayout" xml:space="preserve"><value>_Layout</value></data>
+  <data name="MenuLayoutSave" xml:space="preserve"><value>_Speichern</value></data>
+  <data name="MenuLayoutSaveAs" xml:space="preserve"><value>Speichern _unter...</value></data>
+  <data name="MenuLayoutLoad" xml:space="preserve"><value>_Laden</value></data>
+  <data name="MenuLayoutLoadFromTemplates" xml:space="preserve"><value>Laden aus _Vorlagen</value></data>
+  <data name="LayoutPresetDesigner" xml:space="preserve"><value>Designer</value></data>
+  <data name="LayoutPresetCode" xml:space="preserve"><value>Code</value></data>
+  <data name="LayoutPresetDebugging" xml:space="preserve"><value>Debuggen</value></data>
+  <data name="LayoutPresetAssistants" xml:space="preserve"><value>Assistenten &amp; Server</value></data>
+  <data name="LayoutPresetMinimal" xml:space="preserve"><value>Minimal</value></data>
+  <data name="LayoutSaveTitle" xml:space="preserve"><value>Layout speichern</value></data>
+  <data name="LayoutSavePrompt" xml:space="preserve"><value>Name des Layouts:</value></data>
+  <data name="LayoutSaved" xml:space="preserve"><value>Layout '{0}' gespeichert</value></data>
+  <data name="LayoutLoaded" xml:space="preserve"><value>Layout '{0}' geladen</value></data>
+  <data name="LayoutNotFound" xml:space="preserve"><value>Layout '{0}' wurde nicht gefunden</value></data>
+  <data name="LayoutLoadFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht geladen werden</value></data>
+  <data name="LayoutInvalidName" xml:space="preserve"><value>Der Layoutname ist leer oder enthält ungültige Zeichen</value></data>
+  <data name="MenuLayoutDelete" xml:space="preserve"><value>Layout _löschen</value></data>
+  <data name="MenuLayoutDeleteNamed" xml:space="preserve"><value>Layout '{0}' _löschen</value></data>
+  <data name="LayoutDeleted" xml:space="preserve"><value>Layout '{0}' gelöscht</value></data>
+  <data name="LayoutDeletePrompt" xml:space="preserve"><value>Layout '{0}' wirklich löschen? Dies kann nicht rückgängig gemacht werden.</value></data>
+  <data name="LayoutUnnamed" xml:space="preserve"><value>Unbenannt</value></data>
+  <data name="StatusLayoutFormat" xml:space="preserve"><value>Layout: {0}</value></data>
   <data name="MenuDebug" xml:space="preserve"><value>_Debuggen</value></data>
   <data name="MenuTools" xml:space="preserve"><value>_Werkzeuge</value></data>
   <data name="MenuPreviewer" xml:space="preserve"><value>_Vorschau</value></data>
@@ -675,7 +698,7 @@
   <data name="NewSolutionDialog" xml:space="preserve"><value>Neue Solution...</value></data>
   <data name="NewFileTemplateDialog" xml:space="preserve"><value>Neue Datei aus Template...</value></data>
   <data name="NewProject" xml:space="preserve"><value>Neues Projekt</value></data>
-  <data name="CreateNewProject" xml:space="preserve"><value>Neues Projekt erstellen</value></data>
+  <data name="CreateNewProject" xml:space="preserve"><value>Neues .NET-Projekt aus einer Vorlage erstellen (dotnet new)</value></data>
   <data name="TemplateNoFilePath" xml:space="preserve"><value>Die Template-Erstellung hat keinen Dateipfad zurückgegeben.</value></data>
   <data name="LoadingTemplates" xml:space="preserve"><value>Templates werden geladen...</value></data>
   <data name="InstallingTemplate" xml:space="preserve"><value>Template wird installiert...</value></data>

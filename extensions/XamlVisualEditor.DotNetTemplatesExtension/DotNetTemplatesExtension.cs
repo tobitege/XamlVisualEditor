@@ -62,8 +62,8 @@ public sealed class DotNetTemplatesExtension : IXveExtension
                 UiStrings.NewProject,
                 UiStrings.CreateNewProject,
                 ExtensionToolbarLocations.Main,
-                "dotnet",
-                10,
+                "1.workspace",
+                5,
                 NewProjectIconPath)
         };
         context.Subscriptions.Add(context.Contributions.RegisterToolbarItems(context.ExtensionId, toolbarItems));

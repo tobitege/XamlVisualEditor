@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
 namespace XamlVisualEditor.Terminal;
@@ -50,7 +51,7 @@ public sealed class WindowsPtyProvider : IPtyProvider
             startup = WindowsNative.CreateStartupInfo(ptyHandle);
             envBlock = WindowsNative.CreateEnvironmentBlock(options.Environment);
             WindowsNative.PROCESS_INFORMATION process = WindowsNative.CreateProcess(commandLine, options.WorkingDirectory, envBlock, ref startup);
-            using SafeFileHandle processHandle = new(process.hProcess, ownsHandle: true);
+            SafeWaitHandle processHandle = new(process.hProcess, ownsHandle: true);
             using SafeFileHandle threadHandle = new(process.hThread, ownsHandle: true);
 
             inputRead.Dispose();
@@ -58,6 +59,7 @@ public sealed class WindowsPtyProvider : IPtyProvider
 
             return new WindowsPtyProcess(
                 process.dwProcessId,
+                processHandle,
                 ptyHandle,
                 inputWrite,
                 outputRead,
@@ -122,7 +124,10 @@ internal sealed class WindowsPtyProcess : IPtyProcess
     private readonly FileStream _inputStream;
     private readonly FileStream _outputStream;
     private readonly IntPtr _pseudoConsole;
+    private readonly ManualResetEvent _processExited;
+    private readonly RegisteredWaitHandle _exitWait;
     private WindowsNative.STARTUPINFOEX _startupInfo;
+    private int _pseudoConsoleClosed;
     private int _disposed;
 
     public Stream Input => _inputStream;
@@ -131,6 +136,7 @@ internal sealed class WindowsPtyProcess : IPtyProcess
 
     internal WindowsPtyProcess(
         int pid,
+        SafeWaitHandle processHandle,
         IntPtr pseudoConsole,
         SafeFileHandle inputWrite,
         SafeFileHandle outputRead,
@@ -143,6 +149,9 @@ internal sealed class WindowsPtyProcess : IPtyProcess
         _inputStream = new FileStream(_inputWrite, FileAccess.Write, 4096, isAsync: false);
         _outputStream = new FileStream(_outputRead, FileAccess.Read, 4096, isAsync: false);
         _startupInfo = startupInfo;
+        _processExited = new ManualResetEvent(false) { SafeWaitHandle = processHandle };
+        // ConPTY hält die Ausgabe-Pipe nach dem Prozessende offen; erst ClosePseudoConsole lässt den Leser EOF sehen.
+        _exitWait = ThreadPool.RegisterWaitForSingleObject(_processExited, OnProcessExited, null, Timeout.Infinite, executeOnlyOnce: true);
     }
 
     public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
@@ -150,15 +159,28 @@ internal sealed class WindowsPtyProcess : IPtyProcess
         WindowsNative.ResizePseudoConsole(_pseudoConsole, (short)columns, (short)rows);
     }
 
+    private void OnProcessExited(object? state, bool timedOut)
+    {
+        ClosePseudoConsoleOnce();
+    }
+
+    private void ClosePseudoConsoleOnce()
+    {
+        if (Interlocked.Exchange(ref _pseudoConsoleClosed, 1) != 0) return;
+        WindowsNative.ClosePseudoConsoleHandle(_pseudoConsole);
+    }
+
     public void Dispose()
     {
-        if (System.Threading.Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _exitWait.Unregister(null);
         // Der Leser bleibt aktiv, bis ConPTY seine letzte Ausgabe geschrieben hat.
-        WindowsNative.ClosePseudoConsoleHandle(_pseudoConsole);
+        ClosePseudoConsoleOnce();
         _inputStream.Dispose();
         _outputStream.Dispose();
         _inputWrite.Dispose();
         _outputRead.Dispose();
+        _processExited.Dispose();
         WindowsNative.DisposeStartupInfo(ref _startupInfo);
     }
 }

@@ -97,8 +97,8 @@ public sealed class FileExplorerExtension : IXveExtension
                 UiStrings.OpenWorkspaceFolder,
                 UiStrings.OpenFolderHint,
                 ExtensionToolbarLocations.Main,
-                "workspace",
-                5,
+                "1.workspace",
+                10,
                 OpenFolderIconPath)
         };
         context.Subscriptions.Add(context.Contributions.RegisterToolbarItems(context.ExtensionId, toolbarItems));

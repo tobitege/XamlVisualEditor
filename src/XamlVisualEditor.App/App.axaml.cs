@@ -213,6 +213,7 @@ public sealed class App : Application
         services.AddSingleton<IFolderPicker, AppFolderPicker>();
         services.AddSingleton<IDialogHost, AppDialogHost>();
         services.AddSingleton<IWorkspaceHost, AppWorkspaceHost>();
+        services.AddSingleton<IUserLayoutStore>(_ => UserLayoutStore.CreateDefault());
 
         // LSP services
         services.AddSingleton<ILspSettingsStore, LspSettingsStore>();

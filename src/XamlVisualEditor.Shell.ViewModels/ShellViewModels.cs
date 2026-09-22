@@ -2210,6 +2210,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly ICommands? _extensionCommands;
     private readonly ICommandMetadataRegistry? _commandMetadata;
     private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IUserLayoutStore _userLayoutStore;
+    private readonly IReadOnlyList<LayoutPreset> _layoutPresets = LayoutPresetCatalog.Create();
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ICommand> _extensionCommandsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IDisposable> _extensionCommandSubscriptionsById = new(StringComparer.Ordinal);
@@ -2297,6 +2299,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>Enthält die Einträge unter Ansicht → Server.</summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ServerMenuItems { get; } = new();
 
+    /// <summary>Gets the ready-made layouts offered under View → Layout → Load.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> LayoutPresetMenuItems { get; } = new();
+
+    /// <summary>Gets the user-saved layouts offered under View → Layout → Load.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> SavedLayoutMenuItems { get; } = new();
+
+    /// <summary>Gets whether at least one user-saved layout exists.</summary>
+    public bool HasSavedLayouts => SavedLayoutMenuItems.Count > 0;
+
+    /// <summary>Gets the name of the user layout that was loaded or saved last; null for presets and the default layout.</summary>
+    [Reactive]
+    public partial string? CurrentLayoutName { get; private set; }
+
+    /// <summary>
+    /// Gets the status bar text for the active layout: null while no layout was loaded explicitly,
+    /// "unnamed" for presets and unsaved layouts, otherwise the saved layout name.
+    /// </summary>
+    [Reactive]
+    public partial string? LayoutStatusText { get; private set; }
+
+    /// <summary>Gets the header of the "delete layout" menu entry; names the active user layout when there is one.</summary>
+    public string DeleteLayoutMenuHeader => CurrentLayoutName is null
+        ? UiStrings.MenuLayoutDelete
+        : string.Format(UiStrings.MenuLayoutDeleteNamed, CurrentLayoutName);
+
     /// <summary>
     /// Gets extension-provided Debug menu items.
     /// </summary>
@@ -2362,7 +2389,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     public event EventHandler<ExtensionViewFocusChangedEventArgs>? ExtensionViewFocusChanged;
 
-    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0 || MainToolbarItems.Count > 0;
+    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0;
 
     /// <summary>
     /// Gets the debugger ViewModel.
@@ -2567,6 +2594,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public Interaction<string, string?> WorkspaceSymbolQueryInteraction { get; } = new();
 
     /// <summary>
+    /// Interaction for prompting the name of a layout to save. Input is the suggested name, output the chosen name or null.
+    /// </summary>
+    public Interaction<string, string?> LayoutNameInteraction { get; } = new();
+
+    /// <summary>Asks the user to confirm deleting the named layout; the output is true when confirmed.</summary>
+    public Interaction<string, bool> ConfirmLayoutDeleteInteraction { get; } = new();
+
+    /// <summary>
     /// Interaction for command palette selection.
     /// </summary>
     public Interaction<CommandPaletteRequest, ExtensionCommandPaletteItemViewModel?> CommandPaletteInteraction { get; } = new();
@@ -2669,6 +2704,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private ReactiveCommand<Unit, Unit> ToggleWatchesCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenExtensionManagerCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveLayoutCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveLayoutAsCommand { get; }
+    public ReactiveCommand<Unit, Unit> DeleteLayoutCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
 
     // Help Commands
@@ -2726,10 +2764,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IWorkspaceInfo? themeWorkspaceInfo = null,
         Func<string, IExtensionStorage>? extensionStorageFactory = null,
         string? recentFilesPath = null,
-        EditorOptionsStore? editorOptions = null)
+        EditorOptionsStore? editorOptions = null,
+        IUserLayoutStore? userLayoutStore = null)
     {
         _recentFilesPath = recentFilesPath;
         _editorOptions = editorOptions ?? new EditorOptionsStore();
+        _userLayoutStore = userLayoutStore ?? UserLayoutStore.CreateDefault();
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
         _metadataService = metadataService;
@@ -3086,6 +3126,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             SetDockableVisibility("Watches", IsWatchesVisible);
         });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
+        SaveLayoutCommand = ReactiveCommand.CreateFromTask(() => SaveUserLayoutAsync(promptForName: false));
+        SaveLayoutAsCommand = ReactiveCommand.CreateFromTask(() => SaveUserLayoutAsync(promptForName: true));
+        DeleteLayoutCommand = ReactiveCommand.CreateFromTask(
+            DeleteCurrentLayoutAsync,
+            this.WhenAnyValue(x => x.CurrentLayoutName).Select(name => name is not null));
+        IDisposable deleteLayoutHeaderSubscription = this.WhenAnyValue(x => x.CurrentLayoutName)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(DeleteLayoutMenuHeader)));
+        _disposables.Add(deleteLayoutHeaderSubscription);
+        SavedLayoutMenuItems.CollectionChanged += (_, _) =>
+            this.RaisePropertyChanged(nameof(HasSavedLayouts));
+        InitializeLayoutPresetMenuItems();
+        RefreshSavedLayoutMenuItems();
         OpenCanvasCommand = ReactiveCommand.Create(ShowCanvasDocument);
 
         // Help commands
@@ -5213,18 +5265,273 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IsWatchesVisible = true;
 
         IRootDock layout = DockFactory.CreateDefaultLayout();
+        InstallLayout(layout);
+
+        DockFactory.CollapseBottomToolDock(layout);
+        DockFactory.SaveLayout(layout);
+        SetCurrentLayout(null, isLoaded: false);
+
+        StatusText = UiStrings.LayoutReset;
+    }
+
+    /// <summary>
+    /// Tracks which layout is active. <paramref name="isLoaded"/> is false for the default layout
+    /// (no status bar entry); a null <paramref name="name"/> with a loaded layout shows "unnamed".
+    /// </summary>
+    private void SetCurrentLayout(string? name, bool isLoaded)
+    {
+        CurrentLayoutName = name;
+        LayoutStatusText = isLoaded
+            ? string.Format(UiStrings.StatusLayoutFormat, name ?? UiStrings.LayoutUnnamed)
+            : null;
+    }
+
+    /// <summary>
+    /// Replaces the active dock layout and re-attaches everything that is not part of a serialized
+    /// layout: extension panels, open documents and running terminals.
+    /// </summary>
+    private void InstallLayout(IRootDock layout)
+    {
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
+        DockFactory.EnsureOwnerReferences(layout);
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
         _extensionTools.Clear();
         SyncExtensionDockables();
+        ReattachRuntimeDockables();
+    }
 
-        DockFactory.CollapseBottomToolDock(layout);
+    private void ReattachRuntimeDockables()
+    {
+        _dockDocuments.Clear();
+        foreach (IEditorDocumentViewModel document in Documents)
+        {
+            AddDocumentToDock(document);
+        }
+
+        if (ActiveDocument is IEditorDocumentViewModel active)
+        {
+            SetActiveDockDocument(active);
+        }
+
+        _terminalTools.Clear();
+        foreach (TerminalViewModel terminal in Terminals)
+        {
+            AttachTerminalTool(terminal);
+        }
+    }
+
+    /// <summary>
+    /// Applies one of the ready-made layouts: starts from the default layout and hides every panel
+    /// that the preset does not list.
+    /// </summary>
+    public void ApplyLayoutPreset(string presetId)
+    {
+        LayoutPreset? preset = null;
+        foreach (LayoutPreset candidate in _layoutPresets)
+        {
+            if (string.Equals(candidate.Id, presetId, StringComparison.OrdinalIgnoreCase))
+            {
+                preset = candidate;
+                break;
+            }
+        }
+
+        if (preset is null)
+        {
+            return;
+        }
+
+        IRootDock layout = DockFactory.CreateDefaultLayout();
+        InstallLayout(layout);
+
+        foreach (IDockable tool in XamlEditorDockFactory.FindDockables<Tool>(layout))
+        {
+            string? panelId = tool switch
+            {
+                ExtensionTool extensionTool => extensionTool.ViewId,
+                TerminalTool => null,
+                _ => tool.Id
+            };
+
+            if (panelId is null)
+            {
+                continue;
+            }
+
+            if (!preset.IsVisible(panelId))
+            {
+                DockFactory.HideDockable(tool);
+            }
+            else if (preset.ExpandPinnedPanels && DockFactory.IsDockablePinned(tool, layout))
+            {
+                DockFactory.UnpinDockable(tool);
+            }
+        }
+
+        EnsureActiveToolDockables(layout);
+        if (preset.CollapseBottomDock)
+        {
+            DockFactory.CollapseBottomToolDock(layout);
+        }
+
+        IsBreakpointsVisible = preset.IsVisible("Breakpoints");
+        IsCallStackVisible = preset.IsVisible("CallStack");
+        IsLocalsVisible = preset.IsVisible("Locals");
+        IsWatchesVisible = preset.IsVisible("Watches");
+        IsOutputVisible = preset.IsVisible("Output") || preset.IsVisible("output.panel");
+
         DockFactory.SaveLayout(layout);
+        SetCurrentLayout(null, isLoaded: true);
+        StatusText = string.Format(UiStrings.LayoutLoaded, preset.Title);
+    }
 
-        StatusText = UiStrings.LayoutReset;
+    private static void EnsureActiveToolDockables(IRootDock layout)
+    {
+        foreach (ToolDock dock in XamlEditorDockFactory.FindDockables<ToolDock>(layout))
+        {
+            if (dock.VisibleDockables is null || dock.VisibleDockables.Count == 0)
+            {
+                dock.ActiveDockable = null;
+                continue;
+            }
+
+            if (dock.ActiveDockable is null || !dock.VisibleDockables.Contains(dock.ActiveDockable))
+            {
+                dock.ActiveDockable = dock.VisibleDockables[0];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads a layout that the user saved earlier under the given name.
+    /// </summary>
+    public void LoadUserLayout(string name)
+    {
+        if (!_userLayoutStore.Exists(name))
+        {
+            RefreshSavedLayoutMenuItems();
+            StatusText = string.Format(UiStrings.LayoutNotFound, name);
+            return;
+        }
+
+        IRootDock? layout = DockFactory.LoadLayout(_userLayoutStore.GetPath(name));
+        if (layout is null)
+        {
+            StatusText = string.Format(UiStrings.LayoutLoadFailed, name);
+            return;
+        }
+
+        InstallLayout(layout);
+        SyncPanelVisibilityFlagsFromLayout();
+        DockFactory.SaveLayout(layout);
+        SetCurrentLayout(name, isLoaded: true);
+        StatusText = string.Format(UiStrings.LayoutLoaded, name);
+    }
+
+    private void SyncPanelVisibilityFlagsFromLayout()
+    {
+        IsBreakpointsVisible = IsToolVisible("Breakpoints");
+        IsCallStackVisible = IsToolVisible("CallStack");
+        IsLocalsVisible = IsToolVisible("Locals");
+        IsWatchesVisible = IsToolVisible("Watches");
+        IsOutputVisible = IsToolVisible("Output") || IsExtensionViewVisible("output.panel");
+    }
+
+    private bool IsToolVisible(string id)
+    {
+        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        return dockable?.Owner is IDock dock
+            && dock.VisibleDockables is not null
+            && dock.VisibleDockables.Contains(dockable);
+    }
+
+    private async Task SaveUserLayoutAsync(bool promptForName)
+    {
+        string? name = CurrentLayoutName;
+        if (promptForName || string.IsNullOrWhiteSpace(name))
+        {
+            name = await LayoutNameInteraction.Handle(name ?? string.Empty);
+            if (name is null)
+            {
+                return;
+            }
+
+            name = name.Trim();
+        }
+
+        if (!_userLayoutStore.IsValidName(name))
+        {
+            StatusText = UiStrings.LayoutInvalidName;
+            return;
+        }
+
+        DockFactory.SaveLayout(DockLayout, _userLayoutStore.GetPath(name));
+        SetCurrentLayout(name, isLoaded: true);
+        RefreshSavedLayoutMenuItems();
+        StatusText = string.Format(UiStrings.LayoutSaved, name);
+    }
+
+    /// <summary>
+    /// Deletes the saved file of the active user layout after the user confirmed. The dock keeps
+    /// its current arrangement, which becomes an unnamed layout.
+    /// </summary>
+    private async Task DeleteCurrentLayoutAsync()
+    {
+        string? name = CurrentLayoutName;
+        if (name is null)
+        {
+            return;
+        }
+
+        bool confirmed = await ConfirmLayoutDeleteInteraction.Handle(name);
+        if (!confirmed || !string.Equals(CurrentLayoutName, name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        bool deleted = _userLayoutStore.Delete(name);
+        RefreshSavedLayoutMenuItems();
+        SetCurrentLayout(null, isLoaded: true);
+        StatusText = deleted
+            ? string.Format(UiStrings.LayoutDeleted, name)
+            : string.Format(UiStrings.LayoutNotFound, name);
+    }
+
+    private void InitializeLayoutPresetMenuItems()
+    {
+        DisposeCollectionItems(LayoutPresetMenuItems);
+        int priority = 0;
+        foreach (LayoutPreset preset in _layoutPresets)
+        {
+            string presetId = preset.Id;
+            LayoutPresetMenuItems.Add(new ExtensionMenuItemViewModel(
+                "layout.preset." + presetId,
+                preset.Title,
+                ExtensionMenuLocations.View,
+                "layout.presets",
+                priority += 10,
+                ReactiveCommand.Create(() => ApplyLayoutPreset(presetId))));
+        }
+    }
+
+    private void RefreshSavedLayoutMenuItems()
+    {
+        DisposeCollectionItems(SavedLayoutMenuItems);
+        int priority = 0;
+        foreach (string name in _userLayoutStore.ListNames())
+        {
+            string layoutName = name;
+            SavedLayoutMenuItems.Add(new ExtensionMenuItemViewModel(
+                "layout.user." + layoutName,
+                layoutName,
+                ExtensionMenuLocations.View,
+                "layout.saved",
+                priority += 10,
+                ReactiveCommand.Create(() => LoadUserLayout(layoutName))));
+        }
     }
 
     private sealed partial class NullExtensionManager : IExtensionManager
@@ -5303,20 +5610,34 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
         Terminals.Add(terminalVm);
 
-        if (DockLayout is not null)
+        if (DockLayout is not null && AttachTerminalTool(terminalVm) is not null)
         {
-            TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
-            if (tool is not null)
-            {
-                _terminalTools[terminalVm.Id] = tool;
-                IDisposable titleSubscription = terminalVm.WhenAnyValue(x => x.Title)
-                    .Subscribe(title => tool.Title = title);
-                _terminalTitleSubscriptions[terminalVm.Id] = titleSubscription;
-            }
+            Guid terminalId = terminalVm.Id;
+            // Exited kommt vom Lesethread der PTY-Sitzung.
+            terminalVm.Exited += _ => Dispatcher.UIThread.Post(() => CloseTerminalSession(terminalId));
         }
 
         StatusText = XamlVisualEditor.Core.Localization.UiStrings.TerminalInternalStarted;
         return terminalVm;
+    }
+
+    private TerminalTool? AttachTerminalTool(TerminalViewModel terminalVm)
+    {
+        TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
+        if (tool is null)
+        {
+            return null;
+        }
+
+        _terminalTools[terminalVm.Id] = tool;
+        if (_terminalTitleSubscriptions.TryGetValue(terminalVm.Id, out IDisposable? previousSubscription))
+        {
+            previousSubscription.Dispose();
+        }
+
+        _terminalTitleSubscriptions[terminalVm.Id] = terminalVm.WhenAnyValue(x => x.Title)
+            .Subscribe(title => tool.Title = title);
+        return tool;
     }
 
     public Guid? GetActiveTerminalId()
@@ -8366,6 +8687,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DisposeCollectionItems(FileNewMenuEntries);
         DisposeCollectionItems(ViewMenuItems);
         DisposeCollectionItems(ServerMenuItems);
+        DisposeCollectionItems(LayoutPresetMenuItems);
+        DisposeCollectionItems(SavedLayoutMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);

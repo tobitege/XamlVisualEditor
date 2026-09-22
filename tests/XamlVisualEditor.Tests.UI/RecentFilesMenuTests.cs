@@ -73,12 +73,28 @@ public sealed class RecentFilesMenuTests
             Assert.Equal(11, vm.RecentFiles.Count);
             Assert.DoesNotContain(vm.RecentFiles, entry => entry.FilePath == paths[0]);
             Assert.True(File.Exists(paths[0]));
-            ClickRow(dialog, grid, vm.RecentFiles[0]);
+            // Nach dem Löschen ist der nachfolgende Eintrag ausgewählt.
+            Assert.Same(vm.RecentFiles[0], dialogVm.SelectedEntry);
+            Assert.Same(vm.RecentFiles[0], grid.SelectedItem);
             Button remove = dialog.FindControl<Button>("RemoveRecentEntry")!;
+            Assert.True(remove.IsEffectivelyEnabled);
             Click(dialog, remove);
             await Idle();
             Assert.Equal(10, vm.RecentFiles.Count);
-            Assert.Equal(paths.Skip(2), JsonSerializer.Deserialize<string[]>(File.ReadAllText(store)));
+            Assert.Same(vm.RecentFiles[0], dialogVm.SelectedEntry);
+            // Beim letzten Eintrag rückt der vorherige nach.
+            ClickRow(dialog, grid, vm.RecentFiles[9]);
+            Assert.Same(vm.RecentFiles[9], dialogVm.SelectedEntry);
+            RecentFileEntry previous = vm.RecentFiles[8];
+            dialog.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+            await Idle();
+            Assert.Equal(9, vm.RecentFiles.Count);
+            Assert.Same(previous, dialogVm.SelectedEntry);
+            ClickRow(dialog, grid, vm.RecentFiles[0]);
+            Click(dialog, remove);
+            await Idle();
+            Assert.Equal(8, vm.RecentFiles.Count);
+            Assert.Equal(paths.Skip(3).Take(8), JsonSerializer.Deserialize<string[]>(File.ReadAllText(store)));
             Assert.True(File.Exists(paths[0]));
             await dialogVm.CloseCommand.Execute().FirstAsync();
             await Idle();

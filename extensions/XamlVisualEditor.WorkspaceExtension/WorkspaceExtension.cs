@@ -270,13 +270,13 @@ public sealed class WorkspaceExtension : IXveExtension
     {
         ExtensionToolbarContribution[] toolbarItems =
         {
-            new(NewTerminalCommandId, UiStrings.NewTerminal, UiStrings.CreateTerminalSession, ExtensionToolbarLocations.Main, "terminal", 10, NewTerminalIconPath),
-            new(UndoCommandId, UiStrings.Undo, UiStrings.UndoTooltip, ExtensionToolbarLocations.Main, "edit", 20, UndoIconPath),
-            new(RedoCommandId, UiStrings.Redo, UiStrings.RedoTooltip, ExtensionToolbarLocations.Main, "edit", 30, RedoIconPath),
-            new(CutCommandId, UiStrings.Cut, UiStrings.CutTooltip, ExtensionToolbarLocations.Main, "edit", 40, CutIconPath),
-            new(CopyCommandId, UiStrings.Copy, UiStrings.CopyTooltip, ExtensionToolbarLocations.Main, "edit", 50, CopyIconPath),
-            new(PasteCommandId, UiStrings.Paste, UiStrings.PasteTooltip, ExtensionToolbarLocations.Main, "edit", 60, PasteIconPath),
-            new(DeleteCommandId, UiStrings.Delete, UiStrings.Delete, ExtensionToolbarLocations.Main, "edit", 70, DeleteIconPath)
+            new(UndoCommandId, UiStrings.Undo, UiStrings.UndoTooltip, ExtensionToolbarLocations.Main, "2.edit", 20, UndoIconPath),
+            new(RedoCommandId, UiStrings.Redo, UiStrings.RedoTooltip, ExtensionToolbarLocations.Main, "2.edit", 30, RedoIconPath),
+            new(CutCommandId, UiStrings.Cut, UiStrings.CutTooltip, ExtensionToolbarLocations.Main, "2.edit", 40, CutIconPath),
+            new(CopyCommandId, UiStrings.Copy, UiStrings.CopyTooltip, ExtensionToolbarLocations.Main, "2.edit", 50, CopyIconPath),
+            new(PasteCommandId, UiStrings.Paste, UiStrings.PasteTooltip, ExtensionToolbarLocations.Main, "2.edit", 60, PasteIconPath),
+            new(DeleteCommandId, UiStrings.Delete, UiStrings.Delete, ExtensionToolbarLocations.Main, "2.edit", 70, DeleteIconPath),
+            new(NewTerminalCommandId, UiStrings.NewTerminal, UiStrings.CreateTerminalSession, ExtensionToolbarLocations.Main, "3.terminal", 10, NewTerminalIconPath)
         };
 
         context.Subscriptions.Add(context.Contributions.RegisterToolbarItems(context.ExtensionId, toolbarItems));

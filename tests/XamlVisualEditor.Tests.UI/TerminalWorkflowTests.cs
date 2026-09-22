@@ -57,6 +57,81 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
         }
     }
 
+    [Fact]
+    public async Task WindowsPtyOutputReachesEndOfStreamAfterTheShellExits()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string shell = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+        IPtyProcess pty = new WindowsPtyProvider().StartProcess(new TerminalSessionOptions
+        {
+            Command = shell,
+            Arguments = new[] { "/c", "echo EXIT-MARKER" }
+        });
+        MemoryStream captured = new();
+        Task reader = Task.Run(() =>
+        {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = pty.Output.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                captured.Write(buffer, 0, count);
+            }
+        });
+        try
+        {
+            await reader.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Contains("EXIT-MARKER", Encoding.UTF8.GetString(captured.ToArray()), StringComparison.Ordinal);
+        }
+        finally
+        {
+            output.WriteLine("Raw output: {0}", Encoding.UTF8.GetString(captured.ToArray()));
+            pty.Dispose();
+            captured.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task WindowsTerminalClosesItsDockWhenTheShellExits()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string shell = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+        TerminalService service = new(new WindowsPtyProvider(), new ManagedTerminalEmulatorFactory());
+        Avalonia.Themes.Fluent.FluentTheme fluent = new();
+        Dock.Avalonia.Themes.Fluent.DockFluentTheme dockTheme = new();
+        Application.Current!.Styles.Add(fluent);
+        Application.Current.Styles.Add(dockTheme);
+        using MainWindowViewModel vm = new(terminalService: service);
+        MainWindow window = new(vm) { Width = 1000, Height = 800 };
+        window.DataTemplates.Add(new ViewLocator());
+        try
+        {
+            window.Show();
+            TerminalViewModel terminal = vm.CreateTerminalSession(new TerminalSessionOptions
+            {
+                Command = shell,
+                Arguments = new[] { "/c", "exit" }
+            });
+            string toolId = "Terminal-" + terminal.Id.ToString("N");
+            Assert.NotNull(XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.Core.IDockable>(vm.DockLayout, toolId));
+            Stopwatch deadline = Stopwatch.StartNew();
+            while (vm.Terminals.Count > 0 && deadline.Elapsed < TimeSpan.FromSeconds(15))
+            {
+                await Task.Delay(50);
+                await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            }
+            Assert.Empty(vm.Terminals);
+            Assert.False(terminal.IsConnected);
+            Assert.Null(XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.Core.IDockable>(vm.DockLayout, toolId));
+        }
+        finally
+        {
+            foreach (TerminalViewModel terminal in vm.Terminals.ToArray()) vm.CloseTerminalSession(terminal.Id);
+            window.Close();
+            Application.Current.Styles.Remove(dockTheme);
+            Application.Current.Styles.Remove(fluent);
+        }
+    }
+
     [AvaloniaFact]
     public async Task WindowsTerminalOpensCollapsedDockAcceptsInputAndStopsItsProcessWhenClosed()
     {

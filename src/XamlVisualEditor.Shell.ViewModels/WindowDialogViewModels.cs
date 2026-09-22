@@ -123,3 +123,31 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
             await CloseInteraction.Handle(true));
     }
 }
+
+/// <summary>
+/// ViewModel for a yes/no confirmation dialog. The close interaction carries true when the
+/// user confirmed and false when the dialog was cancelled.
+/// </summary>
+public sealed partial class ConfirmDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+    public string Message { get; }
+    public string ConfirmText { get; }
+
+    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public ConfirmDialogViewModel(string title, string message, string? confirmText = null)
+    {
+        Title = title;
+        Message = message;
+        ConfirmText = string.IsNullOrWhiteSpace(confirmText) ? UiStrings.Ok : confirmText;
+
+        ConfirmCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(true));
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(false));
+    }
+}

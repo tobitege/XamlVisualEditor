@@ -28,8 +28,13 @@ public sealed class RecentFilesDialogViewModel : ReactiveObject, IDisposable
         RemoveCommand = ReactiveCommand.Create(() =>
         {
             if (SelectedEntry is not { } entry) return;
+            int index = Entries.IndexOf(entry);
             SelectedEntry = null;
             Entries.Remove(entry);
+            if (Entries.Count > 0)
+            {
+                SelectedEntry = Entries[Math.Min(Math.Max(index, 0), Entries.Count - 1)];
+            }
         }, this.WhenAnyValue(x => x.SelectedEntry).Select(entry => entry is not null));
         CloseCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke());
     }

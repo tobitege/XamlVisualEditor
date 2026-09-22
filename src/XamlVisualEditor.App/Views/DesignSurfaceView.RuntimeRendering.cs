@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -86,6 +86,7 @@ public sealed partial class DesignSurfaceView
         SetPreviewStatus(empty ? "Add a root control to preview this document."
             : keepPrevious ? "Preview out of date and not editable. See Problems for rendering errors."
             : "Preview unavailable. See Problems for rendering errors.");
+        ClearHover();
         _adornerLayer?.ClearAll();
         _currentVm?.SetDesignTree(null, new Dictionary<Guid, DesignItem>(), new Dictionary<Control, DesignItem>());
         _currentVm?.ClearSelectionFromSync();

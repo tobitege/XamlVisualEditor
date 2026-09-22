@@ -205,6 +205,7 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_currentVm is not null)
         {
             _currentVm.IsRebuilding = false;
+            _currentVm.ShowRebuildProgress = false;
             _currentVm.RebuildRequested -= OnRebuildRequested;
             _currentVm.Selection.SelectionChanged -= OnSelectionChanged;
             _currentVm.PropertyChanged -= OnDesignSurfacePropertyChanged;
@@ -889,6 +890,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _currentVm.RebuildStatus = UiStrings.BuildingDesignSurface;
         _currentVm.IsRebuilding = true;
         _allowLayoutUpdate = _rebuildScheduled ? _allowLayoutUpdate && allowLayoutUpdate : allowLayoutUpdate;
+        if (!_allowLayoutUpdate) _currentVm.ShowRebuildProgress = true;
         if (_rebuildScheduled)
         {
             return;
@@ -987,6 +989,7 @@ public sealed partial class DesignSurfaceView : UserControl
         {
             if (viewModel is not null)
             {
+                viewModel.ShowRebuildProgress = false;
                 viewModel.IsRebuilding = false;
             }
         }
@@ -1048,7 +1051,6 @@ public sealed partial class DesignSurfaceView : UserControl
             && new RuntimeDesignRenderer(metadata).TryUpdateLayout(previous, doc, _rootControl))
         {
             UpdateCanvasSizeFromRoot(docVm, doc.Root);
-            _rootControl.UpdateLayout();
             if (_currentVm?.TakeRequestedSelection() is { } requested) _currentVm.SelectNodesFromSync(requested);
             RefreshSelectionAdorners();
             return;
@@ -1067,6 +1069,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        ClearHover();
         if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
         canvas.Children.Clear();
         _runtimeRenderFailed = false;
@@ -1803,6 +1806,12 @@ public sealed partial class DesignSurfaceView : UserControl
         }
     }
 
+    private void ClearHover()
+    {
+        _hoveredItem = null;
+        _adornerLayer?.UpdateHover(null);
+    }
+
     private void RefreshSelectionAdorners()
     {
         if (_adornerLayer is null || _currentVm is null)
@@ -1952,6 +1961,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
         _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+        ClearHover();
         RefreshSelectionAdorners();
     }
 
@@ -1964,6 +1974,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
         _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+        ClearHover();
         RefreshSelectionAdorners();
     }
 

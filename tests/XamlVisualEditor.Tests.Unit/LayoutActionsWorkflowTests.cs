@@ -105,9 +105,25 @@ public sealed class LayoutActionsWorkflowTests
             document.DesignSurface.SelectNodesFromSync(selected);
             Assert.Equal(selected[0], ((XamlVisualEditor.Designer.Core.DesignItem)document.DesignSurface.Selection.PrimarySelection!).AstNodeId);
             Control[] originalControls = selected.Select(id => document.DesignSurface.ItemMap[id].VisualElement!).ToArray();
+            Border progress = view.FindControl<Border>("RebuildProgressOverlay")!;
+            bool progressShown = false;
+            int selectionChanges = 0;
+            document.DesignSurface.Selection.SelectionChanged += _ => selectionChanges++;
+            System.Collections.Generic.List<int> codeEditOffsets = new();
+            document.CodeEditor.Document.Changed += (_, change) => codeEditOffsets.Add(change.Offset);
+            document.DesignSurface.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(document.DesignSurface.ShowRebuildProgress)
+                    && document.DesignSurface.ShowRebuildProgress) progressShown = true;
+            };
 
             new DesignerLayoutEditor(document).Apply(DesignerLayoutOperation.AlignLeft);
             await FinishLayoutAsync(host);
+            Assert.Single(codeEditOffsets);
+            Assert.True(codeEditOffsets[0] > 0, "Designer edits should update only the changed XAML span.");
+            Assert.Equal(0, selectionChanges);
+            Assert.False(progressShown);
+            Assert.False(progress.IsVisible);
             for (int index = 0; index < selected.Length; index++)
                 Assert.Same(originalControls[index], document.DesignSurface.ItemMap[selected[index]].VisualElement);
 
@@ -121,6 +137,14 @@ public sealed class LayoutActionsWorkflowTests
             double[] lefts = selected.Select(id => document.DesignSurface.ItemMap[id].VisualElement!.TranslatePoint(default, gridControl)!.Value.X).ToArray();
             Assert.True(lefts.All(left => Math.Abs(left - 20) < 0.001), string.Join(",", lefts));
             Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
+            document.DesignSurface.RequestRebuild();
+            Assert.True(progress.IsVisible);
+            await FinishLayoutAsync(host);
+            Assert.False(progress.IsVisible);
+            int beforeNewSelection = selectionChanges;
+            document.DesignSurface.SelectNodesFromSync(new[] { selected[1] });
+            Assert.Equal(selected[1], ((XamlVisualEditor.Designer.Core.DesignItem)document.DesignSurface.Selection.PrimarySelection!).AstNodeId);
+            Assert.True(selectionChanges > beforeNewSelection);
         }
         finally { host.Close(); }
     }

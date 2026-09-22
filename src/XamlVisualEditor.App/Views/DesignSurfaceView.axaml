@@ -108,21 +108,23 @@
                 </ThemeVariantScope>
             </ScrollViewer>
 
-            <Border Grid.Row="1"
+            <Border Name="RebuildProgressOverlay"
+                    Grid.Row="1"
                     Grid.Column="1"
                     ZIndex="1000"
                     Background="{DynamicResource EditorBusyBackdropBrush}"
                     IsHitTestVisible="False"
-                    IsVisible="{CompiledBinding IsRebuilding}">
+                    IsVisible="{CompiledBinding ShowRebuildProgress}">
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Spacing="12">
                     <ProgressBar Width="280" IsIndeterminate="True" />
                     <TextBlock Text="{CompiledBinding RebuildStatus}"
-                               Foreground="White"
+                               Foreground="{DynamicResource EditorWindowForegroundBrush}"
                                HorizontalAlignment="Center" />
                     <TextBlock Text="{x:Static loc:UiStrings.UiThreadConstructorsHint}"
-                               Foreground="#BFFFFFFF"
+                               Foreground="{DynamicResource EditorWindowForegroundBrush}"
+                               Opacity="0.7"
                                FontSize="11"
                                HorizontalAlignment="Center" />
                 </StackPanel>

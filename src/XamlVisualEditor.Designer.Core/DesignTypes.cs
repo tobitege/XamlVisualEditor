@@ -378,6 +378,10 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     [Reactive]
     public partial bool IsRebuilding { get; set; }
 
+    /// <summary>Zeigt den Fortschritts-Screen nur für vollständige Neuaufbauten.</summary>
+    [Reactive]
+    public partial bool ShowRebuildProgress { get; set; }
+
     /// <summary>
     /// Gets or sets the visible phase text for a design-surface rebuild.
     /// </summary>
@@ -586,10 +590,27 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// <summary>Restores a selection without treating it as a new user selection.</summary>
     public void SelectNodesFromSync(IEnumerable<Guid> nodeIds)
     {
+        Guid[] requested = nodeIds as Guid[] ?? nodeIds.ToArray();
+        if (Selection.SelectedItems.Count == requested.Length)
+        {
+            bool unchanged = true;
+            for (int index = 0; index < requested.Length; index++)
+            {
+                if (Selection.SelectedItems[index] is not DesignItem selected
+                    || selected.AstNodeId != requested[index]
+                    || !_itemMap.TryGetValue(requested[index], out DesignItem? current)
+                    || !ReferenceEquals(selected, current))
+                {
+                    unchanged = false;
+                    break;
+                }
+            }
+            if (unchanged) return;
+        }
         using (BeginSelectionSync())
         {
             Selection.ClearSelection();
-            foreach (Guid id in nodeIds)
+            foreach (Guid id in requested)
                 if (_itemMap.TryGetValue(id, out DesignItem? item)) Selection.Select(item, addToSelection: true);
         }
     }

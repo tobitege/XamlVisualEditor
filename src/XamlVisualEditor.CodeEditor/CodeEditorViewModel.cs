@@ -431,11 +431,25 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        if (syncEvent.XamlText is not null &&
-            !string.Equals(Document.Text, syncEvent.XamlText, StringComparison.Ordinal))
+        string previousText = Document.Text;
+        if (syncEvent.XamlText is { } currentText &&
+            !string.Equals(previousText, currentText, StringComparison.Ordinal))
         {
             int caretOffset = CaretOffset;
-            SetTextSilently(syncEvent.XamlText);
+            int start = 0;
+            while (start < previousText.Length && start < currentText.Length && previousText[start] == currentText[start]) start++;
+            int suffix = 0;
+            while (suffix < previousText.Length - start && suffix < currentText.Length - start
+                && previousText[^(suffix + 1)] == currentText[^(suffix + 1)]) suffix++;
+            HasPendingTextChanges = false;
+            _suppressTextChanged = true;
+            try
+            {
+                Document.Replace(start, previousText.Length - start - suffix,
+                    currentText.Substring(start, currentText.Length - start - suffix));
+                IsModified = false;
+            }
+            finally { _suppressTextChanged = false; }
             SetCaretOffsetFromSync(caretOffset);
         }
 

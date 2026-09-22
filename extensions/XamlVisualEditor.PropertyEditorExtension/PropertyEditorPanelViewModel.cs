@@ -159,7 +159,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> SetNullCommand { get; }
     public event Action? NullRequested;
     public string Name { get; }
-    public string DisplayName => Name == "Height" ? "Height 123" : Name;
+    public string DisplayName => Name;
     public string PropertyType { get; }
     public bool IsReadOnly { get; }
     public string Category { get; }

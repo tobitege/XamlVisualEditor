@@ -15,6 +15,39 @@ public static class DesignerUpdateProtocol
     private static readonly XName NodeIdName = XName.Get("DesignNodeIdentity.NodeId", IdentityNamespace);
     private static readonly XName RenderIdName = XName.Get("DesignNodeIdentity.RenderId", IdentityNamespace);
 
+    /// <summary>Liest ausschließlich literale Layout-Werte; Ressourcen, Bindings und andere Eigenschaften bleiben beim XAML-Lader.</summary>
+    public static bool TryGetLayoutValues(string fragment, IReadOnlyList<string> clearedProperties,
+        out IReadOnlyDictionary<string, string?> values)
+    {
+        Dictionary<string, string?> result = new(StringComparer.Ordinal);
+        values = result;
+        XElement element = XElement.Parse(fragment);
+        foreach (XAttribute attribute in element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration))
+        {
+            if (!IsLayoutProperty(attribute.Name, element) || attribute.Value.TrimStart().StartsWith('{')) return false;
+            result[attribute.Name.LocalName] = attribute.Value;
+        }
+        foreach (string property in clearedProperties)
+        {
+            XName name = XName.Get(property);
+            if (!IsLayoutProperty(name, element)) return false;
+            result[name.LocalName] = null;
+        }
+        return true;
+    }
+
+    private static bool IsLayoutProperty(XName name, XElement element)
+    {
+        string xmlNamespace = name.Namespace == XNamespace.None && name.LocalName.Contains('.')
+            ? element.GetDefaultNamespace().NamespaceName : name.NamespaceName;
+        return xmlNamespace is "" or "https://github.com/avaloniaui" or "using:Avalonia.Controls"
+                or "clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls"
+            && name.LocalName is "Width" or "Height" or "MinWidth" or "MinHeight" or "MaxWidth" or "MaxHeight"
+            or "Margin" or "HorizontalAlignment" or "VerticalAlignment" or "Spacing" or "RowSpacing" or "ColumnSpacing"
+            or "Canvas.Left" or "Canvas.Top" or "Canvas.Right" or "Canvas.Bottom"
+            or "Grid.Row" or "Grid.Column" or "Grid.RowSpan" or "Grid.ColumnSpan" or "DockPanel.Dock";
+    }
+
     public static bool TryCreateUpdates(string previous, string current, out IReadOnlyList<DesignerControlUpdate> updates)
     {
         updates = Array.Empty<DesignerControlUpdate>();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -45,10 +45,11 @@ public sealed class RuntimeDesignRenderer
 
         RuntimeRenderRecovery recovery = new(preview, sourceTypes, IdentityNamespace);
         object loaded;
+        string xaml;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string xaml = _serializer.Serialize(preview);
+            xaml = _serializer.Serialize(preview);
             HashSet<Guid> constructedNodes = new();
             using IDisposable capture = DesignNodeIdentity.NodeIdProperty.Changed.Subscribe(change =>
             {
@@ -83,7 +84,27 @@ public sealed class RuntimeDesignRenderer
             cancellationToken.ThrowIfCancellationRequested();
         }
         ApplyDesignProperties(root);
-        return new RuntimeDesignRenderResult(root, baseUri, sourceTypes, recovery.Diagnostics.ToArray());
+        return new RuntimeDesignRenderResult(root, baseUri, sourceTypes, recovery.Diagnostics.ToArray(), document, xaml);
+    }
+
+    /// <summary>Aktualisiert reine Layout-Änderungen im bestehenden Baum; andere Änderungen erfordern Render.</summary>
+    public bool TryUpdateLayout(RuntimeDesignRenderResult rendered, MutableAstDocument document, Control? surfaceRoot = null)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        if (!ReferenceEquals(rendered.SourceDocument, document) || rendered.Diagnostics.Count != 0) return false;
+        try
+        {
+            string xaml = PrepareXaml(document);
+            if (!DesignerUpdateProtocol.TryCreateUpdates(rendered.Xaml, xaml, out var updates) || updates.Count == 0
+                || !RuntimeLayoutUpdater.TryApply(updates, rendered.GetControlNodeIds(surfaceRoot))) return false;
+            rendered.Xaml = xaml;
+            return true;
+        }
+        catch
+        {
+            // Ein nicht übernehmbarer Wert läuft durch den vollständigen Renderer samt Fehleranzeige.
+            return false;
+        }
     }
 
     /// <summary>Creates a preview-only copy with stable source IDs and no code-behind event handlers.</summary>
@@ -262,13 +283,18 @@ public sealed class RuntimeDesignRenderer
 public sealed class RuntimeDesignRenderResult
 {
     internal RuntimeDesignRenderResult(Control root, Uri documentUri, IReadOnlyDictionary<Guid, string> sourceTypes,
-        IReadOnlyList<DesignRenderDiagnostic> diagnostics)
+        IReadOnlyList<DesignRenderDiagnostic> diagnostics, MutableAstDocument sourceDocument, string xaml)
     {
         Root = root;
         DocumentUri = documentUri;
         SourceTypes = sourceTypes;
         Diagnostics = diagnostics;
+        SourceDocument = sourceDocument;
+        Xaml = xaml;
     }
+
+    internal MutableAstDocument SourceDocument { get; }
+    internal string Xaml { get; set; }
 
     public Control Root { get; }
     public Uri DocumentUri { get; }

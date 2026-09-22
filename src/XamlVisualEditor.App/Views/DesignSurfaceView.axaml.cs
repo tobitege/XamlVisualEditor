@@ -46,6 +46,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private bool _isLoaded;
     private bool _rebuildPending;
     private bool _rebuildScheduled;
+    private bool _allowLayoutUpdate;
     private Panel? _canvas;
     private Control? _rootControl;
     private Control? _zoomSurface;
@@ -860,7 +861,7 @@ public sealed partial class DesignSurfaceView : UserControl
         return Math.Clamp(zoom, MinZoom, MaxZoom);
     }
 
-    private void OnRebuildRequested()
+    private void OnRebuildRequested(bool allowLayoutUpdate)
     {
         if (!_isLoaded)
         {
@@ -871,14 +872,14 @@ public sealed partial class DesignSurfaceView : UserControl
         // Ensure we run on the UI thread (sync events may come from background)
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            Dispatcher.UIThread.Post(ScheduleRebuild);
+            Dispatcher.UIThread.Post(() => ScheduleRebuild(allowLayoutUpdate));
             return;
         }
 
-        ScheduleRebuild();
+        ScheduleRebuild(allowLayoutUpdate);
     }
 
-    private void ScheduleRebuild()
+    private void ScheduleRebuild(bool allowLayoutUpdate = false)
     {
         if (_currentVm is null)
         {
@@ -887,6 +888,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _currentVm.RebuildStatus = UiStrings.BuildingDesignSurface;
         _currentVm.IsRebuilding = true;
+        _allowLayoutUpdate = _rebuildScheduled ? _allowLayoutUpdate && allowLayoutUpdate : allowLayoutUpdate;
         if (_rebuildScheduled)
         {
             return;
@@ -1038,6 +1040,17 @@ public sealed partial class DesignSurfaceView : UserControl
         if (doc?.Root is null)
         {
             ShowRuntimeRenderFailure(canvas, docVm, new InvalidOperationException(UiStrings.NoValidXamlRoot));
+            return;
+        }
+
+        if (_allowLayoutUpdate && !_runtimeRenderFailed && ReferenceEquals(_runtimeDocumentOwner, docVm)
+            && _runtimeRenderedDocument is { } previous && _rootControl is not null && docVm.MetadataService is { } metadata
+            && new RuntimeDesignRenderer(metadata).TryUpdateLayout(previous, doc, _rootControl))
+        {
+            UpdateCanvasSizeFromRoot(docVm, doc.Root);
+            _rootControl.UpdateLayout();
+            if (_currentVm?.TakeRequestedSelection() is { } requested) _currentVm.SelectNodesFromSync(requested);
+            RefreshSelectionAdorners();
             return;
         }
 

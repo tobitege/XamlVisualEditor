@@ -523,7 +523,7 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// <summary>
     /// Fires when the design surface needs to rebuild (e.g., after AST changes).
     /// </summary>
-    public event Action? RebuildRequested;
+    public event Action<bool>? RebuildRequested;
 
     public DesignSurfaceViewModel()
     {
@@ -598,7 +598,7 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public void RequestSelection(IEnumerable<Guid> nodeIds)
     {
         _requestedSelection = nodeIds.Distinct().ToArray();
-        RequestRebuild();
+        RequestRebuild(allowLayoutUpdate: true);
     }
 
     /// <summary>Consumes the pending selection for the next completed surface rebuild.</summary>
@@ -627,11 +627,11 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     }
 
     /// <summary>
-    /// Requests a full rebuild of the design surface from the AST.
+    /// Aktualisiert die Designfläche; reine AST-Änderungen können vorhandene Layout-Controls weiterverwenden.
     /// </summary>
-    public void RequestRebuild()
+    public void RequestRebuild(bool allowLayoutUpdate = false)
     {
-        RebuildRequested?.Invoke();
+        RebuildRequested?.Invoke(allowLayoutUpdate);
     }
 
     private void NavigateSelection(bool backwards)

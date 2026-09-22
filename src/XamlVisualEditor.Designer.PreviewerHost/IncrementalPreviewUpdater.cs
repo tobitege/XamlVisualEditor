@@ -26,7 +26,7 @@ internal sealed class IncrementalPreviewUpdater
             return new(request.RequestId, false);
         Action<object, string> populate = _populate;
 
-        List<(object Control, DesignerControlUpdate Update, Action Clear, Action UndoClear)> changes = new();
+        List<(Action Apply, Action Undo)> changes = new();
         try
         {
             foreach (DesignerControlUpdate update in updates)
@@ -34,20 +34,28 @@ internal sealed class IncrementalPreviewUpdater
                 IReadOnlyList<object> targets = resolve(update.NodeId);
                 if (targets.Count == 0) return new(request.RequestId, false);
                 foreach (object target in targets)
-                    changes.Add((target, update,
-                        RuntimePropertyReset.Prepare(target, update.Xaml, update.ClearedProperties),
-                        RuntimePropertyReset.Prepare(target, update.PreviousXaml, update.PreviouslyUnsetProperties)));
+                {
+                    if (RuntimePropertyReset.TryPrepareLayout(target, update.Xaml, update.ClearedProperties, out Action apply)
+                        && RuntimePropertyReset.TryPrepareLayout(target, update.PreviousXaml, update.PreviouslyUnsetProperties, out Action undo))
+                        changes.Add((apply, undo));
+                    else
+                    {
+                        Action clear = RuntimePropertyReset.Prepare(target, update.Xaml, update.ClearedProperties);
+                        Action undoClear = RuntimePropertyReset.Prepare(target, update.PreviousXaml, update.PreviouslyUnsetProperties);
+                        changes.Add((() => { clear(); populate(target, update.Xaml); },
+                            () => { undoClear(); populate(target, update.PreviousXaml); }));
+                    }
+                }
             }
         }
-        catch (NotSupportedException) { return new(request.RequestId, false); }
+        catch (NotSupportedException error) { return new(request.RequestId, false, error.Message); }
         int applied = 0;
         try
         {
             foreach (var change in changes)
             {
                 applied++;
-                change.Clear();
-                populate(change.Control, change.Update.Xaml);
+                change.Apply();
             }
             completed(request.RenderId);
             _xaml = request.Xaml;
@@ -60,8 +68,7 @@ internal sealed class IncrementalPreviewUpdater
             {
                 try
                 {
-                    changes[index].UndoClear();
-                    populate(changes[index].Control, changes[index].Update.PreviousXaml);
+                    changes[index].Undo();
                 }
                 catch { Reset(); }
             }

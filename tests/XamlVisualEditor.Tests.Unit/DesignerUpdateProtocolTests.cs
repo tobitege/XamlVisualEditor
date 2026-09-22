@@ -7,6 +7,49 @@ namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class DesignerUpdateProtocolTests
 {
+    [Theory]
+    [InlineData("<Button xmlns='https://github.com/avaloniaui' Width='{DynamicResource Width}' />")]
+    [InlineData("<Widget xmlns='using:Example' Canvas.Left='10' />")]
+    public void ContextDependentValuesDoNotUseTheDirectLayoutPath(string fragment)
+    {
+        Assert.False(DesignerUpdateProtocol.TryGetLayoutValues(fragment, Array.Empty<string>(), out _));
+    }
+
+    [Fact]
+    public async Task GeometryUpdatesStartImmediatelyAndSkipObsoleteQueuedDocuments()
+    {
+        TaskCompletionSource firstStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseFirst = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<string> latest = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int calls = 0;
+        using XamlVisualEditor.Shell.ViewModels.DesignerDocumentViewModel document = new("PreviewUpdates.axaml", updatePreviewerAsync: async current =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                firstStarted.SetResult();
+                await releaseFirst.Task;
+            }
+            else latest.TrySetResult(current.SyncEngine.GetCurrentText());
+        });
+        await document.SyncEngine.LoadAsync("<Canvas xmlns='https://github.com/avaloniaui' Width='100' />");
+        void Resize(string width)
+        {
+            using var edit = document.SyncEngine.BeginEditTransaction("Resize");
+            document.SyncEngine.CurrentDocument!.Root!.SetPropertyValue("Width", width);
+            edit.Commit();
+        }
+        Resize("110");
+        Assert.True(firstStarted.Task.IsCompleted, "Designer edits must not wait for the code-editor typing delay.");
+        Resize("120");
+        Resize("130");
+        Resize("140");
+        releaseFirst.SetResult();
+        string updated = await latest.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(document.SyncEngine.GetCurrentText(), updated);
+        Assert.Equal("140", XElement.Parse(updated).Attribute("Width")!.Value);
+        Assert.Equal(2, calls);
+    }
+
     private static readonly Guid NodeId = Guid.NewGuid();
     private static readonly Guid InitialRevision = Guid.NewGuid();
 

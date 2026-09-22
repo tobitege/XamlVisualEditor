@@ -356,8 +356,8 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 // After any sync, commit pending changes as an undo batch
                 SyncEngine.CommitUndoBatch("Sync");
 
-                // Rebuild the design surface from the updated AST
-                DesignSurface.RequestRebuild();
+                // Layout-Änderungen können die bestehenden Control-Instanzen behalten.
+                DesignSurface.RequestRebuild(allowLayoutUpdate: true);
             });
         _disposables.Add(syncEventsSubscription);
 

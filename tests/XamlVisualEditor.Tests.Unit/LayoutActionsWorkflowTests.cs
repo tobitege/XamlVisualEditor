@@ -54,9 +54,12 @@ public sealed class LayoutActionsWorkflowTests
             Guid[] selected = document.DesignSurface.ItemMap.Values.Where(item => item.AstNode.TypeName == "Button")
                 .Select(item => item.AstNodeId).ToArray();
             Assert.Equal(3, selected.Length);
+            Control[] originalControls = selected.Select(id => document.DesignSurface.ItemMap[id].VisualElement!).ToArray();
             document.DesignSurface.SelectNodesFromSync(selected);
             new DesignerLayoutEditor(document).Apply(DesignerLayoutOperation.DistributeHorizontally);
             await FinishLayoutAsync(host);
+            for (int index = 0; index < selected.Length; index++)
+                Assert.Same(originalControls[index], document.DesignSurface.ItemMap[selected[index]].VisualElement);
             MutableAstObjectNode parent = Assert.Single(document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>());
             MutableAstObjectNode[] nodes = parent.Children.OfType<MutableAstObjectNode>().ToArray();
             if (layout == "Canvas") Assert.Equal("145", nodes[1].GetPropertyValue("Canvas.Left"));
@@ -101,9 +104,12 @@ public sealed class LayoutActionsWorkflowTests
             Guid[] selected = grid.Children.OfType<MutableAstObjectNode>().Select(node => node.Id).ToArray();
             document.DesignSurface.SelectNodesFromSync(selected);
             Assert.Equal(selected[0], ((XamlVisualEditor.Designer.Core.DesignItem)document.DesignSurface.Selection.PrimarySelection!).AstNodeId);
+            Control[] originalControls = selected.Select(id => document.DesignSurface.ItemMap[id].VisualElement!).ToArray();
 
             new DesignerLayoutEditor(document).Apply(DesignerLayoutOperation.AlignLeft);
             await FinishLayoutAsync(host);
+            for (int index = 0; index < selected.Length; index++)
+                Assert.Same(originalControls[index], document.DesignSurface.ItemMap[selected[index]].VisualElement);
 
             MutableAstObjectNode[] nodes = grid.Children.OfType<MutableAstObjectNode>().ToArray();
             Assert.Equal("20,10,0,0", nodes[0].GetPropertyValue("Margin"));

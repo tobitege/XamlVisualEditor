@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -69,7 +69,7 @@ public sealed class TmpDragBenchmark
             sw.Stop();
             double perMove = sw.Elapsed.TotalMilliseconds / moves;
             int rebuilds = 0;
-            document.DesignSurface.RebuildRequested += () => rebuilds++;
+            document.DesignSurface.RebuildRequested += _ => rebuilds++;
             int syncs = 0;
             document.SyncEngine.SyncCompleted += _ => syncs++;
             Stopwatch drop = Stopwatch.StartNew();

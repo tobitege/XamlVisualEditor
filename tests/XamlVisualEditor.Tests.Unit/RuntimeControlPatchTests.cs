@@ -13,6 +13,45 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class RuntimeControlPatchTests
 {
     [AvaloniaFact]
+    public void LayoutUpdatesAndResetsBypassXamlPopulationForEveryLiveInstance()
+    {
+        Guid nodeId = Guid.NewGuid();
+        Guid revision = Guid.NewGuid();
+        string Source(Guid id, string attributes) =>
+            $"<Canvas xmlns='https://github.com/avaloniaui' xmlns:id='{DesignerUpdateProtocol.IdentityNamespace}' id:DesignNodeIdentity.RenderId='{id}'>"
+            + $"<Button id:DesignNodeIdentity.NodeId='{nodeId}' {attributes} /></Canvas>";
+        Button first = new();
+        Button second = new();
+        first.SetValue(Control.WidthProperty, 60d, Avalonia.Data.BindingPriority.Style);
+        second.SetValue(Control.WidthProperty, 70d, Avalonia.Data.BindingPriority.Style);
+        int populations = 0;
+        IncrementalPreviewUpdater updater = new();
+        updater.Record(Source(revision, ""), revision, (_, _) => populations++);
+        Guid changed = Guid.NewGuid();
+        DesignerUpdateResult update = updater.Apply(new(Guid.NewGuid(), revision, changed,
+            Source(changed, "Width='80' Height='35' Canvas.Left='25' Margin='1,2,3,4' Grid.Column='2'")),
+            _ => new object[] { first, second }, _ => { });
+        Assert.True(update.Applied, update.Error);
+        foreach (Button button in new[] { first, second })
+        {
+            Assert.Equal(80, button.Width);
+            Assert.Equal(35, button.Height);
+            Assert.Equal(25, Canvas.GetLeft(button));
+            Assert.Equal(new Thickness(1, 2, 3, 4), button.Margin);
+            Assert.Equal(2, Grid.GetColumn(button));
+        }
+        Guid cleared = Guid.NewGuid();
+        DesignerUpdateResult reset = updater.Apply(new(Guid.NewGuid(), changed, cleared, Source(cleared, "")),
+            _ => new object[] { first, second }, _ => { });
+        Assert.True(reset.Applied, reset.Error);
+        Assert.Equal(60, first.Width);
+        Assert.Equal(70, second.Width);
+        Assert.False(first.IsSet(Canvas.LeftProperty));
+        Assert.False(second.IsSet(Grid.ColumnProperty));
+        Assert.Equal(0, populations);
+    }
+
+    [AvaloniaFact]
     public void AddingAndResettingPropertiesKeepsControlsAndRestoresStyledValues()
     {
         Guid nodeId = Guid.NewGuid();

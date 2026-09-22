@@ -23,6 +23,7 @@ public sealed class RecentFilesDialogViewModel : ReactiveObject, IDisposable
         Columns = new[]
         {
             CreateColumn(UiStrings.Name, nameof(RecentFileEntry.DisplayName), entry => entry.DisplayName, 1),
+            CreateColumn(UiStrings.Type, nameof(RecentFileEntry.KindDisplayName), entry => entry.KindDisplayName, 1),
             CreateColumn(UiStrings.Path, nameof(RecentFileEntry.FilePath), entry => entry.FilePath, 3)
         };
         RemoveCommand = ReactiveCommand.Create(() =>

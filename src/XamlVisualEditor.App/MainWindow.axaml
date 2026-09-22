@@ -22,6 +22,7 @@
     <i:Interaction.Behaviors>
         <v:RecentFilesDialogBehavior />
         <v:OptionsDialogBehavior />
+        <v:WorkspaceOpenDialogBehavior />
     </i:Interaction.Behaviors>
 
     <Design.DataContext>
@@ -52,13 +53,14 @@
                 </MenuItem.ItemTemplate>
                 <MenuItem Header="{x:Static loc:UiStrings.MenuNew}" ItemsSource="{CompiledBinding FileNewMenuEntries}"
                           Classes="extension-menu" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuOpenWorkspace}" Command="{CompiledBinding OpenWorkspaceCommand}" />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuOpen}" Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" HotKey="Ctrl+O" />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuOpenRecent}">
-                    <MenuItem.ItemTemplate>
-                        <DataTemplate x:DataType="vm:RecentFileEntry">
+                    <MenuItem.Resources>
+                        <DataTemplate x:Key="RecentEntryTemplate" x:DataType="vm:RecentFileEntry">
                             <MenuItem ToolTip.Tip="{CompiledBinding FilePath}"
-                                      Command="{CompiledBinding DataContext.OpenPathCommand, ElementName=MainWin}"
-                                      CommandParameter="{CompiledBinding FilePath}"
+                                      Command="{CompiledBinding DataContext.OpenRecentCommand, ElementName=MainWin}"
+                                      CommandParameter="{Binding}"
                                       Margin="0"
                                       Padding="0">
                                 <MenuItem.Header>
@@ -68,16 +70,34 @@
                                 </MenuItem.Header>
                             </MenuItem>
                         </DataTemplate>
-                    </MenuItem.ItemTemplate>
+                    </MenuItem.Resources>
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuRecentProjects}" IsVisible="{CompiledBinding HasRecentWorkspaces}"
+                              ItemTemplate="{StaticResource RecentEntryTemplate}">
+                        <i:Interaction.Behaviors>
+                            <v:MenuItemsBehavior Items="{CompiledBinding RecentWorkspaces}" />
+                        </i:Interaction.Behaviors>
+                    </MenuItem>
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuRecentFiles}" IsVisible="{CompiledBinding HasRecentDocuments}"
+                              ItemTemplate="{StaticResource RecentEntryTemplate}">
+                        <i:Interaction.Behaviors>
+                            <v:MenuItemsBehavior Items="{CompiledBinding RecentDocuments}" />
+                        </i:Interaction.Behaviors>
+                    </MenuItem>
+                    <MenuItem Header="{x:Static loc:UiStrings.MenuRecentFolders}" IsVisible="{CompiledBinding HasRecentFolders}"
+                              ItemTemplate="{StaticResource RecentEntryTemplate}">
+                        <i:Interaction.Behaviors>
+                            <v:MenuItemsBehavior Items="{CompiledBinding RecentFolders}" />
+                        </i:Interaction.Behaviors>
+                    </MenuItem>
                     <Separator />
                     <MenuItem Header="{x:Static loc:UiStrings.MenuClear}" Command="{CompiledBinding ClearRecentFilesCommand}" />
                     <MenuItem Header="{x:Static loc:UiStrings.MenuMore}" Command="{CompiledBinding ManageRecentFilesCommand}" />
-                    <i:Interaction.Behaviors>
-                        <v:MenuItemsBehavior Items="{CompiledBinding RecentMenuFiles}" />
-                    </i:Interaction.Behaviors>
                 </MenuItem>
                 <MenuItem Header="{x:Static loc:UiStrings.MenuSave}" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" HotKey="Ctrl+S" />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuSaveAll}" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" HotKey="Ctrl+Shift+S" />
+                <Separator />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuCloseFile}" Command="{CompiledBinding CloseActiveDocumentCommand}" InputGesture="Ctrl+W" HotKey="Ctrl+W" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuCloseWorkspace}" Command="{CompiledBinding CloseWorkspaceCommand}" />
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuSaveMode}">
                     <MenuItem Header="{x:Static loc:UiStrings.MenuAutoSave}"
@@ -96,7 +116,7 @@
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuExit}" Command="{CompiledBinding ExitCommand}" InputGesture="Alt+F4" />
                 <i:Interaction.Behaviors>
-                    <v:MenuItemsBehavior Items="{CompiledBinding FileMenuItems}" InsertIndex="2" />
+                    <v:MenuItemsBehavior Items="{CompiledBinding FileMenuItems}" InsertIndex="3" />
                 </i:Interaction.Behaviors>
             </MenuItem>
             <MenuItem Header="{x:Static loc:UiStrings.MenuEdit}" ItemsSource="{CompiledBinding EditMenuItems}"

@@ -34,7 +34,7 @@ public sealed class ToolboxCatalogWorkflowTests
         string secondLibraryName = Assert.IsType<string>(typeof(ToolboxPanelView).Assembly.GetName().Name);
         metadata.LoadAssembly(libraryPath);
         metadata.LoadAssembly(secondLibraryPath);
-        MetadataControlCatalog catalog = new(metadata);
+        MetadataControlCatalog catalog = new(TypeMetadataService.ReadControlTypes);
         catalog.SetWorkspaceAssemblies(new[] { libraryPath, secondLibraryPath });
         SynchronizationContext context = Assert.IsAssignableFrom<SynchronizationContext>(SynchronizationContext.Current);
         using ToolboxPanelViewModel model = new(new CommandRegistry(), new InMemorySettingsStore(), catalog,

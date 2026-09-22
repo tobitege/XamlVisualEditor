@@ -17,8 +17,73 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class WorkspaceResponsivenessTests
 {
+    [AvaloniaTheory]
+    [InlineData(".csproj")]
+    [InlineData(".slnx")]
+    [InlineData(".sln")]
+    public async Task FileAndWorkspaceCommandsOpenSeparatelyAndCloseWorkspaceState(string extension)
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-file-menu-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string workspacePath = Path.Combine(root, "Test" + extension);
+        string codePath = Path.Combine(root, "Code.cs");
+        string recentStore = Path.Combine(root, "recent.json");
+        await File.WriteAllTextAsync(workspacePath, "<Project />");
+        await File.WriteAllTextAsync(codePath, "class Example { }");
+        XamlVisualEditor.App.Services.WorkspaceInfoService workspaceInfo = new();
+        RecordingCatalogUpdater catalog = new();
+        using MainWindowViewModel main = new(
+            workspaceService: new StubWorkspaceService(), workspaceInfoUpdater: workspaceInfo,
+            metadataService: new StubMetadataService(), dotNetCli: new ControllableDotNetCli(), controlCatalogUpdater: catalog,
+            recentFilesPath: recentStore);
+        using IDisposable fileHandler = main.OpenFileInteraction.RegisterHandler(context => context.SetOutput(workspacePath));
+        using IDisposable workspaceHandler = main.OpenWorkspaceInteraction.RegisterHandler(context => context.SetOutput(new WorkspaceOpenRequest(workspacePath, false)));
+
+        Assert.False(await main.CloseActiveDocumentCommand.CanExecute.FirstAsync());
+        Assert.False(await main.CloseWorkspaceCommand.CanExecute.FirstAsync());
+        await main.OpenDocumentCommand.Execute().FirstAsync();
+        Assert.Equal(workspacePath, Assert.Single(main.Documents).FilePath);
+        Assert.False(main.HasWorkspace);
+
+        await main.OpenWorkspaceCommand.Execute().FirstAsync();
+        Assert.True(main.HasWorkspace);
+        Assert.Equal(workspacePath, workspaceInfo.WorkspacePath);
+        Assert.Equal(workspacePath, Assert.Single(main.RecentWorkspaces).FilePath);
+        Assert.Equal(workspacePath, Assert.Single(main.RecentDocuments).FilePath);
+        Assert.False(catalog.AutoLoadProjectControls);
+        Assert.Single(main.WorkspaceProjects);
+        Assert.NotNull(main.ActiveProject);
+        await main.OpenFileAsync(codePath);
+        Assert.Equal(2, main.Documents.Count);
+
+        await main.CloseActiveDocumentCommand.Execute().FirstAsync();
+        Assert.Equal(workspacePath, Assert.Single(main.Documents).FilePath);
+        Assert.True(main.HasWorkspace);
+        Assert.True(await main.CloseWorkspaceCommand.CanExecute.FirstAsync());
+        await main.CloseWorkspaceCommand.Execute().FirstAsync();
+
+        Assert.Empty(main.Documents);
+        Assert.Null(main.ActiveDocument);
+        Assert.False(main.HasWorkspace);
+        Assert.Null(workspaceInfo.WorkspacePath);
+        Assert.Empty(main.WorkspaceProjects);
+        Assert.Null(main.ActiveProject);
+        Assert.Null(main.ActiveProjectPath);
+        Assert.False(main.SolutionExplorer.IsVisible);
+        Assert.False(main.IsWorkspaceLoading);
+        Assert.False(await main.CloseWorkspaceCommand.CanExecute.FirstAsync());
+        Assert.False(await main.CloseActiveDocumentCommand.CanExecute.FirstAsync());
+
+        await main.OpenRecentCommand.Execute(Assert.Single(main.RecentWorkspaces)).FirstAsync();
+        Assert.True(main.HasWorkspace);
+        Assert.Equal(workspacePath, workspaceInfo.WorkspacePath);
+        Assert.False(catalog.AutoLoadProjectControls);
+        using MainWindowViewModel restored = new(recentFilesPath: recentStore);
+        Assert.False(Assert.Single(restored.RecentWorkspaces).LoadProjectControls);
+    }
+
     [AvaloniaFact]
-    public async Task WorkspaceMetadataRegistrationAndCatalogConstructionRunOutsideTheUiThread()
+    public async Task WorkspaceRegistersMetadataOffTheUiThreadWithoutEnumeratingToolboxControls()
     {
         string root = Path.Combine(Path.GetTempPath(), $"xve-metadata-thread-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -49,9 +114,8 @@ public sealed class WorkspaceResponsivenessTests
         await main.OpenFileAsync(projectPath);
 
         Assert.NotNull(metadata.LoadThread);
-        Assert.NotNull(metadata.CatalogThread);
+        Assert.Null(metadata.CatalogThread);
         Assert.NotEqual(uiThread, metadata.LoadThread);
-        Assert.NotEqual(uiThread, metadata.CatalogThread);
         Assert.Contains(outputPath, metadata.LoadedAssemblies);
         Assert.Empty(cli.Calls);
         Assert.True(main.HasWorkspace);
@@ -230,6 +294,13 @@ public sealed class WorkspaceResponsivenessTests
     }
 
     private sealed record DotNetCliCall(IReadOnlyList<string> Arguments, string? WorkingDirectory);
+
+    private sealed class RecordingCatalogUpdater : IControlCatalogUpdater
+    {
+        public bool AutoLoadProjectControls { get; private set; }
+        public void SetWorkspaceAssemblies(IEnumerable<string> assemblyPaths, bool autoLoadProjectControls = true) =>
+            AutoLoadProjectControls = autoLoadProjectControls;
+    }
 
     private sealed class StubWorkspaceService : IWorkspaceService
     {

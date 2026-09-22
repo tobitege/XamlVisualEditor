@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Text.Json;
@@ -192,6 +193,14 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private string _searchText = string.Empty;
     private string _statusText = string.Empty;
     private bool _isLoading;
+    private bool _isCancelling;
+    private bool _hasLoadError;
+    private bool _isProgressIndeterminate = true;
+    private double _loadProgress;
+    private string? _loadErrorDetails;
+    private bool _lastIncludeProjectControls = true;
+    private bool _isLoadStatusVisible;
+    private readonly SerialDisposable _statusDismissal = new();
     private readonly Dictionary<string, ToolboxAssemblyGroup> _assemblyGroups = new(StringComparer.Ordinal);
     private bool _updatingGroups;
     private bool _updatingFilters;
@@ -222,8 +231,17 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         InsertSelectedCommand = ReactiveCommand.CreateFromTask(InsertSelectedAsync, canInsert);
         ReloadCommand = ReactiveCommand.CreateFromTask(() => ReloadAsync(),
             this.WhenAnyValue(x => x.IsLoading).Select(loading => !loading));
-        CancelLoadCommand = ReactiveCommand.Create(() => { _loadCancellation?.Cancel(); },
-            this.WhenAnyValue(x => x.IsLoading));
+        RetryLoadCommand = ReactiveCommand.CreateFromTask(
+            () => ReloadAsync(includeProjectControls: _lastIncludeProjectControls),
+            this.WhenAnyValue(x => x.HasLoadError, x => x.IsLoading, (error, loading) => error && !loading));
+        CancelLoadCommand = ReactiveCommand.Create(CancelLoad,
+            this.WhenAnyValue(x => x.IsLoading, x => x.IsCancelling, x => x.HasLoadError,
+                (loading, cancelling, error) => (loading && !cancelling) || error));
+        DismissLoadStatusCommand = ReactiveCommand.Create(() =>
+        {
+            _statusDismissal.Disposable = null;
+            IsLoadStatusVisible = false;
+        }, this.WhenAnyValue(x => x.HasLoadTask).Select(active => !active));
         ClearFiltersCommand = ReactiveCommand.Create(() =>
         {
             SearchText = string.Empty;
@@ -303,8 +321,55 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         {
             this.RaiseAndSetIfChanged(ref _isLoading, value);
             this.RaisePropertyChanged(nameof(NoMatches));
+            this.RaisePropertyChanged(nameof(HasLoadTask));
             NotifyPreferenceAvailability();
         }
+    }
+
+    /// <summary>Gibt an, ob die laufende Suche ihren Abbruch noch bestätigt.</summary>
+    public bool IsCancelling
+    {
+        get => _isCancelling;
+        private set => this.RaiseAndSetIfChanged(ref _isCancelling, value);
+    }
+
+    /// <summary>Gibt an, ob Wiederholen oder Abbrechen angeboten werden muss.</summary>
+    public bool HasLoadError
+    {
+        get => _hasLoadError;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _hasLoadError, value);
+            this.RaisePropertyChanged(nameof(HasLoadTask));
+        }
+    }
+
+    public bool HasLoadTask => IsLoading || HasLoadError;
+
+    /// <summary>Zeigt die laufende Aufgabe oder ihr kurzzeitig sichtbares Ergebnis.</summary>
+    public bool IsLoadStatusVisible
+    {
+        get => _isLoadStatusVisible;
+        private set => this.RaiseAndSetIfChanged(ref _isLoadStatusVisible, value);
+    }
+
+    /// <summary>Enthält die vollständige Fehlermeldung für den Tooltip.</summary>
+    public string? LoadErrorDetails
+    {
+        get => _loadErrorDetails;
+        private set => this.RaiseAndSetIfChanged(ref _loadErrorDetails, value);
+    }
+
+    public bool IsProgressIndeterminate
+    {
+        get => _isProgressIndeterminate;
+        private set => this.RaiseAndSetIfChanged(ref _isProgressIndeterminate, value);
+    }
+
+    public double LoadProgress
+    {
+        get => _loadProgress;
+        private set => this.RaiseAndSetIfChanged(ref _loadProgress, value);
     }
 
     /// <summary>Gets discovery progress and actionable loading errors.</summary>
@@ -353,6 +418,12 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     /// <summary>Reloads controls from the active project.</summary>
     public ReactiveCommand<Unit, Unit> ReloadCommand { get; }
 
+    /// <summary>Wiederholt die zuletzt fehlgeschlagene Suche.</summary>
+    public ReactiveCommand<Unit, Unit> RetryLoadCommand { get; }
+
+    /// <summary>Blendet das Ergebnis einer abgeschlossenen Aufgabe aus.</summary>
+    public ReactiveCommand<Unit, Unit> DismissLoadStatusCommand { get; }
+
     /// <summary>Cancels the active catalog request.</summary>
     public ReactiveCommand<Unit, Unit> CancelLoadCommand { get; }
 
@@ -395,7 +466,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     }
 
     /// <summary>Refreshes the catalog while ignoring results superseded by another workspace.</summary>
-    public async Task ReloadAsync(CancellationToken cancellationToken = default)
+    public async Task ReloadAsync(CancellationToken cancellationToken = default, bool includeProjectControls = true)
     {
         if (_disposed)
         {
@@ -410,6 +481,14 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 if (!IsCurrent(version)) return;
                 _loadCancellation?.Cancel();
                 _loadCancellation = request;
+                _statusDismissal.Disposable = null;
+                IsLoadStatusVisible = true;
+                _lastIncludeProjectControls = includeProjectControls;
+                HasLoadError = false;
+                LoadErrorDetails = null;
+                IsCancelling = false;
+                LoadProgress = 0;
+                IsProgressIndeterminate = true;
                 IsLoading = true;
                 StatusText = UiStrings.LoadingProjectControls;
             }).ConfigureAwait(false);
@@ -417,11 +496,12 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             request.Token.ThrowIfCancellationRequested();
             ControlCatalogSnapshot snapshot = _catalog is null
                 ? new ControlCatalogSnapshot(Array.Empty<ControlCatalogItem>(), Array.Empty<string>())
-                : await _catalog.GetControlsAsync(request.Token).ConfigureAwait(false);
+                : await _catalog.GetControlsAsync(request.Token, new CatalogProgress(this, version, request.Token),
+                    includeProjectControls).ConfigureAwait(false);
             request.Token.ThrowIfCancellationRequested();
             await UpdateUiAsync(() =>
             {
-                if (!IsCurrent(version)) return;
+                if (!IsCurrent(version) || request.IsCancellationRequested) return;
                 IEnumerable<ToolboxPanelItem> discovered = snapshot.Controls.Select(control =>
                     new ToolboxPanelItem(control.DisplayName, DefaultInsertCommandId,
                         new[] { control.TypeName, control.XmlNamespace }, control.IsStandardControl,
@@ -429,6 +509,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 ReplaceItems(discovered.Concat(TryLoadCatalogFromSettings()));
                 StatusText = _catalog is null ? UiStrings.ControlCatalogUnavailable
                     : string.Format(UiStrings.ControlsAvailable, (object?)(Items.Count));
+                if (!includeProjectControls && _catalog?.HasProjectAssemblies == true)
+                    StatusText = UiStrings.ProjectControlsDeferred;
                 if (snapshot.Diagnostics.Count > 0)
                 {
                     StatusText += Environment.NewLine + string.Join(Environment.NewLine, snapshot.Diagnostics);
@@ -444,8 +526,10 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             await UpdateUiAsync(() =>
             {
                 if (!IsCurrent(version)) return;
-                ReplaceItems(Array.Empty<ToolboxPanelItem>());
-                StatusText = UiStrings.ControlLoadingFailedPrefix + error.Message;
+                LoadErrorDetails = error.ToString();
+                StatusText = error is IOException or UnauthorizedAccessException
+                    ? UiStrings.ToolboxFileReadFailed : UiStrings.ToolboxTaskFailed;
+                HasLoadError = true;
             }).ConfigureAwait(false);
         }
         finally
@@ -453,7 +537,13 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             await UpdateUiAsync(() =>
             {
                 if (ReferenceEquals(_loadCancellation, request)) _loadCancellation = null;
-                if (IsCurrent(version)) IsLoading = false;
+                if (IsCurrent(version))
+                {
+                    IsLoading = false;
+                    IsCancelling = false;
+                    if (request.IsCancellationRequested && !HasLoadError) StatusText = UiStrings.ControlDiscoveryCanceled;
+                    if (!HasLoadError) ScheduleStatusDismissal();
+                }
             }).ConfigureAwait(false);
         }
     }
@@ -462,7 +552,46 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     private Task UpdateUiAsync(Action action) => Observable.Start(action, _uiScheduler).ToTask();
 
-    private void OnCatalogChanged(object? sender, EventArgs args) => _ = ReloadAsync();
+    private void OnCatalogChanged(object? sender, EventArgs args) =>
+        _ = ReloadAsync(includeProjectControls: _catalog?.AutoLoadProjectControls ?? false);
+
+    private void CancelLoad()
+    {
+        if (IsLoading)
+        {
+            IsCancelling = true;
+            StatusText = UiStrings.ControlDiscoveryCancelling;
+            _loadCancellation?.Cancel();
+        }
+        else
+        {
+            HasLoadError = false;
+            LoadErrorDetails = null;
+            StatusText = UiStrings.ControlDiscoveryCanceled;
+            ScheduleStatusDismissal();
+        }
+    }
+
+    private void ScheduleStatusDismissal()
+    {
+        _statusDismissal.Disposable = _uiScheduler.Schedule(TimeSpan.FromSeconds(10), () =>
+        {
+            if (!_disposed && !HasLoadTask) IsLoadStatusVisible = false;
+        });
+    }
+
+    private sealed class CatalogProgress(ToolboxPanelViewModel owner, int version, CancellationToken token)
+        : IProgress<ControlCatalogProgress>
+    {
+        public void Report(ControlCatalogProgress value) => owner._uiScheduler.Schedule(() =>
+        {
+            if (!owner.IsCurrent(version) || !owner.IsLoading || token.IsCancellationRequested) return;
+            owner.IsProgressIndeterminate = value.TotalAssemblies == 0 || string.IsNullOrEmpty(value.AssemblyName);
+            owner.LoadProgress = value.TotalAssemblies == 0 ? 0 : 100.0 * value.CompletedAssemblies / value.TotalAssemblies;
+            owner.StatusText = string.IsNullOrEmpty(value.AssemblyName) ? UiStrings.ClassifyingProjectControls
+                : string.Format(UiStrings.ReadingControlAssembly, value.CompletedAssemblies + 1, value.TotalAssemblies, value.AssemblyName);
+        });
+    }
 
     /// <inheritdoc />
     public void Dispose()
@@ -473,8 +602,11 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         Interlocked.Increment(ref _reloadVersion);
         if (_catalog is not null) _catalog.Changed -= OnCatalogChanged;
         _loadCancellation?.Cancel();
+        _statusDismissal.Dispose();
         InsertSelectedCommand.Dispose();
         ReloadCommand.Dispose();
+        RetryLoadCommand.Dispose();
+        DismissLoadStatusCommand.Dispose();
         CancelLoadCommand.Dispose();
         ClearFiltersCommand.Dispose();
         ShowAllAssembliesCommand.Dispose();

@@ -179,7 +179,7 @@ public sealed class App : Application
         services.AddSingleton<IXamlParsingService, XamlParsingService>();
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
-        services.AddSingleton<MetadataControlCatalog>();
+        services.AddSingleton(_ => new MetadataControlCatalog(TypeMetadataService.ReadControlTypes));
         services.AddSingleton<IControlCatalog>(provider => provider.GetRequiredService<MetadataControlCatalog>());
         services.AddSingleton<IControlCatalogUpdater>(provider => provider.GetRequiredService<MetadataControlCatalog>());
         services.AddSingleton<IClipboardService, DesktopClipboardService>();

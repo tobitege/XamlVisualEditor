@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Avalonia.Controls;
@@ -25,12 +25,16 @@ internal static class AssemblyTypeCatalog
     internal static IReadOnlyList<TypeMetadata> Read(
         IEnumerable<string> assemblyPaths,
         Action<string> reportFailure,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<int, int, string>? reportProgress = null)
     {
         Dictionary<TypeIdentity, CatalogType> definitions = new();
-        foreach (string path in assemblyPaths)
+        string[] paths = assemblyPaths.ToArray();
+        for (int index = 0; index < paths.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            string path = paths[index];
+            reportProgress?.Invoke(index, paths.Length, Path.GetFileName(path));
             try
             {
                 using FileStream stream = File.OpenRead(path);
@@ -39,11 +43,17 @@ internal static class AssemblyTypeCatalog
                     definitions[type.Identity] = type;
                 }
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or BadImageFormatException)
+            catch (BadImageFormatException)
+            {
+                // Native oder für diese Metadaten-Suche ungeeignete Assemblies werden übersprungen.
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
                 reportFailure($"Cannot read control metadata from '{path}': {error.Message}");
             }
         }
+
+        reportProgress?.Invoke(paths.Length, paths.Length, string.Empty);
 
         TypeIdentity controlType = IdentityOf(typeof(Control));
         TypeIdentity styleType = IdentityOf(typeof(Avalonia.Styling.Styles));

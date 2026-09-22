@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using XamlVisualEditor.App;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Shell.ViewModels;
@@ -18,6 +19,111 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class RecentFilesMenuTests
 {
+    [AvaloniaFact]
+    public async Task RecentMenusSeparateOpeningKindsAndPreserveThemWhenReopened()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-recent-groups-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string project = Path.Combine(root, "Sample.csproj");
+        string code = Path.Combine(root, "Code.cs");
+        string store = Path.Combine(root, "recent.json");
+        await File.WriteAllTextAsync(project, "<Project />");
+        await File.WriteAllTextAsync(code, "class Sample { }");
+        await File.WriteAllTextAsync(store, JsonSerializer.Serialize(new[] { project, code, root }));
+        using MainWindowViewModel vm = new(recentFilesPath: store);
+        MainWindow window = new(vm);
+        try
+        {
+            window.Show();
+            await Idle();
+            Assert.Equal(project, Assert.Single(vm.RecentWorkspaces).FilePath);
+            Assert.Equal(code, Assert.Single(vm.RecentDocuments).FilePath);
+            Assert.Equal(root, Assert.Single(vm.RecentFolders).FilePath);
+            Menu menu = Assert.Single(window.GetVisualDescendants().OfType<Menu>());
+            MenuItem file = Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, UiStrings.MenuFile));
+            MenuItem recent = Assert.Single(file.Items.OfType<MenuItem>(), item => Equals(item.Header, UiStrings.MenuOpenRecent));
+            MenuItem projects = Assert.Single(recent.Items.OfType<MenuItem>(), item => Equals(item.Header, UiStrings.MenuRecentProjects));
+            MenuItem files = Assert.Single(recent.Items.OfType<MenuItem>(), item => Equals(item.Header, UiStrings.MenuRecentFiles));
+            MenuItem folders = Assert.Single(recent.Items.OfType<MenuItem>(), item => Equals(item.Header, UiStrings.MenuRecentFolders));
+            Assert.True(projects.IsVisible && files.IsVisible && folders.IsVisible);
+            MenuItem folderEntry = Assert.Single(folders.Items.OfType<MenuItem>());
+            Assert.Same(vm.OpenRecentCommand, folderEntry.Command);
+            await vm.OpenRecentCommand.Execute(Assert.IsType<RecentFileEntry>(folderEntry.CommandParameter)).FirstAsync();
+            Assert.Equal(RecentEntryKind.Folder, vm.RecentFiles[0].Kind);
+            Assert.Empty(vm.Documents);
+
+            using IDisposable filePicker = vm.OpenFileInteraction.RegisterHandler(context => context.SetOutput(project));
+            await vm.OpenDocumentCommand.Execute().FirstAsync();
+            await Idle();
+            Assert.False(vm.HasWorkspace);
+            Assert.Equal(project, Assert.Single(vm.Documents).FilePath);
+            Assert.Single(vm.RecentWorkspaces);
+            Assert.Equal(2, vm.RecentDocuments.Count());
+            MenuItem projectAsFile = Assert.Single(files.Items.OfType<MenuItem>(),
+                item => item.DataContext is RecentFileEntry entry && entry.FilePath == project);
+            Assert.Same(vm.OpenRecentCommand, projectAsFile.Command);
+            Assert.Equal(RecentEntryKind.File, Assert.IsType<RecentFileEntry>(projectAsFile.CommandParameter).Kind);
+            using MainWindowViewModel restored = new(recentFilesPath: store);
+            Assert.Single(restored.RecentWorkspaces);
+            Assert.Equal(2, restored.RecentDocuments.Count());
+            Assert.Single(restored.RecentFolders);
+            await restored.OpenRecentCommand.Execute(restored.RecentDocuments.First()).FirstAsync();
+            Assert.False(restored.HasWorkspace);
+            Assert.Equal(project, Assert.Single(restored.Documents).FilePath);
+
+            await vm.ClearRecentFilesCommand.Execute().FirstAsync();
+            await Idle();
+            Assert.False(projects.IsVisible || files.IsVisible || folders.IsVisible);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task GermanFileMenuExposesSeparateCommandsAndDebugAccessKey()
+    {
+        System.Globalization.CultureInfo? previousCulture = UiStrings.Culture;
+        UiStrings.Culture = System.Globalization.CultureInfo.GetCultureInfo("de");
+        Avalonia.Themes.Fluent.FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        using MainWindowViewModel vm = new();
+        MainWindow window = new(vm);
+        try
+        {
+            window.Show();
+            await Idle();
+            Menu menu = Assert.Single(window.GetVisualDescendants().OfType<Menu>());
+            MenuItem file = Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, "_Datei"));
+            MenuItem[] items = file.Items.OfType<MenuItem>().ToArray();
+            Assert.Same(vm.OpenDocumentCommand, Assert.Single(items, item => Equals(item.Header, "Datei _öffnen...")).Command);
+            Assert.Same(vm.OpenWorkspaceCommand, Assert.Single(items, item => Equals(item.Header, "_Projekt/Solution öffnen...")).Command);
+            MenuItem closeFile = Assert.Single(items, item => Equals(item.Header, "Datei s_chließen"));
+            MenuItem closeWorkspace = Assert.Single(items, item => Equals(item.Header, "Projekt/Solution schließen"));
+            Assert.Same(vm.CloseActiveDocumentCommand, closeFile.Command);
+            Assert.Same(vm.CloseWorkspaceCommand, closeWorkspace.Command);
+            file.IsSubMenuOpen = true;
+            await Idle();
+            Assert.False(closeFile.IsEffectivelyEnabled);
+            Assert.False(closeWorkspace.IsEffectivelyEnabled);
+            Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, "Debu_ggen"));
+
+            string codePath = Path.Combine(Path.GetTempPath(), $"xve-close-menu-{Guid.NewGuid():N}.cs");
+            await File.WriteAllTextAsync(codePath, "class Example { }");
+            await vm.OpenFileAsync(codePath);
+            await Idle();
+            Assert.True(closeFile.IsEffectivelyEnabled);
+            closeFile.Command!.Execute(closeFile.CommandParameter);
+            await Idle();
+            Assert.Empty(vm.Documents);
+            Assert.False(closeFile.IsEffectivelyEnabled);
+        }
+        finally
+        {
+            window.Close();
+            Application.Current.Styles.Remove(theme);
+            UiStrings.Culture = previousCulture;
+        }
+    }
+
     [AvaloniaFact]
     public async Task FullHistoryCanBeSearchedRemovedWithDeleteAndButtonAndClearedPersistently()
     {
@@ -43,9 +149,10 @@ public sealed class RecentFilesMenuTests
             Menu menu = Assert.Single(window.GetVisualDescendants().OfType<Menu>());
             MenuItem file = Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, "_File"));
             MenuItem recent = Assert.Single(file.Items.OfType<MenuItem>(), item => Equals(item.Header, "Open _Recent"));
-            MenuItem[] recentEntries = recent.Items.OfType<MenuItem>().Where(item => item.DataContext is RecentFileEntry).ToArray();
+            MenuItem recentFiles = Assert.Single(recent.Items.OfType<MenuItem>(), item => Equals(item.Header, UiStrings.MenuRecentFiles));
+            MenuItem[] recentEntries = recentFiles.Items.OfType<MenuItem>().Where(item => item.DataContext is RecentFileEntry).ToArray();
             Assert.Equal(10, recentEntries.Length);
-            Assert.All(recentEntries, item => Assert.Same(vm.OpenPathCommand, item.Command));
+            Assert.All(recentEntries, item => Assert.Same(vm.OpenRecentCommand, item.Command));
             MenuItem more = Assert.Single(recent.Items.OfType<MenuItem>(), item => Equals(item.Header, "_More..."));
             MenuItem clear = Assert.Single(recent.Items.OfType<MenuItem>(), item => Equals(item.Header, "_Clear"));
             Assert.Same(vm.ManageRecentFilesCommand, more.Command);
@@ -94,7 +201,7 @@ public sealed class RecentFilesMenuTests
             Click(dialog, remove);
             await Idle();
             Assert.Equal(8, vm.RecentFiles.Count);
-            Assert.Equal(paths.Skip(3).Take(8), JsonSerializer.Deserialize<string[]>(File.ReadAllText(store)));
+            Assert.Equal(paths.Skip(3).Take(8), JsonSerializer.Deserialize<RecentFileEntry[]>(File.ReadAllText(store))!.Select(entry => entry.FilePath));
             Assert.True(File.Exists(paths[0]));
             await dialogVm.CloseCommand.Execute().FirstAsync();
             await Idle();
@@ -102,7 +209,8 @@ public sealed class RecentFilesMenuTests
             await vm.ClearRecentFilesCommand.Execute().FirstAsync();
             await Idle();
             Assert.Empty(vm.RecentFiles);
-            Assert.DoesNotContain(recent.Items.OfType<MenuItem>(), item => item.DataContext is RecentFileEntry);
+            Assert.Empty(recentFiles.Items);
+            Assert.False(recentFiles.IsVisible);
             file.IsSubMenuOpen = true;
             recent.IsSubMenuOpen = true;
             await Idle();

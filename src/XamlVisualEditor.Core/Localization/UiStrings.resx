@@ -31,8 +31,31 @@
   <data name="ExecutableFiles" xml:space="preserve"><value>Executable files</value></data>
   <data name="MenuFile" xml:space="preserve"><value>_File</value></data>
   <data name="MenuNew" xml:space="preserve"><value>_New</value></data>
-  <data name="MenuOpen" xml:space="preserve"><value>_Open...</value></data>
+  <data name="MenuOpen" xml:space="preserve"><value>_Open File...</value></data>
+  <data name="MenuOpenWorkspace" xml:space="preserve"><value>Open _Workspace...</value></data>
+  <data name="MenuCloseFile" xml:space="preserve"><value>_Close File</value></data>
+  <data name="MenuCloseWorkspace" xml:space="preserve"><value>Close Workspace</value></data>
+  <data name="OpenFileTitle" xml:space="preserve"><value>Open File</value></data>
+  <data name="AddProjectControlsToToolbox" xml:space="preserve"><value>Add project controls to the toolbox</value></data>
+  <data name="SelectProjectOrSolution" xml:space="preserve"><value>Select a project/solution file (.csproj, .slnx, .sln).</value></data>
+  <data name="WorkspacePickerFailed" xml:space="preserve"><value>The file picker could not be opened: {0}</value></data>
+  <data name="LoadProjectControls" xml:space="preserve"><value>Load project controls</value></data>
+  <data name="RetryControlDiscovery" xml:space="preserve"><value>Retry</value></data>
+  <data name="ControlDiscoveryCancelling" xml:space="preserve"><value>Cancelling...</value></data>
+  <data name="ClassifyingProjectControls" xml:space="preserve"><value>Finding available controls...</value></data>
+  <data name="ReadingControlAssembly" xml:space="preserve"><value>Assembly {0} of {1}: {2}</value></data>
+  <data name="ToolboxTaskFailed" xml:space="preserve"><value>Project control discovery failed.</value></data>
+  <data name="ToolboxFileReadFailed" xml:space="preserve"><value>An assembly could not be read.</value></data>
+  <data name="ToolboxErrorDetails" xml:space="preserve"><value>Details...</value></data>
+  <data name="ProjectControlsDeferred" xml:space="preserve"><value>Project controls can be loaded when needed.</value></data>
+  <data name="WorkspaceFiles" xml:space="preserve"><value>Projects and Solutions</value></data>
+  <data name="CSharpFiles" xml:space="preserve"><value>C# Files</value></data>
+  <data name="WorkspaceClosed" xml:space="preserve"><value>Workspace closed</value></data>
+  <data name="WorkspaceCloseFailed" xml:space="preserve"><value>Workspace close failed: {0}</value></data>
   <data name="MenuOpenRecent" xml:space="preserve"><value>Open _Recent</value></data>
+  <data name="MenuRecentProjects" xml:space="preserve"><value>Projects/Solutions</value></data>
+  <data name="MenuRecentFiles" xml:space="preserve"><value>Files</value></data>
+  <data name="MenuRecentFolders" xml:space="preserve"><value>Folders</value></data>
   <data name="MenuClear" xml:space="preserve"><value>_Clear</value></data>
   <data name="MenuMore" xml:space="preserve"><value>_More...</value></data>
   <data name="MenuSave" xml:space="preserve"><value>_Save</value></data>
@@ -88,7 +111,7 @@
   <data name="CommandPaletteTooltip" xml:space="preserve"><value>Command Palette (Ctrl+Shift+P)</value></data>
   <data name="LoadingWorkspace" xml:space="preserve"><value>Loading workspace...</value></data>
   <data name="Ready" xml:space="preserve"><value>Ready</value></data>
-  <data name="RecentFilesTitle" xml:space="preserve"><value>Recent Files</value></data>
+  <data name="RecentFilesTitle" xml:space="preserve"><value>Recently Opened</value></data>
   <data name="SearchNameOrPath" xml:space="preserve"><value>Search name or path...</value></data>
   <data name="RemoveFromList" xml:space="preserve"><value>Remove from list</value></data>
   <data name="Close" xml:space="preserve"><value>Close</value></data>

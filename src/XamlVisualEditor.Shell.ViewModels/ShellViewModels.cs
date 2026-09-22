@@ -2115,15 +2115,33 @@ public sealed partial record OutputMessage(
 /// </summary>
 public sealed partial class RecentFileEntry
 {
-    public RecentFileEntry(string filePath)
+    public RecentFileEntry(string filePath, RecentEntryKind kind = RecentEntryKind.File, bool loadProjectControls = true)
     {
         FilePath = filePath;
+        Kind = kind;
+        LoadProjectControls = loadProjectControls;
     }
 
     public string FilePath { get; }
+    public RecentEntryKind Kind { get; }
+    public bool LoadProjectControls { get; }
 
-    public string DisplayName => System.IO.Path.GetFileName(FilePath);
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DisplayName => System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(FilePath)) is { Length: > 0 } name
+        ? name : FilePath;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string KindDisplayName => Kind switch
+    {
+        RecentEntryKind.Workspace => UiStrings.MenuRecentProjects,
+        RecentEntryKind.Folder => UiStrings.MenuRecentFolders,
+        _ => UiStrings.MenuRecentFiles
+    };
 }
+
+/// <summary>Bestimmt die Öffnungsart eines Eintrags in der Historie.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<RecentEntryKind>))]
+public enum RecentEntryKind { File, Workspace, Folder }
 
 /// <summary>
 /// Specifies how XAML changes are saved to disk.
@@ -2173,6 +2191,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly IWorkspaceInfoUpdater? _workspaceInfoUpdater;
     private readonly ITypeMetadataService? _metadataService;
     private readonly IControlCatalogUpdater? _controlCatalogUpdater;
+    private bool _loadProjectControls = true;
     private readonly IClipboardService? _clipboardService;
     private readonly IDotNetCli _dotNetCli;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
@@ -2530,10 +2549,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     public ObservableCollection<RecentFileEntry> RecentFiles { get; } = new();
 
-    /// <summary>Die zehn neuesten Einträge für das kompakte Menü.</summary>
-    public IEnumerable<RecentFileEntry> RecentMenuFiles => RecentFiles.Take(RecentFilesLimit);
+    /// <summary>Die jeweils zehn neuesten Einträge je Öffnungsart.</summary>
+    public IEnumerable<RecentFileEntry> RecentWorkspaces => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.Workspace).Take(RecentFilesLimit);
+    public IEnumerable<RecentFileEntry> RecentDocuments => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.File).Take(RecentFilesLimit);
+    public IEnumerable<RecentFileEntry> RecentFolders => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.Folder).Take(RecentFilesLimit);
+    public bool HasRecentWorkspaces => RecentWorkspaces.Any();
+    public bool HasRecentDocuments => RecentDocuments.Any();
+    public bool HasRecentFolders => RecentFolders.Any();
 
     public bool HasRecentFiles => RecentFiles.Count > 0;
+    public ReactiveCommand<RecentFileEntry, Unit> OpenRecentCommand { get; }
     public ReactiveCommand<Unit, Unit> ClearRecentFilesCommand { get; }
     public ReactiveCommand<Unit, Unit> ManageRecentFilesCommand { get; }
     public Interaction<RecentFilesDialogViewModel, Unit> RecentFilesInteraction { get; } = new();
@@ -2560,6 +2585,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// Interaction for opening a file dialog.
     /// </summary>
     public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
+
+    /// <summary>
+    /// Wählt eine Projekt- oder Solution-Datei als Workspace aus.
+    /// </summary>
+    public Interaction<Unit, WorkspaceOpenRequest?> OpenWorkspaceInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for selecting an extension package.
@@ -2666,6 +2696,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // File Commands
     public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenDocumentCommand { get; }
+    /// <summary>Öffnet den Dialog zur Workspace-Auswahl.</summary>
+    public ReactiveCommand<Unit, Unit> OpenWorkspaceCommand { get; }
+    /// <summary>Schließt die aktive Datei.</summary>
+    public ReactiveCommand<Unit, Unit> CloseActiveDocumentCommand { get; }
+    /// <summary>Schließt alle Dateien und entlädt den Workspace.</summary>
+    public ReactiveCommand<Unit, Unit> CloseWorkspaceCommand { get; }
     public ReactiveCommand<string, Unit> OpenPathCommand { get; }
     public ReactiveCommand<IReadOnlyList<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveDocumentCommand { get; }
@@ -2893,9 +2929,21 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         // File commands
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
-        OpenDocumentCommand = ReactiveCommand.CreateFromTask(OpenDocumentAsync);
+        OpenDocumentCommand = ReactiveCommand.CreateFromTask(() => OpenDocumentAsync(openWorkspace: false));
+        OpenWorkspaceCommand = ReactiveCommand.CreateFromTask(() => OpenDocumentAsync(openWorkspace: true));
+        CloseActiveDocumentCommand = ReactiveCommand.Create(
+            () => { if (ActiveDocument is { } document) CloseDocument(document); },
+            this.WhenAnyValue(x => x.ActiveDocument).Select(document => document is not null));
+        CloseWorkspaceCommand = ReactiveCommand.CreateFromTask(CloseWorkspaceAsync,
+            this.WhenAnyValue(x => x.HasWorkspace, x => x.IsWorkspaceLoading, x => x.IsWorkspaceCommandRunning,
+                (hasWorkspace, loading, running) => hasWorkspace && !loading && !running));
+        _disposables.Add(OpenWorkspaceCommand);
+        _disposables.Add(CloseActiveDocumentCommand);
+        _disposables.Add(CloseWorkspaceCommand);
         OpenPathCommand = ReactiveCommand.CreateFromTask<string>(OpenFileAsync);
         OpenPathsCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>>(OpenDroppedPathsAsync);
+        OpenRecentCommand = ReactiveCommand.CreateFromTask<RecentFileEntry>(OpenRecentAsync);
+        _disposables.Add(OpenRecentCommand);
 
         OpenExtensionManagerCommand = ReactiveCommand.CreateFromObservable(
             () => ExtensionManagerInteraction.Handle(Unit.Default));
@@ -2907,7 +2955,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) =>
         {
-            this.RaisePropertyChanged(nameof(RecentMenuFiles));
+            this.RaisePropertyChanged(nameof(RecentWorkspaces));
+            this.RaisePropertyChanged(nameof(RecentDocuments));
+            this.RaisePropertyChanged(nameof(RecentFolders));
+            this.RaisePropertyChanged(nameof(HasRecentWorkspaces));
+            this.RaisePropertyChanged(nameof(HasRecentDocuments));
+            this.RaisePropertyChanged(nameof(HasRecentFolders));
             this.RaisePropertyChanged(nameof(HasRecentFiles));
             SaveRecentFiles();
         };
@@ -3787,14 +3840,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
-    private async System.Threading.Tasks.Task OpenDocumentAsync()
+    private async System.Threading.Tasks.Task OpenDocumentAsync(bool openWorkspace)
     {
         try
         {
+            if (openWorkspace)
+            {
+                WorkspaceOpenRequest? request = await OpenWorkspaceInteraction.Handle(Unit.Default);
+                if (request is null) return;
+                await LoadWorkspaceAsync(request.FilePath, loadProjectControls: request.LoadProjectControls);
+                if (HasWorkspace && FileSystemPathComparison.Equals(_workspacePath, request.FilePath))
+                    AddRecentFile(request.FilePath, RecentEntryKind.Workspace, request.LoadProjectControls);
+                return;
+            }
             string? filePath = await OpenFileInteraction.Handle(Unit.Default);
             if (!string.IsNullOrEmpty(filePath))
             {
-                await OpenFileAsync(filePath);
+                await OpenFileAsync(filePath, allowWorkspaceLoad: openWorkspace);
             }
         }
         catch (Exception ex)
@@ -7020,10 +7082,52 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
     }
 
+    private async Task CloseWorkspaceAsync()
+    {
+        IsWorkspaceLoading = true;
+        try
+        {
+            foreach (IEditorDocumentViewModel document in Documents.ToArray()) CloseDocument(document);
+            _workspace = null;
+            _workspacePath = null;
+            HasWorkspace = false;
+            _workspaceInfoUpdater?.UpdateWorkspacePath(null);
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
+            WorkspaceProjects.Clear();
+            _projectLookup.Clear();
+            SetActiveProject(null);
+            SolutionExplorer.Clear();
+            SolutionExplorer.IsVisible = false;
+            _assemblyResolver?.Dispose();
+            _assemblyResolver = null;
+            WorkspaceDesignThemeRegistry.Clear();
+            _backNavigation.Clear();
+            _forwardNavigation.Clear();
+            UpdateNavigationState();
+
+            if (_languageRegistry is not null)
+            {
+                foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+                    await service.ClearWorkspaceAsync();
+            }
+            StatusText = UiStrings.WorkspaceClosed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Workspace close failed: {Message}", ex.Message);
+            StatusText = string.Format(UiStrings.WorkspaceCloseFailed, ex.Message);
+        }
+        finally
+        {
+            IsWorkspaceLoading = false;
+        }
+    }
+
     public System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
     {
         if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
         {
+            RemoveRecentFile(folderPath, RecentEntryKind.Folder);
             StatusText = UiStrings.FolderNotFound;
             return System.Threading.Tasks.Task.CompletedTask;
         }
@@ -7046,6 +7150,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             System.IO.Path.AltDirectorySeparatorChar));
         StatusText = string.Format(UiStrings.FolderOpened, (object?)(name));
         LogOutput("Info", $"Opened folder: {folderPath}");
+        AddRecentFile(System.IO.Path.TrimEndingDirectorySeparator(folderPath), RecentEntryKind.Folder);
         return System.Threading.Tasks.Task.CompletedTask;
     }
 
@@ -7094,9 +7199,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)))
         {
             await LoadWorkspaceAsync(filePath);
-            if (addRecent)
+            if (addRecent && HasWorkspace && FileSystemPathComparison.Equals(_workspacePath, filePath))
             {
-                AddRecentFile(filePath);
+                AddRecentFile(filePath, RecentEntryKind.Workspace, _loadProjectControls);
             }
             return null;
         }
@@ -7112,6 +7217,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             ActiveDocument = existing;
             SetActiveDockDocument(existing);
+            if (addRecent) AddRecentFile(filePath);
             return existing;
         }
 
@@ -7166,6 +7272,30 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return doc;
     }
 
+    private async Task OpenRecentAsync(RecentFileEntry entry)
+    {
+        if (entry.Kind == RecentEntryKind.Folder)
+        {
+            await OpenFolderAsync(entry.FilePath);
+        }
+        else if (entry.Kind == RecentEntryKind.Workspace)
+        {
+            if (!System.IO.File.Exists(entry.FilePath))
+            {
+                RemoveRecentFile(entry.FilePath);
+                StatusText = string.Format(UiStrings.FileNotFoundStatus, entry.DisplayName);
+                return;
+            }
+            await LoadWorkspaceAsync(entry.FilePath, loadProjectControls: entry.LoadProjectControls);
+            if (HasWorkspace && FileSystemPathComparison.Equals(_workspacePath, entry.FilePath))
+                AddRecentFile(entry.FilePath, entry.Kind, entry.LoadProjectControls);
+        }
+        else
+        {
+            await OpenFileAsync(entry.FilePath, allowWorkspaceLoad: false);
+        }
+    }
+
     private void LoadRecentFiles()
     {
         _isLoadingRecentFiles = true;
@@ -7177,26 +7307,33 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             string json = ReadRecentFilesText(path);
-            List<string>? recent = JsonSerializer.Deserialize<List<string>>(json);
-            if (recent is null)
-            {
-                return;
-            }
+            using JsonDocument recent = JsonDocument.Parse(json);
+            if (recent.RootElement.ValueKind != JsonValueKind.Array) return;
 
             HashSet<string> seen = new(FileSystemPathComparison.Comparer);
-            foreach (string filePath in recent)
+            foreach (JsonElement element in recent.RootElement.EnumerateArray())
             {
-                if (string.IsNullOrWhiteSpace(filePath))
+                RecentFileEntry? entry;
+                if (element.ValueKind == JsonValueKind.String)
                 {
-                    continue;
+                    // Die vorhandene Historie enthält nur Pfade, daher einmalig anhand des Ziels zuordnen.
+                    string? filePath = element.GetString();
+                    if (string.IsNullOrWhiteSpace(filePath)) continue;
+                    string extension = System.IO.Path.GetExtension(filePath);
+                    RecentEntryKind kind = System.IO.Directory.Exists(filePath) ? RecentEntryKind.Folder
+                        : extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)
+                          || extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+                          || extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
+                            ? RecentEntryKind.Workspace : RecentEntryKind.File;
+                    entry = new RecentFileEntry(filePath, kind);
                 }
-
-                if (!seen.Add(filePath))
+                else
                 {
-                    continue;
+                    entry = element.Deserialize<RecentFileEntry>();
                 }
-
-                RecentFiles.Add(new RecentFileEntry(filePath));
+                if (entry is null || string.IsNullOrWhiteSpace(entry.FilePath) || !Enum.IsDefined(entry.Kind)) continue;
+                if (!seen.Add(entry.Kind + "\0" + entry.FilePath)) continue;
+                RecentFiles.Add(entry);
             }
         }
         catch (Exception ex)
@@ -7218,8 +7355,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         try
         {
-            List<string> recent = RecentFiles.Select(entry => entry.FilePath).ToList();
-            string json = JsonSerializer.Serialize(recent, new JsonSerializerOptions { WriteIndented = true });
+            string json = JsonSerializer.Serialize(RecentFiles, new JsonSerializerOptions { WriteIndented = true });
             WriteRecentFilesText(_recentFilesPath, json);
         }
         catch (Exception ex)
@@ -7269,11 +7405,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         System.IO.File.WriteAllText(path, content);
     }
 
-    private int IndexOfRecentFile(string filePath)
+    private int IndexOfRecentFile(string filePath, RecentEntryKind kind)
     {
         for (int i = 0; i < RecentFiles.Count; i++)
         {
-            if (FileSystemPathComparison.Equals(RecentFiles[i].FilePath, filePath))
+            if (RecentFiles[i].Kind == kind && FileSystemPathComparison.Equals(RecentFiles[i].FilePath, filePath))
             {
                 return i;
             }
@@ -7282,29 +7418,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return -1;
     }
 
-    private void AddRecentFile(string filePath)
+    private void AddRecentFile(string filePath, RecentEntryKind kind = RecentEntryKind.File, bool loadProjectControls = true)
     {
-        int existingIndex = IndexOfRecentFile(filePath);
+        int existingIndex = IndexOfRecentFile(filePath, kind);
         if (existingIndex >= 0)
         {
             RecentFiles.RemoveAt(existingIndex);
         }
 
-        RecentFiles.Insert(0, new RecentFileEntry(filePath));
+        RecentFiles.Insert(0, new RecentFileEntry(filePath, kind, loadProjectControls));
     }
 
-    private void RemoveRecentFile(string filePath)
+    private void RemoveRecentFile(string filePath, RecentEntryKind? kind = null)
     {
-        int index = IndexOfRecentFile(filePath);
-        if (index >= 0)
+        for (int index = RecentFiles.Count - 1; index >= 0; index--)
         {
-            RecentFiles.RemoveAt(index);
+            RecentFileEntry entry = RecentFiles[index];
+            if ((kind is null || entry.Kind == kind) && FileSystemPathComparison.Equals(entry.FilePath, filePath))
+                RecentFiles.RemoveAt(index);
         }
     }
 
     private async System.Threading.Tasks.Task LoadWorkspaceAsync(
         string workspacePath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool loadProjectControls = true)
     {
         if (_workspaceService is null || _metadataService is null)
         {
@@ -7348,6 +7486,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
             StopDocumentPreviewers();
             _workspace = workspace;
+            _loadProjectControls = loadProjectControls;
             _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
             _workspacePath = workspacePath;
             _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
@@ -7386,7 +7525,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 await Task.Run(() =>
                 {
                     _metadataService.LoadAssemblies(assemblySet.All);
-                    _metadataService.GetAvailableTypes();
                 }, cancellationToken);
                 UpdateWorkspaceDesignThemes(workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
@@ -7400,7 +7538,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     document.UseExternalPreviewer = true;
             }
 
-            _controlCatalogUpdater?.SetWorkspaceAssemblies(assemblySet.All);
+            if (_loadProjectControls && assemblySet.All.Count > 0) ShowExtensionView("toolbox.panel");
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(assemblySet.All, _loadProjectControls);
 
             if (_languageRegistry is not null)
             {
@@ -7439,6 +7578,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            if (!FileSystemPathComparison.Equals(_workspacePath, workspacePath)) return;
             await warmup.WarmWorkspaceAsync().ConfigureAwait(false);
             LogOutput("Info", $"Language workspace ready: {System.IO.Path.GetFileName(workspacePath)}");
         }
@@ -8133,7 +8273,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return Task.CompletedTask;
         }
 
-        return LoadWorkspaceAsync(_workspacePath, cancellationToken);
+        return LoadWorkspaceAsync(_workspacePath, cancellationToken, _loadProjectControls);
     }
 
     Task IWorkspaceCommands.RestoreWorkspaceAsync(CancellationToken cancellationToken)
@@ -8327,12 +8467,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 await Task.Run(() =>
                 {
                     _metadataService.LoadAssemblies(assemblySet.All);
-                    _metadataService.GetAvailableTypes();
                 }, cancellationToken);
                 UpdateWorkspaceDesignThemes(_workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
             }
-            _controlCatalogUpdater?.SetWorkspaceAssemblies(assemblySet.All);
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(assemblySet.All, _loadProjectControls);
             LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
             StatusText = string.Format(UiStrings.DotnetCommandCompleted, (object?)(displayCommand));
         }

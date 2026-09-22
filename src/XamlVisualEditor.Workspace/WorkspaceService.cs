@@ -1061,6 +1061,15 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 /// </summary>
 public sealed class TypeMetadataService : ITypeMetadataService
 {
+    /// <summary>Liest ausschließlich die gewählten Assemblies und Avalonia-Grundtypen für die Toolbox.</summary>
+    public static IReadOnlyList<TypeMetadata> ReadControlTypes(IReadOnlyList<string> assemblyPaths,
+        Action<string> reportFailure, Action<int, int, string> reportProgress, CancellationToken cancellationToken)
+    {
+        IEnumerable<string> paths = new[] { typeof(AvaloniaObject).Assembly.Location, typeof(Control).Assembly.Location }
+            .Concat(assemblyPaths).Distinct(FileSystemPathComparison.Comparer);
+        return AssemblyTypeCatalog.Read(paths, reportFailure, cancellationToken, reportProgress);
+    }
+
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TypeMetadata> _cache = new(StringComparer.Ordinal);
     private readonly object _catalogGate = new();
     private readonly Dictionary<string, IReadOnlyList<TypeMetadata>> _namespaceTypes = new(StringComparer.Ordinal);

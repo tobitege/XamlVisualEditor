@@ -120,17 +120,16 @@ public sealed partial class MainWindow : Window
         {
             FilePickerOpenOptions options = new()
             {
-                Title = UiStrings.OpenXamlProjectSolution,
+                Title = UiStrings.OpenFileTitle,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
                     new FilePickerFileType(UiStrings.AllSupportedFiles)
                     {
-                        Patterns = new[] { "*.axaml", "*.xaml", "*.csproj", "*.sln", "*.slnx" }
+                        Patterns = new[] { "*.axaml", "*.xaml", "*.cs" }
                     },
                     new FilePickerFileType(UiStrings.XamlFiles) { Patterns = new[] { "*.axaml", "*.xaml" } },
-                    new FilePickerFileType(UiStrings.Projects) { Patterns = new[] { "*.csproj" } },
-                    new FilePickerFileType(UiStrings.Solutions) { Patterns = new[] { "*.sln", "*.slnx" } },
+                    new FilePickerFileType(UiStrings.CSharpFiles) { Patterns = new[] { "*.cs" } },
                     new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };

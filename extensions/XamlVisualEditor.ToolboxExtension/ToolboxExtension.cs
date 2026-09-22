@@ -1,6 +1,8 @@
 ﻿using XamlVisualEditor.Extensions;
 
 using XamlVisualEditor.Core.Localization;
+using System.Reactive.Linq;
+using ReactiveUI;
 
 namespace XamlVisualEditor.ToolboxExtension;
 
@@ -10,6 +12,7 @@ public sealed class ToolboxExtension : IXveExtension
     private const string InsertSelectedCommandId = "toolbox.insertSelected";
     private const string ToolboxViewId = "toolbox.panel";
     private const string ToggleViewCommandId = "toolbox.toggleView";
+    private const string ShowTaskCommandId = "toolbox.showLoadTask";
 
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
@@ -23,6 +26,8 @@ public sealed class ToolboxExtension : IXveExtension
             InsertSelectedAsync(context, commandContext, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(ToggleViewCommandId, _ =>
             context.ViewHost.ToggleAsync(ToolboxViewId, CancellationToken.None)));
+        context.Subscriptions.Add(context.Commands.Register(ShowTaskCommandId, _ =>
+            context.ViewHost.ShowAsync(ToolboxViewId, CancellationToken.None)));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(
             context.ExtensionId,
@@ -87,9 +92,21 @@ public sealed class ToolboxExtension : IXveExtension
                     20)
             }));
 
+        IStatusBarItem loadStatus = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, 30);
+        loadStatus.CommandId = ShowTaskCommandId;
+        context.Subscriptions.Add(loadStatus);
+        context.Subscriptions.Add(viewModel.WhenAnyValue(x => x.HasLoadTask, x => x.HasLoadError, x => x.StatusText)
+            .Subscribe(state =>
+            {
+                loadStatus.Text = UiStrings.Toolbox + ": " + (state.Item2 ? UiStrings.RetryControlDiscovery : UiStrings.LoadProjectControls);
+                loadStatus.Tooltip = state.Item3;
+                if (state.Item1) loadStatus.Show();
+                else loadStatus.Hide();
+            }));
+
         if (context.ControlCatalog is not null)
         {
-            await viewModel.ReloadAsync(cancellationToken);
+            await viewModel.ReloadAsync(cancellationToken, context.ControlCatalog.AutoLoadProjectControls);
         }
     }
 

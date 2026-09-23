@@ -37,6 +37,24 @@
   <data name="CheckOut" xml:space="preserve"><value>Check Out for Edit</value></data>
   <data name="AddActiveDocument" xml:space="preserve"><value>Add Active File to Source Control</value></data>
   <data name="LocateActiveDocument" xml:space="preserve"><value>Locate Active Document</value></data>
+  <data name="HistoryTitle" xml:space="preserve"><value>TFVC History</value></data>
+  <data name="ShowHistory" xml:space="preserve"><value>View History</value></data>
+  <data name="Changesets" xml:space="preserve"><value>Changesets</value></data>
+  <data name="Labels" xml:space="preserve"><value>Labels</value></data>
+  <data name="ColumnUser" xml:space="preserve"><value>User</value></data>
+  <data name="ColumnDate" xml:space="preserve"><value>Date</value></data>
+  <data name="ColumnComment" xml:space="preserve"><value>Comment</value></data>
+  <data name="ColumnLabel" xml:space="preserve"><value>Label</value></data>
+  <data name="ColumnScope" xml:space="preserve"><value>Scope</value></data>
+  <data name="ColumnChange" xml:space="preserve"><value>Change</value></data>
+  <data name="ColumnItem" xml:space="preserve"><value>Item</value></data>
+  <data name="SearchComments" xml:space="preserve"><value>Search check-in comments</value></data>
+  <data name="SearchButton" xml:space="preserve"><value>Search</value></data>
+  <data name="ShowAll" xml:space="preserve"><value>Show All</value></data>
+  <data name="LoadMore" xml:space="preserve"><value>Load More</value></data>
+  <data name="HistorySearchResultFormat" xml:space="preserve"><value>{0} matches in {1} changesets.</value></data>
+  <data name="CopyName" xml:space="preserve"><value>Copy Name</value></data>
+  <data name="CopyPath" xml:space="preserve"><value>Copy Path</value></data>
   <data name="FocusFolder" xml:space="preserve"><value>Focus on Folder</value></data>
   <data name="ClearFocus" xml:space="preserve"><value>Clear Focus</value></data>
   <data name="FocusedOn" xml:space="preserve"><value>Focus:</value></data>

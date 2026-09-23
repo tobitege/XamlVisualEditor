@@ -32,6 +32,7 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
     private readonly IWindow _window;
     private readonly IDialogHost? _dialogHost;
     private readonly ISystemIconService? _icons;
+    private readonly Func<string, Task>? _showHistory;
     private bool _isDisposed;
 
     /// <summary>Creates the view model.</summary>
@@ -41,8 +42,10 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         IEditorServices editor,
         IWindow window,
         IDialogHost? dialogHost,
-        ISystemIconService? icons)
+        ISystemIconService? icons,
+        Func<string, Task>? showHistory = null)
     {
+        _showHistory = showHistory;
         _session = session;
         _autoCheckOut = autoCheckOut;
         _editor = editor;
@@ -80,6 +83,12 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         AddWorkItemCommand = ReactiveCommand.CreateFromTask(AddWorkItemAsync, this.WhenAnyValue(x => x.WorkItemIdText, text => TryParseWorkItemId(text, out _)));
         RemoveWorkItemCommand = ReactiveCommand.Create<TfvcWorkItemViewModel>(item => WorkItems.Remove(item));
         AddActiveDocumentCommand = ReactiveCommand.CreateFromTask(AddActiveDocumentAsync);
+        IObservable<bool> hasNode = selectedNode.Select(node => node is not null);
+        CopyNameCommand = ReactiveCommand.CreateFromTask(() => CopyAsync(GetLastSegment(SelectedNode?.FullPath)), hasNode);
+        CopyPathCommand = ReactiveCommand.CreateFromTask(() => CopyAsync(SelectedNode?.FullPath), hasNode);
+        ShowHistoryCommand = ReactiveCommand.CreateFromTask(
+            () => SelectedNode is { } node && _showHistory is not null ? _showHistory(node.Change?.ServerPath ?? node.FullPath) : Task.CompletedTask,
+            hasNode);
 
         this.WhenAnyValue(x => x.SelectedIncludedRow)
             .Select(ToNode)
@@ -160,6 +169,18 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
 
     /// <summary>Adds the active editor document to version control.</summary>
     public ReactiveCommand<Unit, Unit> AddActiveDocumentCommand { get; }
+
+    /// <summary>Shows the history of the selected item.</summary>
+    public ReactiveCommand<Unit, Unit> ShowHistoryCommand { get; }
+
+    /// <summary>Copies the name of the selected item to the clipboard.</summary>
+    public ReactiveCommand<Unit, Unit> CopyNameCommand { get; }
+
+    /// <summary>Copies the local path of the selected item, or its server path when it is not mapped, to the clipboard.</summary>
+    public ReactiveCommand<Unit, Unit> CopyPathCommand { get; }
+
+    /// <summary>Asks the view to place text on the clipboard.</summary>
+    public Interaction<string, Unit> CopyToClipboard { get; } = new();
 
     /// <summary>Gets or sets the check-in comment.</summary>
     [Reactive]
@@ -296,6 +317,26 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
     private static bool TryParseWorkItemId(string? text, out int id)
     {
         return int.TryParse(text?.Trim().TrimStart('#'), NumberStyles.Integer, CultureInfo.InvariantCulture, out id) && id > 0;
+    }
+
+    private async Task CopyAsync(string? text)
+    {
+        if (!string.IsNullOrEmpty(text))
+        {
+            await CopyToClipboard.Handle(text);
+        }
+    }
+
+    private static string? GetLastSegment(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return null;
+        }
+
+        string trimmed = path.TrimEnd('\\', '/');
+        int index = trimmed.LastIndexOfAny(['\\', '/']);
+        return index >= 0 ? trimmed.Substring(index + 1) : trimmed;
     }
 
     private void SelectNode(PendingChangeNodeViewModel? node, bool excluded)

@@ -158,6 +158,29 @@ internal sealed class FakeTfvcServerClient : ITfvcServerClient
     public Task<TfvcServerItem?> GetItemAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
         => Task.FromResult(ExistingItems.Contains(serverPath) ? new TfvcServerItem(serverPath, false, 10, null) : null);
 
+    public List<TfvcChangesetInfo> History { get; } = new();
+
+    public Dictionary<int, IReadOnlyList<TfvcChangesetChange>> ChangesetChanges { get; } = new();
+
+    public List<TfvcLabelInfo> LabelList { get; } = new();
+
+    public Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(string collectionUrl, string serverPath, int skip, int top, CancellationToken cancellationToken)
+    {
+        List<TfvcChangesetInfo> page = new();
+        for (int i = skip; i < History.Count && page.Count < top; i++)
+        {
+            page.Add(History[i]);
+        }
+
+        return Task.FromResult<IReadOnlyList<TfvcChangesetInfo>>(page);
+    }
+
+    public Task<IReadOnlyList<TfvcChangesetChange>> GetChangesetChangesAsync(string collectionUrl, int changesetId, CancellationToken cancellationToken)
+        => Task.FromResult(ChangesetChanges.TryGetValue(changesetId, out IReadOnlyList<TfvcChangesetChange>? changes) ? changes : Array.Empty<TfvcChangesetChange>());
+
+    public Task<IReadOnlyList<TfvcLabelInfo>> GetLabelsAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<TfvcLabelInfo>>(LabelList);
+
     public Task<TfvcWorkItemInfo?> GetWorkItemAsync(string collectionUrl, int id, CancellationToken cancellationToken)
         => Task.FromResult(WorkItems.TryGetValue(id, out TfvcWorkItemInfo? info) ? info : null);
 

@@ -46,6 +46,12 @@ public sealed class CanvasDockFactory : Factory
         return rootDock;
     }
 
+    public override void InitDockable(IDockable dockable, IDockable? owner)
+    {
+        DockCapabilityDefaults.Apply(dockable);
+        base.InitDockable(dockable, owner);
+    }
+
     public void EnsureOwnerReferences(IRootDock rootDock)
     {
         SetOwnerRecursive(rootDock, null);

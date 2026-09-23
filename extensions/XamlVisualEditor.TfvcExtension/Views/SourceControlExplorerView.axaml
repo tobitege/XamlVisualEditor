@@ -7,7 +7,8 @@
              xmlns:views="using:XamlVisualEditor.TfvcExtension.Views"
              xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
              x:Class="XamlVisualEditor.TfvcExtension.Views.SourceControlExplorerView"
-             x:DataType="vm:SourceControlExplorerViewModel">
+             x:DataType="vm:SourceControlExplorerViewModel"
+             views:ClipboardInteractionBehavior.Interaction="{CompiledBinding CopyToClipboard}">
 
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
@@ -81,7 +82,7 @@
                  HeadersVisibility="Column"
                  GridLinesVisibility="None"
                  CanUserResizeColumns="True"
-                 CanUserSortColumns="False"
+                 CanUserSortColumns="True"
                  IsReadOnly="True"
                  HorizontalScrollBarVisibility="Auto"
                  views:ScrollSelectionIntoViewBehavior.IsEnabled="True"
@@ -90,6 +91,9 @@
       <dg:DataGrid.ContextMenu>
         <ContextMenu x:DataType="vm:SourceControlExplorerViewModel">
           <MenuItem Header="{x:Static loc:TfvcStrings.Open}" Command="{CompiledBinding OpenCommand}" />
+          <MenuItem Header="{x:Static loc:TfvcStrings.ShowHistory}" Command="{CompiledBinding ShowHistoryCommand}" />
+          <MenuItem Header="{x:Static loc:TfvcStrings.CopyName}" Command="{CompiledBinding CopyNameCommand}" />
+          <MenuItem Header="{x:Static loc:TfvcStrings.CopyPath}" Command="{CompiledBinding CopyPathCommand}" />
           <Separator />
           <MenuItem Header="{x:Static loc:TfvcStrings.FocusFolder}" Command="{CompiledBinding FocusSelectedCommand}" />
           <MenuItem Header="{x:Static loc:TfvcStrings.ClearFocus}" Command="{CompiledBinding ClearFocusCommand}" />
@@ -115,7 +119,7 @@
             </DataTemplate>
           </dg:DataGridHierarchicalColumn.CellTemplate>
         </dg:DataGridHierarchicalColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnPendingChange}" Width="120">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnPendingChange}" Width="120" SortMemberPath="Item.PendingChangeText">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
@@ -128,7 +132,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLocalSize}" Width="80">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLocalSize}" Width="80" SortMemberPath="Item.LocalSizeBytes">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center" HorizontalContentAlignment="Right">
@@ -142,7 +146,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLocalModified}" Width="140">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLocalModified}" Width="140" SortMemberPath="Item.LocalModified">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
@@ -156,7 +160,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLastCheckIn}" Width="130">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLastCheckIn}" Width="130" SortMemberPath="Item.LastCheckIn">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
@@ -169,7 +173,7 @@
             </DataTemplate>
           </dg:DataGridTemplateColumn.CellTemplate>
         </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnChangeset}" Width="80">
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnChangeset}" Width="80" SortMemberPath="Item.Version">
           <dg:DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="dh:HierarchicalNode">
               <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">

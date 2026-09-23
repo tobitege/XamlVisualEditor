@@ -283,6 +283,26 @@ public sealed record TfvcServerItem(string ServerPath, bool IsFolder, int Versio
     }
 }
 
+/// <summary>A changeset of the history of an item.</summary>
+/// <param name="Id">Changeset number.</param>
+/// <param name="Author">Display name of the author.</param>
+/// <param name="CreatedDate">Check-in date.</param>
+/// <param name="Comment">Check-in comment.</param>
+public sealed record TfvcChangesetInfo(int Id, string? Author, DateTimeOffset? CreatedDate, string? Comment);
+
+/// <summary>A changed item of a changeset.</summary>
+/// <param name="ServerPath">Server path of the item.</param>
+/// <param name="ChangeType">Change type list as reported by the server, for example <c>edit, encoding</c>.</param>
+public sealed record TfvcChangesetChange(string ServerPath, string ChangeType);
+
+/// <summary>A label that contains an item.</summary>
+/// <param name="Name">Label name.</param>
+/// <param name="Owner">Display name of the owner.</param>
+/// <param name="ModifiedDate">Date of the last change of the label.</param>
+/// <param name="Description">Label comment.</param>
+/// <param name="Scope">Server path the label is scoped to.</param>
+public sealed record TfvcLabelInfo(string Name, string? Owner, DateTimeOffset? ModifiedDate, string? Description, string? Scope);
+
 /// <summary>Summary of a work item.</summary>
 /// <param name="Id">Work item ID.</param>
 /// <param name="WorkItemType">Work item type name.</param>

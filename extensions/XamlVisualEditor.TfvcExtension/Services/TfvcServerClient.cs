@@ -22,6 +22,15 @@ public interface ITfvcServerClient
     /// <summary>Gets one item, or null when it does not exist.</summary>
     Task<TfvcServerItem?> GetItemAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken);
 
+    /// <summary>Gets a page of the history of an item, newest changeset first.</summary>
+    Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(string collectionUrl, string serverPath, int skip, int top, CancellationToken cancellationToken);
+
+    /// <summary>Gets the changed items of a changeset.</summary>
+    Task<IReadOnlyList<TfvcChangesetChange>> GetChangesetChangesAsync(string collectionUrl, int changesetId, CancellationToken cancellationToken);
+
+    /// <summary>Gets the labels that contain an item.</summary>
+    Task<IReadOnlyList<TfvcLabelInfo>> GetLabelsAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken);
+
     /// <summary>Gets a work item summary, or null when it does not exist.</summary>
     Task<TfvcWorkItemInfo?> GetWorkItemAsync(string collectionUrl, int id, CancellationToken cancellationToken);
 
@@ -43,6 +52,7 @@ public sealed class TfvcServerException : Exception
 public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
 {
     private const string API_VERSION = "5.0";
+    private const int MAX_COMMENT_LENGTH = 4000;
 
     private readonly HttpClient _httpClient;
 
@@ -101,6 +111,116 @@ public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
         }
 
         return null;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(
+        string collectionUrl,
+        string serverPath,
+        int skip,
+        int top,
+        CancellationToken cancellationToken)
+    {
+        string url = TrimCollectionUrl(collectionUrl) + "/_apis/tfvc/changesets?searchCriteria.itemPath="
+            + Uri.EscapeDataString(TfvcWorkspace.NormalizeServerPath(serverPath))
+            + "&$skip=" + skip.ToString(CultureInfo.InvariantCulture)
+            + "&$top=" + top.ToString(CultureInfo.InvariantCulture)
+            + "&maxCommentLength=" + MAX_COMMENT_LENGTH.ToString(CultureInfo.InvariantCulture)
+            + "&api-version=" + API_VERSION;
+        using JsonDocument? document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+        return document is null ? Array.Empty<TfvcChangesetInfo>() : ReadChangesets(document.RootElement);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TfvcChangesetChange>> GetChangesetChangesAsync(string collectionUrl, int changesetId, CancellationToken cancellationToken)
+    {
+        string url = TrimCollectionUrl(collectionUrl) + "/_apis/tfvc/changesets/"
+            + changesetId.ToString(CultureInfo.InvariantCulture) + "/changes?$top=10000&api-version=" + API_VERSION;
+        using JsonDocument? document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+        List<TfvcChangesetChange> changes = new();
+        if (document is null || !document.RootElement.TryGetProperty("value", out JsonElement values) || values.ValueKind != JsonValueKind.Array)
+        {
+            return changes;
+        }
+
+        foreach (JsonElement value in values.EnumerateArray())
+        {
+            string? path = value.TryGetProperty("item", out JsonElement item) ? ReadString(item, "path") : null;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                changes.Add(new TfvcChangesetChange(path, ReadString(value, "changeType") ?? string.Empty));
+            }
+        }
+
+        return changes;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The labels API filters by label scope, not by contained item. Labels are therefore collected for the
+    /// item and each of its parent folders; a label scoped to a parent folder usually covers the item.
+    /// </remarks>
+    public async Task<IReadOnlyList<TfvcLabelInfo>> GetLabelsAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
+    {
+        List<TfvcLabelInfo> labels = new();
+        HashSet<int> seen = new();
+        string scope = TfvcWorkspace.NormalizeServerPath(serverPath);
+        while (scope.Length > 2)
+        {
+            string url = TrimCollectionUrl(collectionUrl) + "/_apis/tfvc/labels?requestData.labelScope="
+                + Uri.EscapeDataString(scope) + "&$top=1000&api-version=" + API_VERSION;
+            using JsonDocument? document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+            if (document is not null && document.RootElement.TryGetProperty("value", out JsonElement values) && values.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement value in values.EnumerateArray())
+                {
+                    string? name = ReadString(value, "name");
+                    int id = value.TryGetProperty("id", out JsonElement idElement) && idElement.TryGetInt32(out int parsedId) ? parsedId : 0;
+                    string? labelScope = ReadString(value, "labelScope");
+                    if (string.IsNullOrWhiteSpace(name) || !seen.Add(id)
+                        || (labelScope is not null && !TfvcWorkspace.IsSameOrChildServerPath(TfvcWorkspace.NormalizeServerPath(serverPath), TfvcWorkspace.NormalizeServerPath(labelScope))))
+                    {
+                        continue;
+                    }
+
+                    labels.Add(new TfvcLabelInfo(
+                        name,
+                        value.TryGetProperty("owner", out JsonElement owner) ? ReadString(owner, "displayName") : null,
+                        ReadDate(value, "modifiedDate"),
+                        ReadString(value, "description"),
+                        labelScope));
+                }
+            }
+
+            int separator = scope.LastIndexOf('/');
+            scope = separator <= 1 ? string.Empty : scope.Substring(0, separator);
+        }
+
+        labels.Sort(static (left, right) => Nullable.Compare(right.ModifiedDate, left.ModifiedDate));
+        return labels;
+    }
+
+    /// <summary>Reads changesets from a changesets API response.</summary>
+    public static IReadOnlyList<TfvcChangesetInfo> ReadChangesets(JsonElement root)
+    {
+        List<TfvcChangesetInfo> changesets = new();
+        if (!root.TryGetProperty("value", out JsonElement values) || values.ValueKind != JsonValueKind.Array)
+        {
+            return changesets;
+        }
+
+        foreach (JsonElement value in values.EnumerateArray())
+        {
+            if (!value.TryGetProperty("changesetId", out JsonElement idElement) || !idElement.TryGetInt32(out int id))
+            {
+                continue;
+            }
+
+            string? author = value.TryGetProperty("author", out JsonElement authorElement) ? ReadString(authorElement, "displayName") : null;
+            changesets.Add(new TfvcChangesetInfo(id, author, ReadDate(value, "createdDate"), ReadString(value, "comment")));
+        }
+
+        return changesets;
     }
 
     /// <inheritdoc />
@@ -267,6 +387,15 @@ public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
             && element.TryGetProperty(propertyName, out JsonElement value)
             && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
+                : null;
+    }
+
+    private static DateTimeOffset? ReadDate(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out JsonElement value)
+            && value.ValueKind == JsonValueKind.String
+            && value.TryGetDateTimeOffset(out DateTimeOffset date)
+                ? date
                 : null;
     }
 

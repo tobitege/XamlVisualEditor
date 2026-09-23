@@ -37,6 +37,24 @@
   <data name="CheckOut" xml:space="preserve"><value>Zur Bearbeitung auschecken</value></data>
   <data name="AddActiveDocument" xml:space="preserve"><value>Aktive Datei zur Quellcodeverwaltung hinzufügen</value></data>
   <data name="LocateActiveDocument" xml:space="preserve"><value>Aktives Dokument anzeigen</value></data>
+  <data name="HistoryTitle" xml:space="preserve"><value>TFVC-Verlauf</value></data>
+  <data name="ShowHistory" xml:space="preserve"><value>Verlauf anzeigen</value></data>
+  <data name="Changesets" xml:space="preserve"><value>Changesets</value></data>
+  <data name="Labels" xml:space="preserve"><value>Bezeichnungen</value></data>
+  <data name="ColumnUser" xml:space="preserve"><value>Benutzer</value></data>
+  <data name="ColumnDate" xml:space="preserve"><value>Datum</value></data>
+  <data name="ColumnComment" xml:space="preserve"><value>Kommentar</value></data>
+  <data name="ColumnLabel" xml:space="preserve"><value>Bezeichnung</value></data>
+  <data name="ColumnScope" xml:space="preserve"><value>Bereich</value></data>
+  <data name="ColumnChange" xml:space="preserve"><value>Änderung</value></data>
+  <data name="ColumnItem" xml:space="preserve"><value>Element</value></data>
+  <data name="SearchComments" xml:space="preserve"><value>Check-in-Kommentare durchsuchen</value></data>
+  <data name="SearchButton" xml:space="preserve"><value>Suchen</value></data>
+  <data name="ShowAll" xml:space="preserve"><value>Alle anzeigen</value></data>
+  <data name="LoadMore" xml:space="preserve"><value>Weitere laden</value></data>
+  <data name="HistorySearchResultFormat" xml:space="preserve"><value>{0} Treffer in {1} Changesets.</value></data>
+  <data name="CopyName" xml:space="preserve"><value>Name kopieren</value></data>
+  <data name="CopyPath" xml:space="preserve"><value>Pfad kopieren</value></data>
   <data name="FocusFolder" xml:space="preserve"><value>Ordner fokussieren</value></data>
   <data name="ClearFocus" xml:space="preserve"><value>Fokus aufheben</value></data>
   <data name="FocusedOn" xml:space="preserve"><value>Fokus:</value></data>

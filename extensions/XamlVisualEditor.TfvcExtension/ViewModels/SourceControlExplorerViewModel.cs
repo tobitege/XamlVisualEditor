@@ -33,6 +33,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
     private readonly ISystemIconService? _icons;
     private string? _loadedCollectionUrl;
     private SourceControlItemViewModel? _treeRoot;
+    private readonly Func<string, Task>? _showHistory;
     private bool _isDisposed;
 
     /// <summary>Creates the view model.</summary>
@@ -41,8 +42,10 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         TfvcAutoCheckOutService autoCheckOut,
         IEditorServices editor,
         IDialogHost? dialogHost,
-        ISystemIconService? icons)
+        ISystemIconService? icons,
+        Func<string, Task>? showHistory = null)
     {
+        _showHistory = showHistory;
         _session = session;
         _autoCheckOut = autoCheckOut;
         _editor = editor;
@@ -109,6 +112,12 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             this.WhenAnyValue(x => x.SelectedItem, x => x.FocusedPath, (item, focus) =>
                 item is { IsFolder: true } && item.ServerPath != ROOT_PATH
                 && !string.Equals(item.ServerPath, focus, StringComparison.OrdinalIgnoreCase)));
+        IObservable<bool> hasItem = selected.Select(item => item is not null);
+        CopyNameCommand = ReactiveCommand.CreateFromTask(() => CopyAsync(SelectedItem?.Name), hasItem);
+        CopyPathCommand = ReactiveCommand.CreateFromTask(() => CopyAsync(SelectedItem?.LocalPath ?? SelectedItem?.ServerPath), hasItem);
+        ShowHistoryCommand = ReactiveCommand.CreateFromTask(
+            () => SelectedItem is { } item && _showHistory is not null ? _showHistory(item.ServerPath) : Task.CompletedTask,
+            hasItem);
         ClearFocusCommand = ReactiveCommand.CreateFromTask(
             ct => SetFocusAsync(null, ct),
             this.WhenAnyValue(x => x.FocusedPath).Select(focus => focus is not null));
@@ -156,6 +165,18 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
 
     /// <summary>Selects the active editor document in the tree.</summary>
     public ReactiveCommand<Unit, Unit> LocateActiveDocumentCommand { get; }
+
+    /// <summary>Shows the history of the selected item.</summary>
+    public ReactiveCommand<Unit, Unit> ShowHistoryCommand { get; }
+
+    /// <summary>Copies the name of the selected item to the clipboard.</summary>
+    public ReactiveCommand<Unit, Unit> CopyNameCommand { get; }
+
+    /// <summary>Copies the local path of the selected item, or its server path when it is not mapped, to the clipboard.</summary>
+    public ReactiveCommand<Unit, Unit> CopyPathCommand { get; }
+
+    /// <summary>Asks the view to place text on the clipboard.</summary>
+    public Interaction<string, Unit> CopyToClipboard { get; } = new();
 
     /// <summary>Shows only the selected folder and its descendants.</summary>
     public ReactiveCommand<Unit, Unit> FocusSelectedCommand { get; }
@@ -559,6 +580,14 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         }
 
         await RunOperationAsync(() => _session.Client.UndoAsync(workspace, [item.ServerPath], item.IsFolder, cancellationToken));
+    }
+
+    private async Task CopyAsync(string? text)
+    {
+        if (!string.IsNullOrEmpty(text))
+        {
+            await CopyToClipboard.Handle(text);
+        }
     }
 
     private async Task LocateActiveDocumentAsync(CancellationToken cancellationToken)

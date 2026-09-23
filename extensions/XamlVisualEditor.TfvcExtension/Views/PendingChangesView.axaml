@@ -8,7 +8,8 @@
              xmlns:controls="using:XamlVisualEditor.TfvcExtension.Controls"
              xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
              x:Class="XamlVisualEditor.TfvcExtension.Views.PendingChangesView"
-             x:DataType="vm:PendingChangesViewModel">
+             x:DataType="vm:PendingChangesViewModel"
+             views:ClipboardInteractionBehavior.Interaction="{CompiledBinding CopyToClipboard}">
 
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:PendingChangeNodeViewModel" x:DataType="vm:PendingChangeNodeViewModel">
@@ -126,6 +127,9 @@
               <ContextMenu x:DataType="vm:PendingChangesViewModel">
                 <MenuItem Header="{x:Static loc:TfvcStrings.Open}" Command="{CompiledBinding OpenSelectedCommand}" />
                 <MenuItem Header="{x:Static loc:TfvcStrings.Compare}" Command="{CompiledBinding CompareSelectedCommand}" />
+                <MenuItem Header="{x:Static loc:TfvcStrings.ShowHistory}" Command="{CompiledBinding ShowHistoryCommand}" />
+                <MenuItem Header="{x:Static loc:TfvcStrings.CopyName}" Command="{CompiledBinding CopyNameCommand}" />
+                <MenuItem Header="{x:Static loc:TfvcStrings.CopyPath}" Command="{CompiledBinding CopyPathCommand}" />
                 <Separator />
                 <MenuItem Header="{x:Static loc:TfvcStrings.Exclude}" Command="{CompiledBinding ExcludeSelectedCommand}" />
                 <Separator />
@@ -165,6 +169,9 @@
             <ContextMenu x:DataType="vm:PendingChangesViewModel">
               <MenuItem Header="{x:Static loc:TfvcStrings.Open}" Command="{CompiledBinding OpenSelectedCommand}" />
               <MenuItem Header="{x:Static loc:TfvcStrings.Compare}" Command="{CompiledBinding CompareSelectedCommand}" />
+              <MenuItem Header="{x:Static loc:TfvcStrings.ShowHistory}" Command="{CompiledBinding ShowHistoryCommand}" />
+                <MenuItem Header="{x:Static loc:TfvcStrings.CopyName}" Command="{CompiledBinding CopyNameCommand}" />
+              <MenuItem Header="{x:Static loc:TfvcStrings.CopyPath}" Command="{CompiledBinding CopyPathCommand}" />
               <Separator />
               <MenuItem Header="{x:Static loc:TfvcStrings.Include}" Command="{CompiledBinding IncludeSelectedCommand}" />
               <Separator />

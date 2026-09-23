@@ -25,6 +25,9 @@ public sealed class TfvcExtension : IXveExtension
     /// <summary>View id of the source control explorer panel.</summary>
     public const string SOURCE_CONTROL_EXPLORER_VIEW_ID = "tfvc.sourceControlExplorer";
 
+    /// <summary>View id of the history panel.</summary>
+    public const string HISTORY_VIEW_ID = "tfvc.history";
+
     /// <inheritdoc />
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
@@ -44,10 +47,18 @@ public sealed class TfvcExtension : IXveExtension
         EventHandler statusHandler = (_, _) => Dispatcher.UIThread.Post(() => UpdateStatusBar(statusBarItem, autoCheckOut));
         autoCheckOut.ActiveDocumentStateChanged += statusHandler;
 
+        TfvcHistoryViewModel history = new(session);
+        Func<string, Task> showHistory = async path =>
+        {
+            await context.ViewHost.ShowAsync(HISTORY_VIEW_ID, CancellationToken.None);
+            await history.ShowAsync(path, CancellationToken.None);
+        };
+
         ExtensionViewContribution[] views =
         [
             new(PENDING_CHANGES_VIEW_ID, TfvcStrings.PendingChangesTitle, ExtensionViewType.Custom, ExtensionViewLocation.Right, 20),
-            new(SOURCE_CONTROL_EXPLORER_VIEW_ID, TfvcStrings.SourceControlExplorerTitle, ExtensionViewType.Custom, ExtensionViewLocation.Left, 40)
+            new(SOURCE_CONTROL_EXPLORER_VIEW_ID, TfvcStrings.SourceControlExplorerTitle, ExtensionViewType.Custom, ExtensionViewLocation.Left, 40),
+            new(HISTORY_VIEW_ID, TfvcStrings.HistoryTitle, ExtensionViewType.Custom, ExtensionViewLocation.Bottom, 60)
         ];
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(context.ExtensionId, views));
@@ -59,7 +70,8 @@ public sealed class TfvcExtension : IXveExtension
                 context.Editor,
                 context.Window,
                 context.DialogHost,
-                context.SystemIcons))));
+                context.SystemIcons,
+                showHistory))));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             SOURCE_CONTROL_EXPLORER_VIEW_ID,
             new DelegateViewProvider(() => new SourceControlExplorerViewModel(
@@ -67,7 +79,11 @@ public sealed class TfvcExtension : IXveExtension
                 autoCheckOut,
                 context.Editor,
                 context.DialogHost,
-                context.SystemIcons))));
+                context.SystemIcons,
+                showHistory))));
+        context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
+            HISTORY_VIEW_ID,
+            new DelegateViewProvider(() => history)));
 
         context.Subscriptions.Add(new ActionDisposable(() =>
         {

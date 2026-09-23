@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
@@ -67,6 +68,20 @@ public sealed partial class SourceControlItemViewModel : ReactiveObject
     [Reactive]
     public partial string? LocalPath { get; private set; }
 
+    /// <summary>Gets the latest changeset; the sort key of the changeset column.</summary>
+    public int Version => Item.Version;
+
+    /// <summary>Gets the date of the last check-in; the sort key of the check-in column.</summary>
+    public DateTimeOffset? LastCheckIn => Item.ChangeDate;
+
+    /// <summary>Gets the size of the local file in bytes; the sort key of the size column.</summary>
+    [Reactive]
+    public partial long? LocalSizeBytes { get; private set; }
+
+    /// <summary>Gets the last write time of the local item; the sort key of the modified column.</summary>
+    [Reactive]
+    public partial DateTime? LocalModified { get; private set; }
+
     /// <summary>Gets the size of the local file.</summary>
     [Reactive]
     public partial string LocalSizeText { get; private set; } = string.Empty;
@@ -102,12 +117,16 @@ public sealed partial class SourceControlItemViewModel : ReactiveObject
         IsDownloaded = info?.Exists == true;
         if (info is null || !info.Exists)
         {
+            LocalSizeBytes = null;
+            LocalModified = null;
             LocalSizeText = string.Empty;
             LocalModifiedText = localPath is null ? TfvcStrings.NotMapped : TfvcStrings.NotDownloaded;
         }
         else
         {
-            LocalSizeText = info is FileInfo file ? FormatSize(file.Length) : string.Empty;
+            LocalSizeBytes = info is FileInfo file ? file.Length : null;
+            LocalModified = info.LastWriteTime;
+            LocalSizeText = LocalSizeBytes is { } bytes ? FormatSize(bytes) : string.Empty;
             LocalModifiedText = info.LastWriteTime.ToString("g", CultureInfo.CurrentCulture);
         }
 

@@ -15,6 +15,7 @@ using Dock.Serializer.SystemTextJson;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
 
@@ -842,7 +843,7 @@ public sealed partial class XamlEditorDockFactory : Factory
                 return null;
             }
 
-            string json = File.ReadAllText(filePath);
+            string json = SharedFileReader.ReadAllText(filePath);
             JsonObject? persisted = JsonNode.Parse(json) as JsonObject;
             JsonObject? pinnedSizes = persisted?["PinnedToolSizes"] as JsonObject;
             persisted?.Remove("PinnedToolSizes");

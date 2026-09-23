@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+             xmlns:models="using:XamlVisualEditor.TfvcExtension.Models"
+             xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+             x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcConnectionView"
+             x:DataType="vm:TfvcConnectionViewModel">
+  <StackPanel Spacing="4">
+    <Grid ColumnDefinitions="Auto,*,Auto">
+      <TextBlock Grid.Column="0" Text="{x:Static loc:TfvcStrings.Workspace}" VerticalAlignment="Center" Margin="0,0,6,0" />
+      <ComboBox Grid.Column="1"
+                HorizontalAlignment="Stretch"
+                ItemsSource="{CompiledBinding Workspaces}"
+                SelectedItem="{CompiledBinding SelectedWorkspace, Mode=TwoWay}"
+                AutomationProperties.Name="{x:Static loc:TfvcStrings.Workspace}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="models:TfvcWorkspace">
+            <TextBlock Text="{CompiledBinding DisplayName}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <ToggleButton Grid.Column="2"
+                    Margin="4,0,0,0"
+                    Padding="8,2"
+                    Content="..."
+                    IsChecked="{CompiledBinding IsSettingsVisible, Mode=TwoWay}"
+                    ToolTip.Tip="{x:Static loc:TfvcStrings.Settings}"
+                    AutomationProperties.Name="{x:Static loc:TfvcStrings.Settings}" />
+    </Grid>
+    <StackPanel Spacing="4" IsVisible="{CompiledBinding IsSettingsVisible}">
+      <TextBlock Text="{x:Static loc:TfvcStrings.CollectionUrl}" />
+      <TextBox Text="{CompiledBinding CollectionUrl, Mode=TwoWay}"
+               PlaceholderText="{x:Static loc:TfvcStrings.CollectionUrlPlaceholder}"
+               AutomationProperties.Name="{x:Static loc:TfvcStrings.CollectionUrl}" />
+      <TextBlock Text="{x:Static loc:TfvcStrings.TfExePath}" />
+      <TextBox Text="{CompiledBinding TfExePath, Mode=TwoWay}"
+               PlaceholderText="{x:Static loc:TfvcStrings.TfExePathPlaceholder}"
+               AutomationProperties.Name="{x:Static loc:TfvcStrings.TfExePath}" />
+      <Button Content="{x:Static loc:TfvcStrings.Connect}"
+              Command="{CompiledBinding ConnectCommand}"
+              HorizontalAlignment="Left"
+              Padding="8,2" />
+    </StackPanel>
+    <ProgressBar Height="3" MinHeight="3" IsIndeterminate="True" IsVisible="{CompiledBinding IsBusy}" />
+    <TextBlock Text="{CompiledBinding StatusMessage}"
+               TextWrapping="Wrap"
+               IsVisible="{CompiledBinding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+  </StackPanel>
+</UserControl>

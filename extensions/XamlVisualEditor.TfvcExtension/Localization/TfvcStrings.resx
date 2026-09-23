@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PendingChangesTitle" xml:space="preserve"><value>Pending Changes</value></data>
+  <data name="SourceControlExplorerTitle" xml:space="preserve"><value>TFVC Explorer</value></data>
+  <data name="CollectionUrl" xml:space="preserve"><value>Collection URL</value></data>
+  <data name="CollectionUrlPlaceholder" xml:space="preserve"><value>https://server/tfs/DefaultCollection</value></data>
+  <data name="TfExePath" xml:space="preserve"><value>tf.exe path</value></data>
+  <data name="TfExePathPlaceholder" xml:space="preserve"><value>Detected automatically</value></data>
+  <data name="Connect" xml:space="preserve"><value>Connect</value></data>
+  <data name="Settings" xml:space="preserve"><value>Connection settings</value></data>
+  <data name="Workspace" xml:space="preserve"><value>Workspace</value></data>
+  <data name="Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="CheckIn" xml:space="preserve"><value>Check In</value></data>
+  <data name="Shelve" xml:space="preserve"><value>Shelve</value></data>
+  <data name="Actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="Comment" xml:space="preserve"><value>Comment</value></data>
+  <data name="CommentPlaceholder" xml:space="preserve"><value>Enter a check-in comment</value></data>
+  <data name="RelatedWorkItems" xml:space="preserve"><value>Related Work Items</value></data>
+  <data name="WorkItemIdPlaceholder" xml:space="preserve"><value>Work item ID</value></data>
+  <data name="AddWorkItem" xml:space="preserve"><value>Add</value></data>
+  <data name="Remove" xml:space="preserve"><value>Remove</value></data>
+  <data name="IncludedChangesFormat" xml:space="preserve"><value>Included Changes ({0})</value></data>
+  <data name="ExcludedChangesFormat" xml:space="preserve"><value>Excluded Changes ({0})</value></data>
+  <data name="IncludeAll" xml:space="preserve"><value>Include All</value></data>
+  <data name="ExcludeAll" xml:space="preserve"><value>Exclude All</value></data>
+  <data name="Include" xml:space="preserve"><value>Include</value></data>
+  <data name="Exclude" xml:space="preserve"><value>Exclude</value></data>
+  <data name="Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Compare" xml:space="preserve"><value>Compare with Workspace Version</value></data>
+  <data name="Undo" xml:space="preserve"><value>Undo Pending Changes</value></data>
+  <data name="UndoAll" xml:space="preserve"><value>Undo All</value></data>
+  <data name="GetLatest" xml:space="preserve"><value>Get Latest Version</value></data>
+  <data name="CheckOut" xml:space="preserve"><value>Check Out for Edit</value></data>
+  <data name="AddActiveDocument" xml:space="preserve"><value>Add Active File to Source Control</value></data>
+  <data name="LocateActiveDocument" xml:space="preserve"><value>Locate Active Document</value></data>
+  <data name="FocusFolder" xml:space="preserve"><value>Focus on Folder</value></data>
+  <data name="ClearFocus" xml:space="preserve"><value>Clear Focus</value></data>
+  <data name="FocusedOn" xml:space="preserve"><value>Focus:</value></data>
+  <data name="SourceLocation" xml:space="preserve"><value>Source location</value></data>
+  <data name="Go" xml:space="preserve"><value>Go</value></data>
+  <data name="ColumnName" xml:space="preserve"><value>Name</value></data>
+  <data name="ColumnPendingChange" xml:space="preserve"><value>Pending Change</value></data>
+  <data name="ColumnChangeset" xml:space="preserve"><value>Changeset</value></data>
+  <data name="ColumnLastCheckIn" xml:space="preserve"><value>Last Check-in</value></data>
+  <data name="ColumnLocalSize" xml:space="preserve"><value>Size</value></data>
+  <data name="ColumnLocalModified" xml:space="preserve"><value>Modified</value></data>
+  <data name="CommentRequired" xml:space="preserve"><value>A check-in requires a comment.</value></data>
+  <data name="NotDownloaded" xml:space="preserve"><value>Not downloaded</value></data>
+  <data name="NotMapped" xml:space="preserve"><value>Not mapped</value></data>
+  <data name="Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="DiffTitleFormat" xml:space="preserve"><value>Difference: {0}</value></data>
+  <data name="Loading" xml:space="preserve"><value>Loading...</value></data>
+  <data name="NotConfigured" xml:space="preserve"><value>Enter the TFVC collection URL to connect.</value></data>
+  <data name="NoWorkspace" xml:space="preserve"><value>No TFVC workspace of this computer is mapped for the collection.</value></data>
+  <data name="NoPendingChanges" xml:space="preserve"><value>No pending changes.</value></data>
+  <data name="TfExeNotFound" xml:space="preserve"><value>tf.exe was not found. Install the Team Explorer component of Visual Studio or set the tf.exe path.</value></data>
+  <data name="CommandFailedFormat" xml:space="preserve"><value>tf {0} failed: {1}</value></data>
+  <data name="ServerRequestFailedFormat" xml:space="preserve"><value>Server request failed: {0}</value></data>
+  <data name="CheckedInFormat" xml:space="preserve"><value>Changeset {0} checked in.</value></data>
+  <data name="CheckedIn" xml:space="preserve"><value>Check-in completed.</value></data>
+  <data name="ShelvedFormat" xml:space="preserve"><value>Shelveset "{0}" created.</value></data>
+  <data name="ShelveNamePrompt" xml:space="preserve"><value>Shelveset name</value></data>
+  <data name="UndoConfirmMessageFormat" xml:space="preserve"><value>Undo the pending changes of {0} item(s)? Local edits of these files are lost.</value></data>
+  <data name="UndoConfirmAction" xml:space="preserve"><value>Undo</value></data>
+  <data name="CommandLineTooLong" xml:space="preserve"><value>Too many items are selected for one tf.exe call. Include all changes or reduce the selection.</value></data>
+  <data name="AutoCheckOutFailedFormat" xml:space="preserve"><value>Check-out of "{0}" failed: {1}</value></data>
+  <data name="WorkItemNotFoundFormat" xml:space="preserve"><value>Work item {0} was not found.</value></data>
+  <data name="WorkItemLinkFailedFormat" xml:space="preserve"><value>Linking work item {0} failed: {1}</value></data>
+  <data name="WorkItemLabelFormat" xml:space="preserve"><value>{0} {1}: {2}</value></data>
+  <data name="StatusBarFormat" xml:space="preserve"><value>TFVC: {0}</value></data>
+  <data name="FileStateNotInWorkspace" xml:space="preserve"><value>not mapped</value></data>
+  <data name="FileStateNotVersioned" xml:space="preserve"><value>not versioned</value></data>
+  <data name="FileStateCheckedIn" xml:space="preserve"><value>checked in</value></data>
+  <data name="FileStatePendingFormat" xml:space="preserve"><value>pending {0}</value></data>
+  <data name="FileStateUnknown" xml:space="preserve"><value>unknown</value></data>
+  <data name="FileStateChecking" xml:space="preserve"><value>checking</value></data>
+  <data name="ChangeEdit" xml:space="preserve"><value>edit</value></data>
+  <data name="ChangeAdd" xml:space="preserve"><value>add</value></data>
+  <data name="ChangeDelete" xml:space="preserve"><value>delete</value></data>
+  <data name="ChangeRename" xml:space="preserve"><value>rename</value></data>
+  <data name="ChangeUndelete" xml:space="preserve"><value>undelete</value></data>
+  <data name="ChangeBranch" xml:space="preserve"><value>branch</value></data>
+  <data name="ChangeMerge" xml:space="preserve"><value>merge</value></data>
+  <data name="ChangeEncoding" xml:space="preserve"><value>encoding</value></data>
+  <data name="ChangeLock" xml:space="preserve"><value>lock</value></data>
+  <data name="ChangeRollback" xml:space="preserve"><value>rollback</value></data>
+  <data name="ChangeProperty" xml:space="preserve"><value>property</value></data>
+  <data name="ChangeSourceRename" xml:space="preserve"><value>source rename</value></data>
+</root>

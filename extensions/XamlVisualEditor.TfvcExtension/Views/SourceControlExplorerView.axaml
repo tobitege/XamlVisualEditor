@@ -1,0 +1,188 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:media="using:Avalonia.Media"
+             xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+             xmlns:views="using:XamlVisualEditor.TfvcExtension.Views"
+             xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+             x:Class="XamlVisualEditor.TfvcExtension.Views.SourceControlExplorerView"
+             x:DataType="vm:SourceControlExplorerViewModel">
+
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{CompiledBinding ServerPath}">
+        <ContentControl Content="{CompiledBinding Icon}" VerticalAlignment="Center">
+          <ContentControl.DataTemplates>
+            <DataTemplate x:DataType="media:IImage">
+              <Image Width="16" Height="16" Source="{CompiledBinding .}" />
+            </DataTemplate>
+          </ContentControl.DataTemplates>
+        </ContentControl>
+        <TextBlock Text="{CompiledBinding Name}" VerticalAlignment="Center" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <DockPanel Margin="6">
+    <views:TfvcConnectionView DockPanel.Dock="Top" DataContext="{CompiledBinding Connection}" Margin="0,0,0,6" />
+
+    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+      <Button Content="{x:Static loc:TfvcStrings.Refresh}" Command="{CompiledBinding RefreshCommand}" Padding="8,2" Margin="0,0,4,4" />
+      <Button Content="{x:Static loc:TfvcStrings.LocateActiveDocument}" Command="{CompiledBinding LocateActiveDocumentCommand}" Padding="8,2" Margin="0,0,4,4" />
+      <Button Content="{x:Static loc:TfvcStrings.GetLatest}" Command="{CompiledBinding GetLatestCommand}" Padding="8,2" Margin="0,0,4,4" />
+      <ProgressBar Width="60" Height="3" MinHeight="3" IsIndeterminate="True" VerticalAlignment="Center"
+                   IsVisible="{CompiledBinding IsWorking}" />
+    </WrapPanel>
+
+    <TextBox DockPanel.Dock="Top" Margin="0,0,0,6"
+             Text="{CompiledBinding SearchText, Mode=TwoWay}"
+             PlaceholderText="{x:Static loc:TfvcStrings.Search}"
+             AutomationProperties.Name="{x:Static loc:TfvcStrings.Search}" />
+
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+      <TextBlock Grid.Column="0" Text="{x:Static loc:TfvcStrings.SourceLocation}" VerticalAlignment="Center" Margin="0,0,6,0" />
+      <TextBox Grid.Column="1"
+               Text="{CompiledBinding PathText, Mode=TwoWay}"
+               AutomationProperties.Name="{x:Static loc:TfvcStrings.SourceLocation}">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{CompiledBinding NavigateCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+      <Button Grid.Column="2" Margin="4,0,0,0" Padding="8,2"
+              Content="{x:Static loc:TfvcStrings.Go}"
+              Command="{CompiledBinding NavigateCommand}" />
+    </Grid>
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding OperationMessage}"
+               TextWrapping="Wrap"
+               Margin="0,0,0,6"
+               IsVisible="{CompiledBinding OperationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6"
+          IsVisible="{CompiledBinding FocusedPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+      <TextBlock Grid.Column="0" Text="{x:Static loc:TfvcStrings.FocusedOn}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+      <TextBlock Grid.Column="1" Text="{CompiledBinding FocusedPath}" TextTrimming="CharacterEllipsis"
+                 ToolTip.Tip="{CompiledBinding FocusedPath}" VerticalAlignment="Center" />
+      <Button Grid.Column="2" Margin="4,0,0,0" Padding="8,2"
+              Content="{x:Static loc:TfvcStrings.ClearFocus}"
+              Command="{CompiledBinding ClearFocusCommand}" />
+    </Grid>
+
+    <dg:DataGrid Classes="explorer-compact"
+                 ItemsSource="{CompiledBinding Model.Flattened}"
+                 HierarchicalModel="{CompiledBinding Model}"
+                 HierarchicalRowsEnabled="True"
+                 SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                 SortingModel="{CompiledBinding SortingModel}"
+                 FilteringModel="{CompiledBinding FilteringModel}"
+                 SearchModel="{CompiledBinding SearchModel}"
+                 HeadersVisibility="Column"
+                 GridLinesVisibility="None"
+                 CanUserResizeColumns="True"
+                 CanUserSortColumns="False"
+                 IsReadOnly="True"
+                 HorizontalScrollBarVisibility="Auto"
+                 views:ScrollSelectionIntoViewBehavior.IsEnabled="True"
+                 views:RightClickSelectBehavior.IsEnabled="True"
+                 views:DoubleTapCommandBehavior.Command="{CompiledBinding OpenCommand}">
+      <dg:DataGrid.ContextMenu>
+        <ContextMenu x:DataType="vm:SourceControlExplorerViewModel">
+          <MenuItem Header="{x:Static loc:TfvcStrings.Open}" Command="{CompiledBinding OpenCommand}" />
+          <Separator />
+          <MenuItem Header="{x:Static loc:TfvcStrings.FocusFolder}" Command="{CompiledBinding FocusSelectedCommand}" />
+          <MenuItem Header="{x:Static loc:TfvcStrings.ClearFocus}" Command="{CompiledBinding ClearFocusCommand}" />
+          <Separator />
+          <MenuItem Header="{x:Static loc:TfvcStrings.GetLatest}" Command="{CompiledBinding GetLatestCommand}" />
+          <MenuItem Header="{x:Static loc:TfvcStrings.CheckOut}" Command="{CompiledBinding CheckOutCommand}" />
+          <Separator />
+          <MenuItem Header="{x:Static loc:TfvcStrings.Undo}" Command="{CompiledBinding UndoCommand}" />
+          <Separator />
+          <MenuItem Header="{x:Static loc:TfvcStrings.Refresh}" Command="{CompiledBinding RefreshCommand}" />
+        </ContextMenu>
+      </dg:DataGrid.ContextMenu>
+      <dg:DataGrid.Columns>
+        <dg:DataGridHierarchicalColumn Header="{x:Static loc:TfvcStrings.ColumnName}"
+                                       Width="280"
+                                       MinWidth="120"
+                                       Binding="{CompiledBinding Item}"
+                                       SortMemberPath="Item.Name"
+                                       x:DataType="dh:HierarchicalNode">
+          <dg:DataGridHierarchicalColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center" />
+            </DataTemplate>
+          </dg:DataGridHierarchicalColumn.CellTemplate>
+        </dg:DataGridHierarchicalColumn>
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnPendingChange}" Width="120">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+                <ContentControl.DataTemplates>
+                  <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
+                    <TextBlock Text="{CompiledBinding PendingChangeText}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLocalSize}" Width="80">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center" HorizontalContentAlignment="Right">
+                <ContentControl.DataTemplates>
+                  <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
+                    <TextBlock Text="{CompiledBinding LocalSizeText}" ToolTip.Tip="{CompiledBinding LocalToolTip}"
+                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0" />
+                  </DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLocalModified}" Width="140">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+                <ContentControl.DataTemplates>
+                  <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
+                    <TextBlock Text="{CompiledBinding LocalModifiedText}" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{CompiledBinding LocalToolTip}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnLastCheckIn}" Width="130">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+                <ContentControl.DataTemplates>
+                  <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
+                    <TextBlock Text="{CompiledBinding LastCheckInText}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnChangeset}" Width="80">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+                <ContentControl.DataTemplates>
+                  <DataTemplate DataType="vm:SourceControlItemViewModel" x:DataType="vm:SourceControlItemViewModel">
+                    <TextBlock Text="{CompiledBinding ChangesetText}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

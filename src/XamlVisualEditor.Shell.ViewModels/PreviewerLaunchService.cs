@@ -856,7 +856,7 @@ internal sealed class PreviewerTelemetryStore
                 return new PreviewerTelemetryData();
             }
 
-            string json = File.ReadAllText(path);
+            string json = SharedFileReader.ReadAllText(path);
             PreviewerTelemetryData? data = JsonSerializer.Deserialize<PreviewerTelemetryData>(json);
             return data ?? new PreviewerTelemetryData();
         }

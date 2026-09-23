@@ -31,6 +31,8 @@ using XamlVisualEditor.DebugSettingsExtension.Views;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal.Avalonia.Views;
+using XamlVisualEditor.TfvcExtension.ViewModels;
+using XamlVisualEditor.TfvcExtension.Views;
 using XamlVisualEditor.TreeInspectorExtension;
 using XamlVisualEditor.TreeInspectorExtension.Views;
 using XamlVisualEditor.TreeView;
@@ -101,6 +103,8 @@ public sealed class ViewLocator : IDataTemplate
             AnimationEditorViewModel => new AnimationEditorView(),
             TerminalViewModel => new TerminalView(),
             GitPanelViewModel => new GitPanelView(),
+            PendingChangesViewModel => new PendingChangesView(),
+            SourceControlExplorerViewModel => new SourceControlExplorerView(),
             IdeBridgePanelViewModel => new IdeBridgePanelView(),
             McpPanelViewModel => new McpPanelView(),
             ReferencesPanelViewModel => new ReferencesPanelView(),
@@ -157,6 +161,8 @@ public sealed class ViewLocator : IDataTemplate
             or AnimationEditorViewModel
             or TerminalViewModel
             or GitPanelViewModel
+            or PendingChangesViewModel
+            or SourceControlExplorerViewModel
             or IdeBridgePanelViewModel
             or McpPanelViewModel
             or OutputPanelViewModel

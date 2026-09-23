@@ -44,7 +44,7 @@ public sealed class EditorOptionsStore
         if (path is null || !File.Exists(path)) return;
         try
         {
-            EditorOptions loaded = JsonSerializer.Deserialize<EditorOptions>(File.ReadAllText(path)) ?? new();
+            EditorOptions loaded = JsonSerializer.Deserialize<EditorOptions>(SharedFileReader.ReadAllText(path)) ?? new();
             if (loaded.Language is not ("en" or "de") || !Enum.IsDefined(loaded.TerminalLocation) || !Enum.IsDefined(loaded.TerminalShell))
                 throw new JsonException("Unsupported language or terminal option.");
             if (loaded.EditorTheme is null || string.IsNullOrWhiteSpace(loaded.EditorTheme.ProviderId) || string.IsNullOrWhiteSpace(loaded.EditorTheme.ThemeId))

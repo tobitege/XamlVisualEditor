@@ -1,0 +1,164 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using XamlVisualEditor.TfvcExtension.Models;
+
+namespace XamlVisualEditor.TfvcExtension.Services;
+
+/// <summary>Runs tf.exe commands.</summary>
+public interface ITfCommandRunner
+{
+    /// <summary>Gets or sets an explicit tf.exe path; null selects automatic detection.</summary>
+    string? ConfiguredTfExePath { get; set; }
+
+    /// <summary>Runs tf.exe with the given arguments.</summary>
+    /// <param name="workingDirectory">Directory whose workspace mapping tf.exe uses when no workspace is passed explicitly.</param>
+    /// <param name="arguments">Command and arguments; each entry is passed as one argument.</param>
+    /// <param name="timeout">Maximum run time before the process is terminated.</param>
+    /// <param name="cancellationToken">Cancels the command and terminates the process.</param>
+    Task<TfCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken);
+}
+
+/// <summary>Raised when tf.exe cannot be located or started.</summary>
+public sealed class TfExeNotFoundException : Exception
+{
+    /// <summary>Creates the exception.</summary>
+    public TfExeNotFoundException(string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>Runs tf.exe as a child process in the context of the current Windows user.</summary>
+public sealed class TfCommandRunner : ITfCommandRunner
+{
+    /// <summary>Longest command line that is passed to tf.exe; Windows limits command lines to 32767 characters.</summary>
+    public const int MAX_COMMAND_LINE_LENGTH = 30000;
+
+    private readonly ITfExeLocator _locator;
+    private readonly Encoding _outputEncoding;
+
+    /// <summary>Creates the runner.</summary>
+    public TfCommandRunner(ITfExeLocator locator)
+    {
+        _locator = locator;
+        _outputEncoding = CreateOutputEncoding();
+    }
+
+    /// <inheritdoc />
+    public string? ConfiguredTfExePath { get; set; }
+
+    /// <inheritdoc />
+    public async Task<TfCommandResult> RunAsync(
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        string? tfExePath = _locator.Locate(ConfiguredTfExePath);
+        if (tfExePath is null)
+        {
+            throw new TfExeNotFoundException("tf.exe was not found.");
+        }
+
+        ProcessStartInfo startInfo = new()
+        {
+            FileName = tfExePath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            StandardOutputEncoding = _outputEncoding,
+            StandardErrorEncoding = _outputEncoding,
+            CreateNoWindow = true,
+            WorkingDirectory = Directory.Exists(workingDirectory)
+                ? workingDirectory
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+        };
+
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        Process process;
+        try
+        {
+            process = Process.Start(startInfo) ?? throw new TfExeNotFoundException("tf.exe did not start.");
+        }
+        catch (Win32Exception ex)
+        {
+            throw new TfExeNotFoundException("tf.exe could not be started: " + ex.Message, ex);
+        }
+
+        using (process)
+        using (CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            timeoutSource.CancelAfter(timeout);
+            process.StandardInput.Close();
+            try
+            {
+                Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutSource.Token);
+                Task<string> stderrTask = process.StandardError.ReadToEndAsync(timeoutSource.Token);
+                await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
+                return new TfCommandResult(process.ExitCode, await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false));
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                TryKill(process);
+                throw new TimeoutException(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "tf {0} did not finish within {1} seconds.",
+                    arguments.Count > 0 ? arguments[0] : string.Empty,
+                    (int)timeout.TotalSeconds));
+            }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>Estimates the command line length of a tf.exe call.</summary>
+    public static int EstimateCommandLineLength(IReadOnlyList<string> arguments)
+    {
+        int length = 260;
+        foreach (string argument in arguments)
+        {
+            length += argument.Length + 3;
+        }
+
+        return length;
+    }
+
+    // tf.exe writes redirected output in the ANSI code page of the system, not in the OEM code page.
+    private static Encoding CreateOutputEncoding()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (Win32Exception)
+        {
+        }
+    }
+}

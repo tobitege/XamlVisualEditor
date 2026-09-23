@@ -21,7 +21,7 @@ public sealed class AssemblySnapshotSettings
         if (!File.Exists(settingsPath)) return null;
 
         AssemblySnapshotSettings[] settings = JsonSerializer.Deserialize<AssemblySnapshotSettings[]>(
-            File.ReadAllText(settingsPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            SharedFileReader.ReadAllText(settingsPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? Array.Empty<AssemblySnapshotSettings>();
         AssemblySnapshotSettings? selected = settings
             .Where(setting => IsWithin(workspacePath, setting.WorkspaceRoot))

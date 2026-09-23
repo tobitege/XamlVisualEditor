@@ -1,0 +1,640 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.IO;
+using System.Reactive;
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Controls.DataGridFiltering;
+using Avalonia.Controls.DataGridHierarchical;
+using Avalonia.Controls.DataGridSearching;
+using Avalonia.Controls.DataGridSorting;
+using ReactiveUI;
+using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Extensions;
+using XamlVisualEditor.TfvcExtension.Localization;
+using XamlVisualEditor.TfvcExtension.Models;
+using XamlVisualEditor.TfvcExtension.Services;
+
+namespace XamlVisualEditor.TfvcExtension.ViewModels;
+
+/// <summary>View model of the source control explorer: server tree of the collection with workspace state.</summary>
+public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDisposable
+{
+    private const string ROOT_PATH = "$/";
+
+    private readonly TfvcSession _session;
+    private readonly TfvcAutoCheckOutService _autoCheckOut;
+    private readonly IEditorServices _editor;
+    private readonly IDialogHost? _dialogHost;
+    private readonly ISystemIconService? _icons;
+    private string? _loadedCollectionUrl;
+    private SourceControlItemViewModel? _treeRoot;
+    private bool _isDisposed;
+
+    /// <summary>Creates the view model.</summary>
+    public SourceControlExplorerViewModel(
+        TfvcSession session,
+        TfvcAutoCheckOutService autoCheckOut,
+        IEditorServices editor,
+        IDialogHost? dialogHost,
+        ISystemIconService? icons)
+    {
+        _session = session;
+        _autoCheckOut = autoCheckOut;
+        _editor = editor;
+        _dialogHost = dialogHost;
+        _icons = icons;
+        Connection = new TfvcConnectionViewModel(session);
+
+        HierarchicalOptions options = new()
+        {
+            ChildrenSelector = item => ((SourceControlItemViewModel)item).Children,
+            IsLeafSelector = item => !((SourceControlItemViewModel)item).HasChildren,
+            IsExpandedSelector = item => ((SourceControlItemViewModel)item).IsExpanded,
+            IsExpandedSetter = (item, value) => OnExpandedChanged((SourceControlItemViewModel)item, value)
+        };
+        Model = new HierarchicalModel(options);
+        Model.SetRoots(Roots);
+        SortingModel = new SortingModel();
+        FilteringModel = new FilteringModel();
+        SearchModel = new SearchModel
+        {
+            HighlightMode = SearchHighlightMode.TextAndCell,
+            HighlightCurrent = true,
+            WrapNavigation = true,
+            UpdateSelectionOnNavigate = true
+        };
+
+        this.WhenAnyValue(x => x.SelectedRow)
+            .Select(row => row switch
+            {
+                HierarchicalNode node => node.Item as SourceControlItemViewModel,
+                SourceControlItemViewModel item => item,
+                _ => null
+            })
+            .Subscribe(item =>
+            {
+                SelectedItem = item is { IsPlaceholder: false } ? item : null;
+                if (SelectedItem is not null)
+                {
+                    PathText = SelectedItem.ServerPath;
+                }
+            });
+
+        this.WhenAnyValue(x => x.SearchText)
+            .Throttle(TimeSpan.FromMilliseconds(150))
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(ApplySearch);
+
+        IObservable<SourceControlItemViewModel?> selected = this.WhenAnyValue(x => x.SelectedItem);
+        IObservable<bool> notWorking = this.WhenAnyValue(x => x.IsWorking).Select(working => !working);
+        IObservable<bool> canOpen = selected.Select(item => item is { IsFolder: false, IsDownloaded: true });
+        IObservable<bool> canGet = selected.CombineLatest(notWorking, (item, idle) => idle && item?.LocalPath is not null);
+        IObservable<bool> canCheckOut = selected.CombineLatest(notWorking, (item, idle) => idle && item is { IsFolder: false, IsDownloaded: true });
+        IObservable<bool> canUndo = selected.CombineLatest(notWorking, (item, idle) => idle && item is not null && HasPendingChangeBelow(item.ServerPath));
+
+        RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync);
+        NavigateCommand = ReactiveCommand.CreateFromTask(ct => NavigateToAsync(PathText, ct));
+        OpenCommand = ReactiveCommand.CreateFromTask(OpenSelectedAsync, canOpen);
+        GetLatestCommand = ReactiveCommand.CreateFromTask(GetLatestAsync, canGet);
+        CheckOutCommand = ReactiveCommand.CreateFromTask(CheckOutAsync, canCheckOut);
+        UndoCommand = ReactiveCommand.CreateFromTask(UndoAsync, canUndo);
+        LocateActiveDocumentCommand = ReactiveCommand.CreateFromTask(LocateActiveDocumentAsync);
+        FocusSelectedCommand = ReactiveCommand.CreateFromTask(
+            ct => SetFocusAsync(SelectedItem?.ServerPath, ct),
+            this.WhenAnyValue(x => x.SelectedItem, x => x.FocusedPath, (item, focus) =>
+                item is { IsFolder: true } && item.ServerPath != ROOT_PATH
+                && !string.Equals(item.ServerPath, focus, StringComparison.OrdinalIgnoreCase)));
+        ClearFocusCommand = ReactiveCommand.CreateFromTask(
+            ct => SetFocusAsync(null, ct),
+            this.WhenAnyValue(x => x.FocusedPath).Select(focus => focus is not null));
+
+        _session.StateChanged += OnSessionStateChanged;
+        _session.PendingChangesChanged += OnPendingChangesChanged;
+        RxSchedulers.MainThreadScheduler.Schedule(() => _ = EnsureRootAsync());
+    }
+
+    /// <summary>Gets the connection settings and workspace selection.</summary>
+    public TfvcConnectionViewModel Connection { get; }
+
+    /// <summary>Gets the root items.</summary>
+    public ObservableCollection<SourceControlItemViewModel> Roots { get; } = new();
+
+    /// <summary>Gets the hierarchical model of the server tree.</summary>
+    public HierarchicalModel Model { get; }
+
+    /// <summary>Gets the sorting model of the grid.</summary>
+    public SortingModel SortingModel { get; }
+
+    /// <summary>Gets the filtering model of the grid.</summary>
+    public FilteringModel FilteringModel { get; }
+
+    /// <summary>Gets the search model of the grid.</summary>
+    public SearchModel SearchModel { get; }
+
+    /// <summary>Reloads the tree.</summary>
+    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+
+    /// <summary>Navigates to the entered server path.</summary>
+    public ReactiveCommand<Unit, Unit> NavigateCommand { get; }
+
+    /// <summary>Opens the selected file.</summary>
+    public ReactiveCommand<Unit, Unit> OpenCommand { get; }
+
+    /// <summary>Gets the latest version of the selected item.</summary>
+    public ReactiveCommand<Unit, Unit> GetLatestCommand { get; }
+
+    /// <summary>Checks out the selected file.</summary>
+    public ReactiveCommand<Unit, Unit> CheckOutCommand { get; }
+
+    /// <summary>Undoes the pending changes of the selected item.</summary>
+    public ReactiveCommand<Unit, Unit> UndoCommand { get; }
+
+    /// <summary>Selects the active editor document in the tree.</summary>
+    public ReactiveCommand<Unit, Unit> LocateActiveDocumentCommand { get; }
+
+    /// <summary>Shows only the selected folder and its descendants.</summary>
+    public ReactiveCommand<Unit, Unit> FocusSelectedCommand { get; }
+
+    /// <summary>Shows the whole collection again.</summary>
+    public ReactiveCommand<Unit, Unit> ClearFocusCommand { get; }
+
+    /// <summary>Gets the server path of the focused folder, or null when the whole collection is shown.</summary>
+    [Reactive]
+    public partial string? FocusedPath { get; private set; }
+
+    /// <summary>Gets or sets the selected grid row.</summary>
+    [Reactive]
+    public partial object? SelectedRow { get; set; }
+
+    /// <summary>Gets the selected item.</summary>
+    [Reactive]
+    public partial SourceControlItemViewModel? SelectedItem { get; private set; }
+
+    /// <summary>Gets or sets the server path of the navigation box.</summary>
+    [Reactive]
+    public partial string? PathText { get; set; }
+
+    /// <summary>Gets or sets the search text.</summary>
+    [Reactive]
+    public partial string? SearchText { get; set; }
+
+    /// <summary>Gets whether an operation of this panel is running.</summary>
+    [Reactive]
+    public partial bool IsWorking { get; private set; }
+
+    /// <summary>Gets the result or error message of the last operation.</summary>
+    [Reactive]
+    public partial string? OperationMessage { get; private set; }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
+        _session.StateChanged -= OnSessionStateChanged;
+        _session.PendingChangesChanged -= OnPendingChangesChanged;
+        Connection.Dispose();
+    }
+
+    /// <summary>Expands the tree along a server path and selects its item.</summary>
+    public async Task NavigateToAsync(string? serverPath, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(serverPath) || !serverPath.Trim().StartsWith('$'))
+        {
+            return;
+        }
+
+        await EnsureRootAsync();
+        if (Roots.Count == 0)
+        {
+            return;
+        }
+
+        string target = TfvcWorkspace.NormalizeServerPath(serverPath);
+        if (FocusedPath is not null && !TfvcWorkspace.IsSameOrChildServerPath(target, FocusedPath))
+        {
+            await SetFocusAsync(null, cancellationToken);
+        }
+
+        List<SourceControlItemViewModel> ancestors = new();
+        SourceControlItemViewModel current = await ResolvePathAsync(Roots[0], target, ancestors, cancellationToken);
+        Model.Refresh();
+        foreach (SourceControlItemViewModel ancestor in ancestors)
+        {
+            HierarchicalNode? ancestorNode = Model.FindNode(ancestor);
+            if (ancestorNode is not null && !ancestorNode.IsExpanded)
+            {
+                Model.Expand(ancestorNode);
+            }
+        }
+
+        SelectedRow = (object?)Model.FindNode(current) ?? current;
+    }
+
+    /// <summary>Shows only the given folder and its descendants; null shows the whole collection again.</summary>
+    public async Task SetFocusAsync(string? serverPath, CancellationToken cancellationToken)
+    {
+        string? normalized = string.IsNullOrWhiteSpace(serverPath) || TfvcWorkspace.NormalizeServerPath(serverPath) == ROOT_PATH
+            ? null
+            : TfvcWorkspace.NormalizeServerPath(serverPath);
+        string? previousFocus = FocusedPath;
+        FocusedPath = normalized;
+        await _session.SaveExplorerFocusAsync(normalized, cancellationToken);
+        await ApplyFocusAsync(cancellationToken);
+        if (normalized is null && previousFocus is not null)
+        {
+            await NavigateToAsync(previousFocus, cancellationToken);
+        }
+    }
+
+    private async Task ApplyFocusAsync(CancellationToken cancellationToken)
+    {
+        if (_treeRoot is null)
+        {
+            return;
+        }
+
+        SourceControlItemViewModel displayed = _treeRoot;
+        if (FocusedPath is not null)
+        {
+            SourceControlItemViewModel resolved = await ResolvePathAsync(_treeRoot, FocusedPath, new List<SourceControlItemViewModel>(), cancellationToken);
+            if (resolved.IsFolder && string.Equals(resolved.ServerPath, FocusedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                displayed = resolved;
+                displayed.IsExpanded = true;
+                await LoadChildrenAsync(displayed, cancellationToken);
+            }
+            else
+            {
+                FocusedPath = null;
+            }
+        }
+
+        if (Roots.Count != 1 || !ReferenceEquals(Roots[0], displayed))
+        {
+            Roots.Clear();
+            Roots.Add(displayed);
+            Model.SetRoots(Roots);
+        }
+
+        Model.Refresh();
+    }
+
+    // Walks from a start item towards a server path, loading children on the way; returns the deepest item reached.
+    private async Task<SourceControlItemViewModel> ResolvePathAsync(
+        SourceControlItemViewModel start,
+        string target,
+        List<SourceControlItemViewModel> ancestors,
+        CancellationToken cancellationToken)
+    {
+        SourceControlItemViewModel current = start;
+        while (!string.Equals(current.ServerPath, target, StringComparison.OrdinalIgnoreCase))
+        {
+            await LoadChildrenAsync(current, cancellationToken);
+            current.IsExpanded = true;
+            ancestors.Add(current);
+            SourceControlItemViewModel? next = null;
+            foreach (SourceControlItemViewModel child in current.Children)
+            {
+                if (TfvcWorkspace.IsSameOrChildServerPath(target, child.ServerPath))
+                {
+                    next = child;
+                    break;
+                }
+            }
+
+            if (next is null)
+            {
+                break;
+            }
+
+            current = next;
+        }
+
+        return current;
+    }
+
+    private async Task EnsureRootAsync()
+    {
+        string? collectionUrl = _session.IsConnected ? _session.Settings.CollectionUrl : null;
+        if (string.Equals(collectionUrl, _loadedCollectionUrl, StringComparison.OrdinalIgnoreCase) && (Roots.Count > 0 || collectionUrl is null))
+        {
+            return;
+        }
+
+        _loadedCollectionUrl = collectionUrl;
+        _treeRoot = null;
+        Roots.Clear();
+        if (collectionUrl is not null)
+        {
+            SourceControlItemViewModel root = new(new TfvcServerItem(ROOT_PATH, true, 0, null), GetIcon(ROOT_PATH, true));
+            _treeRoot = root;
+            UpdateWorkspaceState(root);
+            root.IsExpanded = true;
+            await LoadChildrenAsync(root, CancellationToken.None);
+            FocusedPath ??= await _session.LoadExplorerFocusAsync(CancellationToken.None);
+            await ApplyFocusAsync(CancellationToken.None);
+            return;
+        }
+
+        Model.SetRoots(Roots);
+        Model.Refresh();
+    }
+
+    private async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        HashSet<string> expanded = new(StringComparer.OrdinalIgnoreCase);
+        foreach (SourceControlItemViewModel root in Roots)
+        {
+            CollectExpanded(root, expanded);
+        }
+
+        string? selectedPath = SelectedItem?.ServerPath;
+        _loadedCollectionUrl = null;
+        await EnsureRootAsync();
+        foreach (SourceControlItemViewModel root in Roots)
+        {
+            await RestoreExpandedAsync(root, expanded, cancellationToken);
+        }
+
+        Model.Refresh();
+        if (selectedPath is not null)
+        {
+            await NavigateToAsync(selectedPath, cancellationToken);
+        }
+    }
+
+    private async Task RestoreExpandedAsync(SourceControlItemViewModel item, HashSet<string> expanded, CancellationToken cancellationToken)
+    {
+        if (!item.IsFolder || !expanded.Contains(item.ServerPath))
+        {
+            return;
+        }
+
+        await LoadChildrenAsync(item, cancellationToken);
+        item.IsExpanded = true;
+        foreach (SourceControlItemViewModel child in item.Children)
+        {
+            await RestoreExpandedAsync(child, expanded, cancellationToken);
+        }
+    }
+
+    private static void CollectExpanded(SourceControlItemViewModel item, HashSet<string> expanded)
+    {
+        if (!item.IsExpanded)
+        {
+            return;
+        }
+
+        expanded.Add(item.ServerPath);
+        foreach (SourceControlItemViewModel child in item.Children)
+        {
+            CollectExpanded(child, expanded);
+        }
+    }
+
+    private void OnExpandedChanged(SourceControlItemViewModel item, bool isExpanded)
+    {
+        item.IsExpanded = isExpanded;
+        if (isExpanded && !item.IsLoaded)
+        {
+            _ = LoadChildrenAsync(item, CancellationToken.None);
+        }
+    }
+
+    private async Task LoadChildrenAsync(SourceControlItemViewModel item, CancellationToken cancellationToken)
+    {
+        string? collectionUrl = _session.Settings.CollectionUrl;
+        if (item.IsLoaded || !item.IsFolder || collectionUrl is null)
+        {
+            return;
+        }
+
+        item.IsLoaded = true;
+        item.Children.Clear();
+        item.Children.Add(new SourceControlItemViewModel(new TfvcServerItem(TfvcWorkspace.CombineServerPath(item.ServerPath, "."), false, 0, null), null, isPlaceholder: true));
+        Model.Refresh();
+        try
+        {
+            IReadOnlyList<TfvcServerItem> children = await _session.Server.GetChildrenAsync(collectionUrl, item.ServerPath, cancellationToken);
+            item.Children.Clear();
+            foreach (TfvcServerItem child in children)
+            {
+                SourceControlItemViewModel childViewModel = new(child, GetIcon(GetIconPath(child), child.IsFolder));
+                UpdateWorkspaceState(childViewModel);
+                item.Children.Add(childViewModel);
+            }
+
+            item.HasChildren = item.Children.Count > 0;
+            OperationMessage = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            item.IsLoaded = false;
+            item.Children.Clear();
+            OperationMessage = TfvcDisplayText.DescribeError(ex);
+        }
+
+        Model.Refresh();
+    }
+
+    private string GetIconPath(TfvcServerItem item)
+    {
+        return _session.CurrentWorkspace?.TryGetLocalPath(item.ServerPath) ?? item.Name;
+    }
+
+    private object? GetIcon(string path, bool isFolder) => _icons?.GetIcon(path, isFolder);
+
+    private void UpdateWorkspaceState(SourceControlItemViewModel item)
+    {
+        TfvcPendingChange? change = _session.FindPendingChangeByServerPath(item.ServerPath);
+        item.UpdateWorkspaceState(
+            _session.CurrentWorkspace,
+            change,
+            change is null ? string.Empty : TfvcDisplayText.FormatChangeTypes(change.ChangeTypes));
+    }
+
+    private void UpdateWorkspaceStateRecursive(IEnumerable<SourceControlItemViewModel> items)
+    {
+        foreach (SourceControlItemViewModel item in items)
+        {
+            UpdateWorkspaceState(item);
+            UpdateWorkspaceStateRecursive(item.Children);
+        }
+    }
+
+    private bool HasPendingChangeBelow(string serverPath)
+    {
+        foreach (TfvcPendingChange change in _session.PendingChanges)
+        {
+            if (TfvcWorkspace.IsSameOrChildServerPath(change.ServerPath, TfvcWorkspace.NormalizeServerPath(serverPath)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task OpenSelectedAsync(CancellationToken cancellationToken)
+    {
+        string? localPath = SelectedItem?.LocalPath;
+        if (localPath is not null && File.Exists(localPath))
+        {
+            await _editor.OpenDocumentAsync(localPath, EditorDocumentOpenBehavior.DocumentOnly, cancellationToken);
+        }
+    }
+
+    private async Task GetLatestAsync(CancellationToken cancellationToken)
+    {
+        TfvcWorkspace? workspace = _session.CurrentWorkspace;
+        SourceControlItemViewModel? item = SelectedItem;
+        if (workspace is null || item?.LocalPath is null)
+        {
+            return;
+        }
+
+        await RunOperationAsync(async () =>
+        {
+            await _session.Client.GetLatestAsync(workspace, item.ServerPath, item.IsFolder, cancellationToken);
+            item.UpdateWorkspaceState(workspace, _session.FindPendingChangeByServerPath(item.ServerPath), item.PendingChangeText);
+            UpdateWorkspaceStateRecursive(item.Children);
+        });
+    }
+
+    private async Task CheckOutAsync(CancellationToken cancellationToken)
+    {
+        TfvcWorkspace? workspace = _session.CurrentWorkspace;
+        string? localPath = SelectedItem?.LocalPath;
+        if (workspace is null || localPath is null)
+        {
+            return;
+        }
+
+        await RunOperationAsync(async () =>
+        {
+            await _session.Client.CheckOutAsync(workspace, [localPath], cancellationToken);
+            _autoCheckOut.Invalidate(localPath);
+        });
+    }
+
+    private async Task UndoAsync(CancellationToken cancellationToken)
+    {
+        TfvcWorkspace? workspace = _session.CurrentWorkspace;
+        SourceControlItemViewModel? item = SelectedItem;
+        if (workspace is null || item is null || _dialogHost is null)
+        {
+            return;
+        }
+
+        int count = 0;
+        foreach (TfvcPendingChange change in _session.PendingChanges)
+        {
+            if (TfvcWorkspace.IsSameOrChildServerPath(change.ServerPath, item.ServerPath))
+            {
+                count++;
+            }
+        }
+
+        bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
+            ConfirmationDialogRequest.DIALOG_ID,
+            new ConfirmationDialogRequest(
+                TfvcStrings.Undo,
+                string.Format(CultureInfo.CurrentCulture, TfvcStrings.UndoConfirmMessageFormat, count),
+                TfvcStrings.UndoConfirmAction,
+                IsDestructive: true),
+            cancellationToken);
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunOperationAsync(() => _session.Client.UndoAsync(workspace, [item.ServerPath], item.IsFolder, cancellationToken));
+    }
+
+    private async Task LocateActiveDocumentAsync(CancellationToken cancellationToken)
+    {
+        string? path = _editor.ActiveDocument?.FilePath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        string? serverPath = _session.FindWorkspaceForLocalPath(path)?.TryGetServerPath(path);
+        if (serverPath is not null)
+        {
+            PathText = serverPath;
+            await NavigateToAsync(serverPath, cancellationToken);
+        }
+    }
+
+    private async Task RunOperationAsync(Func<Task> operation)
+    {
+        IsWorking = true;
+        try
+        {
+            await operation();
+            OperationMessage = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            OperationMessage = TfvcDisplayText.DescribeError(ex);
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+
+        await _session.RefreshPendingChangesAsync(CancellationToken.None);
+    }
+
+    private void ApplySearch(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            SearchModel.Clear();
+            return;
+        }
+
+        SearchModel.SetOrUpdate(new SearchDescriptor(
+            text.Trim(),
+            matchMode: SearchMatchMode.Contains,
+            termMode: SearchTermCombineMode.Any,
+            scope: SearchScope.VisibleColumns,
+            comparison: StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void OnSessionStateChanged(object? sender, EventArgs e)
+    {
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
+        {
+            if (_isDisposed || _session.IsBusy)
+            {
+                return;
+            }
+
+            _ = EnsureRootAsync();
+            UpdateWorkspaceStateRecursive(_treeRoot is null ? Roots : [_treeRoot]);
+        });
+    }
+
+    private void OnPendingChangesChanged(object? sender, EventArgs e)
+    {
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
+        {
+            if (!_isDisposed)
+            {
+                UpdateWorkspaceStateRecursive(_treeRoot is null ? Roots : [_treeRoot]);
+            }
+        });
+    }
+}

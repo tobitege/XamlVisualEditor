@@ -7441,7 +7441,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
         }
 
-        return System.IO.File.ReadAllText(path);
+        return SharedFileReader.ReadAllText(path);
     }
 
     private static void WriteRecentFilesText(string path, string content)
@@ -8222,7 +8222,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            string json = File.ReadAllText(path);
+            string json = SharedFileReader.ReadAllText(path);
             List<string>? roots = JsonSerializer.Deserialize<List<string>>(json);
             if (roots is null)
             {

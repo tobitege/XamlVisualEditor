@@ -1,0 +1,204 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:media="using:Avalonia.Media"
+             xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+             xmlns:views="using:XamlVisualEditor.TfvcExtension.Views"
+             xmlns:controls="using:XamlVisualEditor.TfvcExtension.Controls"
+             xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+             x:Class="XamlVisualEditor.TfvcExtension.Views.PendingChangesView"
+             x:DataType="vm:PendingChangesViewModel">
+
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="vm:PendingChangeNodeViewModel" x:DataType="vm:PendingChangeNodeViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{CompiledBinding FullPath}">
+        <ContentControl Content="{CompiledBinding Icon}" VerticalAlignment="Center">
+          <ContentControl.DataTemplates>
+            <DataTemplate x:DataType="media:IImage">
+              <Image Width="16" Height="16" Source="{CompiledBinding .}" />
+            </DataTemplate>
+          </ContentControl.DataTemplates>
+        </ContentControl>
+        <TextBlock Text="{CompiledBinding Name}" VerticalAlignment="Center" />
+        <TextBlock Text="{CompiledBinding ChangeLabel}" Opacity="0.6" VerticalAlignment="Center" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <DockPanel Margin="6">
+    <views:TfvcConnectionView DockPanel.Dock="Top" DataContext="{CompiledBinding Connection}" Margin="0,0,0,6" />
+
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+      <Button Content="{x:Static loc:TfvcStrings.CheckIn}"
+              Command="{CompiledBinding CheckInCommand}"
+              Classes="accent"
+              Padding="10,3" />
+      <Button Content="{x:Static loc:TfvcStrings.Shelve}"
+              Command="{CompiledBinding ShelveCommand}"
+              Padding="8,3" />
+      <DropDownButton Content="{x:Static loc:TfvcStrings.Actions}" Padding="8,3">
+        <DropDownButton.Flyout>
+          <MenuFlyout>
+            <MenuItem Header="{x:Static loc:TfvcStrings.Refresh}" Command="{CompiledBinding RefreshCommand}" />
+            <Separator />
+            <MenuItem Header="{x:Static loc:TfvcStrings.IncludeAll}" Command="{CompiledBinding IncludeAllCommand}" />
+            <MenuItem Header="{x:Static loc:TfvcStrings.ExcludeAll}" Command="{CompiledBinding ExcludeAllCommand}" />
+            <Separator />
+            <MenuItem Header="{x:Static loc:TfvcStrings.AddActiveDocument}" Command="{CompiledBinding AddActiveDocumentCommand}" />
+            <Separator />
+            <MenuItem Header="{x:Static loc:TfvcStrings.UndoAll}" Command="{CompiledBinding UndoAllCommand}" />
+          </MenuFlyout>
+        </DropDownButton.Flyout>
+      </DropDownButton>
+      <ProgressBar Width="60" Height="3" MinHeight="3" IsIndeterminate="True" VerticalAlignment="Center"
+                   IsVisible="{CompiledBinding IsWorking}" />
+    </StackPanel>
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding OperationMessage}"
+               TextWrapping="Wrap"
+               Margin="0,0,0,6"
+               IsVisible="{CompiledBinding OperationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+      <Expander Grid.Row="0" Header="{x:Static loc:TfvcStrings.Comment}" IsExpanded="True"
+                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,4">
+        <TextBox Text="{CompiledBinding Comment, Mode=TwoWay}"
+                 PlaceholderText="{x:Static loc:TfvcStrings.CommentPlaceholder}"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 MinHeight="72"
+                 MaxHeight="200"
+                 AutomationProperties.Name="{x:Static loc:TfvcStrings.Comment}" />
+      </Expander>
+
+      <Expander Grid.Row="1" Header="{x:Static loc:TfvcStrings.RelatedWorkItems}"
+                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,4">
+        <StackPanel Spacing="4">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0"
+                     Text="{CompiledBinding WorkItemIdText, Mode=TwoWay}"
+                     PlaceholderText="{x:Static loc:TfvcStrings.WorkItemIdPlaceholder}"
+                     AutomationProperties.Name="{x:Static loc:TfvcStrings.WorkItemIdPlaceholder}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{CompiledBinding AddWorkItemCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="1" Margin="4,0,0,0" Padding="8,2"
+                    Content="{x:Static loc:TfvcStrings.AddWorkItem}"
+                    Command="{CompiledBinding AddWorkItemCommand}" />
+          </Grid>
+          <ItemsControl ItemsSource="{CompiledBinding WorkItems}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TfvcWorkItemViewModel">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{CompiledBinding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Padding="6,0"
+                          Content="{x:Static loc:TfvcStrings.Remove}"
+                          Command="{CompiledBinding $parent[ItemsControl].((vm:PendingChangesViewModel)DataContext).RemoveWorkItemCommand}"
+                          CommandParameter="{CompiledBinding .}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Expander>
+
+      <Expander Grid.Row="2" Header="{CompiledBinding IncludedHeader}" IsExpanded="True"
+                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                VerticalAlignment="Stretch" VerticalContentAlignment="Stretch" Margin="0,0,0,4">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="{x:Static loc:TfvcStrings.NoPendingChanges}" Opacity="0.7"
+                     IsVisible="{CompiledBinding IsEmpty}" />
+          <dg:DataGrid Classes="explorer-compact"
+                       ItemsSource="{CompiledBinding IncludedModel.Flattened}"
+                       HierarchicalModel="{CompiledBinding IncludedModel}"
+                       HierarchicalRowsEnabled="True"
+                       SelectedItem="{CompiledBinding SelectedIncludedRow, Mode=TwoWay}"
+                       HeadersVisibility="None"
+                       GridLinesVisibility="None"
+                       IsReadOnly="True"
+                       MinHeight="80"
+                       views:RightClickSelectBehavior.IsEnabled="True"
+                       views:DoubleTapCommandBehavior.Command="{CompiledBinding OpenSelectedCommand}">
+            <dg:DataGrid.ContextMenu>
+              <ContextMenu x:DataType="vm:PendingChangesViewModel">
+                <MenuItem Header="{x:Static loc:TfvcStrings.Open}" Command="{CompiledBinding OpenSelectedCommand}" />
+                <MenuItem Header="{x:Static loc:TfvcStrings.Compare}" Command="{CompiledBinding CompareSelectedCommand}" />
+                <Separator />
+                <MenuItem Header="{x:Static loc:TfvcStrings.Exclude}" Command="{CompiledBinding ExcludeSelectedCommand}" />
+                <Separator />
+                <MenuItem Header="{x:Static loc:TfvcStrings.Undo}" Command="{CompiledBinding UndoSelectedCommand}" />
+              </ContextMenu>
+            </dg:DataGrid.ContextMenu>
+            <dg:DataGrid.Columns>
+              <dg:DataGridHierarchicalColumn Width="*"
+                                             Binding="{CompiledBinding Item}"
+                                             x:DataType="dh:HierarchicalNode">
+                <dg:DataGridHierarchicalColumn.CellTemplate>
+                  <DataTemplate x:DataType="dh:HierarchicalNode">
+                    <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center" />
+                  </DataTemplate>
+                </dg:DataGridHierarchicalColumn.CellTemplate>
+              </dg:DataGridHierarchicalColumn>
+            </dg:DataGrid.Columns>
+          </dg:DataGrid>
+        </DockPanel>
+      </Expander>
+
+      <Expander Grid.Row="3" Header="{CompiledBinding ExcludedHeader}"
+                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,4">
+        <dg:DataGrid Classes="explorer-compact"
+                     ItemsSource="{CompiledBinding ExcludedModel.Flattened}"
+                     HierarchicalModel="{CompiledBinding ExcludedModel}"
+                     HierarchicalRowsEnabled="True"
+                     SelectedItem="{CompiledBinding SelectedExcludedRow, Mode=TwoWay}"
+                     HeadersVisibility="None"
+                     GridLinesVisibility="None"
+                     IsReadOnly="True"
+                     MinHeight="40"
+                     MaxHeight="220"
+                     views:RightClickSelectBehavior.IsEnabled="True"
+                       views:DoubleTapCommandBehavior.Command="{CompiledBinding OpenSelectedCommand}">
+          <dg:DataGrid.ContextMenu>
+            <ContextMenu x:DataType="vm:PendingChangesViewModel">
+              <MenuItem Header="{x:Static loc:TfvcStrings.Open}" Command="{CompiledBinding OpenSelectedCommand}" />
+              <MenuItem Header="{x:Static loc:TfvcStrings.Compare}" Command="{CompiledBinding CompareSelectedCommand}" />
+              <Separator />
+              <MenuItem Header="{x:Static loc:TfvcStrings.Include}" Command="{CompiledBinding IncludeSelectedCommand}" />
+              <Separator />
+              <MenuItem Header="{x:Static loc:TfvcStrings.Undo}" Command="{CompiledBinding UndoSelectedCommand}" />
+            </ContextMenu>
+          </dg:DataGrid.ContextMenu>
+          <dg:DataGrid.Columns>
+            <dg:DataGridHierarchicalColumn Width="*"
+                                           Binding="{CompiledBinding Item}"
+                                           x:DataType="dh:HierarchicalNode">
+              <dg:DataGridHierarchicalColumn.CellTemplate>
+                <DataTemplate x:DataType="dh:HierarchicalNode">
+                  <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center" />
+                </DataTemplate>
+              </dg:DataGridHierarchicalColumn.CellTemplate>
+            </dg:DataGridHierarchicalColumn>
+          </dg:DataGrid.Columns>
+        </dg:DataGrid>
+      </Expander>
+
+      <DockPanel Grid.Row="4" Height="260" IsVisible="{CompiledBinding IsDiffVisible}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+          <TextBlock Grid.Column="0" Text="{CompiledBinding DiffTitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Padding="8,2" Content="{x:Static loc:TfvcStrings.Close}" Command="{CompiledBinding CloseDiffCommand}" />
+        </Grid>
+        <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}" BorderThickness="1" Padding="2">
+          <controls:TfvcDiffTextEditor DiffLines="{CompiledBinding DiffLines}"
+                                       ShowLineNumbers="False"
+                                       FontFamily="Cascadia Code, Consolas, Menlo, monospace"
+                                       FontSize="13"
+                                       HorizontalScrollBarVisibility="Auto"
+                                       VerticalScrollBarVisibility="Auto" />
+        </Border>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</UserControl>

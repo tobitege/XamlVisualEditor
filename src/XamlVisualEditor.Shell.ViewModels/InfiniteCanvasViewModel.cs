@@ -15,6 +15,7 @@ using Dock.Model.ReactiveUI.Controls;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell;
 
@@ -321,7 +322,7 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
                 return;
             }
 
-            string json = File.ReadAllText(path);
+            string json = SharedFileReader.ReadAllText(path);
             MdiCanvasLayoutState? layout = JsonSerializer.Deserialize<MdiCanvasLayoutState>(json);
             if (layout?.Items is null)
             {

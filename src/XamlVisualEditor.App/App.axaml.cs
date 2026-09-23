@@ -14,6 +14,7 @@ using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using AcpExtensionEntry = XamlVisualEditor.AcpExtension.AcpExtension;
 using GitExtensionEntry = XamlVisualEditor.GitExtension.GitExtension;
+using TfvcExtensionEntry = XamlVisualEditor.TfvcExtension.TfvcExtension;
 using IdeBridgeExtensionEntry = XamlVisualEditor.IdeBridgeExtension.IdeBridgeExtension;
 using McpExtensionEntry = XamlVisualEditor.McpExtension.McpExtension;
 using VscodeCompatExtensionEntry = XamlVisualEditor.VscodeCompatExtension.VscodeCompatExtension;
@@ -277,6 +278,7 @@ public sealed class App : Application
         services.AddSingleton<BuiltInExtensionHost>();
         services.AddSingleton<IXveExtension, AcpExtensionEntry>();
         services.AddSingleton<IXveExtension, GitExtensionEntry>();
+        services.AddSingleton<IXveExtension, TfvcExtensionEntry>();
         services.AddSingleton<IXveExtension, IdeBridgeExtensionEntry>();
         services.AddSingleton<IXveExtension, McpExtensionEntry>();
         services.AddSingleton<IXveExtension, VscodeCompatExtensionEntry>();

@@ -13,6 +13,7 @@ uses Semantic Versioning.
 - Added automatic preview-host selection for library workspaces that use a separate application assembly.
 - Added preview frame export through the IDE bridge.
 - Added visible progress status for workspace loading and design-surface rebuilds.
+- Added the TFVC extension with a source control explorer, a pending changes panel, and automatic check-out of versioned files on their first edit. It uses tf.exe and the TFVC REST API with the current Windows credentials; the only required setting is the collection URL.
 
 ### Changed
 

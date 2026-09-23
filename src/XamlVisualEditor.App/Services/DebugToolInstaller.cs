@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Formats.Tar;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.App.Services;
@@ -116,7 +117,7 @@ public sealed class DebugToolInstaller : IDebugToolInstaller
 
         try
         {
-            string json = File.ReadAllText(_consentPath);
+            string json = SharedFileReader.ReadAllText(_consentPath);
             string[]? tools = JsonSerializer.Deserialize<string[]>(json);
             if (tools is null)
             {

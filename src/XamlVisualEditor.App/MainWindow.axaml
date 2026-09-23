@@ -322,10 +322,6 @@
                             </MultiBinding>
                         </TextBlock.Text>
                     </TextBlock>
-                    <TextBlock Text="{CompiledBinding CollaborationStatusText}"
-                               VerticalAlignment="Center" FontSize="12"
-                               Foreground="{DynamicResource EditorStatusBarForegroundBrush}"
-                               Opacity="0.8" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -335,6 +331,7 @@
             Layout="{CompiledBinding DockLayout}"
             Factory="{CompiledBinding DockFactory}">
             <i:Interaction.Behaviors>
+                <v:FixedSideDockWidthsBehavior />
                 <v:PinnedDockLayoutBehavior />
             </i:Interaction.Behaviors>
         </dock:DockControl>

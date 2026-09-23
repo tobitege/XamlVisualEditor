@@ -37,7 +37,7 @@ public sealed class WorkspaceResponsivenessTests
             metadataService: new StubMetadataService(), dotNetCli: new ControllableDotNetCli(), controlCatalogUpdater: catalog,
             recentFilesPath: recentStore);
         using IDisposable fileHandler = main.OpenFileInteraction.RegisterHandler(context => context.SetOutput(workspacePath));
-        using IDisposable workspaceHandler = main.OpenWorkspaceInteraction.RegisterHandler(context => context.SetOutput(new WorkspaceOpenRequest(workspacePath, false)));
+        using IDisposable workspaceHandler = main.OpenWorkspaceInteraction.RegisterHandler(context => context.SetOutput(new WorkspaceOpenRequest(workspacePath)));
 
         Assert.False(await main.CloseActiveDocumentCommand.CanExecute.FirstAsync());
         Assert.False(await main.CloseWorkspaceCommand.CanExecute.FirstAsync());
@@ -50,7 +50,7 @@ public sealed class WorkspaceResponsivenessTests
         Assert.Equal(workspacePath, workspaceInfo.WorkspacePath);
         Assert.Equal(workspacePath, Assert.Single(main.RecentWorkspaces).FilePath);
         Assert.Equal(workspacePath, Assert.Single(main.RecentDocuments).FilePath);
-        Assert.False(catalog.AutoLoadProjectControls);
+        Assert.True(catalog.UpdateCount > 0);
         Assert.Single(main.WorkspaceProjects);
         Assert.NotNull(main.ActiveProject);
         await main.OpenFileAsync(codePath);
@@ -74,12 +74,13 @@ public sealed class WorkspaceResponsivenessTests
         Assert.False(await main.CloseWorkspaceCommand.CanExecute.FirstAsync());
         Assert.False(await main.CloseActiveDocumentCommand.CanExecute.FirstAsync());
 
+        int previousUpdates = catalog.UpdateCount;
         await main.OpenRecentCommand.Execute(Assert.Single(main.RecentWorkspaces)).FirstAsync();
         Assert.True(main.HasWorkspace);
         Assert.Equal(workspacePath, workspaceInfo.WorkspacePath);
-        Assert.False(catalog.AutoLoadProjectControls);
+        Assert.True(catalog.UpdateCount > previousUpdates);
         using MainWindowViewModel restored = new(recentFilesPath: recentStore);
-        Assert.False(Assert.Single(restored.RecentWorkspaces).LoadProjectControls);
+        Assert.Equal(workspacePath, Assert.Single(restored.RecentWorkspaces).FilePath);
     }
 
     [AvaloniaFact]
@@ -297,9 +298,8 @@ public sealed class WorkspaceResponsivenessTests
 
     private sealed class RecordingCatalogUpdater : IControlCatalogUpdater
     {
-        public bool AutoLoadProjectControls { get; private set; }
-        public void SetWorkspaceAssemblies(IEnumerable<string> assemblyPaths, bool autoLoadProjectControls = true) =>
-            AutoLoadProjectControls = autoLoadProjectControls;
+        public int UpdateCount { get; private set; }
+        public void SetWorkspaceAssemblies(IEnumerable<string> assemblyPaths) => UpdateCount++;
     }
 
     private sealed class StubWorkspaceService : IWorkspaceService

@@ -121,7 +121,6 @@ public sealed class CollaborationExtension : IXveExtension
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, 95);
         statusBarItem.CommandId = ToggleCollaborationCommandId;
-        statusBarItem.Show();
         UpdateStatusBar(statusBarItem, context.Collaboration);
         context.Subscriptions.Add(statusBarItem);
 
@@ -209,8 +208,7 @@ public sealed class CollaborationExtension : IXveExtension
     {
         if (!collaboration.IsSessionActive)
         {
-            statusBarItem.Text = UiStrings.CollaborationOffline;
-            statusBarItem.Tooltip = UiStrings.NoCollaborationSession;
+            statusBarItem.Hide();
             return;
         }
 
@@ -223,6 +221,7 @@ public sealed class CollaborationExtension : IXveExtension
         statusBarItem.Tooltip = participantCount == 1
             ? string.Format(UiStrings.SessionOneParticipant, session)
             : string.Format(UiStrings.SessionParticipants, session, participantCount);
+        statusBarItem.Show();
     }
 
     private sealed class CollaborationPanelViewProvider : ICustomViewProvider

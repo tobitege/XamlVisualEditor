@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Reactive.Threading.Tasks;
@@ -6,16 +6,21 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
+using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.PropertyEditorExtension;
+using XamlVisualEditor.PropertyEditorExtension.Views;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Workspace;
@@ -71,8 +76,84 @@ public sealed class PropertyEditingWorkflowTests
         }
         document.SetSelectedNode(document.SyncEngine.CurrentDocument!.Root!.Id, SyncSource.TreeView);
         using ShellDesignerHost host = new(main);
-        using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry());
+        InMemorySettingsStore settings = new();
+        using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry(), settings);
         await inspector.InitializeAsync(CancellationToken.None);
+        Assert.True(inspector.CollapseOtherCategoriesOnSelection);
+        inspector.CollapseOtherCategoriesOnSelection = false;
+        Assert.False(settings.Get<bool>("propertyEditor.collapseOtherCategories"));
+        inspector.CollapseOtherCategoriesOnSelection = true;
+        Assert.True(settings.Get<bool>("propertyEditor.collapseOtherCategories"));
+        PropertyRowViewModel[] grouped = inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>().ToArray();
+        Assert.Equal(UiStrings.EssentialProperties, grouped[0].GroupName);
+        Assert.Contains(grouped, row => row.Property is { Name: "Width", IsSet: false }
+            && row.GroupName == UiStrings.EssentialProperties);
+        Assert.Contains(grouped, row => row.Property is { Name: "Padding", IsSet: true }
+            && row.GroupName == UiStrings.EssentialProperties);
+        Assert.Contains(grouped, row => row.Property is { Name: "Features" } && row.GroupName == UiStrings.LocalValues);
+        Assert.All(grouped.Where(row => row.Property is { IsSet: false }),
+            row => Assert.NotEqual(UiStrings.LocalValues, row.GroupName));
+        Assert.Contains(grouped, row => row.IsHeader && row.CanCollapse);
+        PropertyRowViewModel categoryHeader = grouped.First(row => row.IsHeader && row.CanCollapse);
+        categoryHeader.IsExpanded = true;
+        Assert.Same(categoryHeader, inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
+            .First(row => row.IsHeader && row.GroupName == categoryHeader.GroupName));
+        Assert.Contains(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>(),
+            row => row.Property is not null && row.GroupName == categoryHeader.GroupName);
+        categoryHeader.IsExpanded = false;
+        Assert.Same(categoryHeader, inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
+            .First(row => row.IsHeader && row.GroupName == categoryHeader.GroupName));
+        Assert.DoesNotContain(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>(),
+            row => row.Property is not null && row.GroupName == categoryHeader.GroupName);
+        await inspector.ExpandAllCategoriesCommand.Execute().ToTask();
+        Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
+            .Where(row => row.IsHeader && row.CanCollapse), row => Assert.True(row.IsExpanded));
+        Assert.Same(categoryHeader, inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
+            .First(row => row.IsHeader && row.GroupName == categoryHeader.GroupName));
+        await inspector.CollapseAllCategoriesCommand.Execute().ToTask();
+        Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
+            .Where(row => row.IsHeader && row.CanCollapse), row => Assert.False(row.IsExpanded));
+        Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
+            .Where(row => row.IsPinned), row => Assert.True(row.IsExpanded));
+        PropertyCategoryOption layout = Assert.Single(inspector.Categories, option => option.Value == "Layout");
+        inspector.SelectedCategory = layout;
+        Assert.NotEmpty(inspector.PropertiesView.Cast<PropertyEntryViewModel>());
+        Assert.All(inspector.PropertiesView.Cast<PropertyEntryViewModel>(), entry => Assert.Equal("Layout", entry.Category));
+        Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>(),
+            row => Assert.True(row.Property is null || row.Property.Category == "Layout"));
+        inspector.SelectedCategory = inspector.Categories[0];
+        inspector.ShowLocalValuesOnly = true;
+        Assert.Contains(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>(),
+            row => row.Property is { Name: "Width", IsSet: false } && row.GroupName == UiStrings.EssentialProperties);
+        inspector.ShowLocalValuesOnly = false;
+        if (propertyOwner == "CheckBox" && !externalPreviewer)
+        {
+            FluentTheme theme = new();
+            Avalonia.Application.Current!.Styles.Add(theme);
+            PropertyEditorPanelView propertyView = new() { DataContext = inspector };
+            IDataTemplate valueTemplate = Assert.IsAssignableFrom<IDataTemplate>(propertyView.Resources["PropertyValueTemplate"]);
+            PropertyEntryViewModel paddingEntry = Entry("Padding");
+            Assert.True(paddingEntry.IsSet);
+            Control valueRoot = Assert.IsAssignableFrom<Control>(valueTemplate.Build(paddingEntry));
+            valueRoot.DataContext = paddingEntry;
+            propertyView.Content = valueRoot;
+            Window propertyWindow = new() { Width = 480, Height = 700,
+                Content = propertyView };
+            try
+            {
+                propertyWindow.Show();
+                Dispatcher.UIThread.RunJobs();
+                propertyWindow.UpdateLayout();
+                ContentControl changedValue = Assert.Single(propertyView.GetVisualDescendants().OfType<ContentControl>(),
+                    control => control.Classes.Contains("local-value"));
+                Assert.Equal(FontWeight.SemiBold, changedValue.FontWeight);
+            }
+            finally
+            {
+                propertyWindow.Close();
+                Avalonia.Application.Current.Styles.Remove(theme);
+            }
+        }
         PropertyEntryViewModel Entry(string name) => Assert.Single(inspector.PropertiesView.Cast<PropertyEntryViewModel>(), entry => entry.Name == name);
 
         PropertyEntryViewModel content = Entry("Content");

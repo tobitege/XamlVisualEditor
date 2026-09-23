@@ -7,6 +7,7 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Threading;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -132,19 +133,32 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly IGitService? _gitService;
     private readonly IWorkspaceInfo? _workspaceInfo;
+    private readonly IDialogHost? _dialogHost;
     private readonly CompositeDisposable _disposables = new();
     private readonly ObservableCollection<GitChangeEntryViewModel> _stagedItems = new();
     private readonly ObservableCollection<GitChangeEntryViewModel> _unstagedItems = new();
     private readonly DataGridCollectionView _stagedView;
     private readonly DataGridCollectionView _unstagedView;
     private FileSystemWatcher? _watcher;
+    private IDisposable? _watcherSubscription;
+    private CancellationTokenSource? _monitoringCancellation;
     private readonly Subject<Unit> _refreshRequests = new();
+    private readonly object _refreshSync = new();
+    private bool _refreshRunning;
+    private bool _refreshRequested;
+    private string? _repositoryWorkspacePath;
+    private string? _cachedRepositoryRoot;
     private readonly ObservableAsPropertyHelper<int> _stagedCount;
     private readonly ObservableAsPropertyHelper<int> _unstagedCount;
     private readonly ObservableAsPropertyHelper<int> _diffLineCount;
 
     [Reactive]
     public partial string? RepositoryRoot { get; private set; }
+
+    [Reactive]
+    public partial bool IsGitMonitoringEnabled { get; private set; }
+
+    public string GitMonitoringLabel => IsGitMonitoringEnabled ? UiStrings.GitMonitoringOn : UiStrings.GitMonitoringOff;
 
     [Reactive]
     public partial string BranchName { get; private set; } = string.Empty;
@@ -177,6 +191,11 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     public partial string DiffText { get; private set; } = string.Empty;
 
     [Reactive]
+    public partial bool IsDiffVisible { get; private set; } = true;
+
+    public string DiffToggleLabel => IsDiffVisible ? UiStrings.GitHideDiff : UiStrings.GitShowDiff;
+
+    [Reactive]
     public partial GitChangeEntryViewModel? SelectedStagedChange { get; set; }
 
     [Reactive]
@@ -200,6 +219,10 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
 
+    public ReactiveCommand<Unit, Unit> ToggleMonitoringCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ToggleDiffCommand { get; }
+
     public ReactiveCommand<Unit, Unit> StageCommand { get; }
 
     public ReactiveCommand<Unit, Unit> UnstageCommand { get; }
@@ -214,10 +237,12 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     public GitPanelViewModel(
         IGitService? gitService = null,
-        IWorkspaceInfo? workspaceInfo = null)
+        IWorkspaceInfo? workspaceInfo = null,
+        IDialogHost? dialogHost = null)
     {
         _gitService = gitService;
         _workspaceInfo = workspaceInfo;
+        _dialogHost = dialogHost;
 
         _stagedView = new DataGridCollectionView(_stagedItems);
         _unstagedView = new DataGridCollectionView(_unstagedItems);
@@ -260,26 +285,34 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         _diffLineCount = diffLineCountChanged.ToProperty(this, x => x.DiffLineCount);
         _disposables.Add(_diffLineCount);
 
-        RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync);
+        ToggleMonitoringCommand = ReactiveCommand.Create(ToggleMonitoring);
+        _disposables.Add(ToggleMonitoringCommand);
+        ToggleDiffCommand = ReactiveCommand.Create(ToggleDiff);
+        _disposables.Add(ToggleDiffCommand);
+        RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync,
+            this.WhenAnyValue(x => x.IsGitMonitoringEnabled));
 
-        IObservable<bool> canStage = this.WhenAnyValue(x => x.SelectedUnstagedChange)
-            .Select(change => change is not null);
-        IObservable<bool> canUnstage = this.WhenAnyValue(x => x.SelectedStagedChange)
-            .Select(change => change is not null);
-        IObservable<bool> canDiscard = this.WhenAnyValue(x => x.SelectedUnstagedChange)
-            .Select(change => change is not null);
+        IObservable<bool> canStage = this.WhenAnyValue(x => x.SelectedUnstagedChange, x => x.IsGitMonitoringEnabled,
+            (change, enabled) => enabled && change is not null);
+        IObservable<bool> canUnstage = this.WhenAnyValue(x => x.SelectedStagedChange, x => x.IsGitMonitoringEnabled,
+            (change, enabled) => enabled && change is not null);
+        IObservable<bool> canDiscard = this.WhenAnyValue(x => x.SelectedUnstagedChange, x => x.IsGitMonitoringEnabled,
+            (change, enabled) => enabled && change is { IsUntracked: false });
 
         StageCommand = ReactiveCommand.CreateFromTask(StageSelectedAsync, canStage);
         UnstageCommand = ReactiveCommand.CreateFromTask(UnstageSelectedAsync, canUnstage);
         DiscardCommand = ReactiveCommand.CreateFromTask(DiscardSelectedAsync, canDiscard);
 
-        StageAllCommand = ReactiveCommand.CreateFromTask(StageAllAsync, this.WhenAnyValue(x => x.UnstagedCount)
-            .Select(count => count > 0));
-        UnstageAllCommand = ReactiveCommand.CreateFromTask(UnstageAllAsync, this.WhenAnyValue(x => x.StagedCount)
-            .Select(count => count > 0));
+        StageAllCommand = ReactiveCommand.CreateFromTask(StageAllAsync,
+            this.WhenAnyValue(x => x.UnstagedCount, x => x.IsGitMonitoringEnabled,
+                (count, enabled) => enabled && count > 0));
+        UnstageAllCommand = ReactiveCommand.CreateFromTask(UnstageAllAsync,
+            this.WhenAnyValue(x => x.StagedCount, x => x.IsGitMonitoringEnabled,
+                (count, enabled) => enabled && count > 0));
 
-        IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount, x => x.IsRepository,
-                (message, count, isRepo) => isRepo && count > 0 && !string.IsNullOrWhiteSpace(message))
+        IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount,
+                x => x.IsRepository, x => x.IsGitMonitoringEnabled,
+                (message, count, isRepo, enabled) => enabled && isRepo && count > 0 && !string.IsNullOrWhiteSpace(message))
             .DistinctUntilChanged();
         CommitCommand = ReactiveCommand.CreateFromTask(CommitAsync, canCommit);
 
@@ -319,12 +352,15 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         IDisposable refreshSubscription = _refreshRequests
             .Throttle(TimeSpan.FromMilliseconds(500))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => RefreshCommand.Execute().Subscribe());
+            .Subscribe(request => _ = RefreshFromWatcherAsync());
         _disposables.Add(refreshSubscription);
 
         if (_workspaceInfo is not null)
         {
-            EventHandler<WorkspaceChangedEventArgs> handler = (_, _) => _refreshRequests.OnNext(Unit.Default);
+            EventHandler<WorkspaceChangedEventArgs> handler = (_, _) =>
+            {
+                if (IsGitMonitoringEnabled) _refreshRequests.OnNext(Unit.Default);
+            };
             _workspaceInfo.WorkspaceChanged += handler;
             _disposables.Add(Disposable.Create(() => _workspaceInfo.WorkspaceChanged -= handler));
         }
@@ -332,18 +368,131 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     public void Dispose()
     {
-        _watcher?.Dispose();
-        _watcher = null;
+        IsGitMonitoringEnabled = false;
+        _monitoringCancellation?.Cancel();
+        _monitoringCancellation?.Dispose();
+        _monitoringCancellation = null;
+        StopWatcher();
         _refreshRequests.Dispose();
         _disposables.Dispose();
     }
 
+    private void ToggleMonitoring()
+    {
+        if (IsGitMonitoringEnabled)
+        {
+            IsGitMonitoringEnabled = false;
+            this.RaisePropertyChanged(nameof(GitMonitoringLabel));
+            _monitoringCancellation?.Cancel();
+            _monitoringCancellation?.Dispose();
+            _monitoringCancellation = null;
+            StopWatcher();
+            lock (_refreshSync) _refreshRequested = false;
+            _repositoryWorkspacePath = null;
+            _cachedRepositoryRoot = null;
+            RepositoryRoot = null;
+            BranchName = string.Empty;
+            UpstreamName = null;
+            AheadBy = 0;
+            BehindBy = 0;
+            IsRepository = false;
+            ErrorMessage = null;
+            SelectedStagedChange = null;
+            SelectedUnstagedChange = null;
+            ClearChanges();
+            return;
+        }
+
+        _monitoringCancellation = new CancellationTokenSource();
+        IsGitMonitoringEnabled = true;
+        this.RaisePropertyChanged(nameof(GitMonitoringLabel));
+        _refreshRequests.OnNext(Unit.Default);
+    }
+
+    private void ToggleDiff()
+    {
+        IsDiffVisible = !IsDiffVisible;
+        this.RaisePropertyChanged(nameof(DiffToggleLabel));
+    }
+
+    private async System.Threading.Tasks.Task RefreshFromWatcherAsync()
+    {
+        if (!IsGitMonitoringEnabled) return;
+        try
+        {
+            await RefreshAsync();
+        }
+        catch (Exception exception)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (IsGitMonitoringEnabled) ErrorMessage = exception.Message;
+            });
+        }
+    }
+
     public async System.Threading.Tasks.Task RefreshAsync()
     {
+        CancellationTokenSource? monitoringCancellation = _monitoringCancellation;
+        if (!IsGitMonitoringEnabled || monitoringCancellation is null) return;
+        CancellationToken cancellationToken = monitoringCancellation.Token;
+
+        lock (_refreshSync)
+        {
+            if (_refreshRunning)
+            {
+                _refreshRequested = true;
+                return;
+            }
+            _refreshRunning = true;
+        }
+
+        try
+        {
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await RefreshCoreAsync(cancellationToken);
+                lock (_refreshSync)
+                {
+                    if (!_refreshRequested)
+                    {
+                        _refreshRunning = false;
+                        return;
+                    }
+                    _refreshRequested = false;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            bool restart = IsGitMonitoringEnabled && !ReferenceEquals(_monitoringCancellation, monitoringCancellation);
+            lock (_refreshSync)
+            {
+                _refreshRunning = false;
+                _refreshRequested = false;
+            }
+            if (restart) _refreshRequests.OnNext(Unit.Default);
+        }
+        catch
+        {
+            lock (_refreshSync)
+            {
+                _refreshRunning = false;
+                _refreshRequested = false;
+            }
+            throw;
+        }
+    }
+
+    private async System.Threading.Tasks.Task RefreshCoreAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_gitService is null)
         {
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (cancellationToken.IsCancellationRequested) return;
                     ErrorMessage = UiStrings.GitUnavailable;
                     IsRepository = false;
                     ClearChanges();
@@ -354,8 +503,11 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         string? workspacePath = _workspaceInfo?.WorkspacePath;
         if (string.IsNullOrWhiteSpace(workspacePath))
         {
+            _repositoryWorkspacePath = null;
+            _cachedRepositoryRoot = null;
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (cancellationToken.IsCancellationRequested) return;
                     RepositoryRoot = null;
                     ErrorMessage = UiStrings.NoWorkspaceLoadedStatus;
                     IsRepository = false;
@@ -367,11 +519,18 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         IsBusy = true;
         try
         {
-            string? repoRoot = await _gitService.GetRepositoryRootAsync(workspacePath);
+            if (string.IsNullOrWhiteSpace(_cachedRepositoryRoot)
+                || !string.Equals(_repositoryWorkspacePath, workspacePath, StringComparison.OrdinalIgnoreCase))
+            {
+                _cachedRepositoryRoot = await _gitService.GetRepositoryRootAsync(workspacePath, cancellationToken);
+                _repositoryWorkspacePath = workspacePath;
+            }
+            string? repoRoot = _cachedRepositoryRoot;
             if (string.IsNullOrWhiteSpace(repoRoot))
             {
                     Dispatcher.UIThread.Post(() =>
                     {
+                        if (cancellationToken.IsCancellationRequested) return;
                         RepositoryRoot = null;
                         ErrorMessage = UiStrings.WorkspaceNotGitRepository;
                         IsRepository = false;
@@ -380,9 +539,11 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
                 return;
             }
 
-            GitRepositoryStatus status = await _gitService.GetStatusAsync(repoRoot);
+            cancellationToken.ThrowIfCancellationRequested();
+            GitRepositoryStatus status = await _gitService.GetStatusAsync(repoRoot, cancellationToken);
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (cancellationToken.IsCancellationRequested) return;
                     RepositoryRoot = repoRoot;
                     ApplyStatus(status);
                 });
@@ -457,7 +618,8 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     private async System.Threading.Tasks.Task LoadDiffAsync(GitChangeEntryViewModel change)
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        CancellationToken cancellationToken = _monitoringCancellation?.Token ?? CancellationToken.None;
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             DiffText = string.Empty;
             return;
@@ -470,22 +632,29 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             IsUntracked = change.IsUntracked
         };
 
-        GitDiff diff = await _gitService.GetDiffAsync(RepositoryRoot, request);
-        IReadOnlyList<GitDiffLineViewModel> lines = BuildDiffLines(diff);
-        Dispatcher.UIThread.Post(() =>
+        try
         {
-            DiffText = diff.RawText ?? string.Empty;
-            DiffLines.Clear();
-            foreach (GitDiffLineViewModel line in lines)
+            GitDiff diff = await _gitService.GetDiffAsync(RepositoryRoot, request, cancellationToken);
+            IReadOnlyList<GitDiffLineViewModel> lines = BuildDiffLines(diff);
+            Dispatcher.UIThread.Post(() =>
             {
-                DiffLines.Add(line);
-            }
-        });
+                if (cancellationToken.IsCancellationRequested) return;
+                DiffText = diff.RawText ?? string.Empty;
+                DiffLines.Clear();
+                foreach (GitDiffLineViewModel line in lines)
+                {
+                    DiffLines.Add(line);
+                }
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     private async System.Threading.Tasks.Task StageSelectedAsync()
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             return;
         }
@@ -502,7 +671,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     private async System.Threading.Tasks.Task UnstageSelectedAsync()
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             return;
         }
@@ -513,38 +682,44 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await _gitService.UnstageAsync(RepositoryRoot, new[] { selected.Path });
+        string repoPath = RepositoryRoot!;
+        string path = selected.Path;
+        bool confirmed = await ConfirmGitActionAsync(UiStrings.GitUnstageConfirmTitle,
+            string.Format(UiStrings.GitUnstageOnePrompt, path), UiStrings.Unstage);
+        if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        await _gitService.UnstageAsync(repoPath, new[] { path });
         await RefreshAsync();
     }
 
     private async System.Threading.Tasks.Task DiscardSelectedAsync()
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             return;
         }
 
         GitChangeEntryViewModel? selected = SelectedUnstagedChange;
-        if (selected is null)
+        if (selected is null || selected.IsUntracked)
         {
             return;
         }
 
-        if (selected.IsUntracked)
-        {
-            await _gitService.RemoveUntrackedAsync(RepositoryRoot, new[] { selected.Path });
-        }
-        else
-        {
-            await _gitService.DiscardAsync(RepositoryRoot, new[] { selected.Path });
-        }
+        string repoPath = RepositoryRoot!;
+        string path = selected.Path;
+        bool confirmed = await ConfirmGitActionAsync(UiStrings.GitDiscardConfirmTitle,
+            string.Format(UiStrings.GitDiscardOnePrompt, path), UiStrings.Discard, destructive: true);
+        if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
+            return;
 
+        await _gitService.DiscardAsync(repoPath, new[] { path });
         await RefreshAsync();
     }
 
     private async System.Threading.Tasks.Task StageAllAsync()
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             return;
         }
@@ -566,7 +741,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     private async System.Threading.Tasks.Task UnstageAllAsync()
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             return;
         }
@@ -582,13 +757,31 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             paths[i] = _stagedItems[i].Path;
         }
 
-        await _gitService.UnstageAsync(RepositoryRoot, paths);
+        string repoPath = RepositoryRoot!;
+        string prompt = paths.Length == 1
+            ? string.Format(UiStrings.GitUnstageOnePrompt, paths[0])
+            : string.Format(UiStrings.GitUnstageManyPrompt, paths.Length);
+        bool confirmed = await ConfirmGitActionAsync(UiStrings.GitUnstageConfirmTitle,
+            prompt, UiStrings.UnstageAll);
+        if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        await _gitService.UnstageAsync(repoPath, paths);
         await RefreshAsync();
+    }
+
+    private async System.Threading.Tasks.Task<bool> ConfirmGitActionAsync(
+        string title, string message, string action, bool destructive = false)
+    {
+        if (_dialogHost is null || _monitoringCancellation is null) return false;
+        bool? result = await _dialogHost.ShowDialogAsync<bool>(ConfirmationDialogRequest.DIALOG_ID,
+            new ConfirmationDialogRequest(title, message, action, destructive), _monitoringCancellation.Token);
+        return result == true;
     }
 
     private async System.Threading.Tasks.Task CommitAsync()
     {
-        if (_gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
         {
             return;
         }
@@ -606,10 +799,9 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     private void ConfigureWatcher(string? repoRoot)
     {
-        if (string.IsNullOrWhiteSpace(repoRoot))
+        if (!IsGitMonitoringEnabled || string.IsNullOrWhiteSpace(repoRoot))
         {
-            _watcher?.Dispose();
-            _watcher = null;
+            StopWatcher();
             return;
         }
 
@@ -618,16 +810,16 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        _watcher?.Dispose();
-        _watcher = new FileSystemWatcher(repoRoot)
+        StopWatcher();
+        FileSystemWatcher watcher = new(repoRoot)
         {
             IncludeSubdirectories = true,
-            EnableRaisingEvents = true
+            EnableRaisingEvents = false
         };
 
         FileSystemEventHandler handler = (_, args) =>
         {
-            if (IsGitInternalPath(args.FullPath))
+            if (!IsGitMonitoringEnabled || IsIgnoredWatcherPath(repoRoot, args.FullPath))
             {
                 return;
             }
@@ -636,33 +828,43 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         };
         RenamedEventHandler renamedHandler = (_, args) =>
         {
-            if (IsGitInternalPath(args.FullPath))
+            if (!IsGitMonitoringEnabled || IsIgnoredWatcherPath(repoRoot, args.FullPath))
             {
                 return;
             }
 
             _refreshRequests.OnNext(Unit.Default);
         };
-        ErrorEventHandler errorHandler = (_, _) => _refreshRequests.OnNext(Unit.Default);
-
-        _watcher.Changed += handler;
-        _watcher.Created += handler;
-        _watcher.Deleted += handler;
-        _watcher.Renamed += renamedHandler;
-        _watcher.Error += errorHandler;
-
-        _disposables.Add(Disposable.Create(() =>
+        ErrorEventHandler errorHandler = (_, _) =>
         {
-            if (_watcher is not null)
-            {
-                _watcher.EnableRaisingEvents = false;
-                _watcher.Changed -= handler;
-                _watcher.Created -= handler;
-                _watcher.Deleted -= handler;
-                _watcher.Renamed -= renamedHandler;
-                _watcher.Error -= errorHandler;
-            }
-        }));
+            if (IsGitMonitoringEnabled) _refreshRequests.OnNext(Unit.Default);
+        };
+
+        watcher.Changed += handler;
+        watcher.Created += handler;
+        watcher.Deleted += handler;
+        watcher.Renamed += renamedHandler;
+        watcher.Error += errorHandler;
+
+        _watcherSubscription = Disposable.Create(() =>
+        {
+            watcher.EnableRaisingEvents = false;
+            watcher.Changed -= handler;
+            watcher.Created -= handler;
+            watcher.Deleted -= handler;
+            watcher.Renamed -= renamedHandler;
+            watcher.Error -= errorHandler;
+        });
+        _watcher = watcher;
+        watcher.EnableRaisingEvents = true;
+    }
+
+    private void StopWatcher()
+    {
+        _watcherSubscription?.Dispose();
+        _watcherSubscription = null;
+        _watcher?.Dispose();
+        _watcher = null;
     }
 
 
@@ -742,7 +944,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsGitInternalPath(string? path)
+    private static bool IsIgnoredWatcherPath(string repoRoot, string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -750,15 +952,15 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         }
 
         char separator = Path.DirectorySeparatorChar;
-        string normalized = path.Replace(Path.AltDirectorySeparatorChar, separator);
-        string token = separator + ".git" + separator;
+        string normalized = separator + Path.GetRelativePath(repoRoot, path)
+            .Replace(Path.AltDirectorySeparatorChar, separator);
+        return ContainsDirectory(".git") || ContainsDirectory("artifacts")
+            || ContainsDirectory("bin") || ContainsDirectory("obj")
+            || ContainsDirectory("TestResults");
 
-        if (normalized.Contains(token, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return normalized.EndsWith(separator + ".git", StringComparison.OrdinalIgnoreCase);
+        bool ContainsDirectory(string name) =>
+            normalized.Contains(separator + name + separator, StringComparison.OrdinalIgnoreCase)
+            || normalized.EndsWith(separator + name, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<GitDiffLineViewModel> BuildDiffLines(GitDiff diff)

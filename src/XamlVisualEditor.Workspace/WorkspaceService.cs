@@ -1063,10 +1063,39 @@ public sealed class TypeMetadataService : ITypeMetadataService
 {
     /// <summary>Liest ausschließlich die gewählten Assemblies und Avalonia-Grundtypen für die Toolbox.</summary>
     public static IReadOnlyList<TypeMetadata> ReadControlTypes(IReadOnlyList<string> assemblyPaths,
-        Action<string> reportFailure, Action<int, int, string> reportProgress, CancellationToken cancellationToken)
+        Action<string> reportFailure, Action<int, int, string> reportProgress, CancellationToken cancellationToken,
+        bool includeProjectControls = true)
     {
-        IEnumerable<string> paths = new[] { typeof(AvaloniaObject).Assembly.Location, typeof(Control).Assembly.Location }
-            .Concat(assemblyPaths).Distinct(FileSystemPathComparison.Comparer);
+        Dictionary<string, (string Path, bool IsStandard)> selected = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in assemblyPaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                AssemblyTypeCatalog.AssemblyIdentity? identity = AssemblyTypeCatalog.ReadAssemblyIdentity(path);
+                if (identity is not null) selected.TryAdd(identity.Name, (path, identity.IsStandardAssembly));
+            }
+            catch (BadImageFormatException) { }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                reportFailure($"Cannot read control metadata from '{path}': {error.Message}");
+            }
+        }
+
+        // Projekt-Assemblies ersetzen den Basiskatalog; alte und neue Typen werden nicht vereinigt.
+        string[] standardPaths = { typeof(AvaloniaObject).Assembly.Location, typeof(Control).Assembly.Location };
+        bool hasProjectFramework = standardPaths.Any(path => selected.ContainsKey(Path.GetFileNameWithoutExtension(path)));
+        foreach (string path in standardPaths)
+        {
+            AssemblyTypeCatalog.AssemblyIdentity identity = AssemblyTypeCatalog.ReadAssemblyIdentity(path)
+                ?? throw new BadImageFormatException($"XVE-Grundassembly enthält keine .NET-Metadaten: {path}");
+            if (!hasProjectFramework)
+                selected.TryAdd(identity.Name, (path, identity.IsStandardAssembly));
+            else if (!selected.ContainsKey(identity.Name))
+                reportFailure($"Die Projektabhängigkeit '{identity.Name}' fehlt. Bitte die Projektreferenzen wiederherstellen.");
+        }
+        string[] paths = selected.Values.Where(assembly => includeProjectControls || assembly.IsStandard)
+            .Select(assembly => assembly.Path).ToArray();
         return AssemblyTypeCatalog.Read(paths, reportFailure, cancellationToken, reportProgress);
     }
 
@@ -1213,6 +1242,12 @@ public sealed class TypeMetadataService : ITypeMetadataService
             }
 
             (string category, string? description) = GetCategoryAndDescription(field);
+            if (category == "Misc" && ownerType.GetProperty(prop.Name) is { } clrProperty)
+            {
+                (string wrapperCategory, string? wrapperDescription) = GetCategoryAndDescription(clrProperty);
+                if (wrapperCategory != "Misc") category = wrapperCategory;
+                description ??= wrapperDescription;
+            }
 
             properties.Add(new PropertyMetadata
             {
@@ -1224,6 +1259,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 ClrType = prop.PropertyType,
                 IsAttached = prop.IsAttached,
                 OwnerType = prop.IsAttached ? ownerType.FullName : null,
+                DeclaringTypeName = ownerType.Name,
                 Category = category,
                 Description = description
             });
@@ -1261,6 +1297,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 Kind = MapValueKind(prop.PropertyType),
                 IsReadOnly = !prop.CanWrite,
                 ClrType = prop.PropertyType,
+                DeclaringTypeName = prop.DeclaringType?.Name,
                 Category = category,
                 Description = description
             });
@@ -1497,7 +1534,8 @@ public sealed class TypeMetadataService : ITypeMetadataService
     private static TypeMetadata BuildMetadata(Type type)
     {
         string clrNamespace = type.Namespace ?? string.Empty;
-        string assemblyName = type.Assembly.GetName().Name ?? string.Empty;
+        AssemblyName identity = type.Assembly.GetName();
+        string assemblyName = identity.Name ?? string.Empty;
 
         return new TypeMetadata
         {
@@ -1506,9 +1544,10 @@ public sealed class TypeMetadataService : ITypeMetadataService
             XmlNamespace = $"clr-namespace:{clrNamespace};assembly={assemblyName}",
             ClrNamespace = clrNamespace,
             AssemblyName = assemblyName,
+            AssemblyVersion = identity.Version?.ToString(),
             IsControl = typeof(Control).IsAssignableFrom(type),
             IsStyle = typeof(Avalonia.Styling.Styles).IsAssignableFrom(type),
-            IsStandardControl = type.Assembly == typeof(Control).Assembly,
+            IsStandardControl = AssemblyTypeCatalog.IsStandardAssembly(assemblyName, identity.GetPublicKey()),
             IsPanel = typeof(Panel).IsAssignableFrom(type),
             IsContentControl = typeof(ContentControl).IsAssignableFrom(type),
             IsItemsControl = typeof(ItemsControl).IsAssignableFrom(type),

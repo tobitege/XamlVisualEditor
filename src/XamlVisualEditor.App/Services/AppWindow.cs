@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Shell.ViewModels;
@@ -25,17 +26,17 @@ public sealed class AppWindow : IWindow
 
     public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken)
     {
-        return ShowMessageAsync("Information", message, cancellationToken);
+        return ShowMessageAsync(UiStrings.SeverityInfo, message, cancellationToken);
     }
 
     public Task ShowWarningMessageAsync(string message, CancellationToken cancellationToken)
     {
-        return ShowMessageAsync("Warning", message, cancellationToken);
+        return ShowMessageAsync(UiStrings.SeverityWarning, message, cancellationToken);
     }
 
     public Task ShowErrorMessageAsync(string message, CancellationToken cancellationToken)
     {
-        return ShowMessageAsync("Error", message, cancellationToken);
+        return ShowMessageAsync(UiStrings.SeverityError, message, cancellationToken);
     }
 
     public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken)

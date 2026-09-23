@@ -5,10 +5,11 @@ namespace XamlVisualEditor.Extensions.Hosting;
 /// <summary>Ermittelt Toolbox-Controls aus den Assemblies des aktuellen Projekts.</summary>
 public sealed class MetadataControlCatalog : IControlCatalog, IControlCatalogUpdater
 {
+    private const int MAX_CACHED_SCOPES = 16;
     private readonly ControlTypeReader _readTypes;
     private readonly object _gate = new();
+    private readonly Dictionary<string, ControlCatalogSnapshot> _snapshots = new(StringComparer.Ordinal);
     private string[] _assemblyPaths = Array.Empty<string>();
-    private bool _autoLoadProjectControls = true;
 
     /// <summary>Verbindet den Katalog mit der abbrechbaren Metadaten-Suche.</summary>
     public MetadataControlCatalog(ControlTypeReader readTypes)
@@ -23,38 +24,54 @@ public sealed class MetadataControlCatalog : IControlCatalog, IControlCatalogUpd
     public bool HasProjectAssemblies { get { lock (_gate) return _assemblyPaths.Length > 0; } }
 
     /// <inheritdoc />
-    public bool AutoLoadProjectControls { get { lock (_gate) return _autoLoadProjectControls; } }
-
-    /// <inheritdoc />
-    public void SetWorkspaceAssemblies(IEnumerable<string> assemblyPaths, bool autoLoadProjectControls = true)
+    public void SetWorkspaceAssemblies(IEnumerable<string> assemblyPaths)
     {
         string[] paths = assemblyPaths.Distinct(FileSystemPathComparison.Comparer).ToArray();
         lock (_gate)
         {
             _assemblyPaths = paths;
-            _autoLoadProjectControls = autoLoadProjectControls;
         }
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <inheritdoc />
     public Task<ControlCatalogSnapshot> GetControlsAsync(CancellationToken cancellationToken,
-        IProgress<ControlCatalogProgress>? progress = null, bool includeProjectControls = true)
+        IProgress<ControlCatalogProgress>? progress = null, bool includeProjectControls = true, bool forceRefresh = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         string[] paths;
         lock (_gate)
         {
-            paths = includeProjectControls ? _assemblyPaths : Array.Empty<string>();
+            paths = _assemblyPaths;
         }
-        return Task.Run(() => ReadSnapshot(paths, progress, cancellationToken), cancellationToken);
+        return Task.Run(() =>
+        {
+            // NuGet-Versionen haben eigene Pfade; Neubauten am selben Pfad erhalten einen neuen Fingerprint.
+            string key = includeProjectControls + "|" + string.Join("|", paths.Select(path =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                FileInfo file = new(path);
+                return path + ":" + (file.Exists ? file.Length + ":" + file.LastWriteTimeUtc.Ticks : "missing");
+            }));
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_gate)
+                if (!forceRefresh && _snapshots.TryGetValue(key, out ControlCatalogSnapshot? cached)) return cached;
+            ControlCatalogSnapshot snapshot = ReadSnapshot(paths, progress, cancellationToken, includeProjectControls);
+            lock (_gate)
+            {
+                if (_snapshots.Count >= MAX_CACHED_SCOPES) _snapshots.Clear();
+                _snapshots[key] = snapshot;
+            }
+            return snapshot;
+        }, cancellationToken);
     }
 
     private ControlCatalogSnapshot ReadSnapshot(IReadOnlyList<string> paths,
-        IProgress<ControlCatalogProgress>? progress, CancellationToken cancellationToken)
+        IProgress<ControlCatalogProgress>? progress, CancellationToken cancellationToken, bool includeProjectControls)
     {
         IReadOnlyList<TypeMetadata> types = _readTypes(paths, message => throw new IOException(message),
-            (completed, total, assembly) => progress?.Report(new(completed, total, assembly)), cancellationToken);
+            (completed, total, assembly) => progress?.Report(new(completed, total, assembly)), cancellationToken,
+            includeProjectControls);
         cancellationToken.ThrowIfCancellationRequested();
 
         List<ControlCatalogItem> controls = new();
@@ -68,7 +85,10 @@ public sealed class MetadataControlCatalog : IControlCatalog, IControlCatalogUpd
             controls.Add(new ControlCatalogItem(type.Name, type.FullName,
                 type.IsStandardControl ? "https://github.com/avaloniaui" : type.XmlNamespace,
                 type.AssemblyName, type.DisplayName ?? type.Name,
-                type.Category ?? (type.IsPanel ? "Layout" : "Controls"), type.IsStandardControl));
+                type.Category ?? (type.IsPanel ? "Layout" : "Controls"), type.IsStandardControl)
+            {
+                AssemblyVersion = type.AssemblyVersion
+            });
         }
         return new ControlCatalogSnapshot(controls, Array.Empty<string>());
     }

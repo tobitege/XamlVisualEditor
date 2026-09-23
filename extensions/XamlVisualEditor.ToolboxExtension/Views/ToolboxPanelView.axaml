@@ -7,7 +7,6 @@
              x:Class="XamlVisualEditor.ToolboxExtension.Views.ToolboxPanelView"
              x:DataType="vm:ToolboxPanelViewModel">
   <UserControl.Resources>
-    <views:ToolboxRowHeightConverter x:Key="GroupHeight" />
     <DataTemplate x:Key="ToolboxItemTemplate" x:DataType="vm:ToolboxPanelItem">
       <TextBlock Text="{CompiledBinding DisplayName}" TextTrimming="CharacterEllipsis"
                  VerticalAlignment="Center" ToolTip.Tip="{CompiledBinding Description}" />
@@ -34,6 +33,7 @@
                             IsEnabled="{CompiledBinding CanEditPreferences}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Center" Padding="6,2" MinHeight="32"
+                            ToolTip.Tip="{CompiledBinding Description}"
                             AutomationProperties.Name="{TemplateBinding Header}">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                   <ContentPresenter Content="{TemplateBinding Header}"
@@ -56,6 +56,17 @@
         </ControlTemplate>
       </Setter>
     </ControlTheme>
+    <DataTemplate x:Key="StickyAssemblyHeaderTemplate" x:DataType="vm:ToolboxAssemblyGroup">
+      <Expander Header="{CompiledBinding Header}" Theme="{StaticResource AssemblyExpanderTheme}"
+                IsExpanded="{CompiledBinding IsExpanded, Mode=TwoWay}"
+                Margin="0" Padding="0" MinHeight="0" HorizontalAlignment="Stretch">
+        <Expander.HeaderTemplate>
+          <DataTemplate x:DataType="x:String">
+            <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </DataTemplate>
+        </Expander.HeaderTemplate>
+      </Expander>
+    </DataTemplate>
   </UserControl.Resources>
   <UserControl.Styles>
     <Style Selector="Button"><Setter Property="Padding" Value="6,3" /><Setter Property="MinHeight" Value="28" /></Style>
@@ -71,21 +82,21 @@
     <StackPanel Spacing="4">
       <TextBlock Text="{x:Static loc:UiStrings.Toolbox}" FontWeight="SemiBold" />
       <Border Name="ControlLoadTask" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-              BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,2,0,4"
+              BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,2,0,4" Height="140"
               IsVisible="{CompiledBinding IsLoadStatusVisible}">
-        <StackPanel Spacing="6">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+        <Grid RowDefinitions="22,38,8,32" RowSpacing="5">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="4">
             <TextBlock Text="{x:Static loc:UiStrings.LoadProjectControls}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
             <Button Name="DismissControlLoad" Grid.Column="1" Content="×" FontSize="12" Padding="0"
                     Width="16" Height="16" MinWidth="16" MinHeight="16" Background="Transparent" BorderThickness="0"
                     Command="{CompiledBinding DismissLoadStatusCommand}" IsVisible="{CompiledBinding !HasLoadTask}"
                     ToolTip.Tip="{x:Static loc:UiStrings.Close}" AutomationProperties.Name="{x:Static loc:UiStrings.Close}" />
           </Grid>
-          <TextBlock Name="ControlLoadStatus" Text="{CompiledBinding StatusText}" TextWrapping="Wrap"
-                     MaxLines="2" TextTrimming="CharacterEllipsis" />
-          <ProgressBar Name="ControlLoadProgress" IsIndeterminate="{CompiledBinding IsProgressIndeterminate}"
+          <TextBlock Grid.Row="1" Name="ControlLoadStatus" Text="{CompiledBinding StatusText}" TextWrapping="Wrap"
+                     MaxLines="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <ProgressBar Grid.Row="2" Name="ControlLoadProgress" IsIndeterminate="{CompiledBinding IsProgressIndeterminate}"
                        Value="{CompiledBinding LoadProgress}" Maximum="100" IsVisible="{CompiledBinding IsLoading}" Height="6" />
-          <WrapPanel>
+          <WrapPanel Grid.Row="3" VerticalAlignment="Center">
             <Button Name="ControlLoadDetails" Content="{x:Static loc:UiStrings.ToolboxErrorDetails}"
                     IsVisible="{CompiledBinding HasLoadError}" Margin="0,0,6,0">
               <Button.Flyout>
@@ -104,7 +115,7 @@
             <Button Name="CancelControlLoad" Content="{x:Static loc:UiStrings.Cancel}"
                     Command="{CompiledBinding CancelLoadCommand}" IsVisible="{CompiledBinding HasLoadTask}" />
           </WrapPanel>
-        </StackPanel>
+        </Grid>
       </Border>
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
         <TextBox x:Name="ControlSearch" PlaceholderText="{x:Static loc:UiStrings.SearchControls}"
@@ -129,7 +140,7 @@
                                           ContentTemplate="{StaticResource AssemblyFavoriteTemplate}" />
                           <CheckBox IsChecked="{CompiledBinding IsIncluded, Mode=TwoWay}">
                             <TextBlock Text="{CompiledBinding CatalogHeader}" TextTrimming="CharacterEllipsis"
-                                       ToolTip.Tip="{CompiledBinding AssemblyName}" />
+                                       ToolTip.Tip="{CompiledBinding Description}" />
                           </CheckBox>
                         </DockPanel>
                       </DataTemplate>
@@ -148,7 +159,6 @@
                   SelectedItem="{CompiledBinding SelectedCategory, Mode=TwoWay}" HorizontalAlignment="Stretch" />
       </Grid>
       <WrapPanel>
-        <Button Content="{x:Static loc:UiStrings.LoadProjectControls}" Command="{CompiledBinding ReloadCommand}" Margin="0,0,4,0" />
         <Button Content="{x:Static loc:UiStrings.ClearFilters}" Command="{CompiledBinding ClearFiltersCommand}" Margin="0,0,4,0" />
         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <Button Command="{CompiledBinding CollapseAllCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
@@ -168,10 +178,12 @@
       <TextBlock Text="{CompiledBinding PreferenceError}" TextWrapping="Wrap" FontSize="11" />
     </StackPanel>
 
-    <Grid Grid.Row="1">
+    <Grid Grid.Row="1" ClipToBounds="True">
       <ScrollViewer x:Name="AssemblyGroupsViewport" HorizontalScrollBarVisibility="Disabled"
-                    VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
-        <ItemsControl ItemsSource="{CompiledBinding AssemblyGroups}">
+                    VerticalScrollBarVisibility="Auto" AllowAutoHide="False"
+                    views:ToolboxStickyHeaderBehavior.Header="{Binding #StickyAssemblyHeader}">
+        <ItemsControl ItemsSource="{CompiledBinding AssemblyGroups}"
+                      drag:ToolboxDragBehavior.IsEnabled="{CompiledBinding HasInsertTarget}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <StackPanel Spacing="2" />
@@ -181,7 +193,6 @@
             <DataTemplate x:DataType="vm:ToolboxAssemblyGroup">
               <Expander Header="{CompiledBinding Header}" Theme="{StaticResource AssemblyExpanderTheme}"
                         IsExpanded="{CompiledBinding IsExpanded, Mode=TwoWay}"
-                        ToolTip.Tip="{CompiledBinding AssemblyName}"
                         Margin="0" Padding="6,2" MinHeight="0"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch">
@@ -192,23 +203,28 @@
                 </Expander.HeaderTemplate>
                 <ListBox ItemsSource="{CompiledBinding Items}"
                          Padding="0" BorderThickness="0"
-                         drag:ToolboxDragBehavior.IsEnabled="True"
                          SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
                          ItemTemplate="{StaticResource ToolboxItemTemplate}"
-                         MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=ScrollViewer}, Converter={StaticResource GroupHeight}}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled" />
               </Expander>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
+      <ContentControl x:Name="StickyAssemblyHeader" IsVisible="False" ZIndex="1"
+                      HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                      HorizontalContentAlignment="Stretch"
+                      ContentTemplate="{StaticResource StickyAssemblyHeaderTemplate}" />
       <TextBlock Text="{x:Static loc:UiStrings.NoMatchingControls}" IsVisible="{CompiledBinding NoMatches}"
                  HorizontalAlignment="Center" VerticalAlignment="Center" />
     </Grid>
 
-    <Button Grid.Row="2"
-            Content="{x:Static loc:UiStrings.InsertSelected}"
-            Command="{CompiledBinding InsertSelectedCommand}" />
+    <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+            Padding="0,6,0,0">
+      <Button Content="{x:Static loc:UiStrings.InsertSelected}"
+              Command="{CompiledBinding InsertSelectedCommand}" />
+    </Border>
   </Grid>
 </UserControl>

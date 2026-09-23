@@ -5,18 +5,21 @@
         x:Class="XamlVisualEditor.App.Views.MessageDialog"
         Classes="editor-chrome"
         x:DataType="vm:MessageDialogViewModel"
+        Title="{CompiledBinding Title}"
         Width="420"
-        Height="180"
+        SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
   <Window.KeyBindings>
     <KeyBinding Gesture="Escape" Command="{CompiledBinding CancelCommand}" />
   </Window.KeyBindings>
-  <StackPanel Margin="16" Spacing="8">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
     <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
-    <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+    <ScrollViewer Grid.Row="1" MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+    </ScrollViewer>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="{x:Static loc:UiStrings.Ok}" Command="{CompiledBinding ConfirmCommand}" IsDefault="True" />
     </StackPanel>
-  </StackPanel>
+  </Grid>
 </Window>

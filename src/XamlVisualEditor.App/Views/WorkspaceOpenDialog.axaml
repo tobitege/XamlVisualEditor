@@ -16,8 +16,6 @@
       <TextBox Name="WorkspacePath" Text="{CompiledBinding FilePath, Mode=TwoWay}" />
       <Button Grid.Column="1" Content="{x:Static loc:UiStrings.Browse}" Command="{CompiledBinding BrowseCommand}" />
     </Grid>
-    <CheckBox Name="LoadProjectControls" Content="{x:Static loc:UiStrings.AddProjectControlsToToolbox}"
-              IsChecked="{CompiledBinding LoadProjectControls, Mode=TwoWay}" />
     <TextBlock Text="{CompiledBinding Error}" TextWrapping="Wrap" Foreground="Tomato" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Name="OpenWorkspace" Content="{x:Static loc:UiStrings.Open}" Command="{CompiledBinding OpenCommand}" IsDefault="True" MinWidth="90" />

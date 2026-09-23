@@ -11,6 +11,8 @@ internal static class AssemblyTypeCatalog
 {
     internal readonly record struct TypeIdentity(string AssemblyName, string FullName);
 
+    internal sealed record AssemblyIdentity(string Name, string Version, bool IsStandardAssembly);
+
     internal sealed record CatalogType(
         TypeIdentity Identity,
         string Namespace,
@@ -20,7 +22,34 @@ internal static class AssemblyTypeCatalog
         bool IsInstantiable,
         string? DisplayName,
         string? Category,
-        bool IsToolboxVisible);
+        bool IsToolboxVisible)
+    {
+        internal string? AssemblyVersion { get; init; }
+        internal bool IsStandardAssembly { get; init; }
+    }
+
+    internal static AssemblyIdentity? ReadAssemblyIdentity(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        using PEReader reader = new(stream);
+        return reader.HasMetadata ? ReadAssemblyIdentity(reader.GetMetadataReader()) : null;
+    }
+
+    private static AssemblyIdentity ReadAssemblyIdentity(MetadataReader metadata)
+    {
+        if (!metadata.IsAssembly) throw new BadImageFormatException("Das Modul enthält keine Assembly-Identität.");
+        AssemblyDefinition assembly = metadata.GetAssemblyDefinition();
+        string name = metadata.GetString(assembly.Name);
+        byte[] publicKey = metadata.GetBlobBytes(assembly.PublicKey);
+        return new AssemblyIdentity(name, assembly.Version.ToString(), IsStandardAssembly(name, publicKey));
+    }
+
+    internal static bool IsStandardAssembly(string name, ReadOnlySpan<byte> publicKey)
+    {
+        byte[] officialKey = typeof(Control).Assembly.GetName().GetPublicKey() ?? Array.Empty<byte>();
+        return (name == "Avalonia" || name.StartsWith("Avalonia.", StringComparison.Ordinal))
+            && officialKey.Length > 0 && publicKey.SequenceEqual(officialKey);
+    }
 
     internal static IReadOnlyList<TypeMetadata> Read(
         IEnumerable<string> assemblyPaths,
@@ -77,9 +106,10 @@ internal static class AssemblyTypeCatalog
                 XmlNamespace = $"clr-namespace:{type.Namespace};assembly={type.Identity.AssemblyName}",
                 ClrNamespace = type.Namespace,
                 AssemblyName = type.Identity.AssemblyName,
+                AssemblyVersion = type.AssemblyVersion,
                 IsControl = DerivesFrom(type, controlType, definitions),
                 IsStyle = DerivesFrom(type, styleType, definitions),
-                IsStandardControl = type.Identity.AssemblyName == controlType.AssemblyName,
+                IsStandardControl = type.IsStandardAssembly,
                 IsPanel = DerivesFrom(type, panelType, definitions),
                 IsContentControl = DerivesFrom(type, contentType, definitions),
                 IsItemsControl = DerivesFrom(type, itemsType, definitions),
@@ -104,7 +134,8 @@ internal static class AssemblyTypeCatalog
         }
 
         MetadataReader metadata = reader.GetMetadataReader();
-        string assemblyName = metadata.GetString(metadata.GetAssemblyDefinition().Name);
+        AssemblyIdentity assembly = ReadAssemblyIdentity(metadata);
+        string assemblyName = assembly.Name;
         List<CatalogType> result = new();
         foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
         {
@@ -119,7 +150,11 @@ internal static class AssemblyTypeCatalog
             (string? displayName, string? category, bool visible) = ReadDesignAttributes(metadata, definition, assemblyName);
             result.Add(new CatalogType(identity, metadata.GetString(definition.Namespace), metadata.GetString(definition.Name),
                 ResolveIdentity(metadata, definition.BaseType, assemblyName), isPublic, isInstantiable,
-                displayName, category, visible));
+                displayName, category, visible)
+            {
+                AssemblyVersion = assembly.Version,
+                IsStandardAssembly = assembly.IsStandardAssembly
+            });
         }
 
         return result;

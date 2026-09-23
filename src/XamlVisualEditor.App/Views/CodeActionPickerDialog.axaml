@@ -6,6 +6,7 @@
         x:Class="XamlVisualEditor.App.Views.CodeActionPickerDialog"
         Classes="editor-chrome"
         x:DataType="vm:CodeActionPickerDialogViewModel"
+        Title="{x:Static loc:UiStrings.CodeActions}"
         Width="520"
         Height="360"
         CanResize="True"

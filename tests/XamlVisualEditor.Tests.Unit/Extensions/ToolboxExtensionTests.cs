@@ -5,6 +5,8 @@ using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.ToolboxExtension;
 using System.Reactive.Threading.Tasks;
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using ToolboxExtensionEntry = XamlVisualEditor.ToolboxExtension.ToolboxExtension;
 using Xunit;
 
@@ -44,7 +46,8 @@ public sealed class ToolboxExtensionTests
             SettingsTarget.User,
             CancellationToken.None);
 
-        using ToolboxPanelViewModel viewModel = new(commands, settings);
+        using ToolboxPanelViewModel viewModel = new(commands, settings,
+            workspaceInfo: new StubWorkspaceInfo { WorkspacePath = "test.csproj" }, designer: new StubDesignerHost());
         Assert.Single(viewModel.Items);
         Assert.Equal("Custom Border", viewModel.Items[0].DisplayName);
 
@@ -102,6 +105,56 @@ public sealed class ToolboxExtensionTests
         Assert.Contains(UiStrings.ToolboxArgumentsRequired, window.Messages);
     }
 
+    [Fact]
+    public async Task InsertAvailabilityTracksWorkspaceAndDesignerDocument()
+    {
+        RecordingCommands commands = new();
+        InMemorySettingsStore settings = new();
+        await settings.UpdateAsync("toolbox.catalog", new List<ToolboxCatalogEntry>
+        {
+            new() { DisplayName = "Button", CommandId = "toolbox.insertSelected",
+                CommandArguments = new List<string> { "Button", "https://github.com/avaloniaui" } }
+        }, SettingsTarget.User, CancellationToken.None);
+        StubWorkspaceInfo workspace = new();
+        StubDesignerHost designer = new();
+        designer.SetActiveDocument(null);
+        using ToolboxPanelViewModel model = new(commands, settings, uiScheduler: ImmediateScheduler.Instance,
+            workspaceInfo: workspace, designer: designer);
+        model.SelectedItem = Assert.Single(model.Items);
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        workspace.SetWorkspace("test.csproj");
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        designer.SetActiveDocument("test.axaml");
+        Assert.True(model.HasInsertTarget);
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        await model.InsertSelectedCommand.Execute().ToTask();
+        Assert.Equal("toolbox.insertSelected", commands.LastCommandId);
+        designer.SetActiveDocument(null);
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        designer.SetActiveDocument("test.axaml");
+        workspace.SetWorkspace(null);
+        Assert.False(model.HasInsertTarget);
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+    }
+
+    [Fact]
+    public async Task MissingInsertTargetDoesNotShowAWarningEvenWhenCommandIsInvokedDirectly()
+    {
+        CommandRegistry commands = new();
+        ExtensionContext context = CreateContext(commands, out StubDesignerHost designer, out InMemoryWindow window);
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+        designer.SetActiveDocument(null);
+        await commands.ExecuteAsync("toolbox.insertSelected", null, CancellationToken.None);
+        await commands.ExecuteAsync("toolbox.insertButton", null, CancellationToken.None);
+        Assert.Empty(window.Messages);
+        Assert.Null(designer.LastTypeName);
+        designer.SetActiveDocument("test.axaml");
+        Assert.IsType<StubWorkspaceInfo>(context.WorkspaceInfo).SetWorkspace(null);
+        await commands.ExecuteAsync("toolbox.insertButton", null, CancellationToken.None);
+        Assert.Empty(window.Messages);
+        Assert.Null(designer.LastTypeName);
+    }
+
     private static ExtensionContext CreateContext(
         ICommands commands,
         out StubDesignerHost designerHost,
@@ -109,7 +162,7 @@ public sealed class ToolboxExtensionTests
     {
         window = new InMemoryWindow();
         designerHost = new StubDesignerHost();
-        StubWorkspaceInfo workspaceInfo = new();
+        StubWorkspaceInfo workspaceInfo = new() { WorkspacePath = "test.csproj" };
         StubWorkspaceCommands workspaceCommands = new();
         StubEditorServices editorServices = new();
         StubNavigationService navigation = new();
@@ -215,7 +268,13 @@ public sealed class ToolboxExtensionTests
         public string? LastXmlNamespace { get; private set; }
         public string? LastParentNodeId { get; private set; }
 
-        public string? ActiveDocumentPath => "test.axaml";
+        public string? ActiveDocumentPath { get; private set; } = "test.axaml";
+
+        public void SetActiveDocument(string? path)
+        {
+            ActiveDocumentPath = path;
+            ActiveDocumentChanged?.Invoke(this, new DesignerDocumentChangedEventArgs(path));
+        }
 
         public event EventHandler<DesignerDocumentChangedEventArgs>? ActiveDocumentChanged;
 
@@ -454,6 +513,12 @@ public sealed class ToolboxExtensionTests
     {
         public string? WorkspacePath { get; set; }
         public event EventHandler<WorkspaceChangedEventArgs>? WorkspaceChanged;
+
+        public void SetWorkspace(string? path)
+        {
+            WorkspacePath = path;
+            WorkspaceChanged?.Invoke(this, new WorkspaceChangedEventArgs(path));
+        }
     }
 
     private sealed class StubWorkspaceCommands : IWorkspaceCommands

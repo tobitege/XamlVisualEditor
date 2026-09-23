@@ -45,7 +45,6 @@
   <data name="MenuCloseFile" xml:space="preserve"><value>_Close File</value></data>
   <data name="MenuCloseWorkspace" xml:space="preserve"><value>Close Workspace</value></data>
   <data name="OpenFileTitle" xml:space="preserve"><value>Open File</value></data>
-  <data name="AddProjectControlsToToolbox" xml:space="preserve"><value>Add project controls to the toolbox</value></data>
   <data name="SelectProjectOrSolution" xml:space="preserve"><value>Select a project/solution file (.csproj, .slnx, .sln).</value></data>
   <data name="WorkspacePickerFailed" xml:space="preserve"><value>The file picker could not be opened: {0}</value></data>
   <data name="LoadProjectControls" xml:space="preserve"><value>Load project controls</value></data>
@@ -56,7 +55,6 @@
   <data name="ToolboxTaskFailed" xml:space="preserve"><value>Project control discovery failed.</value></data>
   <data name="ToolboxFileReadFailed" xml:space="preserve"><value>An assembly could not be read.</value></data>
   <data name="ToolboxErrorDetails" xml:space="preserve"><value>Details...</value></data>
-  <data name="ProjectControlsDeferred" xml:space="preserve"><value>Project controls can be loaded when needed.</value></data>
   <data name="WorkspaceFiles" xml:space="preserve"><value>Projects and Solutions</value></data>
   <data name="CSharpFiles" xml:space="preserve"><value>C# Files</value></data>
   <data name="WorkspaceClosed" xml:space="preserve"><value>Workspace closed</value></data>
@@ -310,6 +308,7 @@
   <data name="SearchProperties" xml:space="preserve"><value>Search properties...</value></data>
   <data name="Events" xml:space="preserve"><value>Events</value></data>
   <data name="Grouped" xml:space="preserve"><value>Grouped</value></data>
+  <data name="CollapseOtherPropertyCategories" xml:space="preserve"><value>Collapse other categories on selection</value></data>
   <data name="LocalOnly" xml:space="preserve"><value>Local Only</value></data>
   <data name="Value" xml:space="preserve"><value>Value</value></data>
   <data name="Handler" xml:space="preserve"><value>Handler</value></data>
@@ -910,6 +909,18 @@
   <data name="LspStoreUnavailable" xml:space="preserve"><value>LSP settings store unavailable.</value></data>
   <data name="Stopped" xml:space="preserve"><value>Stopped</value></data>
   <data name="GitUnavailable" xml:space="preserve"><value>Git service unavailable</value></data>
+  <data name="GitUnstageConfirmTitle" xml:space="preserve"><value>Confirm Unstage</value></data>
+  <data name="GitUnstageOnePrompt" xml:space="preserve"><value>Unstage 1 file: {0}? Changes in the working file are preserved.</value></data>
+  <data name="GitUnstageManyPrompt" xml:space="preserve"><value>Unstage {0} files? Changes in the working files are preserved.</value></data>
+  <data name="GitDiscardConfirmTitle" xml:space="preserve"><value>Discard changes?</value></data>
+  <data name="GitDiscardOnePrompt" xml:space="preserve"><value>Discard changes in 1 file: {0}? Staged and working-file changes for this path will be lost.</value></data>
+  <data name="GitDiscardTooltip" xml:space="preserve"><value>Discard requires confirmation. Untracked files cannot be removed here.</value></data>
+  <data name="GitShowDiff" xml:space="preserve"><value>Show Diff</value></data>
+  <data name="GitHideDiff" xml:space="preserve"><value>Hide Diff</value></data>
+  <data name="GitResizeDiff" xml:space="preserve"><value>Resize Diff pane</value></data>
+  <data name="GitMonitoringOn" xml:space="preserve"><value>Git: On</value></data>
+  <data name="GitMonitoringOff" xml:space="preserve"><value>Git: Off</value></data>
+  <data name="GitMonitoringToggle" xml:space="preserve"><value>Enable or disable Git status and file monitoring</value></data>
   <data name="WorkspaceNotGitRepository" xml:space="preserve"><value>Workspace is not a git repository</value></data>
   <data name="XamlRootMissing" xml:space="preserve"><value>XAML document has no root element.</value></data>
   <data name="XamlTagsRepaired" xml:space="preserve"><value>Document was repaired automatically (unclosed tags).</value></data>
@@ -959,6 +970,7 @@
   <data name="ValueSourceTransparent" xml:space="preserve"><value>Local transparent brush: the background behind this control remains visible.</value></data>
   <data name="ValueSourceLocal" xml:space="preserve"><value>Local value: overrides the style/default.</value></data>
   <data name="LocalValues" xml:space="preserve"><value>Local Values</value></data>
+  <data name="EssentialProperties" xml:space="preserve"><value>Essentials</value></data>
   <data name="PropertyDraftDocumentChanged" xml:space="preserve"><value>The document changed before this value was applied. The draft is retained.</value></data>
   <data name="ExplicitNullUnsupported" xml:space="preserve"><value>The designer host does not support explicit null values.</value></data>
   <data name="PropertyValueApplyFailed" xml:space="preserve"><value>The value could not be applied to this property.</value></data>

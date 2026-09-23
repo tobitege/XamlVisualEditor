@@ -17,9 +17,11 @@ public sealed class ToolboxExtension : IXveExtension
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
         ToolboxPanelViewModel viewModel = new(context.Commands, context.Settings, context.ControlCatalog,
-            workspaceInfo: context.WorkspaceInfo, storage: context.Storage);
+            workspaceInfo: context.WorkspaceInfo, storage: context.Storage, designer: context.Designer);
         context.Subscriptions.Add(viewModel);
         await viewModel.InitializePreferencesAsync(cancellationToken);
+        if (context.ControlCatalog is not null)
+            await viewModel.ReloadAsync(cancellationToken, includeProjectControls: false, forceRefresh: false);
 
         context.Subscriptions.Add(context.Commands.Register(InsertButtonCommandId, _ => InsertButtonAsync(context, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(InsertSelectedCommandId, commandContext =>
@@ -51,6 +53,7 @@ public sealed class ToolboxExtension : IXveExtension
             new CommandMetadata(
                 Title: UiStrings.ToolboxInsertButton,
                 Category: UiStrings.Toolbox,
+                When: "hasWorkspace && hasDesignerDocument",
                 Priority: 50)));
 
         context.Subscriptions.Add(context.CommandMetadata.Register(
@@ -58,6 +61,7 @@ public sealed class ToolboxExtension : IXveExtension
             new CommandMetadata(
                 Title: UiStrings.ToolboxInsertSelected,
                 Category: UiStrings.Toolbox,
+                When: "hasWorkspace && hasDesignerDocument",
                 Priority: 60)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
@@ -104,21 +108,22 @@ public sealed class ToolboxExtension : IXveExtension
                 else loadStatus.Hide();
             }));
 
-        if (context.ControlCatalog is not null)
+        if (context.ControlCatalog is { HasProjectAssemblies: true })
         {
-            await viewModel.ReloadAsync(cancellationToken, context.ControlCatalog.AutoLoadProjectControls);
+            await viewModel.ReloadAsync(cancellationToken, includeProjectControls: true);
         }
     }
 
     private static async Task InsertButtonAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
+        if (!HasInsertTarget(context)) return;
         string? insertedNodeId = await context.Designer.InsertElementAsync(
             "Button",
             "https://github.com/avaloniaui",
             parentNodeId: null,
             cancellationToken);
 
-        if (insertedNodeId is null)
+        if (insertedNodeId is null && HasInsertTarget(context))
         {
             await context.Window.ShowWarningMessageAsync(
                 UiStrings.DesignerDocumentRequired,
@@ -131,6 +136,7 @@ public sealed class ToolboxExtension : IXveExtension
         CommandContext commandContext,
         CancellationToken cancellationToken)
     {
+        if (!HasInsertTarget(context)) return;
         if (!TryGetStringArg(commandContext.Arguments, 0, out string? typeName)
             || !TryGetStringArg(commandContext.Arguments, 1, out string? xmlNamespace))
         {
@@ -149,13 +155,17 @@ public sealed class ToolboxExtension : IXveExtension
             parentNodeId,
             cancellationToken);
 
-        if (insertedNodeId is null)
+        if (insertedNodeId is null && HasInsertTarget(context))
         {
             await context.Window.ShowWarningMessageAsync(
                 UiStrings.ControlInsertFailed,
                 cancellationToken);
         }
     }
+
+    private static bool HasInsertTarget(ExtensionContext context) =>
+        !string.IsNullOrWhiteSpace(context.WorkspaceInfo.WorkspacePath)
+        && !string.IsNullOrWhiteSpace(context.Designer.ActiveDocumentPath);
 
     private static bool TryGetStringArg(IReadOnlyList<object?>? arguments, int index, out string? value)
     {

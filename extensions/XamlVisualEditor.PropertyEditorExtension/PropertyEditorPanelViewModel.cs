@@ -987,7 +987,7 @@ public sealed class EventEntryViewModel : ReactiveObject
     public void RestoreCommitted() => HandlerName = _committedHandler;
 }
 
-public sealed class PropertyRowViewModel
+public sealed class PropertyRowViewModel : ReactiveObject
 {
     public PropertyRowViewModel(PropertyEntryViewModel property, string groupName)
     {
@@ -995,36 +995,56 @@ public sealed class PropertyRowViewModel
         GroupName = groupName;
     }
 
-    public PropertyEntryViewModel Property { get; }
+    public PropertyRowViewModel(string groupName, bool isExpanded, bool canCollapse, Action<string, bool>? setExpanded)
+    {
+        GroupName = groupName;
+        _isExpanded = isExpanded;
+        CanCollapse = canCollapse;
+        _setExpanded = setExpanded;
+    }
+
+    private readonly Action<string, bool>? _setExpanded;
+    private bool _isExpanded;
+
+    public PropertyEntryViewModel? Property { get; }
 
     public string GroupName { get; }
+    public string GroupLabel => UiLabels.Category(GroupName);
+    public bool IsHeader => Property is null;
+    public bool CanCollapse { get; }
+    public bool IsPinned => IsHeader && !CanCollapse;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value) return;
+            this.RaiseAndSetIfChanged(ref _isExpanded, value);
+            _setExpanded?.Invoke(GroupName, value);
+        }
+    }
 }
 
-public sealed class PropertyRowGroupDescription : DataGridGroupDescription
+/// <summary>Eine auswählbare Kategorie im Eigenschaftenfenster.</summary>
+public sealed class PropertyCategoryOption(string? value, string label)
 {
-    public override string PropertyName => nameof(PropertyRowViewModel.GroupName);
-
-    public override object GroupKeyFromItem(object item, int level, CultureInfo culture)
-    {
-        if (item is PropertyRowViewModel row)
-        {
-            return UiLabels.Category(row.GroupName);
-        }
-
-        return string.Empty;
-    }
+    public string? Value { get; } = value;
+    public string Label { get; } = label;
 }
 
 public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 {
+    private const string CollapseCategoriesSetting = "propertyEditor.collapseOtherCategories";
     private readonly IDesignerHost _designer;
     private readonly IPropertyEditorRegistry _propertyEditors;
+    private readonly ISettings? _settings;
     private readonly Dictionary<string, PropertyEditorDescriptor?> _descriptorCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly CompositeDisposable _disposables = new();
     private readonly CompositeDisposable _entrySubscriptions = new();
     private readonly CompositeDisposable _eventSubscriptions = new();
     private readonly ObservableCollection<PropertyEntryViewModel> _properties = new();
     private readonly ObservableCollection<PropertyRowViewModel> _groupedRows = new();
+    private readonly Dictionary<string, bool> _expandedCategories = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<EventEntryViewModel> _events = new();
     private readonly Dictionary<string, PendingPropertyValue> _pendingPropertyValues = new(StringComparer.Ordinal);
     private sealed record PendingPropertyValue(string DocumentPath, string? Value, string? Error,
@@ -1039,16 +1059,20 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     private string? _selectedTypeName;
     private string? _selectedNodeId;
     private string? _searchText;
+    private PropertyCategoryOption? _selectedCategory;
+    private bool _updatingCategories;
     private string? _statusText;
     private int _suspendUpdates;
     private bool _showProperties = true;
     private bool _showGroupedView = true;
+    private bool _collapseOtherCategoriesOnSelection = true;
     private bool _showLocalValuesOnly;
     private bool _groupedViewDirty = true;
     private string _lastSelectionKey = string.Empty;
     private string _lastActiveDocumentPath = string.Empty;
     private DateTime _lastSelectionUpdateUtc = DateTime.MinValue;
     private static readonly TimeSpan SelectionPollInterval = TimeSpan.FromMilliseconds(500);
+    private static string EssentialPropertiesGroupName => UiStrings.EssentialProperties;
     private static string LocalValuesGroupName => UiStrings.LocalValues;
     private static readonly IReadOnlyDictionary<string, int> CategorySortOrder = new Dictionary<string, int>(
         StringComparer.OrdinalIgnoreCase)
@@ -1061,22 +1085,30 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         ["Misc"] = 5
     };
 
-    public PropertyEditorPanelViewModel(IDesignerHost designer, IPropertyEditorRegistry propertyEditors)
+    public PropertyEditorPanelViewModel(IDesignerHost designer, IPropertyEditorRegistry propertyEditors,
+        ISettings? settings = null)
     {
         _designer = designer;
         _propertyEditors = propertyEditors;
+        _settings = settings;
+        _collapseOtherCategoriesOnSelection = settings?.Get(CollapseCategoriesSetting, true) ?? true;
         PropertiesView = new DataGridCollectionView(_properties)
         {
             Filter = FilterProperty
         };
-        GroupedPropertiesView = new DataGridCollectionView(_groupedRows)
-        {
-            Filter = FilterGroupedProperty
-        };
+        GroupedPropertiesView = new DataGridCollectionView(_groupedRows);
         EventsView = new DataGridCollectionView(_events)
         {
             Filter = FilterEvent
         };
+        IObservable<bool> canExpandCategories = this.WhenAnyValue(
+            x => x.ShowProperties, x => x.ShowGroupedView, x => x.ShowLocalValuesOnly, x => x.SearchText,
+            (showProperties, grouped, localOnly, search) =>
+                showProperties && grouped && !localOnly && string.IsNullOrWhiteSpace(search));
+        CollapseAllCategoriesCommand = ReactiveCommand.Create(() => SetAllCategoriesExpanded(false), canExpandCategories);
+        ExpandAllCategoriesCommand = ReactiveCommand.Create(() => SetAllCategoriesExpanded(true), canExpandCategories);
+        _disposables.Add(CollapseAllCategoriesCommand);
+        _disposables.Add(ExpandAllCategoriesCommand);
         if (designer is IDesignerDocumentNotifications notifications)
         {
             EventHandler<DesignerDocumentChangedEventArgs> changed = (_, args) =>
@@ -1090,6 +1122,16 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             {
                 PropertiesView.Refresh();
                 EventsView.Refresh();
+                RequestGroupedRefresh();
+            }));
+        Categories.Add(new PropertyCategoryOption(null, UiStrings.AllCategories));
+        _selectedCategory = Categories[0];
+        _disposables.Add(this.WhenAnyValue(x => x.SelectedCategory)
+            .Skip(1)
+            .Subscribe(_ =>
+            {
+                if (_updatingCategories) return;
+                PropertiesView.Refresh();
                 RequestGroupedRefresh();
             }));
 
@@ -1129,6 +1171,17 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     public DataGridCollectionView PropertiesView { get; }
     public DataGridCollectionView GroupedPropertiesView { get; }
+    public ReactiveCommand<Unit, Unit> CollapseAllCategoriesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExpandAllCategoriesCommand { get; }
+    /// <summary>Die Kategorien des ausgewählten Controls.</summary>
+    public ObservableCollection<PropertyCategoryOption> Categories { get; } = new();
+
+    /// <summary>Begrenzt die Eigenschaften auf eine Kategorie.</summary>
+    public PropertyCategoryOption? SelectedCategory
+    {
+        get => _selectedCategory;
+        set => this.RaiseAndSetIfChanged(ref _selectedCategory, value);
+    }
     public DataGridCollectionView EventsView { get; }
     public Interaction<PropertyStructureEditorViewModel, Unit> EditStructureInteraction { get; } = new();
     public string? StatusText { get => _statusText; private set => this.RaiseAndSetIfChanged(ref _statusText, value); }
@@ -1161,6 +1214,21 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     {
         get => _showGroupedView;
         set => this.RaiseAndSetIfChanged(ref _showGroupedView, value);
+    }
+
+    /// <summary>Legt fest, ob andere Kategorien bei einer neuen Auswahl zunächst geschlossen sind.</summary>
+    public bool CollapseOtherCategoriesOnSelection
+    {
+        get => _collapseOtherCategoriesOnSelection;
+        set
+        {
+            if (_collapseOtherCategoriesOnSelection == value) return;
+            this.RaiseAndSetIfChanged(ref _collapseOtherCategoriesOnSelection, value);
+            _expandedCategories.Clear();
+            RequestGroupedRefresh();
+            if (_settings is not null)
+                RunBackground(_settings.UpdateAsync(CollapseCategoriesSetting, value, SettingsTarget.User, CancellationToken.None));
+        }
     }
 
     public bool ShowLocalValuesOnly
@@ -1257,6 +1325,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             SelectedTypeName = node.TypeName;
             if (selectionChanged)
             {
+                _expandedCategories.Clear();
                 ClearProperties();
                 ClearEvents();
                 StatusText = UiStrings.LoadingPropertiesEvents;
@@ -1271,6 +1340,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             IReadOnlyList<DesignerEventInfo> events = eventsTask.Result;
 
             UpdatePropertyEntries(node, properties);
+            RefreshCategoryChoices();
             UpdateEventEntries(node, events);
             PropertiesView.Refresh();
             EventsView.Refresh();
@@ -1316,7 +1386,32 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         _entrySubscriptions.Clear();
         _properties.Clear();
         _groupedRows.Clear();
+        Categories.Clear();
+        Categories.Add(new PropertyCategoryOption(null, UiStrings.AllCategories));
+        SelectedCategory = Categories[0];
         _groupedViewDirty = true;
+    }
+
+    private void RefreshCategoryChoices()
+    {
+        string? selected = SelectedCategory?.Value;
+        _updatingCategories = true;
+        try
+        {
+            Categories.Clear();
+            Categories.Add(new PropertyCategoryOption(null, UiStrings.AllCategories));
+            foreach (var category in _properties.GroupBy(entry => string.IsNullOrWhiteSpace(entry.Category) ? "Misc" : entry.Category,
+                         StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(group => GetCategorySortKey(group.Key))
+                     .ThenBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase))
+                Categories.Add(new PropertyCategoryOption(category.Key,
+                    $"{UiLabels.Category(category.Key)} ({category.Count()})"));
+            SelectedCategory = Categories.FirstOrDefault(category => category.Value == selected) ?? Categories[0];
+        }
+        finally
+        {
+            _updatingCategories = false;
+        }
     }
 
     private void ClearEvents()
@@ -1356,6 +1451,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             ordered.Add(CreatePropertyEntry(node.NodeId, property));
         }
 
+        ordered = ordered.OrderBy(entry => EssentialRank(entry.Name)).ToList();
         if (existing.Count > 0 || !AreSameEntrySequence(_properties, ordered))
         {
             structureChanged = true;
@@ -1898,7 +1994,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             return false;
         }
 
-        return (!ShowLocalValuesOnly || entry.IsSet) && MatchesPropertyFilter(entry);
+        return MatchesPropertyFilter(entry);
     }
 
     private void RebuildGroupedView()
@@ -1911,27 +2007,23 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
         if (filtered.Count == 0)
         {
-            GroupedPropertiesView.GroupDescriptions.Clear();
             GroupedPropertiesView.Refresh();
             _groupedViewDirty = false;
             return;
         }
 
-        List<PropertyEntryViewModel> localValues = filtered
-            .Where(entry => entry.IsSet)
-            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        List<PropertyEntryViewModel> essentials = filtered.Where(entry => IsEssential(entry.Name))
+            .OrderBy(entry => EssentialRank(entry.Name)).ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        AddGroup(EssentialPropertiesGroupName, essentials, true, false);
 
-        foreach (PropertyEntryViewModel entry in localValues)
-        {
-            _groupedRows.Add(new PropertyRowViewModel(entry, LocalValuesGroupName));
-        }
+        List<PropertyEntryViewModel> localValues = filtered.Where(entry => entry.IsSet && !IsEssential(entry.Name))
+            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        AddGroup(LocalValuesGroupName, localValues, true, false);
 
-        List<string> categoryOrder = new();
+        Dictionary<string, List<PropertyEntryViewModel>> categories = new(StringComparer.OrdinalIgnoreCase);
         if (!ShowLocalValuesOnly)
         {
-            Dictionary<string, List<PropertyEntryViewModel>> categories = new(StringComparer.OrdinalIgnoreCase);
-            foreach (PropertyEntryViewModel entry in filtered.Where(entry => !entry.IsSet))
+            foreach (PropertyEntryViewModel entry in filtered.Where(entry => !entry.IsSet && !IsEssential(entry.Name)))
             {
                 string category = string.IsNullOrWhiteSpace(entry.Category) ? "Misc" : entry.Category;
                 if (!categories.TryGetValue(category, out List<PropertyEntryViewModel>? list))
@@ -1939,48 +2031,136 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                     list = new List<PropertyEntryViewModel>();
                     categories[category] = list;
                 }
-
                 list.Add(entry);
             }
-
-            categoryOrder = categories.Keys
-                .OrderBy(GetCategorySortKey)
-                .ThenBy(category => category, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            foreach (string category in categoryOrder)
-            {
-                foreach (PropertyEntryViewModel entry in categories[category]
-                             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
-                {
-                    _groupedRows.Add(new PropertyRowViewModel(entry, category));
-                }
-            }
         }
-
-        using (GroupedPropertiesView.DeferRefresh())
+        List<string> categoryOrder = categories.Keys
+            .OrderBy(GetCategorySortKey)
+            .ThenBy(category => category, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (string category in categoryOrder)
         {
-            GroupedPropertiesView.GroupDescriptions.Clear();
-            if (_groupedRows.Count > 0)
-            {
-                PropertyRowGroupDescription groupDescription = new();
-                if (localValues.Count > 0)
-                {
-                    groupDescription.GroupKeys.Add(LocalValuesGroupName);
-                }
-
-                foreach (string category in categoryOrder)
-                {
-                    groupDescription.GroupKeys.Add(UiLabels.Category(category));
-                }
-
-                GroupedPropertiesView.GroupDescriptions.Add(groupDescription);
-            }
+            bool expanded = _expandedCategories.TryGetValue(category, out bool saved)
+                ? saved : !CollapseOtherCategoriesOnSelection;
+            bool searching = !string.IsNullOrWhiteSpace(SearchText);
+            AddGroup(category, categories[category].OrderBy(property => property.Name, StringComparer.OrdinalIgnoreCase),
+                expanded || searching, !searching);
         }
 
         GroupedPropertiesView.Refresh();
         _groupedViewDirty = false;
+
+        void AddGroup(string groupName, IEnumerable<PropertyEntryViewModel> properties, bool expanded, bool canCollapse)
+        {
+            using IEnumerator<PropertyEntryViewModel> iterator = properties.GetEnumerator();
+            if (!iterator.MoveNext()) return;
+            _groupedRows.Add(new PropertyRowViewModel(groupName, expanded, canCollapse,
+                canCollapse ? SetCategoryExpanded : null));
+            if (!expanded) return;
+            do
+                _groupedRows.Add(new PropertyRowViewModel(iterator.Current, groupName));
+            while (iterator.MoveNext());
+        }
     }
+
+    private void SetCategoryExpanded(string category, bool expanded)
+    {
+        _expandedCategories[category] = expanded;
+        if (!ShowGroupedView || _groupedViewDirty)
+        {
+            RequestGroupedRefresh();
+            return;
+        }
+
+        int headerIndex = -1;
+        for (int index = 0; index < _groupedRows.Count; index++)
+        {
+            if (_groupedRows[index].IsHeader && string.Equals(_groupedRows[index].GroupName, category, StringComparison.OrdinalIgnoreCase))
+            {
+                headerIndex = index;
+                break;
+            }
+        }
+        if (headerIndex < 0) return;
+
+        int childIndex = headerIndex + 1;
+        if (expanded)
+        {
+            foreach (PropertyEntryViewModel entry in _properties
+                         .Where(MatchesPropertyFilter)
+                         .Where(entry => !entry.IsSet && !IsEssential(entry.Name)
+                             && string.Equals(string.IsNullOrWhiteSpace(entry.Category) ? "Misc" : entry.Category,
+                                 category, StringComparison.OrdinalIgnoreCase))
+                         .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                _groupedRows.Insert(childIndex++, new PropertyRowViewModel(entry, category));
+            }
+        }
+        else
+        {
+            while (childIndex < _groupedRows.Count && !_groupedRows[childIndex].IsHeader)
+                _groupedRows.RemoveAt(childIndex);
+        }
+    }
+
+    private void SetAllCategoriesExpanded(bool expanded)
+    {
+        foreach (PropertyCategoryOption category in Categories)
+        {
+            if (category.Value is { } value) _expandedCategories[value] = expanded;
+        }
+        if (!ShowGroupedView || _groupedViewDirty)
+        {
+            RequestGroupedRefresh();
+            return;
+        }
+
+        foreach (PropertyRowViewModel header in _groupedRows.Where(row => row.IsHeader && row.CanCollapse).ToArray())
+            header.IsExpanded = expanded;
+    }
+
+    private static bool IsEssential(string name) => EssentialRank(name) != int.MaxValue;
+
+    private static int EssentialRank(string name) => name switch
+    {
+        "Name" or "x:Name" => 0,
+        "Location" => 5,
+        "Canvas.Left" => 10,
+        "Canvas.Top" => 11,
+        "Canvas.Right" => 12,
+        "Canvas.Bottom" => 13,
+        "Grid.Row" or "Row" => 14,
+        "Grid.Column" or "Column" => 15,
+        "Grid.RowSpan" or "RowSpan" => 16,
+        "Grid.ColumnSpan" or "ColumnSpan" => 17,
+        "Margin" => 18,
+        "Padding" => 19,
+        "Size" => 20,
+        "Width" => 21,
+        "Height" => 22,
+        "MinWidth" => 23,
+        "MinHeight" => 24,
+        "MaxWidth" => 25,
+        "MaxHeight" => 26,
+        "Content" => 30,
+        "Header" => 31,
+        "Text" => 32,
+        "FontFamily" => 40,
+        "FontSize" => 41,
+        "FontWeight" => 42,
+        "FontStyle" => 43,
+        "TextAlignment" => 44,
+        "TextWrapping" => 45,
+        "TextTrimming" => 46,
+        "TextDecorations" => 47,
+        "BorderBrush" => 50,
+        "BorderThickness" => 51,
+        "CornerRadius" => 52,
+        "DockPanel.Dock" or "Dock" => 60,
+        "HorizontalAlignment" => 61,
+        "VerticalAlignment" => 62,
+        _ => int.MaxValue
+    };
 
     private static int GetCategorySortKey(string category)
     {
@@ -2019,11 +2199,6 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             || (entry.HandlerName?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    private bool FilterGroupedProperty(object? item)
-    {
-        return item is PropertyRowViewModel row && FilterProperty(row.Property);
-    }
-
     private async Task<IReadOnlyList<DesignerNodeSummary>> PollSelectedNodesAsync(CancellationToken cancellationToken)
     {
         try
@@ -2042,7 +2217,12 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     private bool MatchesPropertyFilter(PropertyEntryViewModel entry)
     {
-        if (ShowLocalValuesOnly && !entry.IsSet)
+        if (SelectedCategory?.Value is { } selectedCategory
+            && !string.Equals(entry.Category, selectedCategory, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (ShowLocalValuesOnly && !entry.IsSet && !IsEssential(entry.Name))
         {
             return false;
         }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace XamlVisualEditor.Core;
 
@@ -22,13 +22,16 @@ public sealed class TypeMetadata
     /// <summary>Gets the assembly name.</summary>
     public required string AssemblyName { get; init; }
 
+    /// <summary>Version der tatsächlich gelesenen Assembly.</summary>
+    public string? AssemblyVersion { get; init; }
+
     /// <summary>Gets whether this type derives from Control.</summary>
     public bool IsControl { get; init; }
 
     /// <summary>Gets whether this type provides a collection of Avalonia styles.</summary>
     public bool IsStyle { get; init; }
 
-    /// <summary>Gets whether the type belongs to the core Avalonia control assembly.</summary>
+    /// <summary>Gibt an, ob der Typ aus einer offiziellen Avalonia-Assembly stammt.</summary>
     public bool IsStandardControl { get; init; }
 
     /// <summary>Gets whether this type derives from Panel.</summary>
@@ -83,6 +86,9 @@ public sealed class PropertyMetadata
 
     /// <summary>Gets the owner type for attached properties.</summary>
     public string? OwnerType { get; init; }
+
+    /// <summary>Gets the type that declares the property, also for inherited properties.</summary>
+    public string? DeclaringTypeName { get; init; }
 
     /// <summary>Gets whether the property is read-only.</summary>
     public bool IsReadOnly { get; init; }

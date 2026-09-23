@@ -15,7 +15,7 @@ public sealed class PropertyEditorExtension : IXveExtension
 
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
-        PropertyEditorPanelViewModel viewModel = new(context.Designer, context.PropertyEditors);
+        PropertyEditorPanelViewModel viewModel = new(context.Designer, context.PropertyEditors, context.Settings);
 
         context.Subscriptions.Add(context.Commands.Register(ToggleViewCommandId, _ =>
             context.ViewHost.ToggleAsync(ViewId, CancellationToken.None)));

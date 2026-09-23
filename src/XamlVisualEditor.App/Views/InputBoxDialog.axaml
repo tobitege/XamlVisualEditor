@@ -5,13 +5,14 @@
         x:Class="XamlVisualEditor.App.Views.InputBoxDialog"
         Classes="editor-chrome"
         x:DataType="vm:InputBoxDialogViewModel"
+        Title="{CompiledBinding Title}"
         Width="360"
-        Height="180"
+        SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
   <StackPanel Margin="16" Spacing="8">
     <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
-    <TextBlock Text="{CompiledBinding Prompt}" Opacity="0.7" />
+    <TextBlock Text="{CompiledBinding Prompt}" Opacity="0.7" TextWrapping="Wrap" />
     <TextBox Text="{CompiledBinding Value, Mode=TwoWay}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" IsCancel="True" />

@@ -201,3 +201,14 @@ cat package/icons/folder_open_20_regular.svg
 ```
 
 Then copy the `d` attribute from the `<path>` element into code.
+
+## 15) Development builds (required)
+
+- Every agent must build this repository through `tools/fullbuild.sh`. Do not invoke
+  `dotnet build` or `dotnet clean` directly or use an alternate build entry point.
+- The script builds `XamlVisualEditor.slnx` in Debug with six reported processors by
+  default. Use Debug for development validation; do not substitute a Release build.
+- On Windows, run the script with native Git-for-Windows Bash from PowerShell 7.
+  Do not run it through WSL.
+- Run one build after related edits are complete. Keep the full build output in
+  `artifacts/logs/` and report relevant failures.

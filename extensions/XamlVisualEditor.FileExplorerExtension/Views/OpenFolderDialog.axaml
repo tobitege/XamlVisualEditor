@@ -4,9 +4,10 @@
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.FileExplorerExtension.Views.OpenFolderDialog"
         x:DataType="vm:OpenFolderDialogViewModel"
+        Title="{x:Static loc:UiStrings.OpenFolder}"
         Classes="editor-chrome"
         Width="520"
-        Height="180"
+        SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <DockPanel Margin="12" LastChildFill="True">

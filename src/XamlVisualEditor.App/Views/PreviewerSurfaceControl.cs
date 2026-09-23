@@ -108,13 +108,19 @@ public sealed partial class PreviewerSurfaceControl : Control
             (control, args) => { if (control._isAttached) control.AttachDocument(args.NewValue as DesignerDocumentViewModel); });
     }
 
+    protected override Size MeasureOverride(Size availableSize) => _session is null && _lastFrame is null
+        ? new Size(Math.Min(availableSize.Width, 480), Math.Min(availableSize.Height, 40))
+        : base.MeasureOverride(availableSize);
+
     public override void Render(DrawingContext context)
     {
         if (_lastFrame is null || _lastFrame.Width == 0 || _lastFrame.Height == 0)
         {
-            DrawStatusOverlay(context, _hasError
+            string? launchError = _document?.Diagnostics
+                .FirstOrDefault(diagnostic => diagnostic.Code == "XVE_PREVIEW_START")?.Message;
+            DrawStatusOverlay(context, launchError ?? (_hasError
                 ? "Preview unavailable. See Problems for details."
-                : "Waiting for previewer frames...");
+                : "Waiting for previewer frames..."));
             base.Render(context);
             return;
         }

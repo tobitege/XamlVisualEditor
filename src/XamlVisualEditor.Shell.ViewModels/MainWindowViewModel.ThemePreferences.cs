@@ -154,7 +154,7 @@ public sealed partial class MainWindowViewModel
             ? XamlVisualEditor.Core.Localization.UiStrings.WorkspaceThemeSaveFailed
             : XamlVisualEditor.Core.Localization.UiStrings.WorkspaceThemeLoadFailed, error.Message);
         LogOutput("Warning", message);
-        StatusText = message;
+        SetPersistentStatus(message);
         foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())
             document.DesignSurface.PreviewThemeStatus = message;
     }

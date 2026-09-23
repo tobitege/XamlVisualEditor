@@ -234,7 +234,7 @@
     </vm:PropertyEditorValueTemplateSelector>
     <DataTemplate x:Key="PropertyValueTemplate" x:DataType="vm:PropertyEntryViewModel">
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-        <ContentControl Content="{CompiledBinding}"
+        <ContentControl Content="{CompiledBinding}" Classes.local-value="{CompiledBinding IsSet}"
                         ContentTemplate="{StaticResource ValueEditorSelector}"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
         <ContentControl Grid.Column="1" Content="{CompiledBinding}"
@@ -265,6 +265,9 @@
     <Style Selector="TextBlock.local-value">
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <Style Selector="ContentControl.local-value">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
   </UserControl.Styles>
   <DockPanel Margin="8" LastChildFill="True">
     <StackPanel DockPanel.Dock="Top" Spacing="6">
@@ -273,6 +276,15 @@
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{CompiledBinding SelectedTypeName}" />
       <TextBox PlaceholderText="{x:Static loc:UiStrings.SearchProperties}"
                Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+      <ComboBox ItemsSource="{CompiledBinding Categories}"
+                SelectedItem="{CompiledBinding SelectedCategory, Mode=TwoWay}"
+                MinHeight="28" MaxDropDownHeight="360">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:PropertyCategoryOption">
+            <TextBlock Text="{CompiledBinding Label}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
       <WrapPanel>
         <ToggleButton Content="{x:Static loc:UiStrings.Properties}" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowProperties, Mode=TwoWay}" />
@@ -281,9 +293,26 @@
         <ToggleButton Content="{x:Static loc:UiStrings.Grouped}" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowGroupedView, Mode=TwoWay}"
                       IsEnabled="{CompiledBinding ShowProperties}" />
+        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,6,6" VerticalAlignment="Center">
+          <Button Command="{CompiledBinding CollapseAllCategoriesCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                  ToolTip.Tip="{x:Static loc:UiStrings.CollapseAll}" AutomationProperties.Name="{x:Static loc:UiStrings.CollapseAll}">
+            <PathIcon Width="12" Height="12"
+                      Data="M 0,5 L 5,0 L 10,5 L 8.6,6.4 L 5,2.8 L 1.4,6.4 Z M 0,11 L 5,6 L 10,11 L 8.6,12.4 L 5,8.8 L 1.4,12.4 Z" />
+          </Button>
+          <Button Command="{CompiledBinding ExpandAllCategoriesCommand}" Width="26" Height="26" MinHeight="26" Padding="0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                  ToolTip.Tip="{x:Static loc:UiStrings.ExpandAll}" AutomationProperties.Name="{x:Static loc:UiStrings.ExpandAll}">
+            <PathIcon Width="12" Height="12"
+                      Data="M 0,1.4 L 1.4,0 L 5,3.6 L 8.6,0 L 10,1.4 L 5,6.4 Z M 0,7.4 L 1.4,6 L 5,9.6 L 8.6,6 L 10,7.4 L 5,12.4 Z" />
+          </Button>
+        </StackPanel>
         <ToggleButton Content="{x:Static loc:UiStrings.LocalOnly}" Margin="0,0,6,6"
                       IsChecked="{CompiledBinding ShowLocalValuesOnly, Mode=TwoWay}"
                       IsEnabled="{CompiledBinding ShowProperties}" />
+        <CheckBox Content="{x:Static loc:UiStrings.CollapseOtherPropertyCategories}"
+                  IsChecked="{CompiledBinding CollapseOtherCategoriesOnSelection, Mode=TwoWay}"
+                  IsEnabled="{CompiledBinding ShowProperties}" />
       </WrapPanel>
       <TextBlock Text="{CompiledBinding StatusText}" TextWrapping="Wrap" />
     </StackPanel>
@@ -307,9 +336,9 @@
         </dg:DataGrid.Columns>
       </dg:DataGrid>
 
-      <dg:DataGrid Classes="property-editor-grid"
-                   IsVisible="{CompiledBinding ShowGroupedView}"
-                   ItemsSource="{CompiledBinding GroupedPropertiesView}"
+       <dg:DataGrid Classes="property-editor-grid"
+                    IsVisible="{CompiledBinding ShowGroupedView}"
+                    ItemsSource="{CompiledBinding GroupedPropertiesView}"
                    AutoGenerateColumns="False"
                    CanUserSortColumns="False"
                    GridLinesVisibility="None"
@@ -317,23 +346,43 @@
                    IsReadOnly="True"
                    Margin="0,8,0,0">
         <dg:DataGrid.Columns>
-          <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Name}"
-                                     Width="*" MinWidth="90" CanUserResize="True">
+          <dg:DataGridTemplateColumn Width="*" MinWidth="227">
+            <dg:DataGridTemplateColumn.Header>
+              <Grid ColumnDefinitions="*,1.5*">
+                <TextBlock Text="{x:Static loc:UiStrings.Name}" />
+                <TextBlock Grid.Column="1" Text="{x:Static loc:UiStrings.Value}" />
+              </Grid>
+            </dg:DataGridTemplateColumn.Header>
             <dg:DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:PropertyRowViewModel">
-                <ContentControl Content="{CompiledBinding Property}"
-                                ContentTemplate="{StaticResource PropertyNameTemplate}"
-                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
-              </DataTemplate>
-            </dg:DataGridTemplateColumn.CellTemplate>
-          </dg:DataGridTemplateColumn>
-          <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Value}"
-                                     Width="1.5*" MinWidth="137" CanUserResize="True">
-            <dg:DataGridTemplateColumn.CellTemplate>
-              <DataTemplate x:DataType="vm:PropertyRowViewModel">
-                <ContentControl Content="{CompiledBinding Property}"
-                                ContentTemplate="{StaticResource PropertyValueTemplate}"
-                                HorizontalContentAlignment="Stretch" />
+                <Grid>
+                  <Grid IsVisible="{CompiledBinding IsHeader}">
+                    <ToggleButton IsVisible="{CompiledBinding CanCollapse}"
+                                  IsChecked="{CompiledBinding IsExpanded, Mode=TwoWay}"
+                                  Background="Transparent" BorderThickness="0" Padding="4,2"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="▸" IsVisible="{CompiledBinding IsExpanded, Converter={StaticResource BooleanInverseConverter}}" />
+                        <TextBlock Text="▾" IsVisible="{CompiledBinding IsExpanded}" />
+                        <TextBlock Text="{CompiledBinding GroupLabel}" FontWeight="SemiBold" />
+                      </StackPanel>
+                    </ToggleButton>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,2"
+                                IsVisible="{CompiledBinding IsPinned}">
+                      <TextBlock Text="▾" />
+                      <TextBlock Text="{CompiledBinding GroupLabel}" FontWeight="SemiBold" />
+                    </StackPanel>
+                  </Grid>
+                  <Grid ColumnDefinitions="*,1.5*" ColumnSpacing="4"
+                        IsVisible="{CompiledBinding IsHeader, Converter={StaticResource BooleanInverseConverter}}">
+                    <ContentControl Content="{CompiledBinding Property}"
+                                    ContentTemplate="{StaticResource PropertyNameTemplate}"
+                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
+                    <ContentControl Grid.Column="1" Content="{CompiledBinding Property}"
+                                    ContentTemplate="{StaticResource PropertyValueTemplate}"
+                                    HorizontalContentAlignment="Stretch" />
+                  </Grid>
+                </Grid>
               </DataTemplate>
             </dg:DataGridTemplateColumn.CellTemplate>
           </dg:DataGridTemplateColumn>

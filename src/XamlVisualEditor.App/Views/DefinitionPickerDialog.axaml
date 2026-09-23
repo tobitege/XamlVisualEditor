@@ -6,6 +6,7 @@
         x:Class="XamlVisualEditor.App.Views.DefinitionPickerDialog"
         Classes="editor-chrome"
         x:DataType="vm:DefinitionPickerDialogViewModel"
+        Title="{x:Static loc:UiStrings.SelectDefinition}"
         Width="520"
         Height="360"
         CanResize="True"

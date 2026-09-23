@@ -7,6 +7,7 @@
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.DotNetTemplatesExtension.Views.NewDotNetWizardDialog"
         x:DataType="vm:DotNetTemplateWizardViewModel"
+        Title="{CompiledBinding Title}"
         Classes="editor-chrome"
         Width="960"
         Height="680"

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Reactive;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
@@ -35,8 +35,11 @@ public sealed partial class ToolboxPanelViewModel
     public Task InitializePreferencesAsync(CancellationToken cancellationToken = default) =>
         LoadAssemblyPreferencesAsync(_workspaceInfo?.WorkspacePath, cancellationToken);
 
-    private void OnPreferencesWorkspaceChanged(object? sender, WorkspaceChangedEventArgs args) =>
+    private void OnPreferencesWorkspaceChanged(object? sender, WorkspaceChangedEventArgs args)
+    {
+        _ = UpdateUiAsync(() => this.RaisePropertyChanged(nameof(HasInsertTarget)));
         _ = LoadAssemblyPreferencesAsync(args.WorkspacePath, CancellationToken.None);
+    }
 
     private async Task LoadAssemblyPreferencesAsync(string? workspacePath, CancellationToken cancellationToken)
     {
@@ -184,11 +187,14 @@ public sealed partial class ToolboxPanelViewModel
                 group = new ToolboxAssemblyGroup(this, assembly.Key);
                 _assemblyGroups.Add(assembly.Key, group);
             }
-            group.UpdateCatalogInfo(assembly.Count(), !string.IsNullOrEmpty(assembly.Key) && assembly.Any(item => !item.IsStandardControl));
+            bool isStandard = assembly.All(item => item.IsStandardControl);
+            group.UpdateCatalogInfo(assembly.Count(), !string.IsNullOrEmpty(assembly.Key) && !isStandard,
+                isStandard, assembly.First().AssemblyVersion);
             group.ApplyExpandedState(!_collapsedAssemblies.Contains(group.AssemblyName));
         }
         SynchronizeGroups(AssemblyChoices, _assemblyGroups.Values
-            .OrderBy(group => group.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .OrderByDescending(group => group.IsStandardAssembly)
+            .ThenBy(group => group.DisplayName, StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(group => group.AssemblyName, StringComparer.Ordinal).ToArray());
         this.RaisePropertyChanged(nameof(AssemblyFilterSummary));
     }

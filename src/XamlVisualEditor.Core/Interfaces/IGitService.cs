@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -38,11 +38,6 @@ public interface IGitService
     /// Discards changes for the specified paths.
     /// </summary>
     Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
-
-    /// <summary>
-    /// Removes untracked files for the specified paths.
-    /// </summary>
-    Task RemoveUntrackedAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
 
     /// <summary>
     /// Creates a commit with the given message.

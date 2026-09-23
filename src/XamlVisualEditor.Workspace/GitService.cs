@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -110,18 +110,6 @@ public sealed class GitService : IGitService
         }
 
         List<string> args = new() { "restore", "--worktree", "--staged", "--" };
-        args.AddRange(paths);
-        await RunGitAsync(repoPath, args, ct);
-    }
-
-    public async Task RemoveUntrackedAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
-    {
-        if (paths.Count == 0)
-        {
-            return;
-        }
-
-        List<string> args = new() { "clean", "-f", "--" };
         args.AddRange(paths);
         await RunGitAsync(repoPath, args, ct);
     }

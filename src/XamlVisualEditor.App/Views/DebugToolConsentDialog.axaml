@@ -5,7 +5,8 @@
         x:Class="XamlVisualEditor.App.Views.DebugToolConsentDialog"
         Classes="editor-chrome"
         x:DataType="vm:DebugToolConsentDialogViewModel"
-        Width="520" Height="260"
+        Title="{CompiledBinding Title}"
+        Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
   <StackPanel Margin="16" Spacing="10">

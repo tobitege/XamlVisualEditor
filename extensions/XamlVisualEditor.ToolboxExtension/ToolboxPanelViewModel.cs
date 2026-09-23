@@ -23,7 +23,8 @@ public sealed class ToolboxPanelItem : IToolboxDragItem
         bool? isStandardControl = null,
         string? fullName = null,
         string? assemblyName = null,
-        string? category = null)
+        string? category = null,
+        string? assemblyVersion = null)
     {
         DisplayName = displayName;
         CommandId = commandId;
@@ -31,6 +32,7 @@ public sealed class ToolboxPanelItem : IToolboxDragItem
         IsStandardControl = isStandardControl ?? false;
         FullName = fullName ?? commandArgs.FirstOrDefault() ?? displayName;
         AssemblyName = assemblyName ?? string.Empty;
+        AssemblyVersion = assemblyVersion;
         Category = category ?? "Custom";
     }
 
@@ -57,6 +59,9 @@ public sealed class ToolboxPanelItem : IToolboxDragItem
 
     /// <summary>Gets the assembly that supplies the control.</summary>
     public string AssemblyName { get; }
+
+    /// <summary>Version der Assembly, aus der dieses Control gelesen wurde.</summary>
+    public string? AssemblyVersion { get; }
 
     /// <summary>Gets the library-defined toolbox category.</summary>
     public string Category { get; }
@@ -92,6 +97,11 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
     public IReadOnlyList<ToolboxPanelItem> Items => _items;
     public string CatalogHeader => $"{DisplayName} ({_catalogCount})";
     public bool CanFavorite => _canFavorite;
+    /// <summary>Gibt an, ob die Bibliothek ausschließlich offizielle Avalonia-Controls enthält.</summary>
+    public bool IsStandardAssembly { get; private set; }
+    /// <summary>Version des aktuellen Bibliothekskatalogs.</summary>
+    public string? AssemblyVersion { get; private set; }
+    public string Description => AssemblyVersion is null ? DisplayName : DisplayName + " · " + AssemblyVersion;
     public bool CanEditPreferences => _owner.CanEditAssemblyPreferences;
     public string FavoriteGlyph => IsFavorite ? "\u2605" : "\u2606";
     public string FavoriteToolTip => IsFavorite ? UiStrings.FavoriteAssemblyRemove : UiStrings.FavoriteAssemblyKeep;
@@ -108,8 +118,15 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
         set => _owner.SetAssemblyFavorite(this, value);
     }
 
-    internal void UpdateCatalogInfo(int count, bool canFavorite)
+    internal void UpdateCatalogInfo(int count, bool canFavorite, bool isStandardAssembly, string? assemblyVersion)
     {
+        IsStandardAssembly = isStandardAssembly;
+        if (AssemblyVersion != assemblyVersion)
+        {
+            AssemblyVersion = assemblyVersion;
+            this.RaisePropertyChanged(nameof(AssemblyVersion));
+            this.RaisePropertyChanged(nameof(Description));
+        }
         if (_catalogCount != count)
         {
             _catalogCount = count;
@@ -184,6 +201,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private readonly ICommands _commands;
     private readonly ISettings _settings;
     private readonly IControlCatalog? _catalog;
+    private readonly IDesignerHost? _designer;
     private readonly IScheduler _uiScheduler;
     private readonly ToolboxFilterOption _allLibraries = new(null, UiStrings.AllLibraries);
     private readonly ToolboxFilterOption _allCategories = new(null, UiStrings.AllCategories);
@@ -212,25 +230,26 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     public ToolboxPanelViewModel(ICommands commands, ISettings settings,
         IControlCatalog? catalog = null, IScheduler? uiScheduler = null,
-        IWorkspaceInfo? workspaceInfo = null, IExtensionStorage? storage = null)
+        IWorkspaceInfo? workspaceInfo = null, IExtensionStorage? storage = null, IDesignerHost? designer = null)
     {
         _commands = commands;
         _settings = settings;
         _catalog = catalog;
+        _designer = designer;
         _uiScheduler = uiScheduler ?? RxSchedulers.MainThreadScheduler;
         _workspaceInfo = workspaceInfo;
         _preferenceStorage = storage;
         _preferencesReady = storage is null;
         if (_workspaceInfo is not null) _workspaceInfo.WorkspaceChanged += OnPreferencesWorkspaceChanged;
+        if (_designer is not null) _designer.ActiveDocumentChanged += OnInsertDocumentChanged;
 
         ReplaceItems(TryLoadCatalogFromSettings());
         StatusText = catalog is null ? UiStrings.ControlCatalogUnavailable : UiStrings.ControlCatalogNotLoaded;
 
-        IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.IsLoading, x => x.CanEditAssemblyPreferences,
-            (item, loading, ready) => item is not null && !loading && ready);
+        IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.IsLoading,
+            x => x.CanEditAssemblyPreferences, x => x.HasInsertTarget,
+            (item, loading, ready, hasTarget) => item is not null && !loading && ready && hasTarget);
         InsertSelectedCommand = ReactiveCommand.CreateFromTask(InsertSelectedAsync, canInsert);
-        ReloadCommand = ReactiveCommand.CreateFromTask(() => ReloadAsync(),
-            this.WhenAnyValue(x => x.IsLoading).Select(loading => !loading));
         RetryLoadCommand = ReactiveCommand.CreateFromTask(
             () => ReloadAsync(includeProjectControls: _lastIncludeProjectControls),
             this.WhenAnyValue(x => x.HasLoadError, x => x.IsLoading, (error, loading) => error && !loading));
@@ -416,7 +435,6 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> InsertSelectedCommand { get; }
 
     /// <summary>Reloads controls from the active project.</summary>
-    public ReactiveCommand<Unit, Unit> ReloadCommand { get; }
 
     /// <summary>Wiederholt die zuletzt fehlgeschlagene Suche.</summary>
     public ReactiveCommand<Unit, Unit> RetryLoadCommand { get; }
@@ -446,10 +464,17 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         if (changed) SaveCollapsedAssemblies();
     }
 
+    /// <summary>Einfügen und Ziehen benötigen einen Workspace und ein aktives Designer-Dokument.</summary>
+    public bool HasInsertTarget => !string.IsNullOrWhiteSpace(_workspaceInfo?.WorkspacePath)
+        && !string.IsNullOrWhiteSpace(_designer?.ActiveDocumentPath);
+
+    private void OnInsertDocumentChanged(object? sender, DesignerDocumentChangedEventArgs args) =>
+        _ = UpdateUiAsync(() => this.RaisePropertyChanged(nameof(HasInsertTarget)));
+
     private async Task InsertSelectedAsync()
     {
         ToolboxPanelItem? item = SelectedItem;
-        if (item is null)
+        if (item is null || !HasInsertTarget)
         {
             return;
         }
@@ -466,7 +491,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     }
 
     /// <summary>Refreshes the catalog while ignoring results superseded by another workspace.</summary>
-    public async Task ReloadAsync(CancellationToken cancellationToken = default, bool includeProjectControls = true)
+    public async Task ReloadAsync(CancellationToken cancellationToken = default, bool includeProjectControls = true,
+        bool forceRefresh = true)
     {
         if (_disposed)
         {
@@ -497,7 +523,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             ControlCatalogSnapshot snapshot = _catalog is null
                 ? new ControlCatalogSnapshot(Array.Empty<ControlCatalogItem>(), Array.Empty<string>())
                 : await _catalog.GetControlsAsync(request.Token, new CatalogProgress(this, version, request.Token),
-                    includeProjectControls).ConfigureAwait(false);
+                    includeProjectControls, forceRefresh).ConfigureAwait(false);
             request.Token.ThrowIfCancellationRequested();
             await UpdateUiAsync(() =>
             {
@@ -505,12 +531,10 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 IEnumerable<ToolboxPanelItem> discovered = snapshot.Controls.Select(control =>
                     new ToolboxPanelItem(control.DisplayName, DefaultInsertCommandId,
                         new[] { control.TypeName, control.XmlNamespace }, control.IsStandardControl,
-                        control.FullName, control.AssemblyName, control.Category));
+                        control.FullName, control.AssemblyName, control.Category, control.AssemblyVersion));
                 ReplaceItems(discovered.Concat(TryLoadCatalogFromSettings()));
                 StatusText = _catalog is null ? UiStrings.ControlCatalogUnavailable
                     : string.Format(UiStrings.ControlsAvailable, (object?)(Items.Count));
-                if (!includeProjectControls && _catalog?.HasProjectAssemblies == true)
-                    StatusText = UiStrings.ProjectControlsDeferred;
                 if (snapshot.Diagnostics.Count > 0)
                 {
                     StatusText += Environment.NewLine + string.Join(Environment.NewLine, snapshot.Diagnostics);
@@ -553,7 +577,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private Task UpdateUiAsync(Action action) => Observable.Start(action, _uiScheduler).ToTask();
 
     private void OnCatalogChanged(object? sender, EventArgs args) =>
-        _ = ReloadAsync(includeProjectControls: _catalog?.AutoLoadProjectControls ?? false);
+        _ = ReloadAsync(includeProjectControls: _catalog?.HasProjectAssemblies ?? false, forceRefresh: false);
 
     private void CancelLoad()
     {
@@ -601,10 +625,10 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         DisposeAssemblyPreferences();
         Interlocked.Increment(ref _reloadVersion);
         if (_catalog is not null) _catalog.Changed -= OnCatalogChanged;
+        if (_designer is not null) _designer.ActiveDocumentChanged -= OnInsertDocumentChanged;
         _loadCancellation?.Cancel();
         _statusDismissal.Dispose();
         InsertSelectedCommand.Dispose();
-        ReloadCommand.Dispose();
         RetryLoadCommand.Dispose();
         DismissLoadStatusCommand.Dispose();
         CancelLoadCommand.Dispose();
@@ -632,10 +656,12 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             }
             Libraries.Clear();
             Libraries.Add(_allLibraries);
-            foreach (string name in Items.Select(item => item.AssemblyName).Where(name => !string.IsNullOrEmpty(name))
-                .Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase))
+            foreach (var assembly in Items.Where(item => !string.IsNullOrEmpty(item.AssemblyName))
+                .GroupBy(item => item.AssemblyName, StringComparer.Ordinal)
+                .OrderByDescending(group => group.All(item => item.IsStandardControl))
+                .ThenBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase))
             {
-                Libraries.Add(new ToolboxFilterOption(name, name));
+                Libraries.Add(new ToolboxFilterOption(assembly.Key, assembly.Key));
             }
             Categories.Clear();
             Categories.Add(_allCategories);
@@ -692,7 +718,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 visibleGroups.Add(group);
             }
 
-            visibleGroups = visibleGroups.OrderByDescending(group => group.IsFavorite)
+            visibleGroups = visibleGroups.OrderByDescending(group => group.IsStandardAssembly)
+                .ThenByDescending(group => group.IsFavorite)
                 .ThenBy(group => group.DisplayName, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(group => group.AssemblyName, StringComparer.Ordinal).ToList();
             foreach (ToolboxAssemblyGroup hidden in _assemblyGroups.Values.Except(visibleGroups))

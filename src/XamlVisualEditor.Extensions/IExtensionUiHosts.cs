@@ -1,4 +1,4 @@
-namespace XamlVisualEditor.Extensions;
+﻿namespace XamlVisualEditor.Extensions;
 
 /// <summary>Hosts modal dialogs for extensions.</summary>
 public interface IDialogHost
@@ -8,6 +8,13 @@ public interface IDialogHost
 
     /// <summary>Shows a dialog by id.</summary>
     Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken);
+}
+
+/// <summary>Requests a modal confirmation with explicit action text.</summary>
+public sealed record ConfirmationDialogRequest(string Title, string Message, string ConfirmText, bool IsDestructive = false)
+{
+    /// <summary>Identifier of the shared confirmation dialog.</summary>
+    public const string DIALOG_ID = "xve.confirm";
 }
 
 /// <summary>Controls workspace opening behavior.</summary>

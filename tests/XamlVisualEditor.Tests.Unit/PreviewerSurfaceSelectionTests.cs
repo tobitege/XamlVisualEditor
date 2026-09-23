@@ -23,6 +23,28 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class PreviewerSurfaceSelectionTests
 {
     [AvaloniaFact]
+    public void SurfaceWithoutFrameReservesVisibleStatusArea()
+    {
+        PreviewerSurfaceControl surface = new()
+        {
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
+        };
+        Window window = new() { Content = new ScrollViewer { Content = surface }, Width = 600, Height = 200 };
+        try
+        {
+            window.Show();
+            window.UpdateLayout();
+            Assert.True(surface.Bounds.Width >= 480);
+            Assert.True(surface.Bounds.Height >= 40);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task ExternalSurfaceKeyboardDuplicatesSelectsAndDeletesWithoutLocalControls()
     {
         const string original = "<Canvas xmlns=\"https://github.com/avaloniaui\" Width=\"200\" Height=\"100\"><Button Name=\"Original\" Width=\"40\" Height=\"20\" /></Canvas>";

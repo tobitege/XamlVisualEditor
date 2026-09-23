@@ -4,9 +4,10 @@
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.DotNetTemplatesExtension.Views.WorkspaceOpenPromptDialog"
         x:DataType="vm:WorkspaceOpenPromptDialogViewModel"
+        Title="{CompiledBinding Title}"
         Classes="editor-chrome"
         Width="420"
-        Height="180"
+        SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="12">

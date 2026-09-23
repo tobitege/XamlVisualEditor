@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -578,7 +578,8 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
                     prop.TypeFullName,
                     value,
                     prop.IsReadOnly,
-                    string.IsNullOrWhiteSpace(prop.Category) ? CategorizeProperty(prop.Name) : prop.Category,
+                    string.IsNullOrWhiteSpace(prop.Category) || prop.Category == "Misc"
+                        ? CategorizeProperty(prop.Name, prop.DeclaringTypeName) : prop.Category,
                     prop.Description,
                     defaultValue,
                     prop.IsAttached,
@@ -633,7 +634,8 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
                 descriptor.PropertyType.FullName ?? descriptor.PropertyType.Name,
                 designItem.GetProperty(descriptor.Name),
                 descriptor.IsReadOnly,
-                string.IsNullOrWhiteSpace(descriptor.Category) ? null : descriptor.Category,
+                string.IsNullOrWhiteSpace(descriptor.Category) || descriptor.Category == "Misc"
+                    ? CategorizeProperty(descriptor.Name) : descriptor.Category,
                 descriptor.Description,
                 defaultValue,
                 IsAttached: descriptor.Name.Contains('.'),
@@ -957,7 +959,7 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
             : $"{name} \"{normalized}\"";
     }
 
-    private static string CategorizeProperty(string propertyName)
+    private static string CategorizeProperty(string propertyName, string? declaringTypeName = null)
     {
         return propertyName switch
         {
@@ -981,7 +983,7 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
             "Name" or "x:Name" or "Classes" or "Tag" or "DataContext"
                 => "Miscellaneous",
 
-            _ => "Common"
+            _ => declaringTypeName ?? "Common"
         };
     }
 

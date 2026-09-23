@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Services;
 
@@ -17,6 +19,16 @@ public sealed class AppDialogHost : IDialogHost
     public AppDialogHost(MainWindowProvider windowProvider)
     {
         _windowProvider = windowProvider;
+        _factories[ConfirmationDialogRequest.DIALOG_ID] = input =>
+        {
+            if (input is not ConfirmationDialogRequest request)
+                throw new ArgumentException("Confirmation dialog requires a confirmation request.", nameof(input));
+            return new ConfirmDialog
+            {
+                DataContext = new ConfirmDialogViewModel(request.Title, request.Message, request.ConfirmText,
+                    request.IsDestructive)
+            };
+        };
     }
 
     public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory)

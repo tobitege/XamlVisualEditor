@@ -62,4 +62,30 @@ public sealed class ConfirmDialogTests
 
         Assert.Equal(UiStrings.Ok, viewModel.ConfirmText);
     }
+
+    [AvaloniaFact]
+    public async Task DestructiveConfirmationDefaultsToCancel()
+    {
+        ConfirmDialogViewModel viewModel = new("Discard", "Changes will be lost.", "Discard", isDestructive: true);
+        Window owner = new();
+        ConfirmDialog dialog = new() { DataContext = viewModel };
+        try
+        {
+            owner.Show();
+            Task<bool> result = dialog.ShowDialog<bool>(owner);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+            Assert.False(dialog.FindControl<Button>("ConfirmButton")!.IsDefault);
+            Assert.True(dialog.FindControl<Button>("CancelButton")!.IsDefault);
+            Assert.True(dialog.FindControl<Button>("CancelButton")!.IsCancel);
+
+            await viewModel.CancelCommand.Execute();
+            Assert.False(await result.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            if (dialog.IsVisible) dialog.Close();
+            owner.Close();
+        }
+    }
 }

@@ -7,13 +7,12 @@ using XamlVisualEditor.Core.Localization;
 namespace XamlVisualEditor.Shell.ViewModels;
 
 /// <summary>Enthält die Auswahl für das Öffnen eines Projekts oder einer Solution.</summary>
-public sealed record WorkspaceOpenRequest(string FilePath, bool LoadProjectControls);
+public sealed record WorkspaceOpenRequest(string FilePath);
 
 /// <summary>Erfasst Projektdatei und optionale Toolbox-Suche.</summary>
 public sealed partial class WorkspaceOpenDialogViewModel : ReactiveObject, IDisposable
 {
     [Reactive] public partial string FilePath { get; set; } = string.Empty;
-    [Reactive] public partial bool LoadProjectControls { get; set; } = true;
     [Reactive] public partial string? Error { get; private set; }
 
     public Interaction<Unit, string?> BrowseInteraction { get; } = new();
@@ -45,7 +44,7 @@ public sealed partial class WorkspaceOpenDialogViewModel : ReactiveObject, IDisp
                 Error = UiStrings.SelectProjectOrSolution;
                 return;
             }
-            CloseRequested?.Invoke(new WorkspaceOpenRequest(path, LoadProjectControls));
+            CloseRequested?.Invoke(new WorkspaceOpenRequest(path));
         }, this.WhenAnyValue(x => x.FilePath).Select(path => !string.IsNullOrWhiteSpace(path)));
         CancelCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(null));
     }

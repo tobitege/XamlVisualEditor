@@ -45,7 +45,6 @@
   <data name="MenuCloseFile" xml:space="preserve"><value>Datei s_chließen</value></data>
   <data name="MenuCloseWorkspace" xml:space="preserve"><value>Projekt/Solution schließen</value></data>
   <data name="OpenFileTitle" xml:space="preserve"><value>Datei öffnen</value></data>
-  <data name="AddProjectControlsToToolbox" xml:space="preserve"><value>Projekt-Controls zur Toolbox hinzufügen</value></data>
   <data name="SelectProjectOrSolution" xml:space="preserve"><value>Projekt/Solution-Datei auswählen (.csproj, .slnx, .sln).</value></data>
   <data name="WorkspacePickerFailed" xml:space="preserve"><value>Die Dateiauswahl konnte nicht geöffnet werden: {0}</value></data>
   <data name="LoadProjectControls" xml:space="preserve"><value>Projekt-Controls laden</value></data>
@@ -56,7 +55,6 @@
   <data name="ToolboxTaskFailed" xml:space="preserve"><value>Die Suche nach Projekt-Controls ist fehlgeschlagen.</value></data>
   <data name="ToolboxFileReadFailed" xml:space="preserve"><value>Eine Assembly konnte nicht gelesen werden.</value></data>
   <data name="ToolboxErrorDetails" xml:space="preserve"><value>Details...</value></data>
-  <data name="ProjectControlsDeferred" xml:space="preserve"><value>Projekt-Controls können bei Bedarf nachgeladen werden.</value></data>
   <data name="WorkspaceFiles" xml:space="preserve"><value>Projekte und Solutions</value></data>
   <data name="CSharpFiles" xml:space="preserve"><value>C#-Dateien</value></data>
   <data name="WorkspaceClosed" xml:space="preserve"><value>Workspace geschlossen</value></data>
@@ -136,11 +134,11 @@
   <data name="BehindLabel" xml:space="preserve"><value>Zurück:</value></data>
   <data name="Refresh" xml:space="preserve"><value>Aktualisieren</value></data>
   <data name="SearchChanges" xml:space="preserve"><value>Änderungen suchen...</value></data>
-  <data name="Stage" xml:space="preserve"><value>Vormerken</value></data>
-  <data name="Unstage" xml:space="preserve"><value>Zurücknehmen</value></data>
-  <data name="Discard" xml:space="preserve"><value>Verwerfen</value></data>
-  <data name="StageAll" xml:space="preserve"><value>Alle vormerken</value></data>
-  <data name="UnstageAll" xml:space="preserve"><value>Alle zurücknehmen</value></data>
+  <data name="Stage" xml:space="preserve"><value>Stage</value></data>
+  <data name="Unstage" xml:space="preserve"><value>Unstage</value></data>
+  <data name="Discard" xml:space="preserve"><value>Discard</value></data>
+  <data name="StageAll" xml:space="preserve"><value>Stage All</value></data>
+  <data name="UnstageAll" xml:space="preserve"><value>Unstage All</value></data>
   <data name="Status" xml:space="preserve"><value>Status</value></data>
   <data name="Commit" xml:space="preserve"><value>Commit</value></data>
   <data name="CommitMessage" xml:space="preserve"><value>Commit-Nachricht</value></data>
@@ -310,6 +308,7 @@
   <data name="SearchProperties" xml:space="preserve"><value>Eigenschaften suchen...</value></data>
   <data name="Events" xml:space="preserve"><value>Ereignisse</value></data>
   <data name="Grouped" xml:space="preserve"><value>Gruppiert</value></data>
+  <data name="CollapseOtherPropertyCategories" xml:space="preserve"><value>Andere Kategorien bei Auswahl einklappen</value></data>
   <data name="LocalOnly" xml:space="preserve"><value>Nur lokal</value></data>
   <data name="Value" xml:space="preserve"><value>Wert</value></data>
   <data name="Handler" xml:space="preserve"><value>Handler</value></data>
@@ -910,6 +909,18 @@
   <data name="LspStoreUnavailable" xml:space="preserve"><value>Speicher für LSP-Einstellungen nicht verfügbar.</value></data>
   <data name="Stopped" xml:space="preserve"><value>Gestoppt</value></data>
   <data name="GitUnavailable" xml:space="preserve"><value>Git-Dienst nicht verfügbar</value></data>
+  <data name="GitUnstageConfirmTitle" xml:space="preserve"><value>Unstage bestätigen</value></data>
+  <data name="GitUnstageOnePrompt" xml:space="preserve"><value>1 Datei aus dem Git-Index nehmen: {0}? Änderungen in der Arbeitsdatei bleiben erhalten.</value></data>
+  <data name="GitUnstageManyPrompt" xml:space="preserve"><value>{0} Dateien aus dem Git-Index nehmen? Änderungen in den Arbeitsdateien bleiben erhalten.</value></data>
+  <data name="GitDiscardConfirmTitle" xml:space="preserve"><value>Änderungen verwerfen?</value></data>
+  <data name="GitDiscardOnePrompt" xml:space="preserve"><value>Änderungen an 1 Datei verwerfen: {0}? Änderungen im Git-Index und in der Arbeitsdatei gehen verloren.</value></data>
+  <data name="GitDiscardTooltip" xml:space="preserve"><value>Discard fragt vor dem Verwerfen nach. Untracked-Dateien können hier nicht entfernt werden.</value></data>
+  <data name="GitShowDiff" xml:space="preserve"><value>Diff anzeigen</value></data>
+  <data name="GitHideDiff" xml:space="preserve"><value>Diff ausblenden</value></data>
+  <data name="GitResizeDiff" xml:space="preserve"><value>Diff-Breite ändern</value></data>
+  <data name="GitMonitoringOn" xml:space="preserve"><value>Git: Ein</value></data>
+  <data name="GitMonitoringOff" xml:space="preserve"><value>Git: Aus</value></data>
+  <data name="GitMonitoringToggle" xml:space="preserve"><value>Git-Status und Dateiüberwachung ein- oder ausschalten</value></data>
   <data name="WorkspaceNotGitRepository" xml:space="preserve"><value>Der Arbeitsbereich ist kein Git-Repository</value></data>
   <data name="XamlRootMissing" xml:space="preserve"><value>Das XAML-Dokument hat kein Wurzelelement.</value></data>
   <data name="XamlTagsRepaired" xml:space="preserve"><value>Das Dokument wurde automatisch repariert; nicht geschlossene Tags wurden ergänzt.</value></data>
@@ -944,14 +955,14 @@
   <data name="MissingOutputsSuffix" xml:space="preserve"><value> (fehlende Ausgaben erkannt)</value></data>
   <data name="FavoriteAssemblyRemove" xml:space="preserve"><value>Assembly aus den Favoriten entfernen</value></data>
   <data name="FavoriteAssemblyKeep" xml:space="preserve"><value>Diese Assembly oben bei den Favoriten anzeigen</value></data>
-  <data name="GitAddedSuffix" xml:space="preserve"><value> Hinzugefügt</value></data>
-  <data name="GitModifiedSuffix" xml:space="preserve"><value> Geändert</value></data>
-  <data name="GitDeletedSuffix" xml:space="preserve"><value> Gelöscht</value></data>
-  <data name="GitRenamedSuffix" xml:space="preserve"><value> Umbenannt</value></data>
-  <data name="GitCopiedSuffix" xml:space="preserve"><value> Kopiert</value></data>
-  <data name="GitTypeChangedSuffix" xml:space="preserve"><value> Typ geändert</value></data>
-  <data name="GitUnmergedSuffix" xml:space="preserve"><value> Nicht zusammengeführt</value></data>
-  <data name="GitChangedSuffix" xml:space="preserve"><value> Geändert</value></data>
+  <data name="GitAddedSuffix" xml:space="preserve"><value> Added</value></data>
+  <data name="GitModifiedSuffix" xml:space="preserve"><value> Modified</value></data>
+  <data name="GitDeletedSuffix" xml:space="preserve"><value> Deleted</value></data>
+  <data name="GitRenamedSuffix" xml:space="preserve"><value> Renamed</value></data>
+  <data name="GitCopiedSuffix" xml:space="preserve"><value> Copied</value></data>
+  <data name="GitTypeChangedSuffix" xml:space="preserve"><value> Type Changed</value></data>
+  <data name="GitUnmergedSuffix" xml:space="preserve"><value> Unmerged</value></data>
+  <data name="GitChangedSuffix" xml:space="preserve"><value> Changed</value></data>
   <data name="ValueSourceDefault" xml:space="preserve"><value>Style/Standard: kein lokal zugewiesener Wert.</value></data>
   <data name="ValueSourceNull" xml:space="preserve"><value>Explizit null: Der lokale Wert ist null. Zurücksetzen stellt den Style-/Standardwert wieder her.</value></data>
   <data name="ValueSourceDynamic" xml:space="preserve"><value>Dynamische Ressource: folgt Änderungen der referenzierten Theme-Ressource.</value></data>
@@ -959,6 +970,7 @@
   <data name="ValueSourceTransparent" xml:space="preserve"><value>Lokaler transparenter Brush: Der Hintergrund hinter diesem Control bleibt sichtbar.</value></data>
   <data name="ValueSourceLocal" xml:space="preserve"><value>Lokaler Wert: überschreibt den Style-/Standardwert.</value></data>
   <data name="LocalValues" xml:space="preserve"><value>Lokale Werte</value></data>
+  <data name="EssentialProperties" xml:space="preserve"><value>Wichtige Eigenschaften</value></data>
   <data name="PropertyDraftDocumentChanged" xml:space="preserve"><value>Das Dokument wurde vor dem Übernehmen des Werts geändert. Der Entwurf bleibt erhalten.</value></data>
   <data name="ExplicitNullUnsupported" xml:space="preserve"><value>Der Designer-Host unterstützt keine expliziten Nullwerte.</value></data>
   <data name="PropertyValueApplyFailed" xml:space="preserve"><value>Der Wert konnte nicht für diese Eigenschaft übernommen werden.</value></data>
@@ -1089,8 +1101,8 @@
   <data name="SelectedFormat" xml:space="preserve"><value>Ausgewählt: {0}</value></data>
   <data name="FavoriteFormat" xml:space="preserve"><value>Favorit: {0}</value></data>
   <data name="CountFormat" xml:space="preserve"><value>Anzahl: {0}</value></data>
-  <data name="StagedCountFormat" xml:space="preserve"><value>Vorgemerkt ({0})</value></data>
-  <data name="UnstagedCountFormat" xml:space="preserve"><value>Nicht vorgemerkt ({0})</value></data>
+  <data name="StagedCountFormat" xml:space="preserve"><value>Staged ({0})</value></data>
+  <data name="UnstagedCountFormat" xml:space="preserve"><value>Unstaged ({0})</value></data>
   <data name="DiffCountFormat" xml:space="preserve"><value>Diff ({0})</value></data>
   <data name="LineColumnFormat" xml:space="preserve"><value>Zeile {0}, Spalte {1}</value></data>
   <data name="TimeSecondsFormat" xml:space="preserve"><value>Zeit {0:0.00}s</value></data>
@@ -1114,9 +1126,9 @@
   <data name="SeverityError" xml:space="preserve"><value>Fehler</value></data>
   <data name="SeverityWarning" xml:space="preserve"><value>Warnung</value></data>
   <data name="SeverityInfo" xml:space="preserve"><value>Info</value></data>
-  <data name="GitUntracked" xml:space="preserve"><value>Nicht versioniert</value></data>
-  <data name="GitStaged" xml:space="preserve"><value>Vorgemerkt</value></data>
-  <data name="GitUnstaged" xml:space="preserve"><value>Nicht vorgemerkt</value></data>
+  <data name="GitUntracked" xml:space="preserve"><value>Untracked</value></data>
+  <data name="GitStaged" xml:space="preserve"><value>Staged</value></data>
+  <data name="GitUnstaged" xml:space="preserve"><value>Unstaged</value></data>
   <data name="AnyLanguage" xml:space="preserve"><value>Beliebig</value></data>
   <data name="TemplateLabel" xml:space="preserve"><value>Vorlage</value></data>
   <data name="StateUnknown" xml:space="preserve"><value>Unbekannt</value></data>

@@ -9,6 +9,7 @@ using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReactiveUI;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.TestControls;
@@ -131,7 +132,8 @@ public sealed class ToolboxCatalogWorkflowTests
             ScrollViewer viewport = Assert.IsType<ScrollViewer>(view.FindControl<ScrollViewer>("AssemblyGroupsViewport"));
             double previousHeight = libraryExpander.Bounds.Height;
             double previousExtent = viewport.Extent.Height;
-            Assert.InRange(GetControlList(view, libraryGroup).Bounds.Height, 1, viewport.Bounds.Height + 1);
+            Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                ScrollViewer.GetVerticalScrollBarVisibility(GetControlList(view, libraryGroup)));
             libraryExpander.IsExpanded = false;
             FlushLayout(window);
             Assert.False(libraryGroup.IsExpanded);
@@ -172,6 +174,75 @@ public sealed class ToolboxCatalogWorkflowTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task SingleViewportKeepsTheCurrentAssemblyHeaderVisibleAndRowsVirtualized()
+    {
+        TypeMetadata[] controls = Enumerable.Range(0, 2200).Select(index => new TypeMetadata
+        {
+            Name = $"Control{index:D4}",
+            FullName = $"Controls.Control{index:D4}",
+            ClrNamespace = "Controls",
+            XmlNamespace = "using:Controls",
+            AssemblyName = index < 2000 ? "Avalonia.Controls" : "Project.Controls",
+            IsStandardControl = index < 2000,
+            IsControl = true,
+            IsInstantiable = true
+        }).ToArray();
+        MetadataControlCatalog catalog = new((_, _, _, _, _) => controls);
+        SynchronizationContext context = Assert.IsAssignableFrom<SynchronizationContext>(SynchronizationContext.Current);
+        using ToolboxPanelViewModel model = new(new CommandRegistry(), new InMemorySettingsStore(), catalog,
+            new SynchronizationContextScheduler(context));
+        ToolboxPanelView view = new() { DataContext = model };
+        FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        Window window = new() { Width = 480, Height = 600, Content = view };
+        try
+        {
+            window.Show();
+            await model.ReloadAsync();
+            FlushLayout(window);
+            ScrollViewer viewport = Assert.IsType<ScrollViewer>(view.FindControl<ScrollViewer>("AssemblyGroupsViewport"));
+            ContentControl header = Assert.IsType<ContentControl>(view.FindControl<ContentControl>("StickyAssemblyHeader"));
+            ToolboxAssemblyGroup first = model.AssemblyGroups[0];
+            ToolboxAssemblyGroup second = model.AssemblyGroups[1];
+            ListBox firstList = GetControlList(view, first);
+            Assert.False(header.IsVisible);
+            Assert.True(viewport.Extent.Height > viewport.Viewport.Height);
+            Assert.InRange(firstList.GetRealizedContainers().Count(), 1, 100);
+
+            viewport.Offset = new Vector(0, 1000);
+            FlushLayout(window);
+            Assert.True(header.IsVisible);
+            Assert.Same(first, header.Content);
+            Assert.InRange(header.TranslatePoint(default, viewport)!.Value.Y, -0.5, 0.5);
+            Assert.InRange(firstList.GetRealizedContainers().Count(), 1, 100);
+            Assert.Single(viewport.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ScrollBar>(),
+                bar => bar.IsVisible && bar.Bounds.Height > 0 && bar.Orientation == Avalonia.Layout.Orientation.Vertical);
+
+            Expander secondExpander = GetExpander(view, second);
+            double secondTop = secondExpander.TranslatePoint(default, viewport)!.Value.Y + viewport.Offset.Y;
+            viewport.Offset = new Vector(0, secondTop + 40);
+            FlushLayout(window);
+            Assert.Same(second, header.Content);
+            double previousExtent = viewport.Extent.Height;
+            Expander pinnedExpander = Assert.Single(header.GetVisualDescendants().OfType<Expander>());
+            pinnedExpander.IsExpanded = false;
+            FlushLayout(window);
+            Assert.False(second.IsExpanded);
+            Assert.False(secondExpander.IsExpanded);
+            Assert.True(viewport.Extent.Height < previousExtent);
+
+            viewport.Offset = default;
+            FlushLayout(window);
+            Assert.False(header.IsVisible);
+        }
+        finally
+        {
+            window.Close();
+            Application.Current.Styles.Remove(theme);
+        }
+    }
+
     private static void FlushLayout(Window window)
     {
         Dispatcher.UIThread.RunJobs();
@@ -182,7 +253,8 @@ public sealed class ToolboxCatalogWorkflowTests
 
     private static Expander GetExpander(ToolboxPanelView view, ToolboxAssemblyGroup group)
     {
-        Expander[] matches = view.GetVisualDescendants().OfType<Expander>()
+        ScrollViewer viewport = Assert.IsType<ScrollViewer>(view.FindControl<ScrollViewer>("AssemblyGroupsViewport"));
+        Expander[] matches = viewport.GetVisualDescendants().OfType<Expander>()
             .Where(expander => ReferenceEquals(expander.DataContext, group)).ToArray();
         Assert.True(matches.Length == 1, $"Expected one expander for '{group.AssemblyName}'. Items controls: " +
             string.Join("; ", view.GetVisualDescendants().OfType<ItemsControl>().Take(10)

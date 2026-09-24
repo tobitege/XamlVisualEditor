@@ -6,6 +6,7 @@
     xmlns:input="using:Avalonia.Input"
     xmlns:i="using:Avalonia.Xaml.Interactivity"
     xmlns:dock="using:Dock.Avalonia.Controls"
+    xmlns:styles="using:XamlVisualEditor.App.Styles"
         x:Class="XamlVisualEditor.App.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Name="MainWin"
@@ -36,10 +37,13 @@
             <Menu.Styles>
                 <Style Selector="MenuItem.extension-menu MenuItem"
                        x:DataType="vm:ExtensionMenuItemViewModel">
-                    <Setter Property="Header" Value="{CompiledBinding Title}" />
+                    <Setter Property="Header" Value="{CompiledBinding Header}" />
                     <Setter Property="IsEnabled" Value="{CompiledBinding IsEnabled}" />
                     <Setter Property="Command" Value="{CompiledBinding Command}" />
                     <Setter Property="InputGesture" Value="{CompiledBinding InputGesture}" />
+                    <Setter Property="ItemsSource" Value="{CompiledBinding Children}" />
+                    <Setter Property="ToggleType" Value="{CompiledBinding IsToggle, Converter={x:Static styles:MenuConverters.ToggleType}}" />
+                    <Setter Property="IsChecked" Value="{CompiledBinding IsChecked, Mode=OneWay}" />
                 </Style>
             </Menu.Styles>
             <MenuItem Header="{x:Static loc:UiStrings.MenuFile}">

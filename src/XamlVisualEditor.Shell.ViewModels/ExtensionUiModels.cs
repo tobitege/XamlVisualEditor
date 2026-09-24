@@ -112,14 +112,36 @@ public abstract partial class ExtensionCommandItemViewModel : ReactiveObject, ID
 
 public sealed partial class ExtensionMenuItemViewModel : ExtensionCommandItemViewModel
 {
+    private bool _isChecked;
+
     public ExtensionMenuItemViewModel(
         string commandId,
         string title,
         string? location,
         string? group,
         int priority,
-        ICommand command,
-        string? inputGesture = null)
+        ICommand? command,
+        string? inputGesture = null,
+        string? checkedWhen = null,
+        string? submenu = null,
+        string? submenuGroup = null)
+        : this(commandId, title, location, group, priority, command, inputGesture, checkedWhen, submenu, submenuGroup,
+            isSeparator: false)
+    {
+    }
+
+    private ExtensionMenuItemViewModel(
+        string commandId,
+        string title,
+        string? location,
+        string? group,
+        int priority,
+        ICommand? command,
+        string? inputGesture,
+        string? checkedWhen,
+        string? submenu,
+        string? submenuGroup,
+        bool isSeparator)
         : base(command)
     {
         CommandId = commandId;
@@ -129,7 +151,46 @@ public sealed partial class ExtensionMenuItemViewModel : ExtensionCommandItemVie
         Priority = priority;
         InputGestureText = inputGesture;
         InputGesture = ParseInputGesture(inputGesture);
+        CheckedWhen = string.IsNullOrWhiteSpace(checkedWhen) ? null : checkedWhen;
+        Submenu = string.IsNullOrWhiteSpace(submenu) ? null : submenu;
+        SubmenuGroup = submenuGroup;
+        IsSeparator = isSeparator;
     }
+
+    /// <summary>Creates a separator between two groups of a menu.</summary>
+    public static ExtensionMenuItemViewModel CreateSeparator(string? location, string? group)
+    {
+        return new ExtensionMenuItemViewModel("separator." + group, string.Empty, location, group, int.MinValue, null, null, null,
+            null, null, isSeparator: true);
+    }
+
+    /// <summary>Gets whether the item is a separator.</summary>
+    public bool IsSeparator { get; }
+
+    /// <summary>Gets the menu header; Avalonia draws a menu item with the header "-" as a separator.</summary>
+    public string Header => IsSeparator ? "-" : Title;
+
+    /// <summary>Gets the items of the submenu this item opens; empty for a command item.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> Children { get; } = new();
+
+    /// <summary>Gets the condition that checks a toggle item; <see langword="null"/> for a plain item.</summary>
+    public string? CheckedWhen { get; }
+
+    /// <summary>Gets whether the item shows a check mark.</summary>
+    public bool IsToggle => CheckedWhen is not null;
+
+    /// <summary>Gets or sets whether a toggle item is checked.</summary>
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => this.RaiseAndSetIfChanged(ref _isChecked, value);
+    }
+
+    /// <summary>Gets the title of the submenu the item belongs to.</summary>
+    public string? Submenu { get; }
+
+    /// <summary>Gets the group of the item inside its submenu.</summary>
+    public string? SubmenuGroup { get; }
 
     public string CommandId { get; }
 
@@ -264,11 +325,16 @@ public sealed partial class ExtensionCommandPaletteItemViewModel : ReactiveObjec
 
 public sealed partial class ExtensionKeyBindingViewModel : ReactiveObject
 {
-    public ExtensionKeyBindingViewModel(string commandId, string gesture, ICommand command)
+    public ExtensionKeyBindingViewModel(
+        string commandId,
+        string gesture,
+        ICommand command,
+        CommandKeybindingScope scope = CommandKeybindingScope.Window)
     {
         CommandId = commandId;
         Gesture = gesture;
         Command = command;
+        Scope = scope;
     }
 
     public string CommandId { get; }
@@ -276,6 +342,9 @@ public sealed partial class ExtensionKeyBindingViewModel : ReactiveObject
     public string Gesture { get; }
 
     public ICommand Command { get; }
+
+    /// <summary>Gets where the keybinding applies.</summary>
+    public CommandKeybindingScope Scope { get; }
 }
 
 public sealed partial class ExtensionAsyncCommand : ICommand

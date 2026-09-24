@@ -31,8 +31,10 @@ using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Terminal;
+using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ReactiveUI;
 using DotNetTemplatesExtensionEntry = XamlVisualEditor.DotNetTemplatesExtension.DotNetTemplatesExtension;
 using DapDebuggingExtensionEntry = XamlVisualEditor.Debugging.DapExtension.DapDebuggingExtension;
 using DotNetSdkDebuggingExtensionEntry = XamlVisualEditor.Debugging.DotNetSdkExtension.DotNetSdkDebuggingExtension;
@@ -50,6 +52,7 @@ using PropertyEditorExtensionEntry = XamlVisualEditor.PropertyEditorExtension.Pr
 using OutputExtensionEntry = XamlVisualEditor.OutputExtension.OutputExtension;
 using XamlEditorExtensionEntry = XamlVisualEditor.XamlEditorExtension.XamlEditorExtension;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
+using TextEditingExtensionEntry = XamlVisualEditor.TextEditingExtension.TextEditingExtension;
 
 using XamlVisualEditor.Core.Localization;
 
@@ -90,6 +93,7 @@ public sealed class App : Application
         {
             Log.Information("Creating the main window");
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
+            Resources[TextEditorViewHost.RESOURCE_KEY] = Services.GetRequiredService<TextEditorViewHost>();
             MainWindow mainWindow = new(mainVm);
             desktop.MainWindow = mainWindow;
 
@@ -255,6 +259,20 @@ public sealed class App : Application
         services.AddSingleton<IDebugSettingsHost, DebugSettingsHostAdapter>();
         services.AddSingleton<ILspSettingsHost, LspSettingsHostAdapter>();
         services.AddSingleton<IEditorServices, EditorServicesAdapter>();
+        services.AddSingleton(sp =>
+        {
+            MainWindowViewModel mainViewModel = sp.GetRequiredService<MainWindowViewModel>();
+            // A designer document shows its code editor except in the design-only view.
+            IObservable<object?> activeDocument = mainViewModel.WhenAnyValue(x => x.ActiveDocument)
+                .Select(document => document is DesignerDocumentViewModel designer
+                    ? designer.WhenAnyValue(x => x.ViewMode)
+                        .Select(mode => mode == DocumentViewMode.Design ? null : (object?)designer.CodeEditor)
+                    : Observable.Return<object?>(document))
+                .Switch();
+            return new TextEditorViewHost(mainViewModel.EditorContextMenuItems, activeDocument, sp.GetRequiredService<IContextKeys>());
+        });
+        services.AddSingleton<ITextEditorViewHost>(sp => sp.GetRequiredService<TextEditorViewHost>());
+        services.AddSingleton<IContextKeys, ContextKeyRegistry>();
         services.AddSingleton<IDesignerHost, ShellDesignerHost>();
         services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();
@@ -296,6 +314,7 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, DebugSettingsExtensionEntry>();
         services.AddSingleton<IXveExtension, LspSettingsExtensionEntry>();
         services.AddSingleton<IXveExtension, WorkspaceExtensionEntry>();
+        services.AddSingleton<IXveExtension, TextEditingExtensionEntry>();
         services.AddSingleton<IXveExtension, DapDebuggingExtensionEntry>();
         services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();
 

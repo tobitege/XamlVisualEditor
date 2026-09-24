@@ -58,9 +58,7 @@ public sealed partial class MainWindowViewModel
             throw new InvalidOperationException("The handler source changed while opening its definition. Retry navigation.");
         }
 
-        target.CaretOffset = binding.NameOffset;
-        target.SelectionStart = binding.NameOffset;
-        target.SelectionLength = binding.NameLength;
+        target.SetSelection(binding.NameOffset, binding.NameLength, binding.NameOffset);
         return true;
     }
 

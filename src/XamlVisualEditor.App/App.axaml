@@ -24,5 +24,6 @@
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml" />
         <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorDensity.axaml" />
         <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorTheme.axaml" />
+        <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorContextMenu.axaml" />
     </Application.Styles>
 </Application>

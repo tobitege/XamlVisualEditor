@@ -24,6 +24,7 @@
 
     <ae:TextEditor Name="TextEditor"
              v:BreakpointMarginBehavior.IsEnabled="True"
+             v:TextEditorFeaturesBehavior.IsEnabled="True"
              v:BreakpointMarginBehavior.Breakpoints="{CompiledBinding Breakpoints}"
                    v:BreakpointMarginBehavior.FilePath="{CompiledBinding FilePath}"
                    v:BreakpointMarginBehavior.ExecutionLine="{CompiledBinding ExecutionLine}"

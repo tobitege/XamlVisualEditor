@@ -22,6 +22,9 @@ public sealed class NavigationExtension : IXveExtension
     private const string NavigateBackCommandId = "navigation.history.back";
     private const string NavigateForwardCommandId = "navigation.history.forward";
     private const string ToggleReferencesCommandId = "navigation.references.toggleView";
+
+    // The number places the group in the edit menu between the workspace editing groups and the options.
+    private const string EDIT_MENU_GROUP = "5.navigation";
     private const int FindInFilesMaxFiles = 2500;
     private const int FindInFilesMaxMatches = 500;
     private const int FindInFilesMaxFileBytes = 1_048_576;
@@ -182,43 +185,43 @@ public sealed class NavigationExtension : IXveExtension
                     NavigateBackCommandId,
                     UiStrings.NavigateBack,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     60),
                 new ExtensionMenuContribution(
                     NavigateForwardCommandId,
                     UiStrings.NavigateForward,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     65),
                 new ExtensionMenuContribution(
                     QuickOpenCommandId,
                     UiStrings.QuickOpenDialog,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     66),
                 new ExtensionMenuContribution(
                     GoToLineCommandId,
                     UiStrings.GoToLineDialog,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     67),
                 new ExtensionMenuContribution(
                     FindInFilesCommandId,
                     UiStrings.FindInFilesDialog,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     68),
                 new ExtensionMenuContribution(
                     GoToDefinitionCommandId,
                     UiStrings.GoToDefinition,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     70),
                 new ExtensionMenuContribution(
                     FindReferencesCommandId,
                     UiStrings.FindReferences,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     75),
                 new ExtensionMenuContribution(
                     ToggleReferencesCommandId,

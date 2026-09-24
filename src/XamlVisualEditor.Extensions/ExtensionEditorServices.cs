@@ -72,6 +72,15 @@ public interface IEditorDocument
     /// <summary>Gets or sets the selection length.</summary>
     int SelectionLength { get; set; }
 
+    /// <summary>Sets selection and caret in one step, so that no combination of old and new values shows.</summary>
+    void SetSelection(int start, int length, int caretOffset)
+    {
+        SelectionLength = 0;
+        SelectionStart = start;
+        SelectionLength = length;
+        CaretOffset = caretOffset;
+    }
+
     /// <summary>Gets the document text.</summary>
     Task<string> GetTextAsync(CancellationToken ct);
 

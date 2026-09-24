@@ -15,9 +15,13 @@ uses Semantic Versioning.
 - Added visible progress status for workspace loading and design-surface rebuilds.
 - Added the TFVC extension with a source control explorer, a pending changes panel, and automatic check-out of versioned files on their first edit. It uses tf.exe and the TFVC REST API with the current Windows credentials; the only required setting is the collection URL.
 - Added changeset details to the TFVC extension: the history context menu shows the changed files of a changeset in the TFVC Changes panel, where the author can revise and save the check-in comment. The history can be filtered by user and is sorted by changeset, newest first.
+- Added the text editing extension: a context menu for the text and code editors with clipboard, find and replace, go to line and matching bracket, a Format submenu (toggle comment, upper and lower case, indentation, line sorting, enclosing in brackets), an Outlining submenu and a Display submenu with check-marked view toggles and zoom. The Editor Options dialog sets font, display, editing, link and color options with a live preview. The options and the caret position of each file persist across sessions.
+- Extensions can contribute to the editor context menu (`ExtensionMenuLocations.EditorContext`), group menu items into submenus (`ExtensionMenuContribution.Submenu` and `SubmenuGroup`), show check marks that follow a condition (`ExtensionMenuContribution.CheckedWhen`) over their own context keys (`ExtensionContext.ContextKeys`), set selection and caret in one step (`IEditorDocument.SetSelection`), limit a keybinding to the focused text editor (`CommandMetadata.KeybindingScope`) and set editor view options and actions through `ExtensionContext.TextEditorView`; `textEditor.hasActiveEditor` tells whether the active document shows an editor.
 
 ### Changed
 
+- The word wrap and line number toggles and the font size of a document are editor options: a change in one document applies to every editor and persists.
+- The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
 - The C# language workspace now warms in the background after the initial workspace load.
 - XVE now reads assemblies from a shared build output instead of unrelated output trees.
 - Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.

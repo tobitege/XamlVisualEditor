@@ -42,6 +42,7 @@
     <Project Path="extensions/XamlVisualEditor.OutputExtension/XamlVisualEditor.OutputExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.PropertyEditorExtension/XamlVisualEditor.PropertyEditorExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.SolutionExplorerExtension/XamlVisualEditor.SolutionExplorerExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.TextEditingExtension/XamlVisualEditor.TextEditingExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.TfvcExtension/XamlVisualEditor.TfvcExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.ToolboxExtension/XamlVisualEditor.ToolboxExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.TreeInspectorExtension/XamlVisualEditor.TreeInspectorExtension.csproj" />

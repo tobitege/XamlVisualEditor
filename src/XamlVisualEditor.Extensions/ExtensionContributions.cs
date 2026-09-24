@@ -18,12 +18,26 @@ public enum ExtensionViewLocation
     Bottom
 }
 
+/// <summary>A menu item of an extension. The title "-" is reserved: menus draw an item with that title as a separator.</summary>
 public sealed record ExtensionMenuContribution(
     string CommandId,
     string Title,
     string? Location,
     string? Group,
-    int Priority = 0);
+    int Priority = 0)
+{
+    /// <summary>Gets the title of the submenu that holds the item; items with the same title and group share one submenu.</summary>
+    public string? Submenu { get; init; }
+
+    /// <summary>Gets the group of the item inside its submenu; separators divide the groups.</summary>
+    public string? SubmenuGroup { get; init; }
+
+    /// <summary>
+    /// Gets the condition, in the syntax of <see cref="CommandMetadata.When"/>, under which a toggle item shows a check
+    /// mark; <see langword="null"/> shows a plain item. The host evaluates it again whenever <see cref="IContextKeys"/> change.
+    /// </summary>
+    public string? CheckedWhen { get; init; }
+}
 
 public sealed record ExtensionToolbarContribution(
     string CommandId,
@@ -72,6 +86,9 @@ public static class ExtensionMenuLocations
     public const string Tools = "menu.tools";
     public const string ToolsWorkspace = "menu.tools.workspace";
     public const string Extensions = "menu.extensions";
+
+    /// <summary>The context menu of the text and code editors.</summary>
+    public const string EditorContext = "menu.editor.context";
 }
 
 /// <summary>Known toolbar locations for extensions.</summary>

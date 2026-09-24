@@ -8,7 +8,21 @@ public sealed record CommandMetadata(
     string? When = null,
     string? Keybinding = null,
     string? MacKeybinding = null,
-    int Priority = 0);
+    int Priority = 0)
+{
+    /// <summary>Gets where the keybinding applies; menus show the gesture wherever it applies.</summary>
+    public CommandKeybindingScope KeybindingScope { get; init; }
+}
+
+/// <summary>Where a command keybinding applies.</summary>
+public enum CommandKeybindingScope
+{
+    /// <summary>Anywhere in the main window, unless the focused control handles the keys itself.</summary>
+    Window,
+
+    /// <summary>Only while a text or code editor has the keyboard focus.</summary>
+    TextEditor
+}
 
 /// <summary>Stores extension command metadata for host composition.</summary>
 public interface ICommandMetadataRegistry

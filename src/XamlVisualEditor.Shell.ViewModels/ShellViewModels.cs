@@ -587,7 +587,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 /// <summary>
 /// ViewModel for a non-XAML text document.
 /// </summary>
-public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
+public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel, ITextEditorDisplayState
 {
     private readonly CompositeDisposable _disposables = new();
     public bool IsDisposed { get; private set; }
@@ -1067,6 +1067,19 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
         int clamped = Math.Clamp(offset, 0, Document.TextLength);
         CaretOffset = clamped;
+    }
+
+    /// <summary>Sets selection and caret; observers see the change only after all three values are set.</summary>
+    public void SetSelection(int start, int length, int caretOffset)
+    {
+        int textLength = Document.TextLength;
+        int clampedStart = Math.Clamp(start, 0, textLength);
+        using (DelayChangeNotifications())
+        {
+            SelectionStart = clampedStart;
+            SelectionLength = Math.Clamp(length, 0, textLength - clampedStart);
+            CaretOffset = Math.Clamp(caretOffset, 0, textLength);
+        }
     }
 
     public int GetOffsetForLineColumn(int line, int column)
@@ -2177,6 +2190,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private const int RecentFilesLimit = 10;
     private readonly string? _recentFilesPath;
     private readonly EditorOptionsStore _editorOptions;
+    private readonly IContextKeys? _contextKeys;
     private readonly IEditorThemeService? _editorThemes;
 
     public ReactiveCommand<Unit, Unit> OpenOptionsCommand { get; }
@@ -2315,6 +2329,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// Gets extension-provided View menu items.
     /// </summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ViewMenuItems { get; } = new();
+
+    /// <summary>Gets the extension-provided items of the text and code editor context menu.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> EditorContextMenuItems { get; } = new();
 
     /// <summary>Enthält die Einträge unter Ansicht → Server.</summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ServerMenuItems { get; } = new();
@@ -2818,9 +2835,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string? recentFilesPath = null,
         EditorOptionsStore? editorOptions = null,
         IUserLayoutStore? userLayoutStore = null,
-        IEditorThemeService? editorThemes = null)
+        IEditorThemeService? editorThemes = null,
+        IContextKeys? contextKeys = null)
     {
         _recentFilesPath = recentFilesPath;
+        _contextKeys = contextKeys;
+        if (_contextKeys is not null)
+        {
+            _contextKeys.Changed += OnContextKeysChanged;
+            _disposables.Add(System.Reactive.Disposables.Disposable.Create(() => _contextKeys.Changed -= OnContextKeysChanged));
+        }
         _editorOptions = editorOptions ?? new EditorOptionsStore();
         _editorThemes = editorThemes;
         if (_editorThemes is not null)
@@ -3164,8 +3188,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     int start = Math.Clamp(document.CodeEditor.SelectionStart, 0, document.CodeEditor.Document.TextLength);
                     int length = Math.Clamp(document.CodeEditor.SelectionLength, 0, document.CodeEditor.Document.TextLength - start);
                     if (length > 0) document.CodeEditor.Document.Remove(start, length);
-                    document.CodeEditor.SelectionLength = 0;
-                    document.CodeEditor.CaretOffset = start;
+                    document.CodeEditor.SetSelection(start, 0, start);
                     return;
                 }
                 new DesignerSelectionEditor(document.SyncEngine, _metadataService).Delete(GetSelectedObjects(document));
@@ -3675,13 +3698,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         buffer.Remove(start, length);
         if (designer is not null)
         {
-            designer.CodeEditor.SelectionLength = 0;
-            designer.CodeEditor.CaretOffset = start;
+            designer.CodeEditor.SetSelection(start, 0, start);
         }
         else
         {
-            text!.SelectionLength = 0;
-            text.CaretOffset = start;
+            text!.SetSelection(start, 0, start);
         }
     }
 
@@ -3714,9 +3735,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         else if (designer is not null)
         {
             buffer.Replace(start, length, clipboard);
-            designer.CodeEditor.SelectionStart = start + clipboard.Length;
-            designer.CodeEditor.SelectionLength = 0;
-            designer.CodeEditor.CaretOffset = start + clipboard.Length;
+            designer.CodeEditor.SetSelection(start + clipboard.Length, 0, start + clipboard.Length);
         }
         else ReplaceTextSelection(text!, clipboard);
     }
@@ -3765,9 +3784,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         document.Document.Replace(start, length, replacement);
 
         int nextOffset = Math.Clamp(start + replacement.Length, 0, document.Document.TextLength);
-        document.SelectionStart = nextOffset;
-        document.SelectionLength = 0;
-        document.SetCaretOffset(nextOffset);
+        document.SetSelection(nextOffset, 0, nextOffset);
     }
 
     private static void DeleteTextSelectionOrCharacter(TextDocumentViewModel document)
@@ -3786,9 +3803,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         document.Document.Remove(offset, 1);
-        document.SelectionStart = offset;
-        document.SelectionLength = 0;
-        document.SetCaretOffset(offset);
+        document.SetSelection(offset, 0, offset);
     }
 
     private static void SelectAllText(TextDocumentViewModel? document)
@@ -3798,9 +3813,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        document.SelectionStart = 0;
-        document.SelectionLength = document.Document.TextLength;
-        document.SetCaretOffset(document.Document.TextLength);
+        document.SetSelection(0, document.Document.TextLength, document.Document.TextLength);
     }
 
     private async System.Threading.Tasks.Task NewDocumentAsync()
@@ -4540,6 +4553,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             DisposeCollectionItems(ServerMenuItems);
             DisposeCollectionItems(DebugMenuItems);
             DisposeCollectionItems(EditMenuItems);
+            DisposeCollectionItems(EditorContextMenuItems);
             DisposeCollectionItems(WorkspaceMenuItems);
             DisposeCollectionItems(ExtensionToolbarItems);
             DisposeCollectionItems(MainToolbarItems);
@@ -4668,6 +4682,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DisposeCollectionItems(ServerMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
+        DisposeCollectionItems(EditorContextMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);
         AddExtensionManagerMenuItem();
 
@@ -4696,6 +4711,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 ExtensionMenuLocations.Debug => DebugMenuItems,
                 ExtensionMenuLocations.Tools => ExtensionMenuItems,
                 ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
+                ExtensionMenuLocations.EditorContext => EditorContextMenuItems,
                 _ => ExtensionMenuItems
             };
 
@@ -4706,38 +4722,130 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 item.Group,
                 item.Priority,
                 CreateExtensionCommand(item.CommandId),
-                GetExtensionCommandInputGesture(item.CommandId)));
+                GetExtensionCommandInputGesture(item.CommandId),
+                item.CheckedWhen,
+                item.Submenu,
+                item.SubmenuGroup));
         }
 
-        GroupViewMenuItems();
+        ArrangeMenuItems(ViewMenuItems, ViewMenuGroupOrder);
+        ArrangeMenuItems(EditMenuItems, []);
+        ArrangeMenuItems(EditorContextMenuItems, []);
+        RefreshMenuCheckStates();
         UpdateFileNewMenuEntries();
     }
 
     private static readonly string[] ViewMenuGroupOrder = ["views.debug", "views.bottom", "views.left", "views.right"];
 
-    // The panels menu lists the debugger tools first and separates each group from the next; groups without a
-    // known place follow alphabetically.
-    private void GroupViewMenuItems()
+    // Separates the groups of a menu and nests the items that name a submenu under one header per group and
+    // submenu title; inside a submenu the submenu groups are separated. Groups listed in the order come first, the
+    // others follow alphabetically.
+    private static void ArrangeMenuItems(ObservableCollection<ExtensionMenuItemViewModel> items, string[] groupOrder)
     {
-        List<IGrouping<string, ExtensionMenuItemViewModel>> groups = ViewMenuItems
-            .GroupBy(item => item.Group ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(group => Array.IndexOf(ViewMenuGroupOrder, group.Key) is int index and >= 0 ? index : ViewMenuGroupOrder.Length)
-            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        ViewMenuItems.Clear();
-        foreach (IGrouping<string, ExtensionMenuItemViewModel> group in groups)
+        List<ExtensionMenuItemViewModel> arranged = new(items.Count);
+        foreach (IGrouping<string, ExtensionMenuItemViewModel> group in OrderGroups(items, item => item.Group, groupOrder))
         {
-            if (ViewMenuItems.Count > 0)
+            AddGroup(arranged, group, NestSubmenus(group));
+        }
+
+        items.Clear();
+        foreach (ExtensionMenuItemViewModel item in arranged)
+        {
+            items.Add(item);
+        }
+    }
+
+    private static List<ExtensionMenuItemViewModel> NestSubmenus(IGrouping<string, ExtensionMenuItemViewModel> group)
+    {
+        List<ExtensionMenuItemViewModel> entries = new();
+        Dictionary<string, (ExtensionMenuItemViewModel Header, List<ExtensionMenuItemViewModel> Children)> submenus =
+            new(StringComparer.OrdinalIgnoreCase);
+        foreach (ExtensionMenuItemViewModel item in group)
+        {
+            if (item.Submenu is not { } title)
             {
-                ViewMenuItems.Add(new ExtensionMenuItemViewModel(
-                    "view.separator." + group.Key, "-", ExtensionMenuLocations.View, group.Key, int.MinValue,
-                    ReactiveCommand.Create(() => { })));
+                entries.Add(item);
+                continue;
             }
 
-            foreach (ExtensionMenuItemViewModel item in group)
+            if (!submenus.TryGetValue(title, out (ExtensionMenuItemViewModel Header, List<ExtensionMenuItemViewModel> Children) submenu))
             {
-                ViewMenuItems.Add(item);
+                submenu = (new ExtensionMenuItemViewModel(
+                    "submenu." + group.Key + "." + title, title, item.Location, item.Group, item.Priority, null), new());
+                submenus[title] = submenu;
+                entries.Add(submenu.Header);
             }
+
+            submenu.Children.Add(item);
+        }
+
+        foreach ((ExtensionMenuItemViewModel header, List<ExtensionMenuItemViewModel> children) in submenus.Values)
+        {
+            foreach (IGrouping<string, ExtensionMenuItemViewModel> subgroup in OrderGroups(children, item => item.SubmenuGroup, []))
+            {
+                AddGroup(header.Children, subgroup, subgroup);
+            }
+        }
+
+        return entries;
+    }
+
+    private static IEnumerable<IGrouping<string, ExtensionMenuItemViewModel>> OrderGroups(
+        IEnumerable<ExtensionMenuItemViewModel> items,
+        Func<ExtensionMenuItemViewModel, string?> groupOf,
+        string[] groupOrder)
+    {
+        return items
+            .GroupBy(item => groupOf(item) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => Array.IndexOf(groupOrder, group.Key) is int index and >= 0 ? index : groupOrder.Length)
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void AddGroup(
+        ICollection<ExtensionMenuItemViewModel> target,
+        IGrouping<string, ExtensionMenuItemViewModel> group,
+        IEnumerable<ExtensionMenuItemViewModel> entries)
+    {
+        if (target.Count > 0)
+        {
+            ExtensionMenuItemViewModel first = group.First();
+            target.Add(ExtensionMenuItemViewModel.CreateSeparator(first.Location, group.Key));
+        }
+
+        foreach (ExtensionMenuItemViewModel entry in entries)
+        {
+            target.Add(entry);
+        }
+    }
+
+    private IEnumerable<ObservableCollection<ExtensionMenuItemViewModel>> GetExtensionMenus()
+    {
+        return
+        [
+            ExtensionMenuItems, FileMenuItems, FileNewMenuItems, ViewMenuItems, ServerMenuItems, DebugMenuItems,
+            EditMenuItems, EditorContextMenuItems, WorkspaceMenuItems
+        ];
+    }
+
+    // Toggle items read their check mark from the context keys, so a changed key updates the menus in place.
+    private void RefreshMenuCheckStates()
+    {
+        foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
+        {
+            RefreshMenuCheckStates(menu);
+        }
+    }
+
+    private void RefreshMenuCheckStates(IEnumerable<ExtensionMenuItemViewModel> items)
+    {
+        foreach (ExtensionMenuItemViewModel item in items)
+        {
+            if (item.CheckedWhen is { } checkedWhen)
+            {
+                item.IsChecked = EvaluateWhenExpressionForContext(checkedWhen);
+            }
+
+            RefreshMenuCheckStates(item.Children);
         }
     }
 
@@ -4857,7 +4965,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ExtensionKeyBindings.Add(new ExtensionKeyBindingViewModel(
                 entry.Key,
                 gesture,
-                CreateExtensionCommand(entry.Key)));
+                CreateExtensionCommand(entry.Key),
+                entry.Value.KeybindingScope));
         }
     }
 
@@ -4984,6 +5093,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
+    private void OnContextKeysChanged(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnContextKeysChanged(sender, e));
+            return;
+        }
+
+        RefreshMenuCheckStates();
+        RefreshExtensionCommandEnablement();
+    }
+
+    private static void AddMenuCommandIds(IEnumerable<ExtensionMenuItemViewModel> items, HashSet<string> commandIds)
+    {
+        foreach (ExtensionMenuItemViewModel item in items.Where(item => item.Command is not null))
+        {
+            commandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel submenu in items.Where(item => item.Children.Count > 0))
+        {
+            AddMenuCommandIds(submenu.Children, commandIds);
+        }
+    }
+
     private void PruneExtensionCommandCache()
     {
         HashSet<string> activeCommandIds = new(StringComparer.Ordinal);
@@ -5018,10 +5152,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             activeCommandIds.Add(item.CommandId);
         }
 
-        foreach (ExtensionMenuItemViewModel item in EditMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
+        AddMenuCommandIds(EditMenuItems, activeCommandIds);
+        AddMenuCommandIds(EditorContextMenuItems, activeCommandIds);
 
         foreach (ExtensionMenuItemViewModel item in WorkspaceMenuItems)
         {
@@ -5280,7 +5412,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return true;
             default:
                 value = false;
-                return false;
+                return _contextKeys?.TryGet(condition, out value) == true;
         }
     }
 
@@ -5307,6 +5439,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         foreach (IDisposable disposable in items.OfType<IDisposable>().ToList())
         {
+            if (disposable is ExtensionMenuItemViewModel { Children.Count: > 0 } submenu)
+            {
+                DisposeCollectionItems(submenu.Children);
+            }
+
             disposable.Dispose();
         }
 
@@ -9071,6 +9208,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DisposeCollectionItems(SavedLayoutMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
+        DisposeCollectionItems(EditorContextMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);
         DisposeCollectionItems(ExtensionToolbarItems);
         DisposeCollectionItems(MainToolbarItems);

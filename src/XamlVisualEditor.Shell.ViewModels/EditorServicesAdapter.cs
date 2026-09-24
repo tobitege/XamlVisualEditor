@@ -304,6 +304,8 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
         public abstract int SelectionLength { get; set; }
 
+        public abstract void SetSelection(int start, int length, int caretOffset);
+
         public event EventHandler<EditorDocumentChangedEventArgs>? Changed;
 
         public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
@@ -343,11 +345,20 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
                 return;
             }
 
-            foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
+            // One update keeps a multi-line edit a single undo step.
+            document.BeginUpdate();
+            try
             {
-                int offset = Math.Clamp(edit.Offset, 0, document.TextLength);
-                int length = Math.Clamp(edit.Length, 0, document.TextLength - offset);
-                document.Replace(offset, length, edit.NewText);
+                foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
+                {
+                    int offset = Math.Clamp(edit.Offset, 0, document.TextLength);
+                    int length = Math.Clamp(edit.Length, 0, document.TextLength - offset);
+                    document.Replace(offset, length, edit.NewText);
+                }
+            }
+            finally
+            {
+                document.EndUpdate();
             }
         }
     }
@@ -372,6 +383,11 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         {
             get => _editor.SelectionLength;
             set => _editor.SelectionLength = value;
+        }
+
+        public override void SetSelection(int start, int length, int caretOffset)
+        {
+            _editor.SetSelection(start, length, caretOffset);
         }
 
         public override Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
@@ -412,6 +428,11 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         {
             get => _editor.SelectionLength;
             set => _editor.SelectionLength = value;
+        }
+
+        public override void SetSelection(int start, int length, int caretOffset)
+        {
+            _editor.SetSelection(start, length, caretOffset);
         }
 
         public override Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)

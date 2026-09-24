@@ -41,10 +41,9 @@ public sealed partial class XamlCodeEditorView : UserControl
     private CompletionWindow? _completionWindow;
     private OverloadInsightWindow? _insightWindow;
     private TextEditor? _textEditor;
-    private EventHandler? _caretPositionChangedHandler;
+    private EditorSelectionSync? _selectionSync;
     private CompositeDisposable? _vmSubscriptions;
     private ThemeName? _currentTextMateTheme;
-    private bool _suppressCaretUpdate;
     private FoldingManager? _foldingManager;
     private readonly XmlFoldingStrategy _foldingStrategy = new();
     private IDisposable? _foldingSubscription;
@@ -107,12 +106,11 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
-            if (_caretPositionChangedHandler is not null)
-            {
-                _textEditor.TextArea.Caret.PositionChanged -= _caretPositionChangedHandler;
-            }
             _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
         }
+
+        _selectionSync?.Dispose();
+        _selectionSync = null;
 
         _hoverCts?.Cancel();
         _hoverCts?.Dispose();
@@ -153,30 +151,8 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Install TextMate with XML grammar for XAML highlighting.
         ApplyTextMateTheme();
 
-        // Wire up caret position tracking
-        _caretPositionChangedHandler = (_, _) =>
-        {
-            if (_suppressCaretUpdate)
-            {
-                return;
-            }
-
-            TextEditor? editor = _textEditor;
-            TextArea? textArea = editor?.TextArea;
-            Caret? caret = textArea?.Caret;
-            if (caret is null)
-            {
-                return;
-            }
-
-            if (DataContext is CodeEditorViewModel vm)
-            {
-                vm.CaretOffset = caret.Offset;
-                vm.CurrentLine = caret.Line;
-                vm.CurrentColumn = caret.Column;
-            }
-        };
-        _textEditor.TextArea.Caret.PositionChanged += _caretPositionChangedHandler;
+        // Wire up caret and selection tracking
+        _selectionSync = new EditorSelectionSync(_textEditor, ReportSelection, ReportCaret);
 
         // Wire text input for auto-completion triggers
         _textEditor.TextArea.TextEntered += OnTextEntered;
@@ -237,7 +213,7 @@ public sealed partial class XamlCodeEditorView : UserControl
     /// </summary>
     private void BindViewModel(CodeEditorViewModel vm)
     {
-        if (_textEditor is null)
+        if (_textEditor is null || _selectionSync is not { } selectionSync)
         {
             return;
         }
@@ -245,8 +221,9 @@ public sealed partial class XamlCodeEditorView : UserControl
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = new CompositeDisposable();
 
-        // Set the shared TextDocument directly — this is the critical line
-        _textEditor.Document = vm.Document;
+        // Set the shared TextDocument directly — this is the critical line. The editor resets its caret and
+        // selection for the new document; the view model keeps its own, which the subscriptions below apply.
+        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
 
         if (_textEditor.TextArea.LeftMargins.FirstOrDefault(m => m is FoldingMargin) is null)
         {
@@ -284,20 +261,14 @@ public sealed partial class XamlCodeEditorView : UserControl
         _vmSubscriptions.Add(wordWrapSubscription);
 
         IDisposable caretSubscription = vm.WhenAnyValue(x => x.CaretOffset)
-            .Subscribe(offset =>
-            {
-                _suppressCaretUpdate = true;
-                _textEditor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _textEditor.Document.TextLength);
-                try
-                {
-                    _textEditor.TextArea.Caret.BringCaretToView();
-                }
-                catch (ArgumentException)
-                {
-                }
-                _suppressCaretUpdate = false;
-            });
+            .Subscribe(selectionSync.ApplyCaret);
         _vmSubscriptions.Add(caretSubscription);
+
+        // The pair can still hold the old value of the property that changes second, so the selection is read
+        // from the view model itself.
+        IDisposable selectionSubscription = vm.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
+            .Subscribe(_ => selectionSync.ApplySelection(vm.SelectionStart, vm.SelectionLength, vm.CaretOffset));
+        _vmSubscriptions.Add(selectionSubscription);
 
         // Add diagnostic colorizer for error squiggles
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.DiagnosticColorizer))
@@ -343,6 +314,26 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
         _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
+    }
+
+    private void ReportCaret(Caret caret)
+    {
+        if (DataContext is CodeEditorViewModel vm)
+        {
+            vm.CaretOffset = caret.Offset;
+            vm.CurrentLine = caret.Line;
+            vm.CurrentColumn = caret.Column;
+        }
+    }
+
+    // Edit commands and extensions read the selection from the view model.
+    private void ReportSelection(int start, int length)
+    {
+        if (DataContext is CodeEditorViewModel vm)
+        {
+            vm.SelectionStart = start;
+            vm.SelectionLength = length;
+        }
     }
 
     private void UpdateHoverHighlight(DocumentLine line, XamlDiagnostic diag)

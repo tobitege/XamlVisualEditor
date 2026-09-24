@@ -37,6 +37,8 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly ISettings _settings;
     private readonly Func<string, IExtensionStorage> _storageFactory;
     private readonly IControlCatalog? _controlCatalog;
+    private readonly ITextEditorViewHost? _textEditorView;
+    private readonly IContextKeys? _contextKeys;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
 
@@ -70,7 +72,9 @@ public sealed class BuiltInExtensionHost : IDisposable
         IExtensionViewHost viewHost,
         ISettings settings,
         IControlCatalog? controlCatalog = null,
-        Func<string, IExtensionStorage>? storageFactory = null)
+        Func<string, IExtensionStorage>? storageFactory = null,
+        ITextEditorViewHost? textEditorView = null,
+        IContextKeys? contextKeys = null)
     {
         _extensions = extensions;
         _commands = commands;
@@ -102,6 +106,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         _settings = settings;
         _storageFactory = storageFactory ?? (_ => new InMemoryExtensionStorage());
         _controlCatalog = controlCatalog;
+        _textEditorView = textEditorView;
+        _contextKeys = contextKeys;
     }
 
     public async Task ActivateAsync(CancellationToken cancellationToken)
@@ -179,7 +185,9 @@ public sealed class BuiltInExtensionHost : IDisposable
             logger,
             subscriptions)
         {
-            ControlCatalog = _controlCatalog
+            ControlCatalog = _controlCatalog,
+            TextEditorView = _textEditorView,
+            ContextKeys = _contextKeys
         };
     }
 

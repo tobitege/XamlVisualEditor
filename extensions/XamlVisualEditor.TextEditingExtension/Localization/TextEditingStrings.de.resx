@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Category" xml:space="preserve"><value>Texteditor</value></data>
+  <data name="Find" xml:space="preserve"><value>Suchen...</value></data>
+  <data name="Replace" xml:space="preserve"><value>Ersetzen...</value></data>
+  <data name="GoToMatchingBracket" xml:space="preserve"><value>Zur passenden Klammer</value></data>
+  <data name="ToggleComment" xml:space="preserve"><value>Kommentar umschalten</value></data>
+  <data name="CommentSelection" xml:space="preserve"><value>Auswahl auskommentieren</value></data>
+  <data name="UncommentSelection" xml:space="preserve"><value>Auskommentierung aufheben</value></data>
+  <data name="MakeUppercase" xml:space="preserve"><value>In Großbuchstaben</value></data>
+  <data name="MakeLowercase" xml:space="preserve"><value>In Kleinbuchstaben</value></data>
+  <data name="EncloseInBrackets" xml:space="preserve"><value>In Klammern einschließen</value></data>
+  <data name="IncreaseIndent" xml:space="preserve"><value>Einzug vergrößern</value></data>
+  <data name="DecreaseIndent" xml:space="preserve"><value>Einzug verkleinern</value></data>
+  <data name="SortLinesAscending" xml:space="preserve"><value>Zeilen aufsteigend sortieren</value></data>
+  <data name="SortLinesDescending" xml:space="preserve"><value>Zeilen absteigend sortieren</value></data>
+  <data name="ExpandAll" xml:space="preserve"><value>Alle aufklappen</value></data>
+  <data name="CollapseAll" xml:space="preserve"><value>Alle zuklappen</value></data>
+  <data name="CollapseSelection" xml:space="preserve"><value>Auswahl zuklappen</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
+  <data name="ResetZoom" xml:space="preserve"><value>Zoom zurücksetzen</value></data>
+  <data name="WordWrap" xml:space="preserve"><value>Zeilenumbruch</value></data>
+  <data name="LineNumbers" xml:space="preserve"><value>Zeilennummern</value></data>
+  <data name="FoldingMargin" xml:space="preserve"><value>Gliederungsleiste</value></data>
+  <data name="ColumnRuler" xml:space="preserve"><value>Randlinie</value></data>
+  <data name="HighlightCurrentLine" xml:space="preserve"><value>Aktuelle Zeile hervorheben</value></data>
+  <data name="ShowWhitespace" xml:space="preserve"><value>Leerzeichen und Tabulatoren</value></data>
+  <data name="ShowEndOfLine" xml:space="preserve"><value>Zeilenenden</value></data>
+  <data name="ShowAllCharacters" xml:space="preserve"><value>Alle Zeichen</value></data>
+  <data name="EditorOptions" xml:space="preserve"><value>Editor-Optionen...</value></data>
+  <data name="FormatMenu" xml:space="preserve"><value>Format</value></data>
+  <data name="OutliningMenu" xml:space="preserve"><value>Gliederung</value></data>
+  <data name="DisplayMenu" xml:space="preserve"><value>Anzeige</value></data>
+  <data name="AdvancedMenu" xml:space="preserve"><value>Erweitert</value></data>
+  <data name="OptionsTitle" xml:space="preserve"><value>Editor-Optionen</value></data>
+  <data name="OptionsHint" xml:space="preserve"><value>Die Optionen gelten für alle Text- und Code-Editoren. Änderungen sind sofort sichtbar; Abbrechen stellt die vorherigen Optionen wieder her.</value></data>
+  <data name="FontGroup" xml:space="preserve"><value>Schrift</value></data>
+  <data name="FontFamily" xml:space="preserve"><value>Schriftart</value></data>
+  <data name="FontFamilyHint" xml:space="preserve"><value>Mehrere durch Kommas getrennte Schriftarten werden der Reihe nach versucht.</value></data>
+  <data name="FontSize" xml:space="preserve"><value>Schriftgröße</value></data>
+  <data name="DisplayGroup" xml:space="preserve"><value>Anzeige</value></data>
+  <data name="ColumnRulerPosition" xml:space="preserve"><value>Spalte der Randlinie</value></data>
+  <data name="ShowSpaces" xml:space="preserve"><value>Leerzeichen anzeigen</value></data>
+  <data name="ShowTabs" xml:space="preserve"><value>Tabulatoren anzeigen</value></data>
+  <data name="ShowEndOfLineOption" xml:space="preserve"><value>Zeilenenden anzeigen</value></data>
+  <data name="ShowControlCharacters" xml:space="preserve"><value>Steuerzeichen als Kästchen anzeigen</value></data>
+  <data name="InheritWrapIndentation" xml:space="preserve"><value>Umbrochene Zeilen behalten ihren Einzug</value></data>
+  <data name="WrapIndentation" xml:space="preserve"><value>Zusätzlicher Einzug umbrochener Zeilen</value></data>
+  <data name="EditingGroup" xml:space="preserve"><value>Bearbeiten</value></data>
+  <data name="AcceptsTab" xml:space="preserve"><value>Tab-Taste fügt Einzug ein</value></data>
+  <data name="ConvertTabsToSpaces" xml:space="preserve"><value>Leerzeichen statt Tabulatoren einfügen</value></data>
+  <data name="IndentationSize" xml:space="preserve"><value>Einzugsgröße</value></data>
+  <data name="RectangularSelection" xml:space="preserve"><value>Spaltenauswahl mit Alt und Ziehen</value></data>
+  <data name="VirtualSpace" xml:space="preserve"><value>Cursor darf hinter das Zeilenende</value></data>
+  <data name="TextDragDrop" xml:space="preserve"><value>Markierten Text per Drag and Drop verschieben</value></data>
+  <data name="CutCopyWholeLine" xml:space="preserve"><value>Ausschneiden und Kopieren ohne Auswahl nehmen die ganze Zeile</value></data>
+  <data name="HideCursorWhileTyping" xml:space="preserve"><value>Mauszeiger beim Tippen ausblenden</value></data>
+  <data name="ScrollBelowDocument" xml:space="preserve"><value>Über die letzte Zeile hinaus scrollen</value></data>
+  <data name="RightClickMovesCaret" xml:space="preserve"><value>Rechtsklick setzt den Cursor</value></data>
+  <data name="AllowOverstrike" xml:space="preserve"><value>Einfg-Taste schaltet den Überschreibmodus um</value></data>
+  <data name="LinksGroup" xml:space="preserve"><value>Links und Auswahl</value></data>
+  <data name="EnableHyperlinks" xml:space="preserve"><value>Webadressen als Links anzeigen</value></data>
+  <data name="EnableEmailHyperlinks" xml:space="preserve"><value>E-Mail-Adressen als Links anzeigen</value></data>
+  <data name="RequireCtrlForLinks" xml:space="preserve"><value>Links nur mit gedrückter Strg-Taste öffnen</value></data>
+  <data name="ExtendSelectionOnMouseUp" xml:space="preserve"><value>Auswahl beim Loslassen der Maustaste erweitern</value></data>
+  <data name="ColorsGroup" xml:space="preserve"><value>Farben</value></data>
+  <data name="BackgroundColor" xml:space="preserve"><value>Hintergrund</value></data>
+  <data name="LineNumbersColor" xml:space="preserve"><value>Zeilennummern</value></data>
+  <data name="ColumnRulerColor" xml:space="preserve"><value>Randlinie</value></data>
+  <data name="ThemeColor" xml:space="preserve"><value>Theme-Farbe</value></data>
+  <data name="ColorWhite" xml:space="preserve"><value>Weiß</value></data>
+  <data name="ColorBlack" xml:space="preserve"><value>Schwarz</value></data>
+  <data name="ColorDark" xml:space="preserve"><value>Dunkelgrau</value></data>
+  <data name="ColorLightGray" xml:space="preserve"><value>Hellgrau</value></data>
+  <data name="ColorSilver" xml:space="preserve"><value>Silber</value></data>
+  <data name="ColorGray" xml:space="preserve"><value>Grau</value></data>
+  <data name="ColorSlateGray" xml:space="preserve"><value>Schiefergrau</value></data>
+  <data name="ColorAliceBlue" xml:space="preserve"><value>Eisblau</value></data>
+  <data name="ColorBeige" xml:space="preserve"><value>Beige</value></data>
+  <data name="ColorCornsilk" xml:space="preserve"><value>Maisgelb</value></data>
+  <data name="ColorLightYellow" xml:space="preserve"><value>Hellgelb</value></data>
+  <data name="ColorLightSteelBlue" xml:space="preserve"><value>Helles Stahlblau</value></data>
+  <data name="ResetToDefaults" xml:space="preserve"><value>Standard wiederherstellen</value></data>
+</root>

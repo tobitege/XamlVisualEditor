@@ -31,8 +31,7 @@ public sealed partial class TextFileView : UserControl
     private CompositeDisposable? _vmSubscriptions;
     private RegistryOptions? _registryOptions;
     private ThemeName? _currentTextMateTheme;
-    private bool _suppressCaretUpdate;
-    private bool _suppressSelectionUpdate;
+    private EditorSelectionSync? _selectionSync;
     private CancellationTokenSource? _hoverCts;
     private readonly HoverRangeColorizer _hoverRangeColorizer = new();
 
@@ -99,12 +98,13 @@ public sealed partial class TextFileView : UserControl
 
         if (_textEditor is not null)
         {
-            _textEditor.TextArea.Caret.PositionChanged -= OnCaretPositionChanged;
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
             _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
-            _textEditor.TextArea.SelectionChanged -= OnSelectionChanged;
         }
+
+        _selectionSync?.Dispose();
+        _selectionSync = null;
 
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = null;
@@ -136,11 +136,10 @@ public sealed partial class TextFileView : UserControl
         ActualThemeVariantChanged += OnActualThemeVariantChanged;
         ApplyTextMateTheme();
 
-        _textEditor.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
+        _selectionSync = new EditorSelectionSync(_textEditor, ReportSelection, ReportCaret);
         _textEditor.TextArea.TextEntered += OnTextEntered;
         _textEditor.TextArea.TextEntering += OnTextEntering;
         _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
-        _textEditor.TextArea.SelectionChanged += OnSelectionChanged;
 
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(_hoverRangeColorizer))
         {
@@ -161,7 +160,7 @@ public sealed partial class TextFileView : UserControl
 
     private void BindViewModel(TextDocumentViewModel vm)
     {
-        if (_textEditor is null)
+        if (_textEditor is null || _selectionSync is not { } selectionSync)
         {
             return;
         }
@@ -169,7 +168,9 @@ public sealed partial class TextFileView : UserControl
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = new CompositeDisposable();
 
-        _textEditor.Document = vm.Document;
+        // A new document resets the caret and selection of the editor; the view model keeps its own, which the
+        // subscriptions below apply.
+        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
         _textEditor.FontSize = vm.FontSize;
         _textEditor.ShowLineNumbers = vm.ShowLineNumbers;
         _textEditor.WordWrap = vm.WordWrap;
@@ -192,25 +193,13 @@ public sealed partial class TextFileView : UserControl
         _vmSubscriptions.Add(wordWrapSubscription);
 
         IDisposable caretSubscription = vm.WhenAnyValue(x => x.CaretOffset)
-            .Subscribe(offset =>
-            {
-                _suppressCaretUpdate = true;
-                _textEditor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _textEditor.Document.TextLength);
-                _textEditor.TextArea.Caret.BringCaretToView();
-                _suppressCaretUpdate = false;
-            });
+            .Subscribe(selectionSync.ApplyCaret);
         _vmSubscriptions.Add(caretSubscription);
 
+        // The pair can still hold the old value of the property that changes second, so the selection is read
+        // from the view model itself.
         IDisposable selectionSubscription = vm.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
-            .Subscribe(selection =>
-            {
-                _suppressSelectionUpdate = true;
-                int start = Math.Clamp(selection.Item1, 0, _textEditor.Document.TextLength);
-                int length = Math.Clamp(selection.Item2, 0, _textEditor.Document.TextLength - start);
-                _textEditor.SelectionStart = start;
-                _textEditor.SelectionLength = length;
-                _suppressSelectionUpdate = false;
-            });
+            .Subscribe(_ => selectionSync.ApplySelection(vm.SelectionStart, vm.SelectionLength, vm.CaretOffset));
         _vmSubscriptions.Add(selectionSubscription);
 
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.DiagnosticColorizer))
@@ -293,18 +282,8 @@ public sealed partial class TextFileView : UserControl
         }
     }
 
-    private void OnCaretPositionChanged(object? sender, EventArgs e)
+    private void ReportCaret(Caret caret)
     {
-        if (_suppressCaretUpdate)
-        {
-            return;
-        }
-
-        if (_textEditor?.TextArea.Caret is not Caret caret)
-        {
-            return;
-        }
-
         if (DataContext is TextDocumentViewModel vm)
         {
             vm.CaretOffset = caret.Offset;
@@ -313,17 +292,12 @@ public sealed partial class TextFileView : UserControl
         }
     }
 
-    private void OnSelectionChanged(object? sender, EventArgs e)
+    private void ReportSelection(int start, int length)
     {
-        if (_suppressSelectionUpdate || _textEditor is null)
-        {
-            return;
-        }
-
         if (DataContext is TextDocumentViewModel vm)
         {
-            vm.SelectionStart = _textEditor.SelectionStart;
-            vm.SelectionLength = _textEditor.SelectionLength;
+            vm.SelectionStart = start;
+            vm.SelectionLength = length;
         }
     }
 

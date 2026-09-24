@@ -24,7 +24,7 @@ namespace XamlVisualEditor.CodeEditor;
 /// ViewModel for the XAML code editor panel.
 /// Wraps an AvaloniaEdit TextDocument and integrates with the sync engine.
 /// </summary>
-public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
+public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, ITextEditorDisplayState
 {
     private readonly CompositeDisposable _disposables = new();
     private readonly SyncEngine _syncEngine;
@@ -340,8 +340,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void SelectAll()
     {
-        SelectionStart = 0;
-        SelectionLength = Document.TextLength;
+        SetSelection(0, Document.TextLength, Document.TextLength);
     }
 
     /// <summary>
@@ -357,6 +356,19 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
 
         int clamped = Math.Clamp(offset, 0, Document.TextLength);
         CaretOffset = clamped;
+    }
+
+    /// <summary>Sets selection and caret; observers see the change only after all three values are set.</summary>
+    public void SetSelection(int start, int length, int caretOffset)
+    {
+        int textLength = Document.TextLength;
+        int clampedStart = Math.Clamp(start, 0, textLength);
+        using (DelayChangeNotifications())
+        {
+            SelectionStart = clampedStart;
+            SelectionLength = Math.Clamp(length, 0, textLength - clampedStart);
+            CaretOffset = Math.Clamp(caretOffset, 0, textLength);
+        }
     }
 
     public int GetOffsetForLineColumn(int line, int column)

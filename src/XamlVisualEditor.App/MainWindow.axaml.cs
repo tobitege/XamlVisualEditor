@@ -382,9 +382,11 @@ public sealed partial class MainWindow : Window
             KeyBinding binding = new()
             {
                 Gesture = gesture,
-                Command = entry.CommandId is "editing.undo" or "editing.redo" or "editing.cut" or "editing.copy"
-                    or "editing.paste" or "editing.delete" or "editing.selectAll" or "editing.duplicate"
-                    ? new FocusAwareEditingCommand(this, entry.Command) : entry.Command
+                Command = entry.Scope == XamlVisualEditor.Extensions.CommandKeybindingScope.TextEditor
+                    ? new TextEditorFocusCommand(this, entry.Command)
+                    : entry.CommandId is "editing.undo" or "editing.redo" or "editing.cut" or "editing.copy"
+                        or "editing.paste" or "editing.delete" or "editing.selectAll" or "editing.duplicate"
+                        ? new FocusAwareEditingCommand(this, entry.Command) : entry.Command
             };
 
             KeyBindings.Add(binding);
@@ -419,6 +421,34 @@ public sealed partial class MainWindow : Window
                     or DesignSurfaceView { DataContext: DesignSurfaceViewModel { IsEditMode: false } }) return false;
             }
             return command.CanExecute(parameter);
+        }
+
+        public void Execute(object? parameter)
+        {
+            if (CanExecute(parameter)) command.Execute(parameter);
+        }
+    }
+
+    // Runs a keybinding only while a text or code editor has the keyboard focus; elsewhere the keys stay free.
+    private sealed class TextEditorFocusCommand(Window window, ICommand command) : ICommand
+    {
+        public event EventHandler? CanExecuteChanged
+        {
+            add => command.CanExecuteChanged += value;
+            remove => command.CanExecuteChanged -= value;
+        }
+
+        public bool CanExecute(object? parameter)
+        {
+            for (Visual? visual = window.FocusManager?.GetFocusedElement() as Visual; visual is not null; visual = visual.GetVisualParent())
+            {
+                if (visual is AvaloniaEdit.TextEditor)
+                {
+                    return command.CanExecute(parameter);
+                }
+            }
+
+            return false;
         }
 
         public void Execute(object? parameter)

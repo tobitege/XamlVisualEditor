@@ -3,6 +3,7 @@
              xmlns:ae="using:AvaloniaEdit"
              xmlns:ce="using:XamlVisualEditor.CodeEditor"
              xmlns:input="using:Avalonia.Input"
+             xmlns:v="using:XamlVisualEditor.App.Views"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.XamlCodeEditorView"
              x:DataType="ce:CodeEditorViewModel">
@@ -41,6 +42,7 @@
         <!-- Code editor -->
         <ae:TextEditor Name="TextEditor"
                    input:DragDrop.AllowDrop="True"
+                   v:TextEditorFeaturesBehavior.IsEnabled="True"
                        FontFamily="Cascadia Code, Consolas, Menlo, monospace"
                        FontSize="14"
                        ShowLineNumbers="True"

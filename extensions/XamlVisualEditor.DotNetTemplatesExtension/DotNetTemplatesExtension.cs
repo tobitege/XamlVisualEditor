@@ -81,7 +81,7 @@ public sealed class DotNetTemplatesExtension : IXveExtension
 
     private async Task OpenWizardAsync(ExtensionContext context, DotNetTemplateWizardMode mode)
     {
-        DotNetTemplateWizardViewModel viewModel = new(_templateService, mode, context.Settings);
+        using DotNetTemplateWizardViewModel viewModel = new(_templateService, mode, context.Settings);
         DotNetTemplateWizardResult? result = await context.DialogHost.ShowDialogAsync<DotNetTemplateWizardResult?>(
             WizardDialogId,
             viewModel,

@@ -31,7 +31,7 @@ public sealed class DialogEscapeTests
         DefinitionPickerDialogViewModel definition = new(new DefinitionPickerRequest("Definition", Array.Empty<ReferenceLocationViewModel>()));
         await AssertCancel(new DefinitionPickerDialog { DataContext = definition }, definition.CloseInteraction, null);
 
-        CommandPaletteDialogViewModel command = new(new CommandPaletteRequest("Command", Array.Empty<ExtensionCommandPaletteItemViewModel>()));
+        using CommandPaletteDialogViewModel command = new(new CommandPaletteRequest("Command", Array.Empty<ExtensionCommandPaletteItemViewModel>()));
         await AssertCancel(new CommandPaletteDialog { DataContext = command }, command.CloseInteraction, null);
 
         OpenFolderDialogViewModel folder = new(Path.Combine(Path.GetTempPath(), "pending-folder"));

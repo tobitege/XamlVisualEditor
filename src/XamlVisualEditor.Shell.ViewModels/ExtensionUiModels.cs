@@ -318,8 +318,10 @@ public sealed partial class ExtensionAsyncCommand : ICommand
 
 public sealed partial record CommandPaletteRequest(string Title, IReadOnlyList<ExtensionCommandPaletteItemViewModel> Items);
 
-public sealed partial class CommandPaletteDialogViewModel : ReactiveObject
+public sealed partial class CommandPaletteDialogViewModel : ReactiveObject, IDisposable
 {
+    private readonly IDisposable _filterSubscription;
+
     public CommandPaletteDialogViewModel(CommandPaletteRequest request)
     {
         Title = request.Title;
@@ -339,11 +341,14 @@ public sealed partial class CommandPaletteDialogViewModel : ReactiveObject
         CancelCommand = ReactiveCommand.CreateFromTask(async () =>
             await CloseInteraction.Handle(null));
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilter);
     }
+
+    /// <summary>Stops the pending filter timer.</summary>
+    public void Dispose() => _filterSubscription.Dispose();
 
     public string Title { get; }
 

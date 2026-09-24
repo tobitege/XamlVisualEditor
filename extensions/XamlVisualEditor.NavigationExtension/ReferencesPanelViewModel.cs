@@ -61,8 +61,9 @@ public sealed class ReferencesGroupViewModel : ReactiveObject
     }
 }
 
-public sealed class ReferencesPanelViewModel : ReactiveObject
+public sealed class ReferencesPanelViewModel : ReactiveObject, IDisposable
 {
+    private readonly IDisposable _filterSubscription;
     private readonly ILanguageNavigationService _navigation;
     private readonly IEditorServices _editor;
     private readonly IWindow _window;
@@ -155,10 +156,17 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         this.WhenAnyValue(x => x.SelectedRow)
             .Subscribe(row => SelectedItem = row?.Item);
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
+    }
+
+    /// <summary>Stops the pending filter timer and the group subscriptions.</summary>
+    public void Dispose()
+    {
+        _filterSubscription.Dispose();
+        _groupDisposables.Dispose();
     }
 
     public async Task FindReferencesAsync(CancellationToken cancellationToken)

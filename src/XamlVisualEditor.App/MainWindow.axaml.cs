@@ -244,7 +244,7 @@ public sealed partial class MainWindow : Window
 
         _commandPaletteHandler = vm.CommandPaletteInteraction.RegisterHandler(async interaction =>
         {
-            CommandPaletteDialogViewModel dialogVm = new(interaction.Input);
+            using CommandPaletteDialogViewModel dialogVm = new(interaction.Input);
             CommandPaletteDialog dialog = new()
             {
                 DataContext = dialogVm

@@ -19,6 +19,7 @@ public static class Program
         TargetAssemblyResolver resolver = new(targetAssemblyPath);
         AssemblyLoadContext.Default.Resolving += resolver.Resolve;
         AssemblyLoadContext.Default.ResolvingUnmanagedDll += resolver.ResolveUnmanaged;
+        AppDomain.CurrentDomain.AssemblyLoad += (_, e) => resolver.RegisterImportResolver(e.LoadedAssembly);
 
         s_targetAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(targetAssemblyPath);
         s_resolver = resolver;
@@ -114,18 +115,52 @@ public static class Program
             || string.Equals(extension, ".exe", StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed class TargetAssemblyResolver
+    internal sealed class TargetAssemblyResolver
     {
         private readonly AssemblyDependencyResolver _resolver;
         private readonly AssemblyDependencyResolver? _editorResolver;
         private readonly string _targetDirectory;
+        private readonly string _hostDirectory;
+        private readonly string _runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
 
         public TargetAssemblyResolver(string mainAssemblyPath)
+            : this(mainAssemblyPath, AppContext.BaseDirectory)
+        {
+        }
+
+        internal TargetAssemblyResolver(string mainAssemblyPath, string hostDirectory)
         {
             _resolver = new AssemblyDependencyResolver(mainAssemblyPath);
             _targetDirectory = Path.GetDirectoryName(mainAssemblyPath) ?? string.Empty;
-            string editorAssembly = Path.Combine(AppContext.BaseDirectory, "XamlVisualEditor.App.dll");
+            _hostDirectory = hostDirectory;
+            string editorAssembly = Path.Combine(hostDirectory, "XamlVisualEditor.App.dll");
             if (File.Exists(editorAssembly)) _editorResolver = new AssemblyDependencyResolver(editorAssembly);
+        }
+
+        // The default lookup falls back to the PATH before ResolvingUnmanagedDll is raised, so an unrelated
+        // native library of the same name (for example an older libSkiaSharp of Git for Windows) would win.
+        // A per-assembly import resolver runs first and prefers the libraries shipped with the target and host.
+        public void RegisterImportResolver(Assembly assembly)
+        {
+            if (assembly.IsDynamic
+                || string.IsNullOrEmpty(assembly.Location)
+                || assembly.Location.StartsWith(_runtimeDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            try
+            {
+                NativeLibrary.SetDllImportResolver(assembly, (name, _, _) =>
+                {
+                    string? path = ResolveUnmanagedPath(name);
+                    return path != null && NativeLibrary.TryLoad(path, out IntPtr handle) ? handle : IntPtr.Zero;
+                });
+            }
+            catch (InvalidOperationException)
+            {
+                // The assembly registered its own resolver.
+            }
         }
 
         public Assembly? Resolve(AssemblyLoadContext context, AssemblyName assemblyName)
@@ -167,16 +202,45 @@ public static class Program
         {
             string? path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName)
                 ?? _editorResolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
-            if (path == null && !string.IsNullOrWhiteSpace(_targetDirectory))
+            if (path != null)
             {
-                string candidate = Path.Combine(_targetDirectory, unmanagedDllName);
-                if (File.Exists(candidate))
+                return path;
+            }
+
+            // Framework-dependent outputs without a runtime identifier keep native assets below runtimes/<rid>/native.
+            string fileName = Path.HasExtension(unmanagedDllName) ? unmanagedDllName : unmanagedDllName + GetNativeLibraryExtension();
+            foreach (string directory in new[] { _targetDirectory, _hostDirectory })
+            {
+                if (string.IsNullOrWhiteSpace(directory))
                 {
-                    path = candidate;
+                    continue;
+                }
+
+                foreach (string candidate in new[]
+                {
+                    Path.Combine(directory, unmanagedDllName),
+                    Path.Combine(directory, fileName),
+                    Path.Combine(directory, "runtimes", RuntimeInformation.RuntimeIdentifier, "native", fileName),
+                    Path.Combine(directory, "runtimes", GetPortableRuntimeIdentifier(), "native", fileName)
+                })
+                {
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
 
-            return path;
+            return null;
+        }
+
+        private static string GetNativeLibraryExtension() =>
+            OperatingSystem.IsWindows() ? ".dll" : OperatingSystem.IsMacOS() ? ".dylib" : ".so";
+
+        private static string GetPortableRuntimeIdentifier()
+        {
+            string os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+            return os + "-" + RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
         }
     }
 }

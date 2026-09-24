@@ -121,9 +121,10 @@ public sealed partial class DotNetProjectRowViewModel : ReactiveObject
     public partial bool CreateProjectDirectory { get; set; }
 }
 
-public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
+public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject, IDisposable
 {
     private const string LastLocationKey = "dotnetTemplates.lastLocation";
+    private readonly IDisposable _filterSubscription;
     private readonly IDotNetTemplateService _templateService;
     private readonly ISettings? _settings;
     private readonly ObservableCollection<DotNetTemplateListItemViewModel> _allTemplates = new();
@@ -235,7 +236,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         CreateCommand = ReactiveCommand.CreateFromTask(ct => CreateAsync(ct), canCreate);
 
-        this.WhenAnyValue(x => x.SearchText, x => x.SelectedLanguage)
+        _filterSubscription = this.WhenAnyValue(x => x.SearchText, x => x.SelectedLanguage)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyFilter());
@@ -1005,6 +1006,9 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         Title = baseTitle + " - " + stepTitle;
     }
+
+    /// <summary>Stops the pending filter timer; a pending save of the location still completes.</summary>
+    public void Dispose() => _filterSubscription.Dispose();
 }
 
 public sealed partial class WorkspaceOpenPromptDialogViewModel : ReactiveObject

@@ -71,6 +71,7 @@ public sealed class NavigationExtension : IXveExtension
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
         ReferencesPanelViewModel viewModel = new(context.Navigation, context.Editor, context.Window);
+        context.Subscriptions.Add(viewModel);
 
         context.Subscriptions.Add(context.Commands.Register(
             FindReferencesCommandId,

@@ -14,7 +14,7 @@ public sealed class DotNetTemplateWizardViewModelTests
     public void ProjectPathPreview_UsesSolutionRootWhenEnabled()
     {
         FakeTemplateService service = new();
-        DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.Project)
+        using DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.Project)
         {
             Location = "/tmp",
             ProjectName = "DemoApp",
@@ -33,7 +33,7 @@ public sealed class DotNetTemplateWizardViewModelTests
     public async Task CreateCommand_UsesAllProjectRowsInSolution()
     {
         FakeTemplateService service = new();
-        DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.Project)
+        using DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.Project)
         {
             Location = "/tmp",
             ProjectName = "AppOne",
@@ -63,7 +63,7 @@ public sealed class DotNetTemplateWizardViewModelTests
     public async Task FileWizard_DoesNotCreateProjectDirectory()
     {
         FakeTemplateService service = new();
-        DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.File)
+        using DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.File)
         {
             Location = "/tmp",
             ProjectName = "Snippet",
@@ -86,7 +86,7 @@ public sealed class DotNetTemplateWizardViewModelTests
     public void FileWizard_SuggestsBetterNamesForClassTemplate()
     {
         FakeTemplateService service = new();
-        DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.File)
+        using DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.File)
         {
             SelectedTemplate = new DotNetTemplateListItemViewModel(new DotNetTemplateInfo
             {

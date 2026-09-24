@@ -53,7 +53,7 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         _window = window;
         _dialogHost = dialogHost;
         _icons = icons;
-        Connection = new TfvcConnectionViewModel(session);
+        Connection = new TfvcConnectionViewModel(session, "pendingChanges");
         ChangesetDetails = changesetDetails ?? new TfvcChangesetDetailsViewModel(session);
 
         IncludedModel = CreateModel(IncludedRoots);

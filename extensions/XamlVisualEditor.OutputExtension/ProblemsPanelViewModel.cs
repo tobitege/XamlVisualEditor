@@ -502,45 +502,44 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
 
     private void BuildFileGroups(List<DiagnosticEntryViewModel> filtered)
     {
-        Dictionary<string, ProblemsGroupViewModel> groups = new(StringComparer.OrdinalIgnoreCase);
-        foreach (DiagnosticEntryViewModel entry in filtered)
-        {
-            string key = $"file:{entry.FilePath}";
-            if (!groups.TryGetValue(key, out ProblemsGroupViewModel? group))
-            {
-                string title = string.IsNullOrWhiteSpace(entry.FilePath) ? UiStrings.Workspace : Path.GetFileName(entry.FilePath);
-                group = new ProblemsGroupViewModel(key, title)
-                {
-                    IsExpanded = !_collapsedGroups.Contains(key)
-                };
-                TrackGroupExpansion(group);
-                groups[key] = group;
-                _rootItems.Add(group);
-            }
-
-            group.Items.Add(entry);
-        }
+        AddGroups(filtered, entry => $"file:{entry.FilePath}",
+            entry => string.IsNullOrWhiteSpace(entry.FilePath) ? UiStrings.Workspace : Path.GetFileName(entry.FilePath));
     }
 
     private void BuildChannelGroups(List<DiagnosticEntryViewModel> filtered)
     {
+        AddGroups(filtered, entry => $"channel:{GetChannelId(entry.Source)}", entry => GetChannelId(entry.Source));
+    }
+
+    // A group joins the tree only after it holds all its entries: the hierarchical model updates its flattened
+    // rows for every entry added to an attached group, which makes large result sets take quadratic time.
+    private void AddGroups(
+        List<DiagnosticEntryViewModel> filtered,
+        Func<DiagnosticEntryViewModel, string> getKey,
+        Func<DiagnosticEntryViewModel, string> getTitle)
+    {
         Dictionary<string, ProblemsGroupViewModel> groups = new(StringComparer.OrdinalIgnoreCase);
+        List<ProblemsGroupViewModel> ordered = new();
         foreach (DiagnosticEntryViewModel entry in filtered)
         {
-            string channelId = GetChannelId(entry.Source);
-            string key = $"channel:{channelId}";
+            string key = getKey(entry);
             if (!groups.TryGetValue(key, out ProblemsGroupViewModel? group))
             {
-                group = new ProblemsGroupViewModel(key, channelId)
+                group = new ProblemsGroupViewModel(key, getTitle(entry))
                 {
                     IsExpanded = !_collapsedGroups.Contains(key)
                 };
                 TrackGroupExpansion(group);
                 groups[key] = group;
-                _rootItems.Add(group);
+                ordered.Add(group);
             }
 
             group.Items.Add(entry);
+        }
+
+        foreach (ProblemsGroupViewModel group in ordered)
+        {
+            _rootItems.Add(group);
         }
     }
 

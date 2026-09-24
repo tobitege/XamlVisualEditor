@@ -15,6 +15,7 @@ public sealed class TfvcSettingsStore
     private const string LAST_WORKSPACE_KEY = "tfvc.lastWorkspace";
     private const string EXPLORER_FOCUS_KEY = "tfvc.explorerFocus";
     private const string EXCLUDED_CHANGES_KEY_PREFIX = "tfvc.excludedChanges.";
+    private const string SETTINGS_VISIBLE_KEY_PREFIX = "tfvc.settingsVisible.";
 
     private readonly IExtensionStorage _storage;
 
@@ -61,6 +62,18 @@ public sealed class TfvcSettingsStore
     public Task SaveExplorerFocusAsync(string? serverPath, CancellationToken cancellationToken)
     {
         return SetOrRemoveAsync(EXPLORER_FOCUS_KEY, serverPath, cancellationToken);
+    }
+
+    /// <summary>Loads whether a panel shows its connection settings; null when the panel has not stored it yet.</summary>
+    public Task<bool?> LoadSettingsVisibleAsync(string panelId, CancellationToken cancellationToken)
+    {
+        return _storage.GetAsync<bool?>(SETTINGS_VISIBLE_KEY_PREFIX + panelId, cancellationToken);
+    }
+
+    /// <summary>Saves whether a panel shows its connection settings.</summary>
+    public Task SaveSettingsVisibleAsync(string panelId, bool isVisible, CancellationToken cancellationToken)
+    {
+        return _storage.SetAsync(SETTINGS_VISIBLE_KEY_PREFIX + panelId, isVisible, cancellationToken);
     }
 
     /// <summary>Loads the server paths excluded from check-in for a workspace.</summary>

@@ -5,9 +5,9 @@ using XamlVisualEditor.Core.Localization;
 namespace XamlVisualEditor.Shell.ViewModels;
 
 /// <summary>
-/// Ready-made docking layout shipped with the editor. A preset starts from the default layout
-/// and keeps only the listed panels visible; every other panel is hidden and can be re-opened
-/// from the view menu. Solution Explorer and File Explorer are part of every preset.
+/// Ready-made docking layout shipped with the editor. A preset builds a new layout that contains only
+/// the listed panels; every other panel opens from the view menu. Solution Explorer and File Explorer
+/// are part of every preset.
 /// </summary>
 /// <param name="Id">Stable identifier used for commands and tests.</param>
 /// <param name="Title">Localized menu title.</param>
@@ -38,6 +38,9 @@ public static class LayoutPresetCatalog
     public const string DebuggingId = "debugging";
     public const string AssistantsId = "assistants";
     public const string MinimalId = "minimal";
+
+    /// <summary>The preset of the first start and of the reset layout command.</summary>
+    public const string DefaultId = DebuggingId;
 
     /// <summary>Creates the presets with localized titles.</summary>
     public static IReadOnlyList<LayoutPreset> Create()

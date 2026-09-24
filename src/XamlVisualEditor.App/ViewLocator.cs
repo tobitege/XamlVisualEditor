@@ -129,6 +129,14 @@ public sealed class ViewLocator : IDataTemplate
             view.Classes.Add("editor-chrome");
         }
 
+        // Documents manage their editor state when they leave the tree; panels only need to let go of their
+        // view model.
+        if (view is not DesignerDocumentView and not DesignSurfaceView and not InfiniteCanvasView and not TextFileView
+            and not XamlCodeEditorView)
+        {
+            DetachedViewDataContext.Apply(view);
+        }
+
         return view;
     }
 

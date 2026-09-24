@@ -77,12 +77,17 @@
   <data name="MenuPanels" xml:space="preserve"><value>_Panels</value></data>
   <data name="MenuServers" xml:space="preserve"><value>_Servers</value></data>
   <data name="MenuDocumentCanvas" xml:space="preserve"><value>Document _Canvas</value></data>
-  <data name="MenuResetLayout" xml:space="preserve"><value>Reset _Layout</value></data>
-  <data name="MenuLayout" xml:space="preserve"><value>_Layout</value></data>
-  <data name="MenuLayoutSave" xml:space="preserve"><value>_Save</value></data>
-  <data name="MenuLayoutSaveAs" xml:space="preserve"><value>Save _As...</value></data>
-  <data name="MenuLayoutLoad" xml:space="preserve"><value>_Load</value></data>
-  <data name="MenuLayoutLoadFromTemplates" xml:space="preserve"><value>Load from _Templates</value></data>
+  <data name="MenuWindow" xml:space="preserve"><value>W_indow</value></data>
+  <data name="MenuResetLayout" xml:space="preserve"><value>_Reset Window Layout</value></data>
+  <data name="MenuLayoutSave" xml:space="preserve"><value>_Save Window Layout</value></data>
+  <data name="MenuLayoutSaveAs" xml:space="preserve"><value>Save Window Layout _As...</value></data>
+  <data name="MenuLayoutLoad" xml:space="preserve"><value>Appl_y Window Layout</value></data>
+  <data name="MenuLayoutLoadFromTemplates" xml:space="preserve"><value>Apply Layout _Template</value></data>
+  <data name="MenuManageLayouts" xml:space="preserve"><value>_Manage Layouts...</value></data>
+  <data name="ManageLayoutsTitle" xml:space="preserve"><value>Manage Window Layouts</value></data>
+  <data name="ManageLayoutsEmpty" xml:space="preserve"><value>No saved layouts.</value></data>
+  <data name="LayoutNameExists" xml:space="preserve"><value>A layout named '{0}' already exists</value></data>
+  <data name="LayoutRenamed" xml:space="preserve"><value>Layout '{0}' renamed to '{1}'</value></data>
   <data name="LayoutPresetDesigner" xml:space="preserve"><value>Designer</value></data>
   <data name="LayoutPresetCode" xml:space="preserve"><value>Code</value></data>
   <data name="LayoutPresetDebugging" xml:space="preserve"><value>Debugging</value></data>

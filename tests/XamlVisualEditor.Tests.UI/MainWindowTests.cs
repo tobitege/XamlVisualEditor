@@ -483,23 +483,24 @@ public sealed class PropertyEditorEditingTests
 public sealed class DockingLayoutTests
 {
     [AvaloniaFact]
-    public void MainWindowViewModel_ResetLayout_Sets_All_Panels_Visible()
+    public void MainWindowViewModel_ResetLayout_Applies_The_Debugging_Preset()
     {
         using MainWindowViewModel vm = new();
-        vm.IsToolboxVisible = false;
-        vm.IsPropertiesVisible = false;
-        vm.IsOutputVisible = false;
+        Dock.Model.ReactiveUI.Controls.ToolDock initialBottom =
+            XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.ReactiveUI.Controls.ToolDock>(vm.DockLayout, "BottomToolDock")!;
+        vm.DockFactory.CloseDockable(XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.Core.IDockable>(vm.DockLayout, "Locals")!);
         vm.IsBreakpointsVisible = false;
-        vm.IsCallStackVisible = false;
         vm.IsLocalsVisible = false;
-        vm.IsWatchesVisible = false;
 
         vm.ResetLayoutCommand.Execute().Subscribe();
 
-        Assert.True(vm.IsToolboxVisible);
-        Assert.True(vm.IsPropertiesVisible);
-        Assert.True(vm.IsVisualTreeVisible);
-        Assert.True(vm.IsLogicalTreeVisible);
+        Dock.Model.ReactiveUI.Controls.ToolDock bottom =
+            XamlVisualEditor.Shell.XamlEditorDockFactory.FindDockable<Dock.Model.ReactiveUI.Controls.ToolDock>(vm.DockLayout, "BottomToolDock")!;
+        Assert.NotSame(initialBottom, bottom);
+        Assert.Equal(
+            new[] { "Output", "Breakpoints", "CallStack", "Locals", "Watches" },
+            bottom.VisibleDockables!.Select(tool => tool.Id));
+        Assert.True(bottom.Proportion > 0);
         Assert.True(vm.IsOutputVisible);
         Assert.True(vm.IsBreakpointsVisible);
         Assert.True(vm.IsCallStackVisible);
@@ -513,16 +514,16 @@ public sealed class DockingLayoutTests
         using MainWindowViewModel vm = new();
         IWorkspaceCommands workspaceCommands = vm;
 
-        // The default layout keeps the breakpoints collapsed, so the first toggle shows them and the second hides them.
-        workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None)
-            .GetAwaiter()
-            .GetResult();
-        Assert.True(vm.IsBreakpointsVisible);
-
+        // The default layout shows the breakpoints in the open bottom dock, so the first toggle hides them and the second shows them.
         workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None)
             .GetAwaiter()
             .GetResult();
         Assert.False(vm.IsBreakpointsVisible);
+
+        workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.True(vm.IsBreakpointsVisible);
     }
 }
 

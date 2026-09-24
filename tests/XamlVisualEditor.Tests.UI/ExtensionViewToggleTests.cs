@@ -34,6 +34,7 @@ public sealed class ExtensionViewToggleTests
         });
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 
+        viewModel.ActivateExtensionView("first.panel");
         viewModel.ActivateExtensionView("second.panel");
         IToolDock rightDock = XamlEditorDockFactory.FindDockable<IToolDock>(viewModel.DockLayout!, "RightToolDock")!;
         Assert.Equal("second.panel", Assert.IsType<ExtensionTool>(rightDock.ActiveDockable).ViewId);
@@ -68,6 +69,7 @@ public sealed class ExtensionViewToggleTests
             new ExtensionViewContribution("second.panel", "Second", ExtensionViewType.Custom, ExtensionViewLocation.Right, 71)
         });
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        viewModel.ActivateExtensionView("first.panel");
         ExtensionTool first = XamlEditorDockFactory.FindDockable<ExtensionTool>(viewModel.DockLayout!, ExtensionTool.BuildId("first.panel"))!;
 
         viewModel.DockFactory.CloseDockable(first);
@@ -78,6 +80,23 @@ public sealed class ExtensionViewToggleTests
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 
         Assert.True(viewModel.IsExtensionViewVisible("first.panel"));
+    }
+
+    [AvaloniaFact]
+    public async Task Toggle_reopens_a_debugger_tool_that_was_closed_in_the_dock()
+    {
+        using MainWindowViewModel viewModel = new();
+        IWorkspaceCommands workspaceCommands = viewModel;
+        BreakpointsTool closed = XamlEditorDockFactory.FindDockable<BreakpointsTool>(viewModel.DockLayout!, "Breakpoints")!;
+        viewModel.DockFactory.CloseDockable(closed);
+        Assert.Null(XamlEditorDockFactory.FindDockable<BreakpointsTool>(viewModel.DockLayout!, "Breakpoints"));
+
+        await workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None);
+
+        BreakpointsTool reopened = XamlEditorDockFactory.FindDockable<BreakpointsTool>(viewModel.DockLayout!, "Breakpoints")!;
+        Assert.Same(viewModel.Breakpoints, reopened.BreakpointsViewModel);
+        Assert.True(reopened.Owner is IToolDock { VisibleDockables: { } shown } && shown.Contains(reopened));
+        Assert.DoesNotContain(reopened, viewModel.DockLayout!.HiddenDockables!);
     }
 
     [AvaloniaFact]
@@ -96,6 +115,7 @@ public sealed class ExtensionViewToggleTests
             new ExtensionViewContribution("first.panel", "First", ExtensionViewType.Custom, ExtensionViewLocation.Right, 70)
         });
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        viewModel.ActivateExtensionView("first.panel");
         IRootDock root = viewModel.DockLayout!;
         ExtensionTool first = XamlEditorDockFactory.FindDockable<ExtensionTool>(root, ExtensionTool.BuildId("first.panel"))!;
         ((Dock.Model.Core.IDock)first.Owner!).VisibleDockables!.Remove(first);

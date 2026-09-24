@@ -16,13 +16,20 @@ namespace XamlVisualEditor.TfvcExtension.ViewModels;
 public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposable
 {
     private readonly TfvcSession _session;
+    private readonly string _panelId;
+    private readonly IDisposable _settingsVisibilitySubscription;
     private bool _isSyncing;
     private bool _isDisposed;
+    private bool _isRestoringSettingsVisibility;
+    private bool _settingsVisibilityChanged;
 
     /// <summary>Creates the view model.</summary>
-    public TfvcConnectionViewModel(TfvcSession session)
+    /// <param name="session">The shared TFVC session.</param>
+    /// <param name="panelId">Identifies the panel whose settings visibility persists.</param>
+    public TfvcConnectionViewModel(TfvcSession session, string panelId)
     {
         _session = session;
+        _panelId = panelId;
         ConnectCommand = ReactiveCommand.CreateFromTask(ConnectAsync);
         ToggleSettingsCommand = ReactiveCommand.Create(() => { IsSettingsVisible = !IsSettingsVisible; });
 
@@ -38,6 +45,16 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
             IsSettingsVisible = true;
             _ = SuggestCollectionUrlAsync();
         }
+
+        _settingsVisibilitySubscription = this.WhenAnyValue(x => x.IsSettingsVisible)
+            .Skip(1)
+            .Where(_ => !_isRestoringSettingsVisibility)
+            .Subscribe(isVisible =>
+            {
+                _settingsVisibilityChanged = true;
+                _ = _session.SaveSettingsVisibleAsync(_panelId, isVisible, CancellationToken.None);
+            });
+        _ = RestoreSettingsVisibilityAsync();
     }
 
     /// <summary>Gets the workspaces of the current user.</summary>
@@ -86,7 +103,28 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
         }
 
         _isDisposed = true;
+        _settingsVisibilitySubscription.Dispose();
         _session.StateChanged -= OnSessionStateChanged;
+    }
+
+    // The stored visibility applies unless the panel changed it while the value was loading.
+    private async Task RestoreSettingsVisibilityAsync()
+    {
+        bool? stored = await _session.LoadSettingsVisibleAsync(_panelId, CancellationToken.None);
+        if (stored is not { } isVisible || _isDisposed || _settingsVisibilityChanged)
+        {
+            return;
+        }
+
+        _isRestoringSettingsVisibility = true;
+        try
+        {
+            IsSettingsVisible = isVisible;
+        }
+        finally
+        {
+            _isRestoringSettingsVisibility = false;
+        }
     }
 
     private async Task ConnectAsync(CancellationToken cancellationToken)

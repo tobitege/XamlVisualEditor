@@ -284,7 +284,11 @@ This is the current native .NET extension API surface. All types live in the
 - `Priority` (int)
 - `ActivateByDefault` (bool, default `false`)
 - `ContainerId` (optional string; custom dock container id)
-- `PersistDockState` (bool, default `true`; persistence hint for layout save/restore)
+- `PersistDockState` (bool, default `true`; `false` leaves the panel out of the saved layout, so it starts closed after a restart)
+
+A view joins the dock layout on its own only when XVE builds a new layout from a layout preset that lists the
+view id (first start and reset use the Debugging preset). A loaded layout shows the panels it contains; a panel
+that it does not contain, or that the user closed, opens from the view menu or through `ShowAsync`/`ActivateAsync`.
 
 - `IPropertyEditorRegistry`
   - `Register(PropertyEditorDescriptor descriptor)`

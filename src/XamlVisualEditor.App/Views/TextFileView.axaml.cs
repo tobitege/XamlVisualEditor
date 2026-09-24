@@ -132,10 +132,6 @@ public sealed partial class TextFileView : UserControl
             return;
         }
 
-        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
-        ActualThemeVariantChanged += OnActualThemeVariantChanged;
-        ApplyTextMateTheme();
-
         _selectionSync = new EditorSelectionSync(_textEditor, ReportSelection, ReportCaret);
         _textEditor.TextArea.TextEntered += OnTextEntered;
         _textEditor.TextArea.TextEntering += OnTextEntering;
@@ -149,8 +145,14 @@ public sealed partial class TextFileView : UserControl
         if (DataContext is TextDocumentViewModel vm)
         {
             BindViewModel(vm);
-            ApplyGrammar(vm);
         }
+
+        // TextMate starts after the document is set: installing it on the empty initial document first creates a
+        // second tokenizer, which waits for the grammar the first one compiles and then tokenizes nothing until
+        // the view scrolls.
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+        ApplyTextMateTheme();
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
@@ -170,8 +172,7 @@ public sealed partial class TextFileView : UserControl
 
         // A new document resets the caret and selection of the editor; the view model keeps its own, which the
         // subscriptions below apply.
-        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
-        _textEditor.FontSize = vm.FontSize;
+        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);        _textEditor.FontSize = vm.FontSize;
         _textEditor.ShowLineNumbers = vm.ShowLineNumbers;
         _textEditor.WordWrap = vm.WordWrap;
 
@@ -251,7 +252,6 @@ public sealed partial class TextFileView : UserControl
         _registryOptions = new RegistryOptions(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(_registryOptions);
         _currentTextMateTheme = targetTheme;
-
         if (DataContext is TextDocumentViewModel vm)
         {
             ApplyGrammar(vm);

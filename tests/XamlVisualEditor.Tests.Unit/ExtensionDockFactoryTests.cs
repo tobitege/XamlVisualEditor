@@ -76,6 +76,32 @@ public sealed class ExtensionDockFactoryTests
     }
 
     [AvaloniaFact]
+    public void LoadLayout_KeepsClosedDebuggerToolClosedAndHiddenDebuggerToolHidden()
+    {
+        using MainWindowViewModel viewModel = new();
+        XamlEditorDockFactory factory = new(viewModel);
+        IRootDock layout = factory.CreateDefaultLayout();
+        factory.InitLayout(layout);
+        factory.CloseDockable(XamlEditorDockFactory.FindDockable<IDockable>(layout, "Locals")!);
+        factory.HideDockable(XamlEditorDockFactory.FindDockable<IDockable>(layout, "Watches")!);
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-closed-tool-layout-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            factory.SaveLayout(layout, path);
+
+            IRootDock restored = factory.LoadLayout(path)!;
+
+            Assert.Empty(XamlEditorDockFactory.FindDockables<LocalsTool>(restored));
+            WatchesTool watches = Assert.Single(XamlEditorDockFactory.FindDockables<WatchesTool>(restored));
+            Assert.Contains(watches, restored.HiddenDockables!);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async System.Threading.Tasks.Task TogglePinnedTool_PreservesMainLayoutAndAutoHideStrip()
     {
         using MainWindowViewModel viewModel = new();

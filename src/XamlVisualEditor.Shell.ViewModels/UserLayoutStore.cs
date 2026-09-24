@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -23,6 +24,12 @@ public interface IUserLayoutStore
 
     /// <summary>Deletes the layout with the given name; returns true when a file was removed.</summary>
     bool Delete(string name);
+
+    /// <summary>
+    /// Renames a saved layout; returns true when the file was renamed. Fails when the new name is invalid or
+    /// belongs to another saved layout; a change of letter case only is allowed.
+    /// </summary>
+    bool Rename(string name, string newName);
 }
 
 /// <summary>
@@ -101,6 +108,21 @@ public sealed class UserLayoutStore : IUserLayoutStore
         }
 
         File.Delete(Path.Combine(_directory, name + FileExtension));
+        return true;
+    }
+
+    public bool Rename(string name, string newName)
+    {
+        if (!Exists(name)
+            || !IsValidName(newName)
+            || string.Equals(name, newName, StringComparison.Ordinal)
+            || ListNames().Any(existing => string.Equals(existing, newName, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(existing, name, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        File.Move(Path.Combine(_directory, name + FileExtension), Path.Combine(_directory, newName + FileExtension));
         return true;
     }
 }

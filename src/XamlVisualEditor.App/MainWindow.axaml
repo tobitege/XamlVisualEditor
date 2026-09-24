@@ -22,6 +22,7 @@
 
     <i:Interaction.Behaviors>
         <v:RecentFilesDialogBehavior />
+        <v:ManageLayoutsDialogBehavior />
         <v:OptionsDialogBehavior />
         <v:WorkspaceOpenDialogBehavior />
     </i:Interaction.Behaviors>
@@ -134,20 +135,6 @@
                           Classes="extension-menu" />
                 <Separator />
                 <MenuItem Header="{x:Static loc:UiStrings.MenuDocumentCanvas}" Command="{CompiledBinding OpenCanvasCommand}" />
-                <Separator />
-                <MenuItem Header="{x:Static loc:UiStrings.MenuLayout}">
-                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutSave}" Command="{CompiledBinding SaveLayoutCommand}" />
-                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutSaveAs}" Command="{CompiledBinding SaveLayoutAsCommand}" />
-                    <MenuItem Header="{CompiledBinding DeleteLayoutMenuHeader}" Command="{CompiledBinding DeleteLayoutCommand}" />
-                    <Separator />
-                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutLoad}" ItemsSource="{CompiledBinding SavedLayoutMenuItems}"
-                              IsEnabled="{CompiledBinding HasSavedLayouts}"
-                              Classes="extension-menu" />
-                    <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutLoadFromTemplates}" ItemsSource="{CompiledBinding LayoutPresetMenuItems}"
-                              Classes="extension-menu" />
-                    <Separator />
-                    <MenuItem Header="{x:Static loc:UiStrings.MenuResetLayout}" Command="{CompiledBinding ResetLayoutCommand}" />
-                </MenuItem>
             </MenuItem>
             <MenuItem Header="{x:Static loc:UiStrings.MenuDebug}" ItemsSource="{CompiledBinding DebugMenuItems}"
                       Classes="extension-menu" />
@@ -162,6 +149,18 @@
             </MenuItem>
             <MenuItem Header="{x:Static loc:UiStrings.MenuExtensions}" ItemsSource="{CompiledBinding ExtensionMenuItems}"
                       Classes="extension-menu" />
+            <MenuItem Header="{x:Static loc:UiStrings.MenuWindow}">
+                <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutSave}" Command="{CompiledBinding SaveLayoutCommand}" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutSaveAs}" Command="{CompiledBinding SaveLayoutAsCommand}" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutLoad}" ItemsSource="{CompiledBinding SavedLayoutMenuItems}"
+                          IsEnabled="{CompiledBinding HasSavedLayouts}"
+                          Classes="extension-menu" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuLayoutLoadFromTemplates}" ItemsSource="{CompiledBinding LayoutPresetMenuItems}"
+                          Classes="extension-menu" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuManageLayouts}" Command="{CompiledBinding ManageLayoutsCommand}" />
+                <MenuItem Header="{CompiledBinding DeleteLayoutMenuHeader}" Command="{CompiledBinding DeleteLayoutCommand}" />
+                <MenuItem Header="{x:Static loc:UiStrings.MenuResetLayout}" Command="{CompiledBinding ResetLayoutCommand}" />
+            </MenuItem>
             <MenuItem Header="{x:Static loc:UiStrings.MenuHelp}">
                 <MenuItem Header="{x:Static loc:UiStrings.MenuAbout}" Command="{CompiledBinding AboutCommand}" />
             </MenuItem>
@@ -318,7 +317,8 @@
                                    FontSize="12"
                                    Foreground="{DynamicResource EditorStatusBarForegroundBrush}" />
                     </Border>
-                    <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource EditorStatusBarForegroundBrush}">
+                    <TextBlock Name="LineColumnStatus" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource EditorStatusBarForegroundBrush}"
+                               IsVisible="{CompiledBinding HasVisibleTextEditor}">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="{x:Static loc:UiStrings.LineColumnFormat}">
                                 <Binding Path="ActiveLine" FallbackValue="1" />

@@ -154,20 +154,32 @@ public sealed partial class CSharpLanguageService : ILanguageIntellisenseService
             return Array.Empty<LanguageDiagnostic>();
         }
 
-        Compilation? compilation = await document.Project.GetCompilationAsync(ct).ConfigureAwait(false);
-        if (compilation is null)
-        {
-            return Array.Empty<LanguageDiagnostic>();
-        }
-
         SyntaxTree? tree = await document.GetSyntaxTreeAsync(ct).ConfigureAwait(false);
         if (tree is null)
         {
             return Array.Empty<LanguageDiagnostic>();
         }
 
+        // A file outside the loaded projects knows only the runtime assemblies, so every reference to another
+        // assembly would count as an error; such a file reports its syntax errors only.
+        IEnumerable<Diagnostic> found;
+        if (_workspaceManager.IsProjectDocument(document))
+        {
+            Compilation? compilation = await document.Project.GetCompilationAsync(ct).ConfigureAwait(false);
+            if (compilation is null)
+            {
+                return Array.Empty<LanguageDiagnostic>();
+            }
+
+            found = compilation.GetDiagnostics(ct);
+        }
+        else
+        {
+            found = tree.GetDiagnostics(ct);
+        }
+
         List<LanguageDiagnostic> diagnostics = new();
-        foreach (Diagnostic diag in compilation.GetDiagnostics(ct))
+        foreach (Diagnostic diag in found)
         {
             if (!diag.Location.IsInSource || diag.Location.SourceTree != tree)
             {

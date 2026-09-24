@@ -19,7 +19,7 @@ namespace XamlVisualEditor.Tests.UI;
 public sealed class ServerPanelsTests
 {
     [AvaloniaFact]
-    public async Task ServerMenuOpensCollapsedPanelsAndResetRestoresTheirDefault()
+    public async Task ServerMenuOpensServerPanelsCollapsedAndResetLeavesThemOut()
     {
         CommandRegistry commands = new();
         ExtensionContributionRegistry contributions = new();
@@ -52,7 +52,7 @@ public sealed class ServerPanelsTests
         Assert.Equal(new[] { "ACP", "MCP" }, viewModel.ServerMenuItems.Select(item => item.Title));
         Assert.Single(viewModel.ViewMenuItems);
         Assert.Equal("Properties", viewModel.ViewMenuItems[0].Title);
-        AssertCollapsedServers(viewModel.DockLayout);
+        AssertNoTestPanels(viewModel.DockLayout);
 
         XamlVisualEditor.App.MainWindow window = new(viewModel);
         WindowLayoutBehavior.SetIsEnabled(window, false);
@@ -77,7 +77,7 @@ public sealed class ServerPanelsTests
 
             await viewModel.ResetLayoutCommand.Execute();
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            AssertCollapsedServers(viewModel.DockLayout);
+            AssertNoTestPanels(viewModel.DockLayout);
         }
         finally
         {
@@ -85,16 +85,11 @@ public sealed class ServerPanelsTests
         }
     }
 
-    private static void AssertCollapsedServers(IRootDock layout)
+    // None of the test panels is part of the default preset, so neither the first start nor a reset places them.
+    private static void AssertNoTestPanels(IRootDock layout)
     {
-        Assert.Equal(new[] { "acp.panel", "mcp.panel" },
-            layout.RightPinnedDockables!.OfType<ExtensionTool>().Select(tool => tool.ViewId).OrderBy(id => id));
+        Assert.Empty(XamlEditorDockFactory.FindDockables<ExtensionTool>(layout));
         Assert.True(layout.PinnedDock?.ActiveDockable is null);
-        IToolDock rightDock = XamlEditorDockFactory.FindDockable<IToolDock>(layout, "RightToolDock")!;
-        Assert.NotNull(rightDock);
-        ExtensionTool visible = Assert.IsType<ExtensionTool>(Assert.Single(rightDock.VisibleDockables!));
-        Assert.Equal("properties.panel", visible.ViewId);
-        Assert.Same(visible, rightDock.ActiveDockable);
     }
 
     private sealed class PanelProvider : ICustomViewProvider

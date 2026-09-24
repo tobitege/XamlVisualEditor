@@ -632,7 +632,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
     public string? LanguageId { get; }
 
-    public ObservableCollection<LanguageDiagnostic> Diagnostics { get; } = new();
+    public BatchObservableCollection<LanguageDiagnostic> Diagnostics { get; } = new();
 
     public XamlVisualEditor.CodeEditor.LanguageDiagnosticColorizer DiagnosticColorizer { get; } = new();
 
@@ -1107,14 +1107,10 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         IReadOnlyList<LanguageDiagnostic> diagnostics =
             await _languageService.GetDiagnosticsAsync(context).ConfigureAwait(false);
 
+        // One notification for the whole result: each added item would publish all diagnostics again.
         RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
-            Diagnostics.Clear();
-            foreach (LanguageDiagnostic diagnostic in diagnostics)
-            {
-                Diagnostics.Add(diagnostic);
-            }
-
+            Diagnostics.ReplaceAll(diagnostics);
             DiagnosticColorizer.UpdateDiagnostics(diagnostics);
         });
     }
@@ -2234,6 +2230,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private bool _isClosingFromDock;
     private readonly ObservableAsPropertyHelper<int> _activeLine;
     private readonly ObservableAsPropertyHelper<int> _activeColumn;
+    private readonly ObservableAsPropertyHelper<object?> _activeTextEditorDocument;
     private bool _isLoadingRecentFiles;
     private InfiniteCanvasDocument? _canvasDocument;
     private readonly Dictionary<Guid, TerminalTool> _terminalTools = new();
@@ -2244,6 +2241,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly ICommands? _extensionCommands;
     private readonly ICommandMetadataRegistry? _commandMetadata;
     private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _placedExtensionViews = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlySet<string>? _presetPanels;
     private readonly IUserLayoutStore _userLayoutStore;
     private readonly IReadOnlyList<LayoutPreset> _layoutPresets = LayoutPresetCatalog.Create();
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
@@ -2273,6 +2272,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public int ActiveLine => _activeLine.Value;
 
     public int ActiveColumn => _activeColumn.Value;
+
+    /// <summary>The document whose text editor is on screen: a text document, or the code editor of a designer
+    /// document outside the design-only view; null when no text editor shows.</summary>
+    public object? ActiveTextEditorDocument => _activeTextEditorDocument.Value;
+
+    /// <summary>Tells whether a text editor shows, which the line and column of the status bar refer to.</summary>
+    public bool HasVisibleTextEditor => ActiveTextEditorDocument is not null;
 
     [Reactive]
     public partial DesignerDocumentViewModel? ActiveDesignerDocument { get; private set; }
@@ -2665,6 +2671,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>Asks the user to confirm deleting the named layout; the output is true when confirmed.</summary>
     public Interaction<string, bool> ConfirmLayoutDeleteInteraction { get; } = new();
 
+    /// <summary>Shows the modal dialog that renames and deletes saved layouts.</summary>
+    public Interaction<ManageLayoutsDialogViewModel, Unit> ManageLayoutsInteraction { get; } = new();
+
     /// <summary>
     /// Interaction for command palette selection.
     /// </summary>
@@ -2776,6 +2785,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public ReactiveCommand<Unit, Unit> SaveLayoutCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveLayoutAsCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteLayoutCommand { get; }
+    public ReactiveCommand<Unit, Unit> ManageLayoutsCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
 
     // Help Commands
@@ -2958,14 +2968,21 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DockFactory = new XamlEditorDockFactory(
             this,
             _loggerFactory?.CreateLogger<XamlEditorDockFactory>());
-        IRootDock? persistedLayout = DockFactory.LoadLayout();
-        IRootDock layout = persistedLayout ?? DockFactory.CreateDefaultLayout();
+        IRootDock? persistedLayout = DockFactory.LoadLayout(out string? persistedLayoutName);
+        LayoutPreset defaultPreset = FindLayoutPreset(LayoutPresetCatalog.DefaultId)!;
+        IRootDock layout = persistedLayout ?? DockFactory.CreateDefaultLayout(defaultPreset.IsVisible);
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
         DockFactory.EnsureOwnerReferences(layout);
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+        BeginExtensionViewPlacement(persistedLayout is null ? defaultPreset.VisiblePanelIds : null);
+        if (persistedLayout is not null && persistedLayoutName is not null && _userLayoutStore.Exists(persistedLayoutName))
+        {
+            SetCurrentLayout(persistedLayoutName, isLoaded: true);
+        }
+
         WireDockEvents();
 
 
@@ -2984,6 +3001,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Switch();
         _activeColumn = activeColumn.ToProperty(this, x => x.ActiveColumn);
         _disposables.Add(_activeColumn);
+
+        // A designer document shows its code editor except in the design-only view.
+        IObservable<object?> activeTextEditorDocument = this.WhenAnyValue(x => x.ActiveDocument)
+            .Select(document => document is DesignerDocumentViewModel designer
+                ? designer.WhenAnyValue(x => x.ViewMode)
+                    .Select(mode => mode == DocumentViewMode.Design ? null : (object?)designer.CodeEditor)
+                : Observable.Return<object?>(document))
+            .Switch();
+        _activeTextEditorDocument = activeTextEditorDocument.ToProperty(this, x => x.ActiveTextEditorDocument);
+        _disposables.Add(_activeTextEditorDocument);
+        IDisposable textEditorVisibility = this.WhenAnyValue(x => x.ActiveTextEditorDocument)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(HasVisibleTextEditor)));
+        _disposables.Add(textEditorVisibility);
 
         _dockDocuments.Clear();
         foreach (IEditorDocumentViewModel doc in Documents)
@@ -3017,7 +3047,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         RefreshExtensionContributions();
         UpdateFileNewMenuEntries();
         SyncExtensionDockables();
-        if (persistedLayout is null) DockFactory.CollapseBottomToolDock(DockLayout);
+        if (persistedLayout is null) ArrangePresetLayout(DockLayout, defaultPreset);
 
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) =>
@@ -3247,6 +3277,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DeleteLayoutCommand = ReactiveCommand.CreateFromTask(
             DeleteCurrentLayoutAsync,
             this.WhenAnyValue(x => x.CurrentLayoutName).Select(name => name is not null));
+        ManageLayoutsCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            using ManageLayoutsDialogViewModel dialog = new(_userLayoutStore, OnUserLayoutRenamed, OnUserLayoutDeleted);
+            await ManageLayoutsInteraction.Handle(dialog);
+        });
+        _disposables.Add(ManageLayoutsCommand);
         IDisposable deleteLayoutHeaderSubscription = this.WhenAnyValue(x => x.CurrentLayoutName)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(DeleteLayoutMenuHeader)));
         _disposables.Add(deleteLayoutHeaderSubscription);
@@ -5466,6 +5502,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _statusBarItemsById.Clear();
     }
 
+    // A panel joins a layout on its own only when the preset of a new layout lists it, and only once: a panel
+    // that a loaded layout does not contain, or that the user closed, stays closed until the view menu opens it.
+    private void BeginExtensionViewPlacement(IReadOnlySet<string>? presetPanels)
+    {
+        _presetPanels = presetPanels;
+        _placedExtensionViews.Clear();
+    }
+
     private void SyncExtensionDockables()
     {
         if (DockLayout is null)
@@ -5490,6 +5534,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 tool.ExtensionViewModel = viewModel;
                 tool.Title = viewModel.Title;
                 _extensionTools[tool.ViewId] = tool;
+                _placedExtensionViews.Add(tool.ViewId);
             }
         }
 
@@ -5507,6 +5552,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 existing.ExtensionViewModel = view;
                 existing.Title = view.Title;
                 _extensionTools[view.ViewId] = existing;
+                _placedExtensionViews.Add(view.ViewId);
+                continue;
+            }
+
+            if (_presetPanels?.Contains(view.ViewId) != true || !_placedExtensionViews.Add(view.ViewId))
+            {
                 continue;
             }
 
@@ -5539,23 +5590,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void ResetLayout()
     {
-        IsToolboxVisible = true;
-        IsPropertiesVisible = true;
-        IsVisualTreeVisible = true;
-        IsLogicalTreeVisible = true;
-        IsOutputVisible = true;
-        IsCollaborationVisible = false;
-        IsAnimationEditorVisible = true;
-        IsBreakpointsVisible = true;
-        IsCallStackVisible = true;
-        IsLocalsVisible = true;
-        IsWatchesVisible = true;
-
-        IRootDock layout = DockFactory.CreateDefaultLayout();
-        InstallLayout(layout);
-
-        DockFactory.CollapseBottomToolDock(layout);
-        DockFactory.SaveLayout(layout);
+        InstallPresetLayout(FindLayoutPreset(LayoutPresetCatalog.DefaultId)!);
         SetCurrentLayout(null, isLoaded: false);
 
         StatusText = UiStrings.LayoutReset;
@@ -5574,10 +5609,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     /// <summary>
-    /// Replaces the active dock layout and re-attaches everything that is not part of a serialized
-    /// layout: extension panels, open documents and running terminals.
+    /// Replaces the active dock layout and re-attaches the open documents and running terminals, which a
+    /// serialized layout does not contain. A loaded layout shows the panels it contains; a layout built from a
+    /// preset receives the extension panels that <paramref name="presetPanels"/> lists.
     /// </summary>
-    private void InstallLayout(IRootDock layout)
+    private void InstallLayout(IRootDock layout, IReadOnlySet<string>? presetPanels)
     {
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
@@ -5585,6 +5621,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+        BeginExtensionViewPlacement(presetPanels);
         _extensionTools.Clear();
         SyncExtensionDockables();
         ReattachRuntimeDockables();
@@ -5611,50 +5648,52 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     /// <summary>
-    /// Applies one of the ready-made layouts: starts from the default layout and hides every panel
-    /// that the preset does not list.
+    /// Applies one of the ready-made layouts: builds a new layout that contains only the panels of the preset.
     /// </summary>
     public void ApplyLayoutPreset(string presetId)
     {
-        LayoutPreset? preset = null;
-        foreach (LayoutPreset candidate in _layoutPresets)
-        {
-            if (string.Equals(candidate.Id, presetId, StringComparison.OrdinalIgnoreCase))
-            {
-                preset = candidate;
-                break;
-            }
-        }
-
+        LayoutPreset? preset = FindLayoutPreset(presetId);
         if (preset is null)
         {
             return;
         }
 
-        IRootDock layout = DockFactory.CreateDefaultLayout();
-        InstallLayout(layout);
+        InstallPresetLayout(preset);
+        SetCurrentLayout(null, isLoaded: true);
+        StatusText = string.Format(UiStrings.LayoutLoaded, preset.Title);
+    }
 
-        foreach (IDockable tool in XamlEditorDockFactory.FindDockables<Tool>(layout))
+    private LayoutPreset? FindLayoutPreset(string presetId)
+    {
+        foreach (LayoutPreset candidate in _layoutPresets)
         {
-            string? panelId = tool switch
+            if (string.Equals(candidate.Id, presetId, StringComparison.OrdinalIgnoreCase))
             {
-                ExtensionTool extensionTool => extensionTool.ViewId,
-                TerminalTool => null,
-                _ => tool.Id
-            };
-
-            if (panelId is null)
-            {
-                continue;
+                return candidate;
             }
+        }
 
-            if (!preset.IsVisible(panelId))
+        return null;
+    }
+
+    private void InstallPresetLayout(LayoutPreset preset)
+    {
+        IRootDock layout = DockFactory.CreateDefaultLayout(preset.IsVisible);
+        InstallLayout(layout, preset.VisiblePanelIds);
+        ArrangePresetLayout(layout, preset);
+        DockFactory.SaveLayout(layout);
+    }
+
+    private void ArrangePresetLayout(IRootDock layout, LayoutPreset preset)
+    {
+        if (preset.ExpandPinnedPanels)
+        {
+            foreach (IDockable tool in XamlEditorDockFactory.FindDockables<Tool>(layout))
             {
-                DockFactory.HideDockable(tool);
-            }
-            else if (preset.ExpandPinnedPanels && DockFactory.IsDockablePinned(tool, layout))
-            {
-                DockFactory.UnpinDockable(tool);
+                if (tool is not TerminalTool && DockFactory.IsDockablePinned(tool, layout))
+                {
+                    DockFactory.UnpinDockable(tool);
+                }
             }
         }
 
@@ -5669,10 +5708,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IsLocalsVisible = preset.IsVisible("Locals");
         IsWatchesVisible = preset.IsVisible("Watches");
         IsOutputVisible = preset.IsVisible("Output") || preset.IsVisible("output.panel");
-
-        DockFactory.SaveLayout(layout);
-        SetCurrentLayout(null, isLoaded: true);
-        StatusText = string.Format(UiStrings.LayoutLoaded, preset.Title);
     }
 
     private static void EnsureActiveToolDockables(IRootDock layout)
@@ -5711,9 +5746,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        InstallLayout(layout);
+        InstallLayout(layout, presetPanels: null);
         SyncPanelVisibilityFlagsFromLayout();
-        DockFactory.SaveLayout(layout);
+        DockFactory.SaveLayout(layout, layoutName: name);
         SetCurrentLayout(name, isLoaded: true);
         StatusText = string.Format(UiStrings.LayoutLoaded, name);
     }
@@ -5797,6 +5832,29 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         StatusText = deleted
             ? string.Format(UiStrings.LayoutDeleted, name)
             : string.Format(UiStrings.LayoutNotFound, name);
+    }
+
+    private void OnUserLayoutRenamed(string oldName, string newName)
+    {
+        if (string.Equals(CurrentLayoutName, oldName, StringComparison.Ordinal))
+        {
+            SetCurrentLayout(newName, isLoaded: true);
+        }
+
+        RefreshSavedLayoutMenuItems();
+        StatusText = string.Format(UiStrings.LayoutRenamed, oldName, newName);
+    }
+
+    // The dock keeps the arrangement of a deleted active layout, which becomes an unnamed layout.
+    private void OnUserLayoutDeleted(string name)
+    {
+        if (string.Equals(CurrentLayoutName, name, StringComparison.Ordinal))
+        {
+            SetCurrentLayout(null, isLoaded: true);
+        }
+
+        RefreshSavedLayoutMenuItems();
+        StatusText = string.Format(UiStrings.LayoutDeleted, name);
     }
 
     private void InitializeLayoutPresetMenuItems()
@@ -7047,7 +7105,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id)
+            ?? (isVisible ? RecreateDebuggerTool(id) : null);
         if (dockable is null)
         {
             string? extensionViewId = MapLegacyToolToExtensionView(id);
@@ -7064,6 +7123,29 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             FloatTool(dockable);
         }
+    }
+
+    // Closing a debugger tool in the dock removes it from the layout. The view menu opens a new one, which joins the
+    // hidden tools, so SetToolVisibility moves it into its home dock like a hidden tool of a restored layout.
+    private IDockable? RecreateDebuggerTool(string id)
+    {
+        Tool? tool = id switch
+        {
+            "Breakpoints" => new BreakpointsTool(Breakpoints),
+            "CallStack" => new CallStackTool(CallStack),
+            "Locals" => new LocalsTool(Locals),
+            "Watches" => new WatchesTool(Watches),
+            _ => null
+        };
+        if (tool is null || DockLayout is null)
+        {
+            return null;
+        }
+
+        DockLayout.HiddenDockables ??= DockFactory.CreateList<IDockable>();
+        tool.Owner = DockLayout;
+        DockLayout.HiddenDockables.Add(tool);
+        return tool;
     }
 
     private void SetToolVisibility(IDockable dockable, bool isVisible)
@@ -9195,7 +9277,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         if (DockLayout is not null)
         {
-            DockFactory.SaveLayout(DockLayout);
+            DockFactory.SaveLayout(DockLayout, layoutName: CurrentLayoutName);
         }
 
         DisposeCollectionItems(ExtensionMenuItems);

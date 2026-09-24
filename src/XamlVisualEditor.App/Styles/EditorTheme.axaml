@@ -35,6 +35,10 @@
                     <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+            <!-- The DataGrid theme brightens the accent of a selected row under the mouse; with a light accent the
+                 text of the row becomes unreadable, so a selected row keeps its color while hovered. -->
+            <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">0.6</x:Double>
+            <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">0.6</x:Double>
         </ResourceDictionary>
     </Styles.Resources>
     <Style Selector="Window">
@@ -46,6 +50,11 @@
          title bar binds to the active tool, which such a dock does not have. -->
     <Style Selector="dock|ToolDockControl" x:DataType="dockmodel:IDock">
         <Setter Property="IsVisible" Value="{CompiledBinding VisibleDockables.Count, Converter={x:Static styles:DockConverters.HasDockables}, FallbackValue=False}" />
+    </Style>
+
+    <!-- The chrome binds ActiveDockable.* of its dock; an empty dock has no active dockable. -->
+    <Style Selector="dock|ToolChromeControl">
+        <Setter Property="styles:ToolChromeDataContext.ReleaseWhenEmpty" Value="True" />
     </Style>
 
     <!-- The selected tool tab keeps the dock background; an accent frame and a bold title mark it.

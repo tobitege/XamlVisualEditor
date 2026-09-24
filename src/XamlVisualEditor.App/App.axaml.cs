@@ -262,13 +262,7 @@ public sealed class App : Application
         services.AddSingleton(sp =>
         {
             MainWindowViewModel mainViewModel = sp.GetRequiredService<MainWindowViewModel>();
-            // A designer document shows its code editor except in the design-only view.
-            IObservable<object?> activeDocument = mainViewModel.WhenAnyValue(x => x.ActiveDocument)
-                .Select(document => document is DesignerDocumentViewModel designer
-                    ? designer.WhenAnyValue(x => x.ViewMode)
-                        .Select(mode => mode == DocumentViewMode.Design ? null : (object?)designer.CodeEditor)
-                    : Observable.Return<object?>(document))
-                .Switch();
+            IObservable<object?> activeDocument = mainViewModel.WhenAnyValue(x => x.ActiveTextEditorDocument);
             return new TextEditorViewHost(mainViewModel.EditorContextMenuItems, activeDocument, sp.GetRequiredService<IContextKeys>());
         });
         services.AddSingleton<ITextEditorViewHost>(sp => sp.GetRequiredService<TextEditorViewHost>());

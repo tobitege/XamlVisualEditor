@@ -291,6 +291,7 @@ public sealed partial class XamlEditorDockFactory : Factory
 
     private static readonly bool LogLayoutWarnings = true;
     private const string SolutionExplorerViewId = "solutionExplorer.panel";
+    private const string LAYOUT_NAME_KEY = "LayoutName";
     private readonly MainWindowViewModel _mainVm;
     private readonly ILogger<XamlEditorDockFactory> _logger;
     private static readonly DockSerializer s_serializer = new(typeof(ObservableCollection<>));
@@ -304,18 +305,27 @@ public sealed partial class XamlEditorDockFactory : Factory
     }
 
     /// <summary>
-    /// Creates the default layout with docking panels arranged in a VS/Blend style.
+    /// Creates the dock structure of a new layout with docking panels arranged in a VS/Blend style.
     /// </summary>
-    public IRootDock CreateDefaultLayout()
+    /// <param name="includeTool">
+    /// Selects the built-in tools (Output, Breakpoints, CallStack, Locals, Watches) of the bottom dock by id;
+    /// null includes all of them. Extension panels are not part of the structure.
+    /// </param>
+    public IRootDock CreateDefaultLayout(Predicate<string>? includeTool = null)
     {
         // Left tools: extensions will populate
 
         // Bottom tools: output and debugging panels (extensions contribute the rest).
-        OutputTool outputTool = new(_mainVm.Output);
-        BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
-        CallStackTool callStackTool = new(_mainVm.CallStack);
-        LocalsTool localsTool = new(_mainVm.Locals);
-        WatchesTool watchesTool = new(_mainVm.Watches);
+        IDockable[] bottomTools = new Tool[]
+            {
+                new OutputTool(_mainVm.Output),
+                new BreakpointsTool(_mainVm.Breakpoints),
+                new CallStackTool(_mainVm.CallStack),
+                new LocalsTool(_mainVm.Locals),
+                new WatchesTool(_mainVm.Watches)
+            }
+            .Where(tool => includeTool?.Invoke(tool.Id) ?? true)
+            .ToArray();
 
         // Left tool dock
         ToolDock leftToolDock = new()
@@ -346,12 +356,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             Title = UiStrings.BottomTools,
             Proportion = 0.25,
             ActiveDockable = null,
-            VisibleDockables = CreateList<IDockable>(
-                outputTool,
-                breakpointsTool,
-                callStackTool,
-                localsTool,
-                watchesTool),
+            VisibleDockables = CreateList(bottomTools),
             Alignment = Alignment.Bottom,
             AutoHide = true,
             IsExpanded = false
@@ -803,7 +808,10 @@ public sealed partial class XamlEditorDockFactory : Factory
     /// <summary>
     /// Saves the current dock layout to a JSON file.
     /// </summary>
-    public void SaveLayout(IRootDock rootDock, string? filePath = null)
+    /// <param name="rootDock">The layout to save.</param>
+    /// <param name="filePath">The target file; null saves the working layout of the next start.</param>
+    /// <param name="layoutName">The name of the saved user layout that the working layout came from, if any.</param>
+    public void SaveLayout(IRootDock rootDock, string? filePath = null, string? layoutName = null)
     {
         if (filePath is null && !HasDesktopLifetime()) return;
         filePath ??= GetDefaultLayoutPath();
@@ -827,6 +835,11 @@ public sealed partial class XamlEditorDockFactory : Factory
                     pinnedSizes[tool.Id] = new JsonObject { ["Width"] = width, ["Height"] = height };
             }
             snapshot["PinnedToolSizes"] = pinnedSizes;
+            if (!string.IsNullOrWhiteSpace(layoutName))
+            {
+                snapshot[LAYOUT_NAME_KEY] = layoutName;
+            }
+
             File.WriteAllText(filePath, snapshot.ToJsonString());
         }
         catch (Exception ex)
@@ -848,8 +861,14 @@ public sealed partial class XamlEditorDockFactory : Factory
     /// <summary>
     /// Loads a dock layout from a JSON file.
     /// </summary>
-    public IRootDock? LoadLayout(string? filePath = null)
+    public IRootDock? LoadLayout(string? filePath = null) => LoadLayout(out _, filePath);
+
+    /// <summary>
+    /// Loads a dock layout from a JSON file together with the name of the user layout it came from.
+    /// </summary>
+    public IRootDock? LoadLayout(out string? layoutName, string? filePath = null)
     {
+        layoutName = null;
         if (filePath is null && !HasDesktopLifetime()) return null;
         filePath ??= GetDefaultLayoutPath();
         try
@@ -863,6 +882,12 @@ public sealed partial class XamlEditorDockFactory : Factory
             JsonObject? persisted = JsonNode.Parse(json) as JsonObject;
             JsonObject? pinnedSizes = persisted?["PinnedToolSizes"] as JsonObject;
             persisted?.Remove("PinnedToolSizes");
+            if (persisted?[LAYOUT_NAME_KEY] is JsonValue nameValue && nameValue.TryGetValue(out string? storedName))
+            {
+                layoutName = storedName;
+            }
+
+            persisted?.Remove(LAYOUT_NAME_KEY);
             persisted?.Remove(nameof(IRootDock.PinnedDock));
             persisted?.Remove(nameof(IRootDock.Window));
             persisted?.Remove(nameof(IRootDock.Windows));
@@ -1004,30 +1029,6 @@ public sealed partial class XamlEditorDockFactory : Factory
             {
                 bottomDock.IsEmpty = false;
             }
-            bool hasBreakpoints = FindDockables<BreakpointsTool>(rootDock).Count > 0;
-            if (!hasBreakpoints)
-            {
-                bottomDock.VisibleDockables.Add(new BreakpointsTool());
-            }
-
-            bool hasCallStack = FindDockables<CallStackTool>(rootDock).Count > 0;
-            if (!hasCallStack)
-            {
-                bottomDock.VisibleDockables.Add(new CallStackTool());
-            }
-
-            bool hasLocals = FindDockables<LocalsTool>(rootDock).Count > 0;
-            if (!hasLocals)
-            {
-                bottomDock.VisibleDockables.Add(new LocalsTool());
-            }
-
-            bool hasWatches = FindDockables<WatchesTool>(rootDock).Count > 0;
-            if (!hasWatches)
-            {
-                bottomDock.VisibleDockables.Add(new WatchesTool());
-            }
-
         }
 
         ToolDock? leftDock = FindDockable<ToolDock>(rootDock, "LeftToolDock");

@@ -18,7 +18,7 @@ namespace XamlVisualEditor.Tests.UI;
 public sealed class LayoutManagementTests
 {
     [AvaloniaFact]
-    public async Task DesignerPresetHidesPanelsThatAreNotPartOfThePreset()
+    public async Task DesignerPresetContainsOnlyThePanelsItLists()
     {
         using LayoutTestHost host = new();
         await host.FlushAsync();
@@ -29,12 +29,10 @@ public sealed class LayoutManagementTests
         IRootDock layout = host.ViewModel.DockLayout;
         Assert.True(host.IsPanelVisible("toolbox.panel"));
         Assert.True(host.IsPanelVisible("propertyEditor.panel"));
-        Assert.False(host.IsPanelVisible("git.panel"));
-        Assert.False(host.IsPanelVisible("acp.panel"));
-        Assert.Contains(layout.HiddenDockables!, dockable => dockable is ExtensionTool { ViewId: "git.panel" });
-        Assert.Contains(layout.HiddenDockables!, dockable => dockable is ExtensionTool { ViewId: "acp.panel" });
-        Assert.Contains(layout.HiddenDockables!, dockable => dockable.Id == "Breakpoints");
-        Assert.DoesNotContain(layout.RightPinnedDockables!, dockable => dockable is ExtensionTool { ViewId: "acp.panel" });
+        Assert.False(host.IsPanelInLayout("git.panel"));
+        Assert.False(host.IsPanelInLayout("acp.panel"));
+        Assert.Null(XamlEditorDockFactory.FindDockable<IDockable>(layout, "Breakpoints"));
+        Assert.Empty(layout.HiddenDockables!);
         Assert.False(host.ViewModel.IsBreakpointsVisible);
         Assert.False(host.ViewModel.IsWatchesVisible);
         Assert.Equal(0, XamlEditorDockFactory.FindDockable<IToolDock>(layout, "BottomToolDock")!.Proportion);
@@ -80,6 +78,7 @@ public sealed class LayoutManagementTests
         });
 
         // Toggling hides only the frontmost tab; a covered toolbox would be brought to the front instead.
+        host.ViewModel.ActivateExtensionView("propertyEditor.panel");
         host.ViewModel.ActivateExtensionView("toolbox.panel");
         host.ViewModel.ToggleExtensionView("toolbox.panel");
         await host.FlushAsync();
@@ -97,7 +96,8 @@ public sealed class LayoutManagementTests
 
         await host.ViewModel.ResetLayoutCommand.Execute();
         await host.FlushAsync();
-        Assert.True(host.IsPanelVisible("toolbox.panel"));
+        Assert.False(host.IsPanelInLayout("toolbox.panel"));
+        Assert.False(host.IsPanelInLayout("propertyEditor.panel"));
         Assert.Null(host.ViewModel.CurrentLayoutName);
 
         var loadCommand = Assert.IsAssignableFrom<System.Windows.Input.ICommand>(host.ViewModel.SavedLayoutMenuItems[0].Command);
@@ -116,6 +116,104 @@ public sealed class LayoutManagementTests
         await host.FlushAsync();
         Assert.Equal("unset", promptedName);
         Assert.Equal("Mein Layout", host.ViewModel.CurrentLayoutName);
+    }
+
+    [AvaloniaFact]
+    public async Task PanelsJoinALayoutOnlyThroughItsPresetOrTheViewMenu()
+    {
+        using LayoutTestHost host = new();
+        await host.FlushAsync();
+        using IDisposable prompt = host.ViewModel.LayoutNameInteraction.RegisterHandler(interaction => interaction.SetOutput("Mit Toolbox"));
+
+        // The first start builds the Debugging preset: registered panels outside it stay out, also later ones.
+        Assert.True(host.IsPanelInLayout("solutionExplorer.panel"));
+        Assert.True(host.IsPanelInLayout("fileExplorer.panel"));
+        Assert.False(host.IsPanelInLayout("toolbox.panel"));
+        Assert.False(host.IsPanelInLayout("git.panel"));
+        host.RegisterView(new ExtensionViewContribution("early.panel", "Early", ExtensionViewType.Custom, ExtensionViewLocation.Right, 50));
+        await host.FlushAsync();
+        Assert.False(host.IsPanelInLayout("early.panel"));
+
+        // A panel of the preset that the user closed stays closed when the views change.
+        ExtensionTool files = XamlEditorDockFactory.FindDockable<ExtensionTool>(host.ViewModel.DockLayout, ExtensionTool.BuildId("fileExplorer.panel"))!;
+        host.ViewModel.DockFactory.CloseDockable(files);
+        host.RegisterView(new ExtensionViewContribution("middle.panel", "Middle", ExtensionViewType.Custom, ExtensionViewLocation.Right, 55));
+        await host.FlushAsync();
+        Assert.False(host.IsPanelInLayout("fileExplorer.panel"));
+
+        // A loaded layout keeps exactly its panels.
+        host.ViewModel.ActivateExtensionView("toolbox.panel");
+        await host.ViewModel.SaveLayoutAsCommand.Execute();
+        await host.ViewModel.ResetLayoutCommand.Execute();
+        await host.FlushAsync();
+        Assert.False(host.IsPanelInLayout("toolbox.panel"));
+        Assert.True(host.IsPanelInLayout("fileExplorer.panel"));
+
+        Assert.IsAssignableFrom<System.Windows.Input.ICommand>(host.ViewModel.SavedLayoutMenuItems[0].Command).Execute(null);
+        await host.FlushAsync();
+        Assert.True(host.IsPanelInLayout("toolbox.panel"));
+        Assert.False(host.IsPanelInLayout("fileExplorer.panel"));
+        Assert.False(host.IsPanelInLayout("early.panel"));
+
+        host.RegisterView(new ExtensionViewContribution("late.panel", "Late", ExtensionViewType.Custom, ExtensionViewLocation.Right, 60));
+        await host.FlushAsync();
+        Assert.False(host.IsPanelInLayout("late.panel"));
+
+        // The view menu opens every missing panel.
+        host.ViewModel.ToggleExtensionView("fileExplorer.panel");
+        host.ViewModel.ToggleExtensionView("late.panel");
+        await host.FlushAsync();
+        Assert.True(host.IsPanelVisible("fileExplorer.panel"));
+        Assert.True(host.IsPanelVisible("late.panel"));
+    }
+
+    [AvaloniaFact]
+    public async Task ManageLayoutsRenamesAndDeletesSavedLayouts()
+    {
+        using LayoutTestHost host = new();
+        await host.FlushAsync();
+        string nextName = "Alpha";
+        using IDisposable prompt = host.ViewModel.LayoutNameInteraction.RegisterHandler(interaction => interaction.SetOutput(nextName));
+        await host.ViewModel.SaveLayoutAsCommand.Execute();
+        nextName = "Beta";
+        await host.ViewModel.SaveLayoutAsCommand.Execute();
+        Assert.Equal("Beta", host.ViewModel.CurrentLayoutName);
+        bool? confirmAnswer = null;
+        using IDisposable manage = host.ViewModel.ManageLayoutsInteraction.RegisterHandler(async interaction =>
+        {
+            ManageLayoutsDialogViewModel dialog = interaction.Input;
+            using IDisposable confirm = dialog.ConfirmDeleteInteraction.RegisterHandler(confirmation => confirmation.SetOutput(confirmAnswer!.Value));
+            Assert.Equal(new[] { "Alpha", "Beta" }, dialog.Names);
+
+            dialog.SelectedName = "Beta";
+            dialog.EditName = "Alpha";
+            await dialog.RenameCommand.Execute();
+            Assert.Equal(string.Format(UiStrings.LayoutNameExists, "Alpha"), dialog.ErrorText);
+
+            dialog.EditName = "Gamma";
+            await dialog.RenameCommand.Execute();
+            Assert.Equal(new[] { "Alpha", "Gamma" }, dialog.Names);
+            Assert.Equal("Gamma", dialog.SelectedName);
+            Assert.Null(dialog.ErrorText);
+
+            dialog.SelectedName = "Alpha";
+            confirmAnswer = false;
+            await dialog.DeleteCommand.Execute();
+            Assert.Equal(new[] { "Alpha", "Gamma" }, dialog.Names);
+            confirmAnswer = true;
+            await dialog.DeleteCommand.Execute();
+            Assert.Equal(new[] { "Gamma" }, dialog.Names);
+            Assert.Equal("Gamma", dialog.SelectedName);
+            interaction.SetOutput(System.Reactive.Unit.Default);
+        });
+
+        await host.ViewModel.ManageLayoutsCommand.Execute();
+
+        Assert.Equal("Gamma", host.ViewModel.CurrentLayoutName);
+        Assert.Equal(new[] { "Gamma" }, host.ViewModel.SavedLayoutMenuItems.Select(item => item.Title));
+        Assert.False(host.Store.Exists("Alpha"));
+        Assert.False(host.Store.Exists("Beta"));
+        Assert.True(host.Store.Exists("Gamma"));
     }
 
     [AvaloniaFact]
@@ -238,7 +336,7 @@ public sealed class LayoutManagementTests
     }
 
     [AvaloniaFact]
-    public async Task ViewMenuOffersLayoutSaveSaveAsLoadAndTemplateSubmenus()
+    public async Task WindowMenuOffersTheLayoutCommandsAndTheViewMenuNoLongerDoes()
     {
         using LayoutTestHost host = new();
         await host.FlushAsync();
@@ -252,25 +350,29 @@ public sealed class LayoutManagementTests
             await host.FlushAsync();
             Menu menu = window.GetLogicalDescendants().OfType<Menu>().First();
             MenuItem viewMenu = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, UiStrings.MenuView));
-            MenuItem layoutMenu = viewMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, UiStrings.MenuLayout));
+            Assert.DoesNotContain(viewMenu.Items.OfType<MenuItem>(), item => ReferenceEquals(item.Command, host.ViewModel.ResetLayoutCommand)
+                || item.Items.OfType<MenuItem>().Any(child => ReferenceEquals(child.Command, host.ViewModel.ResetLayoutCommand)));
+            MenuItem windowMenu = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, UiStrings.MenuWindow));
+            MenuItem helpMenu = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, UiStrings.MenuHelp));
+            Assert.Equal(menu.Items.IndexOf(windowMenu) + 1, menu.Items.IndexOf(helpMenu));
             menu.Open();
-            viewMenu.Open();
-            layoutMenu.Open();
+            windowMenu.Open();
             window.UpdateLayout();
             await host.FlushAsync();
-            MenuItem[] entries = layoutMenu.Items.OfType<MenuItem>().ToArray();
+            MenuItem[] entries = windowMenu.Items.OfType<MenuItem>().ToArray();
 
             Assert.Equal(
-                new object?[] { UiStrings.MenuLayoutSave, UiStrings.MenuLayoutSaveAs, UiStrings.MenuLayoutDelete, UiStrings.MenuLayoutLoad, UiStrings.MenuLayoutLoadFromTemplates, UiStrings.MenuResetLayout },
+                new object?[] { UiStrings.MenuLayoutSave, UiStrings.MenuLayoutSaveAs, UiStrings.MenuLayoutLoad, UiStrings.MenuLayoutLoadFromTemplates, UiStrings.MenuManageLayouts, UiStrings.MenuLayoutDelete, UiStrings.MenuResetLayout },
                 entries.Select(item => item.Header));
             Assert.Same(host.ViewModel.SaveLayoutCommand, entries[0].Command);
             Assert.Same(host.ViewModel.SaveLayoutAsCommand, entries[1].Command);
-            Assert.Same(host.ViewModel.DeleteLayoutCommand, entries[2].Command);
-            Assert.False(entries[2].IsEffectivelyEnabled);
-            Assert.Same(host.ViewModel.SavedLayoutMenuItems, entries[3].ItemsSource);
-            Assert.False(entries[3].IsEnabled);
-            Assert.Same(host.ViewModel.LayoutPresetMenuItems, entries[4].ItemsSource);
-            Assert.Same(host.ViewModel.ResetLayoutCommand, entries[5].Command);
+            Assert.Same(host.ViewModel.SavedLayoutMenuItems, entries[2].ItemsSource);
+            Assert.False(entries[2].IsEnabled);
+            Assert.Same(host.ViewModel.LayoutPresetMenuItems, entries[3].ItemsSource);
+            Assert.Same(host.ViewModel.ManageLayoutsCommand, entries[4].Command);
+            Assert.Same(host.ViewModel.DeleteLayoutCommand, entries[5].Command);
+            Assert.False(entries[5].IsEffectivelyEnabled);
+            Assert.Same(host.ViewModel.ResetLayoutCommand, entries[6].Command);
             Assert.Equal(
                 new[] { UiStrings.LayoutPresetDesigner, UiStrings.LayoutPresetCode, UiStrings.LayoutPresetDebugging, UiStrings.LayoutPresetAssistants, UiStrings.LayoutPresetMinimal },
                 host.ViewModel.LayoutPresetMenuItems.Select(item => item.Title));
@@ -285,8 +387,8 @@ public sealed class LayoutManagementTests
 
             Assert.True(statusSection.IsVisible);
             Assert.Equal(string.Format(UiStrings.StatusLayoutFormat, "Mein Layout"), window.FindControl<TextBlock>("LayoutStatusText")!.Text);
-            Assert.Equal(string.Format(UiStrings.MenuLayoutDeleteNamed, "Mein Layout"), entries[2].Header);
-            Assert.True(entries[2].IsEffectivelyEnabled);
+            Assert.Equal(string.Format(UiStrings.MenuLayoutDeleteNamed, "Mein Layout"), entries[5].Header);
+            Assert.True(entries[5].IsEffectivelyEnabled);
         }
         finally
         {
@@ -298,26 +400,26 @@ public sealed class LayoutManagementTests
     {
         private readonly string _directory = Path.Combine(Path.GetTempPath(), "xve-layouts-" + Guid.NewGuid().ToString("N"));
         private readonly List<IDisposable> _registrations = new();
+        private readonly ExtensionContributionRegistry _contributions = new();
+        private readonly ExtensionViewRegistry _views = new();
 
         public LayoutTestHost()
         {
             Store = new UserLayoutStore(_directory);
             CommandRegistry commands = new();
-            ExtensionContributionRegistry contributions = new();
-            ExtensionViewRegistry views = new();
             ViewModel = new MainWindowViewModel(
                 extensionCommands: commands,
-                extensionContributionRegistry: contributions,
-                extensionViewRegistry: views,
+                extensionContributionRegistry: _contributions,
+                extensionViewRegistry: _views,
                 userLayoutStore: Store);
 
             string[] viewIds = { "solutionExplorer.panel", "fileExplorer.panel", "toolbox.panel", "propertyEditor.panel", "acp.panel", "git.panel" };
             foreach (string viewId in viewIds)
             {
-                _registrations.Add(views.RegisterCustomViewProvider(viewId, new PanelProvider()));
+                _registrations.Add(_views.RegisterCustomViewProvider(viewId, new PanelProvider()));
             }
 
-            _registrations.Add(contributions.RegisterViews("test.layouts", new[]
+            _registrations.Add(_contributions.RegisterViews("test.layouts", new[]
             {
                 new ExtensionViewContribution("solutionExplorer.panel", "Solution", ExtensionViewType.Custom, ExtensionViewLocation.Left, 1),
                 new ExtensionViewContribution("fileExplorer.panel", "Files", ExtensionViewType.Custom, ExtensionViewLocation.Left, 2),
@@ -333,6 +435,15 @@ public sealed class LayoutManagementTests
         public UserLayoutStore Store { get; }
 
         public bool IsPanelVisible(string viewId) => ViewModel.IsExtensionViewVisible(viewId);
+
+        public bool IsPanelInLayout(string viewId) =>
+            XamlEditorDockFactory.FindDockable<ExtensionTool>(ViewModel.DockLayout, ExtensionTool.BuildId(viewId)) is not null;
+
+        public void RegisterView(ExtensionViewContribution contribution)
+        {
+            _registrations.Add(_views.RegisterCustomViewProvider(contribution.ViewId, new PanelProvider()));
+            _registrations.Add(_contributions.RegisterViews("test.layouts." + contribution.ViewId, new[] { contribution }));
+        }
 
         public Task FlushAsync() => Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background).GetTask();
 

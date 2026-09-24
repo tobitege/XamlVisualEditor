@@ -216,6 +216,14 @@ public sealed class TfvcSession : IDisposable
     /// <summary>Saves the folder the source control explorer is focused on.</summary>
     public Task SaveExplorerFocusAsync(string? serverPath, CancellationToken cancellationToken) => _store.SaveExplorerFocusAsync(serverPath, cancellationToken);
 
+    /// <summary>Loads whether a panel shows its connection settings; null when the panel has not stored it yet.</summary>
+    public Task<bool?> LoadSettingsVisibleAsync(string panelId, CancellationToken cancellationToken) =>
+        _store.LoadSettingsVisibleAsync(panelId, cancellationToken);
+
+    /// <summary>Saves whether a panel shows its connection settings.</summary>
+    public Task SaveSettingsVisibleAsync(string panelId, bool isVisible, CancellationToken cancellationToken) =>
+        _store.SaveSettingsVisibleAsync(panelId, isVisible, cancellationToken);
+
     /// <summary>Includes or excludes pending changes from check-in.</summary>
     public async Task SetExcludedAsync(IEnumerable<string> serverPaths, bool excluded, CancellationToken cancellationToken)
     {

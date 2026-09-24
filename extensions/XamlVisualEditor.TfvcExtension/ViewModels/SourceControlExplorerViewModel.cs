@@ -53,7 +53,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         _editor = editor;
         _dialogHost = dialogHost;
         _icons = icons;
-        Connection = new TfvcConnectionViewModel(session);
+        Connection = new TfvcConnectionViewModel(session, "sourceControlExplorer");
 
         HierarchicalOptions options = new()
         {

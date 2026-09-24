@@ -1,6 +1,8 @@
 using System;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Editing;
+using AvaloniaEdit.Rendering;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -16,6 +18,8 @@ internal sealed class EditorSelectionSync : IDisposable
     private readonly Action<Caret> _reportCaret;
     private bool _changingEditor;
     private bool _reportingSelection;
+    private bool _waitingForLayout;
+    private bool _disposed;
 
     /// <summary>Starts following the caret and selection of the editor.</summary>
     /// <param name="editor">The editor.</param>
@@ -54,15 +58,47 @@ internal sealed class EditorSelectionSync : IDisposable
         ChangeEditor(() =>
         {
             _editor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _editor.Document.TextLength);
-            try
+            BringCaretToView();
+        });
+    }
+
+    // Before its first layout the text view has neither its width nor the width of the gutter, so scrolling would
+    // move the view by a wrong distance; the caret then comes into view once the text view has built its lines.
+    private void BringCaretToView()
+    {
+        TextView view = _editor.TextArea.TextView;
+        if (view.VisualLinesValid && view.Bounds.Width > 0)
+        {
+            _editor.TextArea.Caret.BringCaretToView();
+            return;
+        }
+
+        if (_waitingForLayout)
+        {
+            return;
+        }
+
+        _waitingForLayout = true;
+        view.VisualLinesChanged += OnFirstVisualLines;
+    }
+
+    private void OnFirstVisualLines(object? sender, EventArgs e)
+    {
+        TextView view = _editor.TextArea.TextView;
+        if (!view.VisualLinesValid || view.Bounds.Width <= 0)
+        {
+            return;
+        }
+
+        view.VisualLinesChanged -= OnFirstVisualLines;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _waitingForLayout = false;
+            if (!_disposed)
             {
                 _editor.TextArea.Caret.BringCaretToView();
             }
-            catch (ArgumentException)
-            {
-                // A document without a laid out view has no position to scroll to yet.
-            }
-        });
+        }, DispatcherPriority.Background);
     }
 
     /// <summary>Shows the selection of the view model; a report from the editor in progress is not echoed back.</summary>
@@ -99,6 +135,8 @@ internal sealed class EditorSelectionSync : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _disposed = true;
+        _editor.TextArea.TextView.VisualLinesChanged -= OnFirstVisualLines;
         _editor.TextArea.Caret.PositionChanged -= OnCaretChanged;
         _editor.TextArea.SelectionChanged -= OnSelectionChanged;
     }

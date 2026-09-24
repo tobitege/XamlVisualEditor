@@ -145,12 +145,6 @@ public sealed partial class XamlCodeEditorView : UserControl
             return;
         }
 
-        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
-        ActualThemeVariantChanged += OnActualThemeVariantChanged;
-
-        // Install TextMate with XML grammar for XAML highlighting.
-        ApplyTextMateTheme();
-
         // Wire up caret and selection tracking
         _selectionSync = new EditorSelectionSync(_textEditor, ReportSelection, ReportCaret);
 
@@ -172,6 +166,13 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             BindViewModel(codeVm);
         }
+
+        // Install TextMate with XML grammar for XAML highlighting, after the document is set: installing it on the
+        // empty initial document first creates a second tokenizer, which waits for the grammar the first one
+        // compiles and then tokenizes nothing until the view scrolls.
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+        ApplyTextMateTheme();
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
@@ -197,8 +198,7 @@ public sealed partial class XamlCodeEditorView : UserControl
         RegistryOptions registryOptions = new(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
         _textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("xml"));
-        _currentTextMateTheme = targetTheme;
-    }
+        _currentTextMateTheme = targetTheme;    }
 
     private static ThemeName ResolveTextMateTheme(ThemeVariant themeVariant)
     {
@@ -224,7 +224,6 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Set the shared TextDocument directly — this is the critical line. The editor resets its caret and
         // selection for the new document; the view model keeps its own, which the subscriptions below apply.
         selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
-
         if (_textEditor.TextArea.LeftMargins.FirstOrDefault(m => m is FoldingMargin) is null)
         {
             _textEditor.TextArea.LeftMargins.Insert(0, new FoldingMargin());

@@ -776,6 +776,16 @@ public sealed partial class XamlEditorDockFactory : Factory
             }
             if (root.PinnedDock is not null)
                 CollectDockables(root.PinnedDock, results, visited);
+
+            // Floating windows hold their tools in a layout of their own.
+            if (root.Windows is not null)
+            {
+                foreach (IDockWindow window in root.Windows)
+                {
+                    if (window.Layout is not null)
+                        CollectDockables(window.Layout, results, visited);
+                }
+            }
         }
     }
 

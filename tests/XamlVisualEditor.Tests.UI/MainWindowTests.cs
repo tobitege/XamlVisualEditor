@@ -513,12 +513,16 @@ public sealed class DockingLayoutTests
         using MainWindowViewModel vm = new();
         IWorkspaceCommands workspaceCommands = vm;
 
-        bool initial = vm.IsBreakpointsVisible;
+        // The default layout keeps the breakpoints collapsed, so the first toggle shows them and the second hides them.
         workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None)
             .GetAwaiter()
             .GetResult();
+        Assert.True(vm.IsBreakpointsVisible);
 
-        Assert.NotEqual(initial, vm.IsBreakpointsVisible);
+        workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.False(vm.IsBreakpointsVisible);
     }
 }
 

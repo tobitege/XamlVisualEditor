@@ -60,11 +60,11 @@
           <Button Content="{x:Static loc:TfvcStrings.CheckIn}"
                   Command="{CompiledBinding CheckInCommand}"
                   Classes="accent"
-                  Padding="10,3" />
+                  Padding="10,2" />
           <Button Content="{x:Static loc:TfvcStrings.Shelve}"
                   Command="{CompiledBinding ShelveCommand}"
-                  Padding="8,3" />
-          <DropDownButton Content="{x:Static loc:TfvcStrings.Actions}" Padding="8,3">
+                  Padding="8,2" />
+          <DropDownButton Content="{x:Static loc:TfvcStrings.Actions}" Padding="8,2">
             <DropDownButton.Flyout>
               <MenuFlyout>
                 <MenuItem Header="{x:Static loc:TfvcStrings.Refresh}" Command="{CompiledBinding RefreshCommand}" />

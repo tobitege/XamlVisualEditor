@@ -99,7 +99,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         IObservable<bool> notWorking = this.WhenAnyValue(x => x.IsWorking).Select(working => !working);
         IObservable<bool> canOpen = selected.Select(item => item is { IsFolder: false, IsDownloaded: true });
         IObservable<bool> canGet = selected.CombineLatest(notWorking, (item, idle) => idle && item?.LocalPath is not null);
-        IObservable<bool> canCheckOut = selected.CombineLatest(notWorking, (item, idle) => idle && item is { IsFolder: false, IsDownloaded: true });
+        IObservable<bool> canCheckOut = selected.CombineLatest(notWorking, (item, idle) => idle && item is { IsDownloaded: true });
         IObservable<bool> canUndo = selected.CombineLatest(notWorking, (item, idle) => idle && item is not null && HasPendingChangeBelow(item.ServerPath));
 
         RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync);
@@ -159,7 +159,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
     /// <summary>Gets the latest version of the selected item.</summary>
     public ReactiveCommand<Unit, Unit> GetLatestCommand { get; }
 
-    /// <summary>Checks out the selected file.</summary>
+    /// <summary>Checks out the selected file, or every item of the selected folder and its subfolders.</summary>
     public ReactiveCommand<Unit, Unit> CheckOutCommand { get; }
 
     /// <summary>Undoes the pending changes of the selected item.</summary>
@@ -604,16 +604,46 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
     private async Task CheckOutAsync(CancellationToken cancellationToken)
     {
         TfvcWorkspace? workspace = _session.CurrentWorkspace;
-        string? localPath = SelectedItem?.LocalPath;
-        if (workspace is null || localPath is null)
+        SourceControlItemViewModel? item = SelectedItem;
+        string? localPath = item?.LocalPath;
+        if (workspace is null || item is null || localPath is null)
         {
             return;
         }
 
+        // A folder checks out every file below it, which can be a large pending change.
+        if (item.IsFolder)
+        {
+            if (_dialogHost is null)
+            {
+                return;
+            }
+
+            bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
+                ConfirmationDialogRequest.DIALOG_ID,
+                new ConfirmationDialogRequest(
+                    TfvcStrings.CheckOut,
+                    string.Format(CultureInfo.CurrentCulture, TfvcStrings.CheckOutFolderConfirmMessageFormat, item.ServerPath),
+                    TfvcStrings.CheckOut,
+                    IsDestructive: false),
+                cancellationToken);
+            if (confirmed != true)
+            {
+                return;
+            }
+        }
+
         await RunOperationAsync(async () =>
         {
-            await _session.Client.CheckOutAsync(workspace, [localPath], cancellationToken);
-            _autoCheckOut.Invalidate(localPath);
+            await _session.Client.CheckOutAsync(workspace, [localPath], item.IsFolder, cancellationToken);
+            if (item.IsFolder)
+            {
+                _autoCheckOut.InvalidateFolder(localPath);
+            }
+            else
+            {
+                _autoCheckOut.Invalidate(localPath);
+            }
         });
     }
 

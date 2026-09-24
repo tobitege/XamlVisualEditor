@@ -3200,22 +3200,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         // View commands
         ToggleBreakpointsCommand = ReactiveCommand.Create(() =>
         {
-            IsBreakpointsVisible = !IsBreakpointsVisible;
+            IsBreakpointsVisible = !IsDockableShown("Breakpoints");
             SetDockableVisibility("Breakpoints", IsBreakpointsVisible);
         });
         ToggleCallStackCommand = ReactiveCommand.Create(() =>
         {
-            IsCallStackVisible = !IsCallStackVisible;
+            IsCallStackVisible = !IsDockableShown("CallStack");
             SetDockableVisibility("CallStack", IsCallStackVisible);
         });
         ToggleLocalsCommand = ReactiveCommand.Create(() =>
         {
-            IsLocalsVisible = !IsLocalsVisible;
+            IsLocalsVisible = !IsDockableShown("Locals");
             SetDockableVisibility("Locals", IsLocalsVisible);
         });
         ToggleWatchesCommand = ReactiveCommand.Create(() =>
         {
-            IsWatchesVisible = !IsWatchesVisible;
+            IsWatchesVisible = !IsDockableShown("Watches");
             SetDockableVisibility("Watches", IsWatchesVisible);
         });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
@@ -5561,6 +5561,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IsOutputVisible = IsToolVisible("Output") || IsExtensionViewVisible("output.panel");
     }
 
+    // The view toggles decide from the layout, not from the visibility flags, which a restored layout does not update.
+    private bool IsDockableShown(string id)
+    {
+        IDockable? dockable = DockLayout is null ? null : XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        if (dockable is not null && DockFactory.IsDockablePinned(dockable, DockLayout))
+        {
+            return DockLayout!.PinnedDock?.VisibleDockables?.Contains(dockable) == true;
+        }
+
+        return IsToolVisible(id);
+    }
+
     private bool IsToolVisible(string id)
     {
         IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
@@ -6882,10 +6894,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         SetToolVisibility(dockable, isVisible);
+        if (isVisible && !IsDockableShown(id))
+        {
+            FloatTool(dockable);
+        }
     }
 
     private void SetToolVisibility(IDockable dockable, bool isVisible)
     {
+        if (isVisible)
+        {
+            PlaceHiddenToolWithoutDock(dockable);
+        }
+
         if (DockFactory.IsDockablePinned(dockable, DockLayout))
         {
             if (isVisible)
@@ -6906,6 +6927,66 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             DockFactory.HideDockable(dockable);
         }
+    }
+
+    // A restored layout stores hidden tools with the root dock as owner, so restoring them would put them into the
+    // root where nothing renders them. Such a tool moves into its home tool dock instead: the dock of its extension
+    // location, or the bottom dock for the debugger tools. A collapsed bottom dock keeps its tools pinned, so the
+    // tool joins them there.
+    private void PlaceHiddenToolWithoutDock(IDockable dockable)
+    {
+        if (DockLayout?.HiddenDockables is not { } hidden
+            || !hidden.Contains(dockable)
+            || dockable.Owner is not (null or IRootDock))
+        {
+            return;
+        }
+
+        string dockId = dockable is ExtensionTool { ExtensionViewModel: { } view }
+            ? view.Location switch
+            {
+                ExtensionViewLocation.Left => "LeftToolDock",
+                ExtensionViewLocation.Bottom => "BottomToolDock",
+                _ => "RightToolDock"
+            }
+            : "BottomToolDock";
+        IDock? home = XamlEditorDockFactory.FindDockable<IToolDock>(DockLayout, dockId)
+            ?? XamlEditorDockFactory.FindDockables<IToolDock>(DockLayout).FirstOrDefault(dock => dock is not IRootDock);
+        hidden.Remove(dockable);
+        if (home is null)
+        {
+            FloatTool(dockable);
+            return;
+        }
+
+        DockFactory.AddDockable(home, dockable);
+        dockable.Owner = home;
+        if (home is ToolDock { Proportion: 0 } && string.Equals(home.Id, "BottomToolDock", StringComparison.Ordinal))
+        {
+            DockFactory.PinDockable(dockable);
+            dockable.GetPinnedBounds(out _, out _, out double width, out double height);
+            if (!double.IsFinite(width) || width <= 0 || !double.IsFinite(height) || height <= 0)
+            {
+                dockable.SetPinnedBounds(0, 0, 400, 300);
+            }
+        }
+    }
+
+    // Last resort of the view menu: a tool that no dock can show opens in its own window.
+    private void FloatTool(IDockable dockable)
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        DockLayout.HiddenDockables?.Remove(dockable);
+        if (dockable.Owner is IDock owner && owner.VisibleDockables?.Contains(dockable) == true)
+        {
+            owner.VisibleDockables.Remove(dockable);
+        }
+
+        DockFactory.SplitToWindow(DockLayout, dockable, 200, 200, 600, 400);
     }
 
     private static string? MapLegacyToolToExtensionView(string id)
@@ -6935,13 +7016,51 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
+    // A view that is open behind another tab of its dock is brought to the front; only the active tab is hidden.
     public void ToggleExtensionView(string viewId)
     {
         if (TryResolveExtensionViewId(viewId, out string resolved))
         {
             bool isVisible = IsExtensionViewVisible(resolved);
+            if (isVisible && !IsExtensionViewFrontmost(resolved))
+            {
+                ActivateExtensionView(resolved);
+                return;
+            }
+
             TrySetExtensionDockableVisibility(resolved, !isVisible);
         }
+    }
+
+    // A tool closed with its tab button leaves the layout but stays in the lookup; it counts as missing, so
+    // showing the view creates a new tool instead of restoring one that no dock contains.
+    private ExtensionTool? FindExtensionTool(string viewId)
+    {
+        if (DockLayout is null)
+        {
+            return null;
+        }
+
+        ExtensionTool? tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
+        if (tool is null)
+        {
+            _extensionTools.Remove(viewId);
+        }
+
+        return tool;
+    }
+
+    private bool IsExtensionViewFrontmost(string viewId)
+    {
+        if (DockLayout is null)
+        {
+            return false;
+        }
+
+        ExtensionTool? tool = FindExtensionTool(viewId);
+
+        return tool is not null
+            && (DockFactory.IsDockablePinned(tool, DockLayout) || (tool.Owner is IDock dock && ReferenceEquals(dock.ActiveDockable, tool)));
     }
 
     public bool IsExtensionViewVisible(string viewId)
@@ -6956,10 +7075,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
-        if (!_extensionTools.TryGetValue(resolved, out ExtensionTool? tool))
-        {
-            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(resolved));
-        }
+        ExtensionTool? tool = FindExtensionTool(resolved);
 
         if (tool is not null && DockFactory.IsDockablePinned(tool, DockLayout))
         {
@@ -6986,10 +7102,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (!_extensionTools.TryGetValue(resolved, out ExtensionTool? tool))
-        {
-            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(resolved));
-        }
+        ExtensionTool? tool = FindExtensionTool(resolved);
 
         if (tool is null && TrySetExtensionDockableVisibility(resolved, true))
         {
@@ -7017,15 +7130,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
-        if (!_extensionTools.TryGetValue(viewId, out ExtensionTool? tool))
-        {
-            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
-        }
+        ExtensionTool? tool = FindExtensionTool(viewId);
 
+        bool wasVisible = IsExtensionViewVisible(viewId);
         if (tool is null && isVisible && _extensionViews.TryGetValue(viewId, out ExtensionViewModel? viewModel))
         {
             tool = DockFactory.AddExtensionTool(DockLayout, viewModel);
-            if (tool is not null) _extensionTools[viewId] = tool;
+            if (tool is null)
+            {
+                tool = new ExtensionTool(viewModel);
+                FloatTool(tool);
+            }
+
+            _extensionTools[viewId] = tool;
         }
 
         if (tool is null)
@@ -7033,11 +7150,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
-        bool wasVisible = IsExtensionViewVisible(viewId);
-
         SetToolVisibility(tool, isVisible);
         if (isVisible)
         {
+            if (!IsExtensionViewVisible(viewId))
+            {
+                FloatTool(tool);
+            }
+
             UpdateActiveExtensionViewFocus(viewId);
         }
         else

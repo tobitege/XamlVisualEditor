@@ -151,6 +151,7 @@ public sealed class ViewLocator : IDataTemplate
             or LocalsViewModel
             or WatchesViewModel
             or ReferencesViewModel
+            or ReferencesPanelViewModel
             or CodeEditorViewModel
             or TextDocumentViewModel
             or InfiniteCanvasViewModel

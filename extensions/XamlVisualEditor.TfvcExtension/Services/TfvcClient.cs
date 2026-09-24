@@ -23,8 +23,8 @@ public interface ITfvcClient
     /// <summary>Lists the pending changes of one local item.</summary>
     Task<IReadOnlyList<TfvcPendingChange>> GetPendingChangesForLocalPathAsync(string localPath, CancellationToken cancellationToken);
 
-    /// <summary>Checks out local files for edit.</summary>
-    Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken);
+    /// <summary>Checks out local files for edit; with <paramref name="recursive"/> folders include all items below them.</summary>
+    Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken);
 
     /// <summary>Adds local files to version control.</summary>
     Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken);
@@ -143,9 +143,14 @@ public sealed class TfvcClient : ITfvcClient
     }
 
     /// <inheritdoc />
-    public Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
+    public Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken)
     {
         List<string> arguments = ["checkout", "/noprompt"];
+        if (recursive)
+        {
+            arguments.Add("/recursive");
+        }
+
         arguments.AddRange(localPaths);
         return RunChangeAsync(workspace, arguments, cancellationToken);
     }

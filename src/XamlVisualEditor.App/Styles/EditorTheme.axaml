@@ -1,6 +1,8 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:dock="using:Dock.Avalonia.Controls">
+        xmlns:dock="using:Dock.Avalonia.Controls"
+        xmlns:dockmodel="using:Dock.Model.Core"
+        xmlns:styles="using:XamlVisualEditor.App.Styles">
     <Styles.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
@@ -38,6 +40,12 @@
     <Style Selector="Window">
         <Setter Property="Background" Value="{DynamicResource EditorWindowBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EditorWindowForegroundBrush}" />
+    </Style>
+
+    <!-- A tool dock without tools (the collapsed bottom dock, the idle pinned-tool dock) is not built at all: its
+         title bar binds to the active tool, which such a dock does not have. -->
+    <Style Selector="dock|ToolDockControl" x:DataType="dockmodel:IDock">
+        <Setter Property="IsVisible" Value="{CompiledBinding VisibleDockables.Count, Converter={x:Static styles:DockConverters.HasDockables}, FallbackValue=False}" />
     </Style>
 
     <!-- The selected tool tab keeps the dock background; an accent frame and a bold title mark it.

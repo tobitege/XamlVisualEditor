@@ -5,15 +5,17 @@
         <Setter Property="Margin" Value="0,0,4,2" />
     </Style>
 
+    <!-- Desktop density: buttons and inputs share a minimum height of 23; the caption stays centered in it. -->
     <Style Selector=".editor-chrome :is(Button)">
-        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="Padding" Value="6,1" />
         <Setter Property="MinWidth" Value="0" />
-        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="MinHeight" Value="23" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
-    <Style Selector=".editor-chrome TextBox, .editor-chrome ComboBox, .editor-chrome NumericUpDown">
-        <Setter Property="Padding" Value="6,3" />
-        <Setter Property="MinHeight" Value="26" />
+    <Style Selector=".editor-chrome TextBox, .editor-chrome ComboBox, .editor-chrome NumericUpDown, .editor-chrome AutoCompleteBox">
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="MinHeight" Value="23" />
     </Style>
 
     <Style Selector=".editor-chrome CheckBox, .editor-chrome RadioButton">

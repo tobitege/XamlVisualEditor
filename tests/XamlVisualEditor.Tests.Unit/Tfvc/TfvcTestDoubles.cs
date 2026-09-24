@@ -97,9 +97,12 @@ internal sealed class FakeTfvcClient : ITfvcClient
             : Array.Empty<TfvcPendingChange>());
     }
 
-    public Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
+    public List<bool> CheckOutRecursion { get; } = new();
+
+    public Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken)
     {
         CheckOuts.Add(localPaths);
+        CheckOutRecursion.Add(recursive);
         if (CheckOutFailure is not null)
         {
             throw CheckOutFailure;

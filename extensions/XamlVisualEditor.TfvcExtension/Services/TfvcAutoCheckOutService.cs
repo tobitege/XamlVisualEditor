@@ -143,7 +143,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
                 return;
             }
 
-            await _session.Client.CheckOutAsync(state.Workspace, [path], cancellationToken);
+            await _session.Client.CheckOutAsync(state.Workspace, [path], recursive: false, cancellationToken);
             Invalidate(path);
             if (ReferenceEquals(state.Workspace, _session.CurrentWorkspace))
             {
@@ -185,6 +185,24 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         {
             _states.Remove(localPath);
             _failedCheckOuts.Remove(localPath);
+        }
+    }
+
+    /// <summary>Forgets the cached state of every file in a folder and its subfolders.</summary>
+    public void InvalidateFolder(string localFolder)
+    {
+        string prefix = Path.TrimEndingDirectorySeparator(localFolder) + Path.DirectorySeparatorChar;
+        lock (_gate)
+        {
+            foreach (string path in new List<string>(_states.Keys))
+            {
+                if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    _states.Remove(path);
+                }
+            }
+
+            _failedCheckOuts.RemoveWhere(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
 

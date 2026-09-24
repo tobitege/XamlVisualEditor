@@ -78,10 +78,21 @@ public sealed class TfvcClientTests
         TfvcClient client = new(runner);
 
         TfCommandException exception = await Assert.ThrowsAsync<TfCommandException>(
-            () => client.CheckOutAsync(TfvcTestData.CreateWorkspace(), [@"C:\src\Product\a.cs"], CancellationToken.None));
+            () => client.CheckOutAsync(TfvcTestData.CreateWorkspace(), [@"C:\src\Product\a.cs"], recursive: false, CancellationToken.None));
 
         Assert.Equal("checkout", exception.Command);
         Assert.Contains("TF10152", TfvcDisplayText.DescribeError(exception));
+    }
+
+    [Fact]
+    public async Task CheckOutAsync_PassesRecursiveForFolders()
+    {
+        FakeTfCommandRunner runner = new();
+        TfvcClient client = new(runner);
+
+        await client.CheckOutAsync(TfvcTestData.CreateWorkspace(), [@"C:\src\Product\src"], recursive: true, CancellationToken.None);
+
+        Assert.Equal(["checkout", "/noprompt", "/recursive", @"C:\src\Product\src"], runner.Calls[0].Arguments);
     }
 
     [Fact]

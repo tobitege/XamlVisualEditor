@@ -35,7 +35,7 @@
           <Button Content="{x:Static loc:TfvcStrings.Save}"
                   Command="{CompiledBinding SaveCommand}"
                   Classes="accent"
-                  Padding="10,3"
+                  Padding="10,2"
                   IsVisible="{CompiledBinding CanEditComment}" />
           <TextBlock Text="{x:Static loc:TfvcStrings.ChangesetCommentReadOnly}" Opacity="0.7" VerticalAlignment="Center"
                      IsVisible="{CompiledBinding !CanEditComment}" />

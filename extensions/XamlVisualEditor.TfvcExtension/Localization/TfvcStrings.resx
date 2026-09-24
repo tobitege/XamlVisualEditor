@@ -95,6 +95,7 @@
   <data name="ShelveNamePrompt" xml:space="preserve"><value>Shelveset name</value></data>
   <data name="UndoConfirmMessageFormat" xml:space="preserve"><value>Undo the pending changes of {0} item(s)? Local edits of these files are lost.</value></data>
   <data name="UndoConfirmAction" xml:space="preserve"><value>Undo</value></data>
+  <data name="CheckOutFolderConfirmMessageFormat" xml:space="preserve"><value>Check out all files in {0} and its subfolders for edit?</value></data>
   <data name="CommandLineTooLong" xml:space="preserve"><value>Too many items are selected for one tf.exe call. Include all changes or reduce the selection.</value></data>
   <data name="AutoCheckOutFailedFormat" xml:space="preserve"><value>Check-out of "{0}" failed: {1}</value></data>
   <data name="WorkItemNotFoundFormat" xml:space="preserve"><value>Work item {0} was not found.</value></data>

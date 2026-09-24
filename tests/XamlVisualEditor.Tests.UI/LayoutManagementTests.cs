@@ -79,6 +79,8 @@ public sealed class LayoutManagementTests
             interaction.SetOutput("Mein Layout");
         });
 
+        // Toggling hides only the frontmost tab; a covered toolbox would be brought to the front instead.
+        host.ViewModel.ActivateExtensionView("toolbox.panel");
         host.ViewModel.ToggleExtensionView("toolbox.panel");
         await host.FlushAsync();
         Assert.False(host.IsPanelVisible("toolbox.panel"));

@@ -95,6 +95,7 @@
   <data name="ShelveNamePrompt" xml:space="preserve"><value>Name des Shelvesets</value></data>
   <data name="UndoConfirmMessageFormat" xml:space="preserve"><value>Die ausstehenden Änderungen von {0} Element(en) rückgängig machen? Lokale Bearbeitungen dieser Dateien gehen verloren.</value></data>
   <data name="UndoConfirmAction" xml:space="preserve"><value>Rückgängig machen</value></data>
+  <data name="CheckOutFolderConfirmMessageFormat" xml:space="preserve"><value>Alle Dateien in {0} und seinen Unterordnern zur Bearbeitung auschecken?</value></data>
   <data name="CommandLineTooLong" xml:space="preserve"><value>Für einen tf.exe-Aufruf sind zu viele Elemente ausgewählt. Alle Änderungen einschließen oder die Auswahl verkleinern.</value></data>
   <data name="AutoCheckOutFailedFormat" xml:space="preserve"><value>Auschecken von „{0}“ ist fehlgeschlagen: {1}</value></data>
   <data name="WorkItemNotFoundFormat" xml:space="preserve"><value>Arbeitselement {0} wurde nicht gefunden.</value></data>

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
@@ -182,6 +183,43 @@ public sealed class TfvcPanelViewModelTests
             Assert.Equal("29", selected.ChangesetText);
             Assert.Equal("$/Product/a.cs", viewModel.PathText);
             Assert.Empty(client.CheckOuts);
+        }
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_ChecksOutFolderRecursivelyAfterConfirmation()
+    {
+        string localRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-tfvc-" + System.Guid.NewGuid().ToString("N"));
+        string folder = System.IO.Path.Combine(localRoot, "src");
+        System.IO.Directory.CreateDirectory(folder);
+        try
+        {
+            FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace(localRoot: localRoot)] };
+            FakeTfvcServerClient server = new();
+            server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null)];
+            server.Children["$/Product"] = [new TfvcServerItem("$/Product/src", true, 29, null)];
+            server.Children["$/Product/src"] = [];
+            using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+            await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+            ConfirmingDialogHost dialogHost = new();
+            using SourceControlExplorerViewModel viewModel = new(
+                session,
+                new TfvcAutoCheckOutService(session, new FakeEditorServices(), new RecordingWindow(), new NullExtensionLogger()),
+                new FakeEditorServices(),
+                dialogHost,
+                null);
+
+            await viewModel.NavigateToAsync("$/Product/src", CancellationToken.None);
+            Assert.True(await viewModel.CheckOutCommand.CanExecute.FirstAsync());
+            await viewModel.CheckOutCommand.Execute().ToTask();
+
+            Assert.Equal(1, dialogHost.Confirmations);
+            Assert.Equal([folder], Assert.Single(client.CheckOuts));
+            Assert.Equal([true], client.CheckOutRecursion);
+        }
+        finally
+        {
+            System.IO.Directory.Delete(localRoot, recursive: true);
         }
     }
 

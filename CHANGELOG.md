@@ -14,6 +14,7 @@ uses Semantic Versioning.
 - Added preview frame export through the IDE bridge.
 - Added visible progress status for workspace loading and design-surface rebuilds.
 - Added the TFVC extension with a source control explorer, a pending changes panel, and automatic check-out of versioned files on their first edit. It uses tf.exe and the TFVC REST API with the current Windows credentials; the only required setting is the collection URL.
+- Added changeset details to the TFVC extension: the history context menu shows the changed files of a changeset in the TFVC Changes panel, where the author can revise and save the check-in comment. The history can be filtered by user and is sorted by changeset, newest first.
 
 ### Changed
 

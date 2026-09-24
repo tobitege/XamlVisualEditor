@@ -23,7 +23,22 @@ public interface ITfvcServerClient
     Task<TfvcServerItem?> GetItemAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken);
 
     /// <summary>Gets a page of the history of an item, newest changeset first.</summary>
-    Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(string collectionUrl, string serverPath, int skip, int top, CancellationToken cancellationToken);
+    /// <param name="collectionUrl">Project collection URL.</param>
+    /// <param name="serverPath">Server path of the item.</param>
+    /// <param name="author">Account or display name of the author to filter by; null returns every author.</param>
+    /// <param name="skip">Number of changesets to skip.</param>
+    /// <param name="top">Maximum number of changesets to return.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(
+        string collectionUrl,
+        string serverPath,
+        string? author,
+        int skip,
+        int top,
+        CancellationToken cancellationToken);
+
+    /// <summary>Gets the identity ID of the authenticated user.</summary>
+    Task<string?> GetCurrentUserIdAsync(string collectionUrl, CancellationToken cancellationToken);
 
     /// <summary>Gets the changed items of a changeset.</summary>
     Task<IReadOnlyList<TfvcChangesetChange>> GetChangesetChangesAsync(string collectionUrl, int changesetId, CancellationToken cancellationToken);
@@ -117,18 +132,30 @@ public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
     public async Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(
         string collectionUrl,
         string serverPath,
+        string? author,
         int skip,
         int top,
         CancellationToken cancellationToken)
     {
         string url = TrimCollectionUrl(collectionUrl) + "/_apis/tfvc/changesets?searchCriteria.itemPath="
             + Uri.EscapeDataString(TfvcWorkspace.NormalizeServerPath(serverPath))
+            + (string.IsNullOrWhiteSpace(author) ? string.Empty : "&searchCriteria.author=" + Uri.EscapeDataString(author.Trim()))
             + "&$skip=" + skip.ToString(CultureInfo.InvariantCulture)
             + "&$top=" + top.ToString(CultureInfo.InvariantCulture)
             + "&maxCommentLength=" + MAX_COMMENT_LENGTH.ToString(CultureInfo.InvariantCulture)
             + "&api-version=" + API_VERSION;
         using JsonDocument? document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         return document is null ? Array.Empty<TfvcChangesetInfo>() : ReadChangesets(document.RootElement);
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetCurrentUserIdAsync(string collectionUrl, CancellationToken cancellationToken)
+    {
+        string url = TrimCollectionUrl(collectionUrl) + "/_apis/connectionData";
+        using JsonDocument? document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+        return document is not null && document.RootElement.TryGetProperty("authenticatedUser", out JsonElement user)
+            ? ReadString(user, "id")
+            : null;
     }
 
     /// <inheritdoc />
@@ -216,8 +243,14 @@ public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
                 continue;
             }
 
-            string? author = value.TryGetProperty("author", out JsonElement authorElement) ? ReadString(authorElement, "displayName") : null;
-            changesets.Add(new TfvcChangesetInfo(id, author, ReadDate(value, "createdDate"), ReadString(value, "comment")));
+            bool hasAuthor = value.TryGetProperty("author", out JsonElement authorElement);
+            changesets.Add(new TfvcChangesetInfo(
+                id,
+                hasAuthor ? ReadString(authorElement, "displayName") : null,
+                ReadDate(value, "createdDate"),
+                ReadString(value, "comment"),
+                hasAuthor ? ReadString(authorElement, "id") : null,
+                hasAuthor ? ReadString(authorElement, "uniqueName") : null));
         }
 
         return changesets;

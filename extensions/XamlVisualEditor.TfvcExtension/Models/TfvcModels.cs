@@ -288,7 +288,15 @@ public sealed record TfvcServerItem(string ServerPath, bool IsFolder, int Versio
 /// <param name="Author">Display name of the author.</param>
 /// <param name="CreatedDate">Check-in date.</param>
 /// <param name="Comment">Check-in comment.</param>
-public sealed record TfvcChangesetInfo(int Id, string? Author, DateTimeOffset? CreatedDate, string? Comment);
+/// <param name="AuthorId">Identity ID of the author.</param>
+/// <param name="AuthorUniqueName">Account name of the author, for example <c>DOMAIN\user</c>.</param>
+public sealed record TfvcChangesetInfo(
+    int Id,
+    string? Author,
+    DateTimeOffset? CreatedDate,
+    string? Comment,
+    string? AuthorId = null,
+    string? AuthorUniqueName = null);
 
 /// <summary>A changed item of a changeset.</summary>
 /// <param name="ServerPath">Server path of the item.</param>

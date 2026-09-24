@@ -4,7 +4,7 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <data name="PendingChangesTitle" xml:space="preserve"><value>Pending Changes</value></data>
+  <data name="PendingChangesTitle" xml:space="preserve"><value>TFVC Changes</value></data>
   <data name="SourceControlExplorerTitle" xml:space="preserve"><value>TFVC Explorer</value></data>
   <data name="CollectionUrl" xml:space="preserve"><value>Collection URL</value></data>
   <data name="CollectionUrlPlaceholder" xml:space="preserve"><value>https://server/tfs/DefaultCollection</value></data>
@@ -49,6 +49,16 @@
   <data name="ColumnChange" xml:space="preserve"><value>Change</value></data>
   <data name="ColumnItem" xml:space="preserve"><value>Item</value></data>
   <data name="SearchComments" xml:space="preserve"><value>Search check-in comments</value></data>
+  <data name="FilterUser" xml:space="preserve"><value>Filter by user</value></data>
+  <data name="ChangesetDetails" xml:space="preserve"><value>Changeset Details</value></data>
+  <data name="ChangesetTitleFormat" xml:space="preserve"><value>Changeset {0}</value></data>
+  <data name="ChangesetSummaryFormat" xml:space="preserve"><value>{0}, {1}</value></data>
+  <data name="ChangesetFilesFormat" xml:space="preserve"><value>Files ({0})</value></data>
+  <data name="ChangesetSavedFormat" xml:space="preserve"><value>The comment of changeset {0} was saved.</value></data>
+  <data name="ChangesetCommentRequired" xml:space="preserve"><value>The changeset comment must not be empty.</value></data>
+  <data name="ChangesetCommentReadOnly" xml:space="preserve"><value>Only the author can change the comment.</value></data>
+  <data name="BackToPendingChanges" xml:space="preserve"><value>Back to pending changes</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
   <data name="SearchButton" xml:space="preserve"><value>Search</value></data>
   <data name="ShowAll" xml:space="preserve"><value>Show All</value></data>
   <data name="LoadMore" xml:space="preserve"><value>Load More</value></data>

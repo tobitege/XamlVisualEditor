@@ -44,6 +44,33 @@ public sealed class TfvcClientTests
     }
 
     [Fact]
+    public async Task UpdateChangesetCommentAsync_PassesCommentCollectionAndChangeset()
+    {
+        FakeTfCommandRunner runner = new();
+        TfvcClient client = new(runner);
+
+        await client.UpdateChangesetCommentAsync(TfvcTestData.CollectionUrl, 4711, "Fix build", CancellationToken.None);
+
+        Assert.Equal(
+            ["changeset", "/comment:Fix build", "/collection:" + TfvcTestData.CollectionUrl, "/noprompt", "4711"],
+            runner.Calls[0].Arguments);
+    }
+
+    [Fact]
+    public async Task UpdateChangesetCommentAsync_ThrowsWithOutputOnFailure()
+    {
+        FakeTfCommandRunner runner = new();
+        runner.Enqueue(new TfCommandResult(100, string.Empty, "TF10158: not the owner."));
+        TfvcClient client = new(runner);
+
+        TfCommandException exception = await Assert.ThrowsAsync<TfCommandException>(
+            () => client.UpdateChangesetCommentAsync(TfvcTestData.CollectionUrl, 4711, "Fix build", CancellationToken.None));
+
+        Assert.Equal("changeset", exception.Command);
+        Assert.Contains("TF10158", exception.Message);
+    }
+
+    [Fact]
     public async Task CheckOutAsync_ThrowsWithOutputOnFailure()
     {
         FakeTfCommandRunner runner = new();

@@ -43,7 +43,8 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         IWindow window,
         IDialogHost? dialogHost,
         ISystemIconService? icons,
-        Func<string, Task>? showHistory = null)
+        Func<string, Task>? showHistory = null,
+        TfvcChangesetDetailsViewModel? changesetDetails = null)
     {
         _showHistory = showHistory;
         _session = session;
@@ -53,6 +54,7 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         _dialogHost = dialogHost;
         _icons = icons;
         Connection = new TfvcConnectionViewModel(session);
+        ChangesetDetails = changesetDetails ?? new TfvcChangesetDetailsViewModel(session);
 
         IncludedModel = CreateModel(IncludedRoots);
         ExcludedModel = CreateModel(ExcludedRoots);
@@ -106,6 +108,9 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
 
     /// <summary>Gets the connection settings and workspace selection.</summary>
     public TfvcConnectionViewModel Connection { get; }
+
+    /// <summary>Gets the changeset details that replace the pending changes while they are active.</summary>
+    public TfvcChangesetDetailsViewModel ChangesetDetails { get; }
 
     /// <summary>Gets the roots of the included changes tree.</summary>
     public ObservableCollection<PendingChangeNodeViewModel> IncludedRoots { get; } = new();

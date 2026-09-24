@@ -47,7 +47,14 @@ public sealed class TfvcExtension : IXveExtension
         EventHandler statusHandler = (_, _) => Dispatcher.UIThread.Post(() => UpdateStatusBar(statusBarItem, autoCheckOut));
         autoCheckOut.ActiveDocumentStateChanged += statusHandler;
 
-        TfvcHistoryViewModel history = new(session);
+        TfvcChangesetDetailsViewModel changesetDetails = new(session);
+        TfvcHistoryViewModel history = new(session, async changeset =>
+        {
+            await context.ViewHost.ShowAsync(PENDING_CHANGES_VIEW_ID, CancellationToken.None);
+            await changesetDetails.ShowAsync(changeset, CancellationToken.None);
+        });
+        EventHandler<Models.TfvcChangesetInfo> changesetUpdatedHandler = (_, changeset) => history.UpdateChangeset(changeset);
+        changesetDetails.ChangesetUpdated += changesetUpdatedHandler;
         Func<string, Task> showHistory = async path =>
         {
             await context.ViewHost.ShowAsync(HISTORY_VIEW_ID, CancellationToken.None);
@@ -71,7 +78,8 @@ public sealed class TfvcExtension : IXveExtension
                 context.Window,
                 context.DialogHost,
                 context.SystemIcons,
-                showHistory))));
+                showHistory,
+                changesetDetails))));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             SOURCE_CONTROL_EXPLORER_VIEW_ID,
             new DelegateViewProvider(() => new SourceControlExplorerViewModel(
@@ -88,6 +96,7 @@ public sealed class TfvcExtension : IXveExtension
         context.Subscriptions.Add(new ActionDisposable(() =>
         {
             autoCheckOut.ActiveDocumentStateChanged -= statusHandler;
+            changesetDetails.ChangesetUpdated -= changesetUpdatedHandler;
             autoCheckOut.Dispose();
             statusBarItem.Dispose();
             session.Dispose();

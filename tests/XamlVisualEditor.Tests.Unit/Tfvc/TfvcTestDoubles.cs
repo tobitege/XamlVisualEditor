@@ -140,6 +140,14 @@ internal sealed class FakeTfvcClient : ITfvcClient
 
     public Task<string?> DetectCollectionUrlAsync(string localDirectory, CancellationToken cancellationToken)
         => Task.FromResult<string?>(null);
+
+    public List<(int ChangesetId, string Comment)> ChangesetCommentUpdates { get; } = new();
+
+    public Task<TfCommandResult> UpdateChangesetCommentAsync(string collectionUrl, int changesetId, string comment, CancellationToken cancellationToken)
+    {
+        ChangesetCommentUpdates.Add((changesetId, comment));
+        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    }
 }
 
 internal sealed class FakeTfvcServerClient : ITfvcServerClient
@@ -164,16 +172,25 @@ internal sealed class FakeTfvcServerClient : ITfvcServerClient
 
     public List<TfvcLabelInfo> LabelList { get; } = new();
 
-    public Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(string collectionUrl, string serverPath, int skip, int top, CancellationToken cancellationToken)
+    public string? CurrentUserId { get; set; }
+
+    public List<string?> AuthorFilters { get; } = new();
+
+    public Task<IReadOnlyList<TfvcChangesetInfo>> GetChangesetsAsync(string collectionUrl, string serverPath, string? author, int skip, int top, CancellationToken cancellationToken)
     {
+        AuthorFilters.Add(author);
+        List<TfvcChangesetInfo> matching = History.FindAll(changeset => author is null || string.Equals(changeset.Author, author, StringComparison.OrdinalIgnoreCase));
         List<TfvcChangesetInfo> page = new();
-        for (int i = skip; i < History.Count && page.Count < top; i++)
+        for (int i = skip; i < matching.Count && page.Count < top; i++)
         {
-            page.Add(History[i]);
+            page.Add(matching[i]);
         }
 
         return Task.FromResult<IReadOnlyList<TfvcChangesetInfo>>(page);
     }
+
+    public Task<string?> GetCurrentUserIdAsync(string collectionUrl, CancellationToken cancellationToken)
+        => Task.FromResult(CurrentUserId);
 
     public Task<IReadOnlyList<TfvcChangesetChange>> GetChangesetChangesAsync(string collectionUrl, int changesetId, CancellationToken cancellationToken)
         => Task.FromResult(ChangesetChanges.TryGetValue(changesetId, out IReadOnlyList<TfvcChangesetChange>? changes) ? changes : Array.Empty<TfvcChangesetChange>());

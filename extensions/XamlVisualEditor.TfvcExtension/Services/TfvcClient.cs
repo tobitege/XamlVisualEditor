@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,6 +46,9 @@ public interface ITfvcClient
 
     /// <summary>Detects the collection URL of the workspace that maps a local directory.</summary>
     Task<string?> DetectCollectionUrlAsync(string localDirectory, CancellationToken cancellationToken);
+
+    /// <summary>Replaces the comment of a checked-in changeset.</summary>
+    Task<TfCommandResult> UpdateChangesetCommentAsync(string collectionUrl, int changesetId, string comment, CancellationToken cancellationToken);
 }
 
 /// <summary>Raised when a tf.exe command reports a failure.</summary>
@@ -232,6 +236,32 @@ public sealed class TfvcClient : ITfvcClient
         List<string> arguments = ["workfold", "/noprompt", localDirectory];
         TfCommandResult result = await _runner.RunAsync(localDirectory, arguments, QueryTimeout, cancellationToken).ConfigureAwait(false);
         return result.Succeeded ? TfvcOutputParser.TryParseCollectionUrl(result.StandardOutput) : null;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The server accepts the change only from the author or from users with the permission to revise other users' changes.</remarks>
+    public async Task<TfCommandResult> UpdateChangesetCommentAsync(string collectionUrl, int changesetId, string comment, CancellationToken cancellationToken)
+    {
+        List<string> arguments =
+        [
+            "changeset",
+            "/comment:" + comment,
+            "/collection:" + collectionUrl,
+            "/noprompt",
+            changesetId.ToString(CultureInfo.InvariantCulture)
+        ];
+        if (TfCommandRunner.EstimateCommandLineLength(arguments) > TfCommandRunner.MAX_COMMAND_LINE_LENGTH)
+        {
+            throw new TfCommandLineTooLongException();
+        }
+
+        TfCommandResult result = await _runner.RunAsync(GetNeutralDirectory(), arguments, ChangeTimeout, cancellationToken).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            throw new TfCommandException(arguments[0], result);
+        }
+
+        return result;
     }
 
     private async Task<TfCommandResult> RunQueryAsync(string workingDirectory, List<string> arguments, CancellationToken cancellationToken)

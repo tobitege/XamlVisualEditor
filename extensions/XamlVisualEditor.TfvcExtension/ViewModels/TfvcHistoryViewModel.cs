@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls.DataGridSorting;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.TfvcExtension.Localization;
@@ -95,7 +97,7 @@ public sealed class TfvcLabelRowViewModel
 /// <param name="ChangeText">Displayed change types.</param>
 public sealed record TfvcChangeRowViewModel(string ServerPath, string ChangeText);
 
-/// <summary>View model of the history panel: changesets and labels of one item, with a comment search.</summary>
+/// <summary>View model of the history panel: changesets and labels of one item, with a comment and an author filter.</summary>
 public sealed partial class TfvcHistoryViewModel : ReactiveObject
 {
     /// <summary>Number of changesets loaded per page.</summary>
@@ -104,14 +106,31 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     /// <summary>Maximum number of changesets scanned by one comment search.</summary>
     public const int SEARCH_LIMIT = 5000;
 
+    /// <summary>Sort member path of the changeset column.</summary>
+    public const string CHANGESET_SORT_PATH = nameof(TfvcChangesetRowViewModel.Id);
+
     private readonly TfvcSession _session;
+    private readonly Func<TfvcChangesetInfo, Task>? _showChangesetDetails;
+    private readonly HashSet<string> _knownAuthors = new(StringComparer.CurrentCultureIgnoreCase);
+    private string? _appliedAuthor;
     private int _loadedCount;
     private int _requestVersion;
 
     /// <summary>Creates the view model.</summary>
-    public TfvcHistoryViewModel(TfvcSession session)
+    /// <param name="session">TFVC session.</param>
+    /// <param name="showChangesetDetails">Shows the details of a changeset; null hides the command.</param>
+    public TfvcHistoryViewModel(TfvcSession session, Func<TfvcChangesetInfo, Task>? showChangesetDetails = null)
     {
         _session = session;
+        _showChangesetDetails = showChangesetDetails;
+        SortingModel = new SortingModel();
+        SortingModel.SetOrUpdate(new SortingDescriptor(
+            CHANGESET_SORT_PATH,
+            ListSortDirection.Descending,
+            CHANGESET_SORT_PATH,
+            null,
+            CultureInfo.CurrentCulture));
+
         IObservable<bool> hasItem = this.WhenAnyValue(x => x.ServerPath, x => x.IsBusy, (path, busy) => !string.IsNullOrWhiteSpace(path) && !busy);
         RefreshCommand = ReactiveCommand.CreateFromTask(ReloadAsync, hasItem);
         LoadMoreCommand = ReactiveCommand.CreateFromTask(LoadMoreAsync, this.WhenAnyValue(x => x.HasMore, x => x.IsBusy, (more, busy) => more && !busy));
@@ -119,9 +138,14 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         ClearSearchCommand = ReactiveCommand.CreateFromTask(async ct =>
         {
             SearchText = null;
+            AuthorText = null;
+            _appliedAuthor = null;
             await ReloadAsync(ct);
         }, hasItem);
         NavigateCommand = ReactiveCommand.CreateFromTask(ct => ShowAsync(LocationText, ct));
+        ShowChangesetDetailsCommand = ReactiveCommand.CreateFromTask(
+            () => SelectedChangeset is { } row && _showChangesetDetails is not null ? _showChangesetDetails(row.Changeset) : Task.CompletedTask,
+            this.WhenAnyValue(x => x.SelectedChangeset).Select(row => row is not null && showChangesetDetails is not null));
 
         this.WhenAnyValue(x => x.SelectedChangeset)
             .Subscribe(row => _ = LoadChangesAsync(row));
@@ -129,6 +153,12 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
 
     /// <summary>Gets the changesets of the item.</summary>
     public ObservableCollection<TfvcChangesetRowViewModel> Changesets { get; } = new();
+
+    /// <summary>Gets the sorting of the changesets grid; newest changeset first by default.</summary>
+    public SortingModel SortingModel { get; }
+
+    /// <summary>Gets the authors of the loaded changesets, offered as filter suggestions.</summary>
+    public ObservableCollection<string> KnownAuthors { get; } = new();
 
     /// <summary>Gets the labels that cover the item.</summary>
     public ObservableCollection<TfvcLabelRowViewModel> Labels { get; } = new();
@@ -151,6 +181,9 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     /// <summary>Shows the history of the entered location.</summary>
     public ReactiveCommand<Unit, Unit> NavigateCommand { get; }
 
+    /// <summary>Shows the changed items and the comment of the selected changeset in the changes panel.</summary>
+    public ReactiveCommand<Unit, Unit> ShowChangesetDetailsCommand { get; }
+
     /// <summary>Gets the server path of the item.</summary>
     [Reactive]
     public partial string? ServerPath { get; private set; }
@@ -162,6 +195,10 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     /// <summary>Gets or sets the comment search text.</summary>
     [Reactive]
     public partial string? SearchText { get; set; }
+
+    /// <summary>Gets or sets the author filter: account or display name as known to the server.</summary>
+    [Reactive]
+    public partial string? AuthorText { get; set; }
 
     /// <summary>Gets or sets the selected changeset.</summary>
     [Reactive]
@@ -191,7 +228,36 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         ServerPath = serverPath;
         LocationText = _session.CurrentWorkspace?.TryGetLocalPath(serverPath) ?? serverPath;
         SearchText = null;
+        _appliedAuthor = NormalizeFilter(AuthorText);
         await ReloadAsync(cancellationToken);
+    }
+
+    /// <summary>Replaces a displayed changeset after its comment was revised.</summary>
+    public void UpdateChangeset(TfvcChangesetInfo changeset)
+    {
+        for (int i = 0; i < Changesets.Count; i++)
+        {
+            if (Changesets[i].Id != changeset.Id)
+            {
+                continue;
+            }
+
+            bool wasSelected = ReferenceEquals(Changesets[i], SelectedChangeset);
+            TfvcChangesetRowViewModel row = new(changeset);
+            Changesets[i] = row;
+            if (wasSelected)
+            {
+                SelectedChangeset = row;
+            }
+
+            return;
+        }
+    }
+
+    private static string? NormalizeFilter(string? text)
+    {
+        string? trimmed = text?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
     private string? ResolveServerPath(string? path)
@@ -227,7 +293,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
 
         await RunAsync(async () =>
         {
-            Task<IReadOnlyList<TfvcChangesetInfo>> changesetTask = _session.Server.GetChangesetsAsync(collectionUrl, serverPath, 0, PAGE_SIZE, cancellationToken);
+            Task<IReadOnlyList<TfvcChangesetInfo>> changesetTask = _session.Server.GetChangesetsAsync(collectionUrl, serverPath, _appliedAuthor, 0, PAGE_SIZE, cancellationToken);
             Task<IReadOnlyList<TfvcLabelInfo>> labelTask = _session.Server.GetLabelsAsync(collectionUrl, serverPath, cancellationToken);
             IReadOnlyList<TfvcChangesetInfo> changesets = await changesetTask;
             IReadOnlyList<TfvcLabelInfo> labels = await labelTask;
@@ -260,7 +326,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         int version = _requestVersion;
         await RunAsync(async () =>
         {
-            IReadOnlyList<TfvcChangesetInfo> changesets = await _session.Server.GetChangesetsAsync(collectionUrl, serverPath, _loadedCount, PAGE_SIZE, cancellationToken);
+            IReadOnlyList<TfvcChangesetInfo> changesets = await _session.Server.GetChangesetsAsync(collectionUrl, serverPath, _appliedAuthor, _loadedCount, PAGE_SIZE, cancellationToken);
             if (version != _requestVersion)
             {
                 return;
@@ -272,11 +338,12 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         });
     }
 
-    // The changesets API cannot filter by comment, so the search scans the history page by page.
+    // The changesets API filters by author but not by comment, so the comment search scans the history page by page.
     private async Task SearchAsync(CancellationToken cancellationToken)
     {
-        string? query = SearchText?.Trim();
-        if (string.IsNullOrEmpty(query))
+        _appliedAuthor = NormalizeFilter(AuthorText);
+        string? query = NormalizeFilter(SearchText);
+        if (query is null)
         {
             await ReloadAsync(cancellationToken);
             return;
@@ -299,7 +366,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
             int matches = 0;
             while (scanned < SEARCH_LIMIT)
             {
-                IReadOnlyList<TfvcChangesetInfo> page = await _session.Server.GetChangesetsAsync(collectionUrl, serverPath, scanned, PAGE_SIZE, cancellationToken);
+                IReadOnlyList<TfvcChangesetInfo> page = await _session.Server.GetChangesetsAsync(collectionUrl, serverPath, _appliedAuthor, scanned, PAGE_SIZE, cancellationToken);
                 if (version != _requestVersion)
                 {
                     return;
@@ -309,7 +376,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
                 {
                     if (changeset.Comment?.Contains(query, StringComparison.CurrentCultureIgnoreCase) == true)
                     {
-                        Changesets.Add(new TfvcChangesetRowViewModel(changeset));
+                        AddChangeset(changeset);
                         matches++;
                     }
                 }
@@ -359,7 +426,22 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     {
         foreach (TfvcChangesetInfo changeset in changesets)
         {
-            Changesets.Add(new TfvcChangesetRowViewModel(changeset));
+            AddChangeset(changeset);
+        }
+    }
+
+    private void AddChangeset(TfvcChangesetInfo changeset)
+    {
+        Changesets.Add(new TfvcChangesetRowViewModel(changeset));
+        if (!string.IsNullOrWhiteSpace(changeset.Author) && _knownAuthors.Add(changeset.Author))
+        {
+            int index = 0;
+            while (index < KnownAuthors.Count && string.Compare(KnownAuthors[index], changeset.Author, StringComparison.CurrentCultureIgnoreCase) < 0)
+            {
+                index++;
+            }
+
+            KnownAuthors.Insert(index, changeset.Author);
         }
     }
 

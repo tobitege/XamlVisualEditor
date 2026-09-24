@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+             xmlns:views="using:XamlVisualEditor.TfvcExtension.Views"
              xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
              x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcHistoryView"
              x:DataType="vm:TfvcHistoryViewModel">
@@ -20,7 +21,7 @@
               Command="{CompiledBinding NavigateCommand}" />
     </Grid>
 
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,220,Auto,Auto,Auto,Auto,*" Margin="0,0,0,6">
       <TextBox Grid.Column="0"
                Text="{CompiledBinding SearchText, Mode=TwoWay}"
                PlaceholderText="{x:Static loc:TfvcStrings.SearchComments}"
@@ -29,16 +30,27 @@
           <KeyBinding Gesture="Enter" Command="{CompiledBinding SearchCommand}" />
         </TextBox.KeyBindings>
       </TextBox>
-      <Button Grid.Column="1" Margin="4,0,0,0" Padding="8,2"
+      <AutoCompleteBox Grid.Column="1" Margin="4,0,0,0"
+                       Text="{CompiledBinding AuthorText, Mode=TwoWay}"
+                       ItemsSource="{CompiledBinding KnownAuthors}"
+                       FilterMode="Contains"
+                       MinimumPrefixLength="1"
+                       PlaceholderText="{x:Static loc:TfvcStrings.FilterUser}"
+                       AutomationProperties.Name="{x:Static loc:TfvcStrings.FilterUser}">
+        <AutoCompleteBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{CompiledBinding SearchCommand}" />
+        </AutoCompleteBox.KeyBindings>
+      </AutoCompleteBox>
+      <Button Grid.Column="2" Margin="4,0,0,0" Padding="8,2"
               Content="{x:Static loc:TfvcStrings.SearchButton}"
               Command="{CompiledBinding SearchCommand}" />
-      <Button Grid.Column="2" Margin="4,0,0,0" Padding="8,2"
+      <Button Grid.Column="3" Margin="4,0,0,0" Padding="8,2"
               Content="{x:Static loc:TfvcStrings.ShowAll}"
               Command="{CompiledBinding ClearSearchCommand}" />
-      <Button Grid.Column="3" Margin="4,0,0,0" Padding="8,2"
+      <Button Grid.Column="4" Margin="4,0,0,0" Padding="8,2"
               Content="{x:Static loc:TfvcStrings.Refresh}"
               Command="{CompiledBinding RefreshCommand}" />
-      <ProgressBar Grid.Column="4" Width="60" Height="3" MinHeight="3" Margin="6,0,0,0"
+      <ProgressBar Grid.Column="5" Width="60" Height="3" MinHeight="3" Margin="6,0,0,0"
                    IsIndeterminate="True" VerticalAlignment="Center"
                    IsVisible="{CompiledBinding IsBusy}" />
     </Grid>
@@ -61,11 +73,19 @@
                        MinHeight="80"
                        ItemsSource="{CompiledBinding Changesets}"
                        SelectedItem="{CompiledBinding SelectedChangeset, Mode=TwoWay}"
+                       SortingModel="{CompiledBinding SortingModel}"
                        AutoGenerateColumns="False"
                        CanUserResizeColumns="True"
                        CanUserSortColumns="True"
                        GridLinesVisibility="None"
-                       IsReadOnly="True">
+                       IsReadOnly="True"
+                       views:RightClickSelectBehavior.IsEnabled="True"
+                       views:DoubleTapCommandBehavior.Command="{CompiledBinding ShowChangesetDetailsCommand}">
+            <dg:DataGrid.ContextMenu>
+              <ContextMenu x:DataType="vm:TfvcHistoryViewModel">
+                <MenuItem Header="{x:Static loc:TfvcStrings.ChangesetDetails}" Command="{CompiledBinding ShowChangesetDetailsCommand}" />
+              </ContextMenu>
+            </dg:DataGrid.ContextMenu>
             <dg:DataGrid.Columns>
               <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnChangeset}" Width="90"
                                      x:DataType="vm:TfvcChangesetRowViewModel"

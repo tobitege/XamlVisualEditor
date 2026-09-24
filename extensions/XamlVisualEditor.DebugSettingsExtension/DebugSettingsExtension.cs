@@ -90,7 +90,7 @@ public sealed class DebugSettingsExtension : IXveExtension
                     ToggleDebugSettingsCommandId,
                     UiStrings.DebugSettings,
                     ExtensionMenuLocations.View,
-                    "views.bottom",
+                    "views.debug",
                     80)
             }));
 

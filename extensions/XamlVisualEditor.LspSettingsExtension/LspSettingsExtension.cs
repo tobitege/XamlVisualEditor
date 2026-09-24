@@ -85,9 +85,9 @@ public sealed class LspSettingsExtension : IXveExtension
                 new ExtensionMenuContribution(
                     ToggleLspSettingsCommandId,
                     UiStrings.LspSettings,
-                    ExtensionMenuLocations.View,
-                    "views.bottom",
-                    90)
+                    ExtensionMenuLocations.ViewServers,
+                    "servers",
+                    40)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(

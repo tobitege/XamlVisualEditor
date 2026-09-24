@@ -4709,7 +4709,36 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 GetExtensionCommandInputGesture(item.CommandId)));
         }
 
+        GroupViewMenuItems();
         UpdateFileNewMenuEntries();
+    }
+
+    private static readonly string[] ViewMenuGroupOrder = ["views.debug", "views.bottom", "views.left", "views.right"];
+
+    // The panels menu lists the debugger tools first and separates each group from the next; groups without a
+    // known place follow alphabetically.
+    private void GroupViewMenuItems()
+    {
+        List<IGrouping<string, ExtensionMenuItemViewModel>> groups = ViewMenuItems
+            .GroupBy(item => item.Group ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => Array.IndexOf(ViewMenuGroupOrder, group.Key) is int index and >= 0 ? index : ViewMenuGroupOrder.Length)
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        ViewMenuItems.Clear();
+        foreach (IGrouping<string, ExtensionMenuItemViewModel> group in groups)
+        {
+            if (ViewMenuItems.Count > 0)
+            {
+                ViewMenuItems.Add(new ExtensionMenuItemViewModel(
+                    "view.separator." + group.Key, "-", ExtensionMenuLocations.View, group.Key, int.MinValue,
+                    ReactiveCommand.Create(() => { })));
+            }
+
+            foreach (ExtensionMenuItemViewModel item in group)
+            {
+                ViewMenuItems.Add(item);
+            }
+        }
     }
 
     private void UpdateFileNewMenuEntries()

@@ -33,6 +33,12 @@
         <Setter Property="MinHeight" Value="24" />
     </Style>
 
+    <!-- A menu item with the header "-" is a separator and keeps the height of a plain Separator. -->
+    <Style Selector=".editor-chrome MenuItem:separator">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
     <Style Selector=".editor-chrome TabItem">
         <Setter Property="FontSize" Value="{DynamicResource ControlContentThemeFontSize}" />
     </Style>

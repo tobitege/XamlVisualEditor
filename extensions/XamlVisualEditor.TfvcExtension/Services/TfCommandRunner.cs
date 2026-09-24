@@ -7,6 +7,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Extensions;
 using XamlVisualEditor.TfvcExtension.Models;
 
 namespace XamlVisualEditor.TfvcExtension.Services;
@@ -42,12 +43,16 @@ public sealed class TfCommandRunner : ITfCommandRunner
     public const int MAX_COMMAND_LINE_LENGTH = 30000;
 
     private readonly ITfExeLocator _locator;
+    private readonly IExtensionLogger? _logger;
     private readonly Encoding _outputEncoding;
 
     /// <summary>Creates the runner.</summary>
-    public TfCommandRunner(ITfExeLocator locator)
+    /// <param name="locator">Locates tf.exe.</param>
+    /// <param name="logger">Receives one entry per finished command with exit code, duration and working directory.</param>
+    public TfCommandRunner(ITfExeLocator locator, IExtensionLogger? logger = null)
     {
         _locator = locator;
+        _logger = logger;
         _outputEncoding = CreateOutputEncoding();
     }
 
@@ -102,12 +107,15 @@ public sealed class TfCommandRunner : ITfCommandRunner
         {
             timeoutSource.CancelAfter(timeout);
             process.StandardInput.Close();
+            Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
                 Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutSource.Token);
                 Task<string> stderrTask = process.StandardError.ReadToEndAsync(timeoutSource.Token);
                 await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
-                return new TfCommandResult(process.ExitCode, await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false));
+                TfCommandResult result = new(process.ExitCode, await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false));
+                LogResult(arguments, startInfo.WorkingDirectory, result, stopwatch.ElapsedMilliseconds);
+                return result;
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -136,6 +144,31 @@ public sealed class TfCommandRunner : ITfCommandRunner
         }
 
         return length;
+    }
+
+    private void LogResult(IReadOnlyList<string> arguments, string workingDirectory, TfCommandResult result, long elapsedMilliseconds)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        string message = string.Format(
+            CultureInfo.InvariantCulture,
+            "tf {0} exited with {1} after {2} ms in {3}",
+            arguments.Count > 0 ? arguments[0] : string.Empty,
+            result.ExitCode,
+            elapsedMilliseconds,
+            workingDirectory);
+        if (result.Succeeded)
+        {
+            _logger.Info(message);
+            return;
+        }
+
+        string error = result.StandardError.Trim();
+        int lineEnd = error.IndexOfAny(['\r', '\n']);
+        _logger.Warn(message + ": " + (lineEnd < 0 ? error : error.Substring(0, lineEnd)));
     }
 
     // tf.exe writes redirected output in the ANSI code page of the system, not in the OEM code page.

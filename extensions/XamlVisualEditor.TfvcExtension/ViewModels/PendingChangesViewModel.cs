@@ -576,9 +576,11 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         }, cancellationToken);
     }
 
+    // Each operation replaces the result or error message of the previous one.
     private async Task RunOperationAsync(Func<Task> operation, CancellationToken cancellationToken, bool refreshAfterwards = true)
     {
         IsWorking = true;
+        OperationMessage = null;
         try
         {
             await operation();

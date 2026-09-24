@@ -138,6 +138,27 @@ public sealed class TfvcPanelViewModelTests
     }
 
     [Fact]
+    public async Task PendingChanges_SuccessfulCompareClearsPreviousError()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            viewModel.SelectedIncludedRow = viewModel.IncludedRoots[0].Children[0];
+            client.DifferenceFailure = new TfCommandException("difference", new TfCommandResult(100, string.Empty, "TF400324: unavailable"));
+
+            await viewModel.CompareSelectedCommand.Execute().ToTask();
+            Assert.Contains("TF400324", viewModel.OperationMessage);
+
+            client.DifferenceFailure = null;
+            await viewModel.CompareSelectedCommand.Execute().ToTask();
+
+            Assert.Null(viewModel.OperationMessage);
+            Assert.True(viewModel.IsDiffVisible);
+        }
+    }
+
+    [Fact]
     public async Task SourceControlExplorer_NavigatesToServerPathAndShowsWorkspaceState()
     {
         (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
@@ -165,6 +186,28 @@ public sealed class TfvcPanelViewModelTests
     }
 
     [Fact]
+    public async Task SourceControlExplorer_SessionChangesDuringRootLoadDoNotStartAnotherLoad()
+    {
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null)];
+        server.ChildrenGate = new TaskCompletionSource();
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                await session.RefreshPendingChangesAsync(CancellationToken.None);
+            }
+
+            server.ChildrenGate.SetResult();
+            await Task.Yield();
+
+            Assert.Equal(["$/"], server.ChildrenRequests);
+            Assert.Equal("$/", Assert.Single(viewModel.Roots).ServerPath);
+        }
+    }
+
+    [Fact]
     public async Task SourceControlExplorer_FocusShowsOnlyFolderAndIsRestored()
     {
         InMemoryExtensionStorage storage = new();
@@ -187,11 +230,15 @@ public sealed class TfvcPanelViewModelTests
             Assert.Equal("a.cs", Assert.Single(root.Children).Name);
         }
 
+        server.ChildrenRequests.Clear();
+        server.ItemRequests.Clear();
         using (SourceControlExplorerViewModel reopened = CreateExplorer(session))
         {
             await reopened.NavigateToAsync("$/Product/src/a.cs", CancellationToken.None);
             Assert.Equal("$/Product/src", reopened.FocusedPath);
             Assert.Equal("$/Product/src", Assert.Single(reopened.Roots).ServerPath);
+            Assert.Equal(["$/Product/src"], server.ItemRequests);
+            Assert.Equal(["$/Product/src"], server.ChildrenRequests);
 
             await reopened.NavigateToAsync("$/Other", CancellationToken.None);
             Assert.Null(reopened.FocusedPath);

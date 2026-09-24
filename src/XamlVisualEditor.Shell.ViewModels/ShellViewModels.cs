@@ -4566,36 +4566,49 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         RefreshExtensionViews();
     }
 
+    // Every contribution change of any extension lands here. Custom views whose contribution is unchanged keep
+    // their view model, so the extension state survives and no second instance keeps working in the background.
+    // Custom view models belong to their extension, which disposes them on deactivation.
     private void RefreshExtensionViews()
     {
-        foreach (IDisposable view in ExtensionViews.OfType<IDisposable>().ToList())
-        {
-            view.Dispose();
-        }
-
+        Dictionary<string, ExtensionViewModel> previous = new(_extensionViews, StringComparer.OrdinalIgnoreCase);
         ExtensionViews.Clear();
         _extensionViews.Clear();
 
-        if (_extensionContributions is null)
+        if (_extensionContributions is not null)
         {
-            SyncExtensionDockables();
-            return;
+            IEnumerable<ExtensionViewContribution> ordered = _extensionContributions.ViewContributions
+                .OrderBy(contribution => contribution.Location)
+                .ThenBy(contribution => contribution.Priority)
+                .ThenBy(contribution => contribution.Title, StringComparer.OrdinalIgnoreCase);
+
+            foreach (ExtensionViewContribution contribution in ordered)
+            {
+                ExtensionViewModel viewModel;
+                if (previous.TryGetValue(contribution.ViewId, out ExtensionViewModel? existing)
+                    && existing is ExtensionCustomViewModel { ViewModel: not null }
+                    && existing.Contribution == contribution)
+                {
+                    previous.Remove(contribution.ViewId);
+                    viewModel = existing;
+                }
+                else
+                {
+                    viewModel = CreateExtensionViewModel(contribution);
+                    if (viewModel is ExtensionTreeViewModel treeView)
+                    {
+                        _ = treeView.LoadAsync(CancellationToken.None);
+                    }
+                }
+
+                _extensionViews[contribution.ViewId] = viewModel;
+                ExtensionViews.Add(viewModel);
+            }
         }
 
-        IEnumerable<ExtensionViewContribution> ordered = _extensionContributions.ViewContributions
-            .OrderBy(contribution => contribution.Location)
-            .ThenBy(contribution => contribution.Priority)
-            .ThenBy(contribution => contribution.Title, StringComparer.OrdinalIgnoreCase);
-
-        foreach (ExtensionViewContribution contribution in ordered)
+        foreach (IDisposable replaced in previous.Values.OfType<IDisposable>())
         {
-            ExtensionViewModel viewModel = CreateExtensionViewModel(contribution);
-            _extensionViews[contribution.ViewId] = viewModel;
-            ExtensionViews.Add(viewModel);
-            if (viewModel is ExtensionTreeViewModel treeView)
-            {
-                _ = treeView.LoadAsync(CancellationToken.None);
-            }
+            replaced.Dispose();
         }
 
         SyncExtensionDockables();
@@ -8859,6 +8872,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         _statusTextExpiration.Dispose();
         _disposables.Dispose();
+        Toolbox.Dispose();
+        SolutionExplorer.Dispose();
+        foreach (IDisposable view in ExtensionViews.OfType<IDisposable>())
+        {
+            view.Dispose();
+        }
+
         Collaboration.Dispose();
         AnimationEditor.Dispose();
         Debugger.Dispose();
@@ -9199,12 +9219,13 @@ public enum SolutionExplorerNodeKind
 /// <summary>
 /// ViewModel for the Solution Explorer tool panel.
 /// </summary>
-public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel
+public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel, IDisposable
 {
     private const string FilterPropertyPath = "Item.Name";
     private const string SetStartupProjectCommandId = "workspace.setStartupProject";
     private readonly ISystemIconService? _systemIcons;
     private readonly ICommands? _extensionCommands;
+    private readonly IDisposable _filterSubscription;
 
     public SolutionExplorerNodeViewModel? Root { get; set; }
 
@@ -9274,7 +9295,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
                 _ => null
             });
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
@@ -9524,4 +9545,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             }
         }
     }
+
+    /// <summary>Stops the pending filter timer.</summary>
+    public void Dispose() => _filterSubscription.Dispose();
 }

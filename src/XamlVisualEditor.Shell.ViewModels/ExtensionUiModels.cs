@@ -389,6 +389,7 @@ public abstract partial class ExtensionViewModel : ReactiveObject
 {
     protected ExtensionViewModel(ExtensionViewContribution contribution)
     {
+        Contribution = contribution;
         ViewId = contribution.ViewId;
         Title = contribution.Title;
         ViewType = contribution.Type;
@@ -399,6 +400,9 @@ public abstract partial class ExtensionViewModel : ReactiveObject
         PersistDockState = contribution.PersistDockState;
         AutoHideByDefault = contribution.AutoHideByDefault;
     }
+
+    /// <summary>Gets the contribution the view was created from.</summary>
+    public ExtensionViewContribution Contribution { get; }
 
     public string ViewId { get; }
 
@@ -431,6 +435,7 @@ public sealed partial class ExtensionWebviewViewModel : ExtensionViewModel
     public string PlaceholderMessage { get; }
 }
 
+/// <summary>Hosts the view model that an extension supplies for a custom view; the extension owns its lifetime.</summary>
 public sealed partial class ExtensionCustomViewModel : ExtensionViewModel
 {
     public ExtensionCustomViewModel(ExtensionViewContribution contribution, object? viewModel)
@@ -449,6 +454,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
 
     private const string FilterPropertyPath = "Item.Label";
     private readonly IExtensionTreeDataProvider _provider;
+    private readonly IDisposable _filterSubscription;
     private bool _isDisposed;
 
     public ExtensionTreeViewModel(ExtensionViewContribution contribution, IExtensionTreeDataProvider provider)
@@ -478,7 +484,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         Model = new HierarchicalModel(options);
         Model.SetRoots(RootItems);
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
@@ -610,6 +616,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         }
 
         _provider.Changed -= OnProviderChanged;
+        _filterSubscription.Dispose();
         _isDisposed = true;
     }
 

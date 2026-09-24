@@ -32,8 +32,10 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
     private readonly IDialogHost? _dialogHost;
     private readonly ISystemIconService? _icons;
     private string? _loadedCollectionUrl;
+    private string? _loadingRootCollectionUrl;
     private SourceControlItemViewModel? _treeRoot;
     private readonly Func<string, Task>? _showHistory;
+    private readonly IDisposable _searchSubscription;
     private bool _isDisposed;
 
     /// <summary>Creates the view model.</summary>
@@ -88,7 +90,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
                 }
             });
 
-        this.WhenAnyValue(x => x.SearchText)
+        _searchSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplySearch);
@@ -223,6 +225,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         _isDisposed = true;
         _session.StateChanged -= OnSessionStateChanged;
         _session.PendingChangesChanged -= OnPendingChangesChanged;
+        _searchSubscription.Dispose();
         Connection.Dispose();
     }
 
@@ -287,18 +290,26 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         SourceControlItemViewModel displayed = _treeRoot;
         if (FocusedPath is not null)
         {
-            SourceControlItemViewModel resolved = await ResolvePathAsync(_treeRoot, FocusedPath, new List<SourceControlItemViewModel>(), cancellationToken);
-            if (resolved.IsFolder && string.Equals(resolved.ServerPath, FocusedPath, StringComparison.OrdinalIgnoreCase))
+            // A loaded tree resolves the focus in place; otherwise only the focused folder is read instead of
+            // every folder above it.
+            SourceControlItemViewModel? start = Roots.Count == 1 && Roots[0].IsLoaded && TfvcWorkspace.IsSameOrChildServerPath(FocusedPath, Roots[0].ServerPath)
+                ? Roots[0]
+                : _treeRoot.IsLoaded ? _treeRoot : null;
+            SourceControlItemViewModel? resolved = start is not null
+                ? await ResolvePathAsync(start, FocusedPath, new List<SourceControlItemViewModel>(), cancellationToken)
+                : await LoadFolderAsync(FocusedPath, cancellationToken);
+            if (resolved is not null && resolved.IsFolder && string.Equals(resolved.ServerPath, FocusedPath, StringComparison.OrdinalIgnoreCase))
             {
                 displayed = resolved;
                 displayed.IsExpanded = true;
-                await LoadChildrenAsync(displayed, cancellationToken);
             }
             else
             {
                 FocusedPath = null;
             }
         }
+
+        await LoadChildrenAsync(displayed, cancellationToken);
 
         if (Roots.Count != 1 || !ReferenceEquals(Roots[0], displayed))
         {
@@ -308,6 +319,33 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         }
 
         Model.Refresh();
+    }
+
+    private async Task<SourceControlItemViewModel?> LoadFolderAsync(string serverPath, CancellationToken cancellationToken)
+    {
+        string? collectionUrl = _session.Settings.CollectionUrl;
+        if (collectionUrl is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            TfvcServerItem? item = await _session.Server.GetItemAsync(collectionUrl, serverPath, cancellationToken);
+            if (item is null)
+            {
+                return null;
+            }
+
+            SourceControlItemViewModel folder = new(item, GetIcon(GetIconPath(item), item.IsFolder));
+            UpdateWorkspaceState(folder);
+            return folder;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            OperationMessage = TfvcDisplayText.DescribeError(ex);
+            return null;
+        }
     }
 
     // Walks from a start item towards a server path, loading children on the way; returns the deepest item reached.
@@ -347,7 +385,9 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
     private async Task EnsureRootAsync()
     {
         string? collectionUrl = _session.IsConnected ? _session.Settings.CollectionUrl : null;
-        if (string.Equals(collectionUrl, _loadedCollectionUrl, StringComparison.OrdinalIgnoreCase) && (Roots.Count > 0 || collectionUrl is null))
+        if (_isDisposed
+            || (collectionUrl is not null && string.Equals(collectionUrl, _loadingRootCollectionUrl, StringComparison.OrdinalIgnoreCase))
+            || (string.Equals(collectionUrl, _loadedCollectionUrl, StringComparison.OrdinalIgnoreCase) && (Roots.Count > 0 || collectionUrl is null)))
         {
             return;
         }
@@ -357,13 +397,25 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         Roots.Clear();
         if (collectionUrl is not null)
         {
-            SourceControlItemViewModel root = new(new TfvcServerItem(ROOT_PATH, true, 0, null), GetIcon(ROOT_PATH, true));
-            _treeRoot = root;
-            UpdateWorkspaceState(root);
-            root.IsExpanded = true;
-            await LoadChildrenAsync(root, CancellationToken.None);
-            FocusedPath ??= await _session.LoadExplorerFocusAsync(CancellationToken.None);
-            await ApplyFocusAsync(CancellationToken.None);
+            // Session state changes arrive while the root loads; they must not start a second load of the same tree.
+            _loadingRootCollectionUrl = collectionUrl;
+            try
+            {
+                SourceControlItemViewModel root = new(new TfvcServerItem(ROOT_PATH, true, 0, null), GetIcon(ROOT_PATH, true));
+                _treeRoot = root;
+                UpdateWorkspaceState(root);
+                root.IsExpanded = true;
+                FocusedPath ??= await _session.LoadExplorerFocusAsync(CancellationToken.None);
+                await ApplyFocusAsync(CancellationToken.None);
+            }
+            finally
+            {
+                if (string.Equals(collectionUrl, _loadingRootCollectionUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    _loadingRootCollectionUrl = null;
+                }
+            }
+
             return;
         }
 
@@ -482,6 +534,23 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             _session.CurrentWorkspace,
             change,
             change is null ? string.Empty : TfvcDisplayText.FormatChangeTypes(change.ChangeTypes));
+    }
+
+    // A focused folder that was loaded on its own is not part of the tree below the collection root.
+    private IEnumerable<SourceControlItemViewModel> GetStateRoots()
+    {
+        if (_treeRoot is not null)
+        {
+            yield return _treeRoot;
+        }
+
+        foreach (SourceControlItemViewModel root in Roots)
+        {
+            if (!ReferenceEquals(root, _treeRoot))
+            {
+                yield return root;
+            }
+        }
     }
 
     private void UpdateWorkspaceStateRecursive(IEnumerable<SourceControlItemViewModel> items)
@@ -652,7 +721,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             }
 
             _ = EnsureRootAsync();
-            UpdateWorkspaceStateRecursive(_treeRoot is null ? Roots : [_treeRoot]);
+            UpdateWorkspaceStateRecursive(GetStateRoots());
         });
     }
 
@@ -662,7 +731,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         {
             if (!_isDisposed)
             {
-                UpdateWorkspaceStateRecursive(_treeRoot is null ? Roots : [_treeRoot]);
+                UpdateWorkspaceStateRecursive(GetStateRoots());
             }
         });
     }

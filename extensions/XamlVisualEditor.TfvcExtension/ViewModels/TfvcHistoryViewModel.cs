@@ -445,9 +445,11 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         }
     }
 
+    // Each request replaces the result or error message of the previous one.
     private async Task RunAsync(Func<Task> operation)
     {
         IsBusy = true;
+        Message = null;
         try
         {
             await operation();

@@ -485,7 +485,7 @@ public sealed class DockingLayoutTests
     [AvaloniaFact]
     public void MainWindowViewModel_ResetLayout_Sets_All_Panels_Visible()
     {
-        MainWindowViewModel vm = new();
+        using MainWindowViewModel vm = new();
         vm.IsToolboxVisible = false;
         vm.IsPropertiesVisible = false;
         vm.IsOutputVisible = false;
@@ -510,7 +510,7 @@ public sealed class DockingLayoutTests
     [AvaloniaFact]
     public void MainWindowViewModel_ToggleCommands_Work()
     {
-        MainWindowViewModel vm = new();
+        using MainWindowViewModel vm = new();
         IWorkspaceCommands workspaceCommands = vm;
 
         bool initial = vm.IsBreakpointsVisible;
@@ -552,7 +552,7 @@ public sealed class DragDropWorkflowTests
     [AvaloniaFact]
     public async System.Threading.Tasks.Task NewDocument_Creates_Document_ViewModel()
     {
-        MainWindowViewModel vm = new();
+        using MainWindowViewModel vm = new();
 
         await vm.NewDocumentCommand.Execute().FirstAsync();
 
@@ -570,7 +570,7 @@ public sealed class MainWindowTests
     [AvaloniaFact]
     public void MainWindowViewModel_Creates_With_Default_State()
     {
-        MainWindowViewModel vm = new();
+        using MainWindowViewModel vm = new();
 
         Assert.True(vm.IsToolboxVisible);
         Assert.True(vm.IsPropertiesVisible);
@@ -677,7 +677,7 @@ public sealed class HeadlessUiTests
     [AvaloniaFact]
     public void MainWindow_Creates_With_DataContext()
     {
-        MainWindowViewModel vm = new();
+        using MainWindowViewModel vm = new();
         MainWindow window = new(vm);
 
         Assert.Same(vm, window.DataContext);

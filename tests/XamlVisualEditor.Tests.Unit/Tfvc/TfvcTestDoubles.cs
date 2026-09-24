@@ -135,8 +135,12 @@ internal sealed class FakeTfvcClient : ITfvcClient
     public Task<TfCommandResult> GetLatestAsync(TfvcWorkspace workspace, string itemSpec, bool recursive, CancellationToken cancellationToken)
         => Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
 
+    public Exception? DifferenceFailure { get; set; }
+
     public Task<TfCommandResult> DifferenceAsync(TfvcWorkspace workspace, string localPath, CancellationToken cancellationToken)
-        => Task.FromResult(new TfCommandResult(1, "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n", string.Empty));
+        => DifferenceFailure is null
+            ? Task.FromResult(new TfCommandResult(1, "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n", string.Empty))
+            : Task.FromException<TfCommandResult>(DifferenceFailure);
 
     public Task<string?> DetectCollectionUrlAsync(string localDirectory, CancellationToken cancellationToken)
         => Task.FromResult<string?>(null);
@@ -160,11 +164,29 @@ internal sealed class FakeTfvcServerClient : ITfvcServerClient
 
     public List<(int WorkItemId, int ChangesetId)> Links { get; } = new();
 
-    public Task<IReadOnlyList<TfvcServerItem>> GetChildrenAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
-        => Task.FromResult(Children.TryGetValue(serverPath, out IReadOnlyList<TfvcServerItem>? items) ? items : Array.Empty<TfvcServerItem>());
+    public List<string> ChildrenRequests { get; } = new();
+
+    public TaskCompletionSource? ChildrenGate { get; set; }
+
+    public async Task<IReadOnlyList<TfvcServerItem>> GetChildrenAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
+    {
+        ChildrenRequests.Add(serverPath);
+        if (ChildrenGate is { } gate)
+        {
+            await gate.Task;
+        }
+
+        return Children.TryGetValue(serverPath, out IReadOnlyList<TfvcServerItem>? items) ? items : Array.Empty<TfvcServerItem>();
+    }
+
+    public List<string> ItemRequests { get; } = new();
 
     public Task<TfvcServerItem?> GetItemAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
-        => Task.FromResult(ExistingItems.Contains(serverPath) ? new TfvcServerItem(serverPath, false, 10, null) : null);
+    {
+        ItemRequests.Add(serverPath);
+        bool isFolder = Children.ContainsKey(serverPath);
+        return Task.FromResult(ExistingItems.Contains(serverPath) || isFolder ? new TfvcServerItem(serverPath, isFolder, 10, null) : null);
+    }
 
     public List<TfvcChangesetInfo> History { get; } = new();
 

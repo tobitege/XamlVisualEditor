@@ -172,6 +172,7 @@ public sealed partial class TfvcChangesetDetailsViewModel : ReactiveObject
         }
 
         IsBusy = true;
+        Message = null;
         try
         {
             await _session.Client.UpdateChangesetCommentAsync(collectionUrl, changeset.Id, comment, cancellationToken);

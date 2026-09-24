@@ -35,7 +35,7 @@ public sealed class TfvcExtension : IXveExtension
         TfvcOutputLogger logger = new(context.Logger, outputChannel);
         TfvcServerClient serverClient = new();
         TfvcSession session = new(
-            new TfvcClient(new TfCommandRunner(new TfExeLocator())),
+            new TfvcClient(new TfCommandRunner(new TfExeLocator(), logger)),
             serverClient,
             new TfvcSettingsStore(context.Storage),
             context.WorkspaceInfo,

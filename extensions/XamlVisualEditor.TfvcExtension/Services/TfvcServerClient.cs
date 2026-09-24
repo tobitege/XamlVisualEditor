@@ -69,11 +69,20 @@ public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
     private const string API_VERSION = "5.0";
     private const int MAX_COMMENT_LENGTH = 4000;
 
+    // Servers and firewalls limit the connections per client; beyond that limit they drop new connections,
+    // including those of tf.exe processes started at the same time.
+    private const int MAX_CONNECTIONS_PER_SERVER = 8;
+
     private readonly HttpClient _httpClient;
 
     /// <summary>Creates a client that authenticates with the current Windows user.</summary>
     public TfvcServerClient()
-        : this(new HttpClient(new HttpClientHandler { UseDefaultCredentials = true, PreAuthenticate = true })
+        : this(new HttpClient(new HttpClientHandler
+        {
+            UseDefaultCredentials = true,
+            PreAuthenticate = true,
+            MaxConnectionsPerServer = MAX_CONNECTIONS_PER_SERVER
+        })
         {
             Timeout = TimeSpan.FromSeconds(60)
         })

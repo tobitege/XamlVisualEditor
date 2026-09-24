@@ -35,6 +35,19 @@
   </UserControl.DataTemplates>
 
   <DockPanel Margin="6">
+    <!-- Activity of this panel at its top edge; the strip keeps its height, so the layout never moves. -->
+    <Border DockPanel.Dock="Top" Height="2" Margin="-6,-6,-6,4" IsHitTestVisible="False">
+      <ProgressBar Height="2" MinHeight="2" IsIndeterminate="True">
+        <ProgressBar.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.Or}">
+            <Binding Path="IsWorking" />
+            <Binding Path="Connection.IsBusy" />
+            <Binding Path="ChangesetDetails.IsBusy" />
+          </MultiBinding>
+        </ProgressBar.IsVisible>
+      </ProgressBar>
+    </Border>
+
     <views:TfvcConnectionView DockPanel.Dock="Top" DataContext="{CompiledBinding Connection}" Margin="0,0,0,6" />
 
     <Panel>
@@ -65,8 +78,6 @@
               </MenuFlyout>
             </DropDownButton.Flyout>
           </DropDownButton>
-          <ProgressBar Width="60" Height="3" MinHeight="3" IsIndeterminate="True" VerticalAlignment="Center"
-                       IsVisible="{CompiledBinding IsWorking}" />
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Top"

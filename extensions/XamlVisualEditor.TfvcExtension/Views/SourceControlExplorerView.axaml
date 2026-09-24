@@ -26,14 +26,24 @@
   </UserControl.DataTemplates>
 
   <DockPanel Margin="6">
+    <!-- Activity of this panel at its top edge; the strip keeps its height, so the layout never moves. -->
+    <Border DockPanel.Dock="Top" Height="2" Margin="-6,-6,-6,4" IsHitTestVisible="False">
+      <ProgressBar Height="2" MinHeight="2" IsIndeterminate="True">
+        <ProgressBar.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.Or}">
+            <Binding Path="IsWorking" />
+            <Binding Path="Connection.IsBusy" />
+          </MultiBinding>
+        </ProgressBar.IsVisible>
+      </ProgressBar>
+    </Border>
+
     <views:TfvcConnectionView DockPanel.Dock="Top" DataContext="{CompiledBinding Connection}" Margin="0,0,0,6" />
 
     <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
       <Button Content="{x:Static loc:TfvcStrings.Refresh}" Command="{CompiledBinding RefreshCommand}" Padding="8,2" Margin="0,0,4,4" />
       <Button Content="{x:Static loc:TfvcStrings.LocateActiveDocument}" Command="{CompiledBinding LocateActiveDocumentCommand}" Padding="8,2" Margin="0,0,4,4" />
       <Button Content="{x:Static loc:TfvcStrings.GetLatest}" Command="{CompiledBinding GetLatestCommand}" Padding="8,2" Margin="0,0,4,4" />
-      <ProgressBar Width="60" Height="3" MinHeight="3" IsIndeterminate="True" VerticalAlignment="Center"
-                   IsVisible="{CompiledBinding IsWorking}" />
     </WrapPanel>
 
     <TextBox DockPanel.Dock="Top" Margin="0,0,0,6"

@@ -69,7 +69,7 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
     [Reactive]
     public partial string? StatusMessage { get; private set; }
 
-    /// <summary>Gets whether the session is busy.</summary>
+    /// <summary>Gets whether a connection or workspace change started in this panel is running.</summary>
     [Reactive]
     public partial bool IsBusy { get; private set; }
 
@@ -91,7 +91,16 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
 
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
-        await _session.ApplySettingsAsync(new TfvcSettings(CollectionUrl, TfExePath), cancellationToken);
+        IsBusy = true;
+        try
+        {
+            await _session.ApplySettingsAsync(new TfvcSettings(CollectionUrl, TfExePath), cancellationToken);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
         if (_session.IsConnected)
         {
             IsSettingsVisible = false;
@@ -105,7 +114,15 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
             return;
         }
 
-        await _session.SelectWorkspaceAsync(workspace, CancellationToken.None);
+        IsBusy = true;
+        try
+        {
+            await _session.SelectWorkspaceAsync(workspace, CancellationToken.None);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task SuggestCollectionUrlAsync()
@@ -161,7 +178,6 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
 
             SelectedWorkspace = _session.CurrentWorkspace;
             StatusMessage = _session.StatusMessage;
-            IsBusy = _session.IsBusy;
             IsConnected = _session.IsConnected;
         }
         finally

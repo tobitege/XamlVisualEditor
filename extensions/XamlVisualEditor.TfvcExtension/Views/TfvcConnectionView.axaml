@@ -41,7 +41,6 @@
               HorizontalAlignment="Left"
               Padding="8,2" />
     </StackPanel>
-    <ProgressBar Height="3" MinHeight="3" IsIndeterminate="True" IsVisible="{CompiledBinding IsBusy}" />
     <TextBlock Text="{CompiledBinding StatusMessage}"
                TextWrapping="Wrap"
                IsVisible="{CompiledBinding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />

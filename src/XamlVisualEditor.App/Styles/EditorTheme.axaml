@@ -1,5 +1,6 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="using:Dock.Avalonia.Controls">
     <Styles.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
@@ -37,6 +38,17 @@
     <Style Selector="Window">
         <Setter Property="Background" Value="{DynamicResource EditorWindowBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EditorWindowForegroundBrush}" />
+    </Style>
+
+    <!-- The selected tool tab keeps the dock background; an accent frame and a bold title mark it.
+         Every tab reserves the frame so the title does not shift when the selection changes. -->
+    <Style Selector="dock|ToolTabStripItem">
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="dock|ToolTabStripItem:selected">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
     </Style>
 
     <!-- Nur Dialogbuttons; Designer-Controls und Dock-Toolbars behalten ihre Styles. -->

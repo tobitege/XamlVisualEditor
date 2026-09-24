@@ -6,12 +6,9 @@
              x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcChangesetDetailsView"
              x:DataType="vm:TfvcChangesetDetailsViewModel">
   <DockPanel>
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,4">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
       <TextBlock Grid.Column="0" Text="{CompiledBinding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
-      <ProgressBar Grid.Column="1" Width="60" Height="3" MinHeight="3" Margin="6,0"
-                   IsIndeterminate="True" VerticalAlignment="Center"
-                   IsVisible="{CompiledBinding IsBusy}" />
-      <Button Grid.Column="2" Padding="8,2"
+      <Button Grid.Column="1" Padding="8,2"
               Content="{x:Static loc:TfvcStrings.BackToPendingChanges}"
               Command="{CompiledBinding CloseCommand}" />
     </Grid>

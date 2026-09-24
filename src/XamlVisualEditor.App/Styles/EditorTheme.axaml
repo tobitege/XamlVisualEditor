@@ -1,6 +1,7 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dock="using:Dock.Avalonia.Controls"
+        xmlns:recycling="using:Avalonia.Controls.Recycling"
         xmlns:dockmodel="using:Dock.Model.Core"
         xmlns:styles="using:XamlVisualEditor.App.Styles">
     <Styles.Resources>
@@ -50,6 +51,14 @@
          title bar binds to the active tool, which such a dock does not have. -->
     <Style Selector="dock|ToolDockControl" x:DataType="dockmodel:IDock">
         <Setter Property="IsVisible" Value="{CompiledBinding VisibleDockables.Count, Converter={x:Static styles:DockConverters.HasDockables}, FallbackValue=False}" />
+    </Style>
+
+    <!-- Dock builds the view of a tab again on every activation unless its dock control has a view cache; Dock
+         keeps one cache per factory. -->
+    <Style Selector="dock|DockControl">
+        <Setter Property="recycling:ControlRecyclingDataTemplate.ControlRecycling">
+            <recycling:ControlRecycling />
+        </Setter>
     </Style>
 
     <!-- The chrome binds ActiveDockable.* of its dock; an empty dock has no active dockable. -->

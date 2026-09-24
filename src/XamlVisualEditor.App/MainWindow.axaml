@@ -335,6 +335,7 @@
             Layout="{CompiledBinding DockLayout}"
             Factory="{CompiledBinding DockFactory}">
             <i:Interaction.Behaviors>
+                <v:DockViewRecyclingBehavior />
                 <v:FixedSideDockWidthsBehavior />
                 <v:PinnedDockLayoutBehavior />
             </i:Interaction.Behaviors>

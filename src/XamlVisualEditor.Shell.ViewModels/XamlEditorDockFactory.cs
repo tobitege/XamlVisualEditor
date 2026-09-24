@@ -892,6 +892,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             persisted?.Remove(nameof(IRootDock.Window));
             persisted?.Remove(nameof(IRootDock.Windows));
             RemoveExtensionManagerDock(persisted);
+            RemoveRuntimeDocuments(persisted);
             if (persisted is not null && persisted[nameof(IRootDock.ActiveDockable)] is null)
             {
                 persisted.Remove(nameof(IRootDock.DefaultDockable));
@@ -939,28 +940,39 @@ public sealed partial class XamlEditorDockFactory : Factory
         }
     }
 
-    private static void RemoveExtensionManagerDock(JsonNode? node)
+    private static void RemoveExtensionManagerDock(JsonNode? node) => RemoveMatchingNodes(node, IsExtensionManagerDock);
+
+    // Open documents belong to the session, not to the layout, and cannot be deserialized. SaveLayout leaves them
+    // out; a layout file that an earlier version wrote with a document reference must still load.
+    private static void RemoveRuntimeDocuments(JsonNode? node) => RemoveMatchingNodes(node, IsRuntimeDocument);
+
+    private static void RemoveMatchingNodes(JsonNode? node, Func<JsonNode?, bool> matches)
     {
         if (node is JsonArray items)
         {
             for (int index = items.Count - 1; index >= 0; index--)
             {
-                if (IsExtensionManagerDock(items[index])) items.RemoveAt(index);
-                else RemoveExtensionManagerDock(items[index]);
+                if (matches(items[index])) items.RemoveAt(index);
+                else RemoveMatchingNodes(items[index], matches);
             }
         }
         else if (node is JsonObject entry)
         {
             foreach (KeyValuePair<string, JsonNode?> property in entry.ToArray())
             {
-                if (IsExtensionManagerDock(property.Value)) entry.Remove(property.Key);
-                else RemoveExtensionManagerDock(property.Value);
+                if (matches(property.Value)) entry.Remove(property.Key);
+                else RemoveMatchingNodes(property.Value, matches);
             }
         }
     }
 
     private static bool IsExtensionManagerDock(JsonNode? node) =>
         node is JsonObject entry && entry[nameof(IDockable.Id)]?.GetValue<string>() == "ExtensionsManager";
+
+    private static bool IsRuntimeDocument(JsonNode? node) =>
+        node is JsonObject entry
+        && entry["$type"]?.GetValue<string>() is { } type
+        && (type == typeof(TextDocument).FullName || type == typeof(DesignerDocument).FullName);
 
     public static void EnsureLayoutDefaults(IRootDock rootDock)
     {
@@ -1224,15 +1236,24 @@ public sealed partial class XamlEditorDockFactory : Factory
     private static bool HasDesktopLifetime() =>
         Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
 
+    // The references are read before any collection changes and cleared after all of them: removing the active
+    // document from its dock makes Dock activate the next document, which also moves the root focus onto it, and a
+    // reference cleared before that would be written into the layout again.
     private static List<Action> DetachRuntimeDocuments(IRootDock rootDock)
     {
         List<Action> restoreCollections = new();
         List<Action> restoreReferences = new();
-        foreach (IDock dock in FindDockables<IDock>(rootDock))
+        List<(Func<IDockable?> Get, Action<IDockable?> Set)> references = new();
+        IReadOnlyList<IDock> docks = FindDockables<IDock>(rootDock);
+        foreach (IDock dock in docks)
         {
-            DetachReference(() => dock.ActiveDockable, value => dock.ActiveDockable = value);
-            DetachReference(() => dock.DefaultDockable, value => dock.DefaultDockable = value);
-            DetachReference(() => dock.FocusedDockable, value => dock.FocusedDockable = value);
+            CaptureReference(() => dock.ActiveDockable, value => dock.ActiveDockable = value);
+            CaptureReference(() => dock.DefaultDockable, value => dock.DefaultDockable = value);
+            CaptureReference(() => dock.FocusedDockable, value => dock.FocusedDockable = value);
+        }
+
+        foreach (IDock dock in docks)
+        {
             DetachCollection(dock.VisibleDockables);
             if (dock is IRootDock root)
             {
@@ -1243,15 +1264,26 @@ public sealed partial class XamlEditorDockFactory : Factory
                 DetachCollection(root.BottomPinnedDockables);
             }
         }
+
+        foreach ((Func<IDockable?> get, Action<IDockable?> set) in references)
+        {
+            if (get() is DesignerDocument or TextDocument)
+            {
+                set(null);
+            }
+        }
+
         restoreCollections.AddRange(restoreReferences);
         return restoreCollections;
 
-        void DetachReference(Func<IDockable?> get, Action<IDockable?> set)
+        void CaptureReference(Func<IDockable?> get, Action<IDockable?> set)
         {
             IDockable? value = get();
-            if (value is not DesignerDocument and not TextDocument) return;
-            set(null);
-            restoreReferences.Add(() => set(value));
+            references.Add((get, set));
+            if (value is DesignerDocument or TextDocument)
+            {
+                restoreReferences.Add(() => set(value));
+            }
         }
 
         void DetachCollection(IList<IDockable>? items)

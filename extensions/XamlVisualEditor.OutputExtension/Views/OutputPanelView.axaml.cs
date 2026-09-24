@@ -16,6 +16,7 @@ public sealed partial class OutputPanelView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += (_, _) => RegisterHandlers();
+        AttachedToVisualTree += (_, _) => RegisterHandlers();
         DetachedFromVisualTree += (_, _) => DisposeHandlers();
     }
 

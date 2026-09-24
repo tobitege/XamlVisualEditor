@@ -123,9 +123,15 @@ public sealed partial class TextFileView : UserControl
         }
     }
 
+    // Dock keeps the view of a document while its tab is hidden, so every load sets the editor up again after the
+    // teardown of the previous detach.
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        Loaded -= OnLoaded;
+        if (_textEditor is not null)
+        {
+            return;
+        }
+
         _textEditor = this.FindControl<TextEditor>("TextEditor");
         if (_textEditor is null)
         {

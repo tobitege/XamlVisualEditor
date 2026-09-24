@@ -107,6 +107,8 @@ public sealed partial class XamlCodeEditorView : UserControl
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
             _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
+            _textEditor.RemoveHandler(DragDrop.DragOverEvent, OnDragOver);
+            _textEditor.RemoveHandler(DragDrop.DropEvent, OnDrop);
         }
 
         _selectionSync?.Dispose();
@@ -118,7 +120,11 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         _foldingSubscription?.Dispose();
         _foldingSubscription = null;
-        _foldingManager = null;
+        if (_foldingManager is not null)
+        {
+            FoldingManager.Uninstall(_foldingManager);
+            _foldingManager = null;
+        }
 
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = null;
@@ -135,9 +141,14 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
     }
 
+    // Dock keeps the view of a document while its tab is hidden, so every load sets the editor up again after the
+    // teardown of the previous detach.
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        Loaded -= OnLoaded;
+        if (_textEditor is not null)
+        {
+            return;
+        }
 
         _textEditor = this.FindControl<TextEditor>("TextEditor");
         if (_textEditor is null)
@@ -198,7 +209,8 @@ public sealed partial class XamlCodeEditorView : UserControl
         RegistryOptions registryOptions = new(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
         _textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("xml"));
-        _currentTextMateTheme = targetTheme;    }
+        _currentTextMateTheme = targetTheme;
+    }
 
     private static ThemeName ResolveTextMateTheme(ThemeVariant themeVariant)
     {

@@ -23,6 +23,7 @@ uses Semantic Versioning.
 
 - The word wrap and line number toggles and the font size of a document are editor options: a change in one document applies to every editor and persists.
 - Loading a layout no longer adds panels on its own: a debugger tool or extension panel that the saved layout does not contain stays closed until the view menu opens it. An extension panel with `PersistDockState = false` therefore starts closed after a restart.
+- A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
 - The first start and the reset layout command use the Debugging preset instead of a layout with every panel. A layout preset contains only the panels it lists, instead of hiding the others.
 - The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
 - The C# language workspace now warms in the background after the initial workspace load.
@@ -50,7 +51,8 @@ uses Semantic Versioning.
 - Fixed unreadable text of a selected row under the mouse in the explorer and other lists.
 - Fixed C# files outside a loaded project reporting every reference to another assembly as an error; they report syntax errors only.
 - Fixed a C# file outside the loaded projects pushing the project workspace aside, after which files of the projects lost their references as well.
-- Fixed panels whose list stopped following the selection after their tab was hidden and shown again, for example the TFVC explorer after loading a workspace; the hidden view of a panel lets go of its view model.
+- Fixed saving a window layout while several documents were open: the focus moved to another open document during the save and was written into the layout, which then failed to load and was replaced by the default layout. Such a layout file loads again without the document.
+- Fixed panels whose list stopped following the selection after their tab was hidden and shown again, for example the TFVC explorer after loading a workspace.
 - Fixed the TFVC panels forgetting whether their connection settings were shown; each panel keeps its own choice.
 
 ## [0.1.0] - 2026-08-20

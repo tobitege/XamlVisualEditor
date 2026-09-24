@@ -171,6 +171,11 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_canvas is not null)
         {
             if (_canvas.Background is null) _canvas.SetCurrentValue(Panel.BackgroundProperty, Avalonia.Media.Brushes.Transparent);
+            // Dock keeps the view of a document while its tab is hidden and loads it again later.
+            _canvas.PointerPressed -= OnCanvasPointerPressed;
+            _canvas.PointerMoved -= OnCanvasPointerMoved;
+            _canvas.PointerReleased -= OnCanvasPointerReleased;
+            _canvas.PointerCaptureLost -= OnCanvasPointerCaptureLost;
             _canvas.PointerPressed += OnCanvasPointerPressed;
             _canvas.PointerMoved += OnCanvasPointerMoved;
             _canvas.PointerReleased += OnCanvasPointerReleased;
@@ -180,6 +185,8 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_scrollViewer is not null)
         {
+            _scrollViewer.ScrollChanged -= OnSurfaceScrollChanged;
+            _scrollViewer.SizeChanged -= OnSurfaceSizeChanged;
             _scrollViewer.ScrollChanged += OnSurfaceScrollChanged;
             _scrollViewer.SizeChanged += OnSurfaceSizeChanged;
             UpdateSurfaceMargin();

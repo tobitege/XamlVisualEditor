@@ -18,6 +18,7 @@ public sealed partial class OutputView : UserControl
     {
         InitializeComponent();
         DataContextChanged += (_, _) => RegisterClipboardHandler();
+        AttachedToVisualTree += (_, _) => RegisterClipboardHandler();
         DetachedFromVisualTree += (_, _) => _clipboardHandler?.Dispose();
     }
 

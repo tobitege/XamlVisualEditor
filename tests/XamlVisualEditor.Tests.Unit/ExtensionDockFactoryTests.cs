@@ -75,6 +75,39 @@ public sealed class ExtensionDockFactoryTests
         Assert.Null(XamlEditorDockFactory.FindDockable<IDockable>(restored, "ExtensionsManager"));
     }
 
+    [Fact]
+    public void LoadLayout_DropsOpenDocumentsThatALayoutFileStillReferences()
+    {
+        using MainWindowViewModel viewModel = new();
+        LayoutLogger logger = new();
+        XamlEditorDockFactory factory = new(viewModel, logger);
+        IRootDock layout = factory.CreateDefaultLayout();
+        factory.InitLayout(layout);
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-document-layout-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            factory.SaveLayout(layout, path);
+            System.Text.Json.Nodes.JsonObject json = System.Text.Json.Nodes.JsonNode.Parse(System.IO.File.ReadAllText(path))!.AsObject();
+            json[nameof(IRootDock.FocusedDockable)] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["$type"] = typeof(TextDocument).FullName,
+                ["Id"] = @"C:\Work\Readme.md",
+                ["Title"] = "Readme.md"
+            };
+            System.IO.File.WriteAllText(path, json.ToJsonString());
+
+            IRootDock? restored = factory.LoadLayout(path);
+
+            Assert.True(restored is not null, string.Join(Environment.NewLine, logger.Messages));
+            Assert.Null(restored!.FocusedDockable);
+            Assert.NotNull(XamlEditorDockFactory.FindDockable<IDockable>(restored, "DocumentDock"));
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
     [AvaloniaFact]
     public void LoadLayout_KeepsClosedDebuggerToolClosedAndHiddenDebuggerToolHidden()
     {

@@ -16,6 +16,7 @@ public sealed partial class IdeBridgePanelView : UserControl
     {
         InitializeComponent();
         DataContextChanged += (_, _) => RegisterHandlers();
+        AttachedToVisualTree += (_, _) => RegisterHandlers();
         DetachedFromVisualTree += (_, _) => DisposeHandlers();
     }
 

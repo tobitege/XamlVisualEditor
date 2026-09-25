@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
@@ -1263,8 +1265,9 @@ internal static class RuntimeXamlLoaderRegistrar
         {
             foreach (AssemblyName reference in pending.Dequeue().GetReferencedAssemblies())
             {
-                if (reference.Name is not { } name || !s_referenceScans.Add(name)
-                    || !File.Exists(Path.Combine(s_targetDirectory, name + ".dll")))
+                string candidatePath = Path.Combine(s_targetDirectory, (reference.Name ?? string.Empty) + ".dll");
+                if (reference.Name is not { } name || !s_referenceScans.Add(name) || !File.Exists(candidatePath)
+                    || !HasLoadableAssemblyAttributes(candidatePath, context))
                 {
                     continue;
                 }
@@ -1279,6 +1282,54 @@ internal static class RuntimeXamlLoaderRegistrar
                 }
             }
         }
+    }
+
+    // The runtime XAML compiler reads the assembly-level attributes of every loaded assembly to find the
+    // XmlnsDefinition mappings. An assembly whose attribute types live in an assembly this runtime cannot load
+    // (for example System.Xaml, referenced by a .NET Framework library) makes that scan throw for every
+    // document, so such an assembly is not loaded for the preview.
+    internal static bool HasLoadableAssemblyAttributes(string assemblyPath, AssemblyLoadContext context)
+    {
+        try
+        {
+            using FileStream stream = File.OpenRead(assemblyPath);
+            using PEReader peReader = new(stream);
+            if (!peReader.HasMetadata) return false;
+            MetadataReader reader = peReader.GetMetadataReader();
+            if (!reader.IsAssembly) return false;
+            foreach (CustomAttributeHandle handle in reader.GetAssemblyDefinition().GetCustomAttributes())
+            {
+                CustomAttribute attribute = reader.GetCustomAttribute(handle);
+                if (attribute.Constructor.Kind != HandleKind.MemberReference) continue;
+                MemberReference constructor = reader.GetMemberReference((MemberReferenceHandle)attribute.Constructor);
+                if (constructor.Parent.Kind != HandleKind.TypeReference) continue;
+                EntityHandle scope = reader.GetTypeReference((TypeReferenceHandle)constructor.Parent).ResolutionScope;
+                while (scope.Kind == HandleKind.TypeReference)
+                    scope = reader.GetTypeReference((TypeReferenceHandle)scope).ResolutionScope;
+                if (scope.Kind != HandleKind.AssemblyReference) continue;
+                string referenceName = reader.GetString(reader.GetAssemblyReference((AssemblyReferenceHandle)scope).Name);
+                if (!CanResolveAssembly(referenceName, context)) return false;
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or BadImageFormatException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool CanResolveAssembly(string assemblyName, AssemblyLoadContext context)
+    {
+        if (context.Assemblies.Any(assembly => string.Equals(assembly.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        string fileName = assemblyName + ".dll";
+        if (s_targetDirectory is { } targetDirectory && File.Exists(Path.Combine(targetDirectory, fileName))
+            || File.Exists(Path.Combine(AppContext.BaseDirectory, fileName)))
+            return true;
+        return (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Any(path => string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase)) == true;
     }
 
     private static object GetCurrentMutable()

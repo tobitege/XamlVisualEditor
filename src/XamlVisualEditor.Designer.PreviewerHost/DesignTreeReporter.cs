@@ -166,8 +166,24 @@ internal sealed class DesignTreeReporter
         }
     }
 
-    private static object? Read(object instance, string property) => instance.GetType()
-        .GetProperty(property, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(instance);
+    // Walks the type hierarchy from the most derived type: a control that hides an inherited property with
+    // "new" (for example a Padding of its own type over the Avalonia Thickness Padding) makes a plain
+    // GetProperty lookup ambiguous. propertyTypeName selects the declaration with that property type.
+    internal static object? Read(object instance, string property, string? propertyTypeName = null)
+    {
+        for (Type? type = instance.GetType(); type is not null; type = type.BaseType)
+        {
+            PropertyInfo? info = type.GetProperty(property,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            if (info is not null && info.GetIndexParameters().Length == 0
+                && (propertyTypeName is null || info.PropertyType.FullName == propertyTypeName))
+            {
+                return info.GetValue(instance);
+            }
+        }
+
+        return null;
+    }
 
     private static double Number(object instance, string property) => (double)Read(instance, property)!;
 
@@ -178,8 +194,7 @@ internal sealed class DesignTreeReporter
         object bounds = Value("Bounds");
         object desired = Value("DesiredSize");
         object margin = Value("Margin");
-        object? padding = Read(control, "Padding");
-        if (padding?.GetType().FullName != "Avalonia.Thickness") padding = null;
+        object? padding = Read(control, "Padding", "Avalonia.Thickness");
         object origin = Value("RenderTransformOrigin");
         object originPoint = Read(origin, "Point")!;
         object matrix = _transformToVisual.Invoke(null, new[] { control, viewport })!;

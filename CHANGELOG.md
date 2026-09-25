@@ -47,6 +47,8 @@ uses Semantic Versioning.
 - The design surface clamps Grid.Row and Grid.Column to zero before writing them, so a negative target index no longer throws from an input handler.
 - Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
 - Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
+- Fixed the external previewer reporting "Design tree unavailable: Ambiguous match found" for controls that hide an inherited property with `new`, such as a Padding of their own type: the design tree reader walks the type hierarchy and takes the Avalonia Thickness declaration of Padding.
+- Fixed the external previewer failing with "Could not load file or assembly 'System.Xaml'" when the previewed project references a .NET Framework library: the previewer host no longer preloads project references whose assembly-level attributes come from an assembly the runtime cannot load, because the XAML compiler reads those attributes of every loaded assembly.
 - `DesignPreviewHookRegistry.Register` ignores a hook that is already registered: the hook runs once per preview, the repeated registration's disposal does nothing, and the first registration keeps owning the hook.
 - XVE now reads assemblies from a shared build output instead of unrelated output trees.
 - Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.

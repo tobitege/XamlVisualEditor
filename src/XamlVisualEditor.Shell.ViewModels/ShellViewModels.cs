@@ -7588,6 +7588,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private async System.Threading.Tasks.Task<string> ResolveUserOpenPathAsync(string filePath)
     {
         if (_documentOpenResolver is null
+            || !FileSystemPathValidation.IsAccepted(filePath)
             || !System.IO.File.Exists(filePath)
             || Documents.Any(document => FileSystemPathComparison.Equals(document.FilePath, filePath)))
         {
@@ -7640,6 +7641,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     public System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
     {
+        if (RejectInvalidPath(folderPath))
+        {
+            RemoveRecentFile(folderPath, RecentEntryKind.Folder);
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
         if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
         {
             RemoveRecentFile(folderPath, RecentEntryKind.Folder);
@@ -7701,6 +7708,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         bool updateStatus,
         bool allowWorkspaceLoad)
     {
+        if (RejectInvalidPath(filePath))
+        {
+            RemoveRecentFile(filePath);
+            return null;
+        }
+
         if (!System.IO.File.Exists(filePath))
         {
             RemoveRecentFile(filePath);
@@ -7814,6 +7827,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private void LoadRecentFiles()
     {
         _isLoadingRecentFiles = true;
+        int rejectedEntries = 0;
         try
         {
             if (_recentFilesPath is not { } path || !System.IO.File.Exists(path))
@@ -7847,6 +7861,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     entry = element.Deserialize<RecentFileEntry>();
                 }
                 if (entry is null || string.IsNullOrWhiteSpace(entry.FilePath) || !Enum.IsDefined(entry.Kind)) continue;
+                if (!FileSystemPathValidation.IsAccepted(entry.FilePath))
+                {
+                    _logger.LogWarning("Rejected recent entry with an invalid path: {Path}", entry.FilePath);
+                    rejectedEntries++;
+                    continue;
+                }
                 if (!seen.Add(entry.Kind + "\0" + entry.FilePath)) continue;
                 RecentFiles.Add(entry);
             }
@@ -7859,6 +7879,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             _isLoadingRecentFiles = false;
         }
+
+        // Rewriting the list removes rejected entries from the stored history as well.
+        if (rejectedEntries > 0)
+            SaveRecentFiles();
+    }
+
+    private bool RejectInvalidPath(string path)
+    {
+        if (FileSystemPathValidation.IsAccepted(path))
+            return false;
+
+        _logger.LogWarning("Rejected invalid path: {Path}", path);
+        SetPersistentStatus(string.Format(UiStrings.InvalidPathRejected, (object?)(path)));
+        return true;
     }
 
     private void SaveRecentFiles()
@@ -7935,6 +7969,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void AddRecentFile(string filePath, RecentEntryKind kind = RecentEntryKind.File)
     {
+        if (!FileSystemPathValidation.IsAccepted(filePath))
+            return;
+
         int existingIndex = IndexOfRecentFile(filePath, kind);
         if (existingIndex >= 0)
         {
@@ -7958,6 +7995,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string workspacePath,
         CancellationToken cancellationToken = default)
     {
+        if (RejectInvalidPath(workspacePath))
+            return;
+
         if (_workspaceService is null || _metadataService is null)
         {
             SetPersistentStatus(UiStrings.WorkspaceServicesUnavailable);

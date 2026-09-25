@@ -46,6 +46,7 @@ uses Semantic Versioning.
 
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
+- Opening files, folders and workspaces rejects paths that are not fully qualified in the canonical syntax of the operating system; on Windows only drive paths and UNC paths with backslashes are accepted. Recent entries with such paths are dropped and removed from the stored history.
 - Fixed workspace access errors caused by changes to the process-wide current directory.
 - Fixed preview startup for library projects that do not contain an application entry point.
 - Fixed preview sessions that displayed an endless wait after the preview host stopped.

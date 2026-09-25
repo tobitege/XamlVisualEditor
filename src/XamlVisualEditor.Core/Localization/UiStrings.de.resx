@@ -957,6 +957,7 @@
   <data name="StartingStatus" xml:space="preserve"><value>Wird gestartet...</value></data>
   <data name="ActivatingExtensionStatus" xml:space="preserve"><value>Erweiterung {0} wird aktiviert...</value></data>
   <data name="LanguageWorkspaceWarmupStatus" xml:space="preserve"><value>Sprachdienste für {0} werden vorbereitet...</value></data>
+  <data name="InvalidPathRejected" xml:space="preserve"><value>Ungültiger Pfad abgewiesen: {0}</value></data>
   <data name="AcpRequestFailed" xml:space="preserve"><value>ACP-Anfrage fehlgeschlagen.</value></data>
   <data name="OpenAiAcpAgent" xml:space="preserve"><value>ACP-Agent für OpenAI Codex</value></data>
   <data name="AnthropicAcpAgent" xml:space="preserve"><value>ACP-Agent für Anthropic Claude</value></data>

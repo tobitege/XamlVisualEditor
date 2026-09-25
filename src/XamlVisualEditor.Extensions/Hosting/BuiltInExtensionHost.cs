@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -46,6 +47,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly IControlCatalog? _controlCatalog;
     private readonly ITextEditorViewHost? _textEditorView;
     private readonly IContextKeys? _contextKeys;
+    private readonly IBackgroundActivities? _backgroundActivities;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
 
@@ -84,7 +86,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         IContextKeys? contextKeys = null,
         IExtensionPackageStore? packageStore = null,
         IExtensionStateStore? stateStore = null,
-        ILogger<BuiltInExtensionHost>? logger = null)
+        ILogger<BuiltInExtensionHost>? logger = null,
+        IBackgroundActivities? backgroundActivities = null)
     {
         _extensions = extensions;
         _packageStore = packageStore;
@@ -121,6 +124,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _controlCatalog = controlCatalog;
         _textEditorView = textEditorView;
         _contextKeys = contextKeys;
+        _backgroundActivities = backgroundActivities;
     }
 
     public async Task ActivateAsync(CancellationToken cancellationToken)
@@ -134,7 +138,9 @@ public sealed class BuiltInExtensionHost : IDisposable
         foreach (IXveExtension extension in _extensions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ExtensionContext context = CreateContext(ResolveExtensionId(extension), ResolveExtensionPath(extension));
+            string extensionId = ResolveExtensionId(extension);
+            using IDisposable? activity = BeginActivation(extensionId);
+            ExtensionContext context = CreateContext(extensionId, ResolveExtensionPath(extension));
             await extension.ActivateAsync(context, cancellationToken);
         }
 
@@ -178,6 +184,7 @@ public sealed class BuiltInExtensionHost : IDisposable
                     continue;
                 }
 
+                using IDisposable? activity = BeginActivation(extensionId);
                 Assembly assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(mainAssemblyPath);
                 foreach (Type type in InstalledExtensionPackages.FindExtensionTypes(assembly))
                 {
@@ -253,9 +260,13 @@ public sealed class BuiltInExtensionHost : IDisposable
         {
             ControlCatalog = _controlCatalog,
             TextEditorView = _textEditorView,
-            ContextKeys = _contextKeys
+            ContextKeys = _contextKeys,
+            BackgroundActivities = _backgroundActivities
         };
     }
+
+    private IDisposable? BeginActivation(string extensionId) =>
+        _backgroundActivities?.Begin(string.Format(UiStrings.ActivatingExtensionStatus, (object?)(extensionId)));
 
     private static string ResolveExtensionId(IXveExtension extension)
     {

@@ -136,15 +136,24 @@ public sealed class TfvcExtension : IXveExtension
         }));
 
         autoCheckOut.Start();
-        _ = InitializeAsync(session, offline, logger);
+        _ = InitializeAsync(session, offline, logger, context.BackgroundActivities?.Begin(TfvcStrings.InitializingStatus));
         return Task.CompletedTask;
     }
 
-    private static async Task InitializeAsync(TfvcSession session, TfvcOfflineCoordinator offline, IExtensionLogger logger)
+    private static async Task InitializeAsync(TfvcSession session, TfvcOfflineCoordinator offline, IExtensionLogger logger, IDisposable? activity)
     {
         try
         {
-            await session.InitializeAsync(CancellationToken.None);
+            try
+            {
+                await session.InitializeAsync(CancellationToken.None);
+            }
+            finally
+            {
+                // The offline prompt that may follow waits for the user, not for background work.
+                activity?.Dispose();
+            }
+
             await offline.HandleInitializedAsync(CancellationToken.None);
         }
         catch (Exception ex)

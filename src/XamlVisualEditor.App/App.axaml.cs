@@ -91,6 +91,8 @@ public sealed class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // Begun before the main view model exists, so the status bar starts with the startup text instead of "Ready".
+            IDisposable startupActivity = Services.GetRequiredService<IBackgroundActivities>().Begin(UiStrings.StartingStatus);
             Log.Information("Creating the main window");
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
             Resources[TextEditorViewHost.RESOURCE_KEY] = Services.GetRequiredService<TextEditorViewHost>();
@@ -114,7 +116,7 @@ public sealed class App : Application
             };
 
             Dispatcher.UIThread.Post(() =>
-                _ = InitializeExtensionsAsync(serviceProvider, mainVm, startupPath, startupToken));
+                _ = InitializeExtensionsAsync(serviceProvider, mainVm, startupPath, startupActivity, startupToken));
             Log.Information("Main window created; extension activation scheduled");
         }
 
@@ -125,8 +127,10 @@ public sealed class App : Application
         IServiceProvider services,
         MainWindowViewModel mainVm,
         string? startupPath,
+        IDisposable startupActivity,
         CancellationToken cancellationToken)
     {
+        using IDisposable activity = startupActivity;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -221,6 +225,9 @@ public sealed class App : Application
         services.AddSingleton<IDialogHost, AppDialogHost>();
         services.AddSingleton<IWorkspaceHost, AppWorkspaceHost>();
         services.AddSingleton<IUserLayoutStore>(_ => UserLayoutStore.CreateDefault());
+        services.AddSingleton<BackgroundActivityTracker>();
+        services.AddSingleton<IBackgroundActivities>(sp => sp.GetRequiredService<BackgroundActivityTracker>());
+        services.AddSingleton<IBackgroundActivityMonitor>(sp => sp.GetRequiredService<BackgroundActivityTracker>());
 
         // LSP services
         services.AddSingleton<ILspSettingsStore, LspSettingsStore>();

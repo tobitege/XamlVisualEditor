@@ -154,4 +154,5 @@ Work offline? Versioned files stay read-only; when you edit one, XVE asks whethe
   <data name="FileTypeFormat" xml:space="preserve"><value>{0} file</value></data>
   <data name="SizeKilobytesFormat" xml:space="preserve"><value>{0:N0} KB</value></data>
   <data name="ReconcileFailedFormat" xml:space="preserve"><value>Reconciling the local changes failed: {0}</value></data>
+  <data name="InitializingStatus" xml:space="preserve"><value>Initializing TFVC...</value></data>
 </root>

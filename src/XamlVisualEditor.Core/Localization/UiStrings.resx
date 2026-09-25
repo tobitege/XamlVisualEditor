@@ -954,6 +954,9 @@
   <data name="SelectLocation" xml:space="preserve"><value>Select Location</value></data>
   <data name="DiagnosticFirstSeen" xml:space="preserve"><value>{0}{1}First seen: {2}</value></data>
   <data name="ApplicationStartupFailed" xml:space="preserve"><value>Application startup failed: {0}</value></data>
+  <data name="StartingStatus" xml:space="preserve"><value>Starting...</value></data>
+  <data name="ActivatingExtensionStatus" xml:space="preserve"><value>Activating extension {0}...</value></data>
+  <data name="LanguageWorkspaceWarmupStatus" xml:space="preserve"><value>Preparing language services for {0}...</value></data>
   <data name="AcpRequestFailed" xml:space="preserve"><value>ACP request failed.</value></data>
   <data name="OpenAiAcpAgent" xml:space="preserve"><value>OpenAI Codex ACP agent</value></data>
   <data name="AnthropicAcpAgent" xml:space="preserve"><value>Anthropic Claude ACP agent</value></data>

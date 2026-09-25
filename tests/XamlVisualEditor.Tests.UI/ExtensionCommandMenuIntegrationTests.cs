@@ -18,6 +18,7 @@ using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Extensions.Hosting;
@@ -445,6 +446,59 @@ public sealed class ExtensionCommandMenuIntegrationTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Status_Bar_Shows_Startup_Activities_And_Ready_Only_After_The_Last_One_Ends()
+    {
+        BackgroundActivityTracker activities = new();
+        IDisposable startup = activities.Begin(UiStrings.StartingStatus);
+        ActivityProbeExtension probe = new(activities);
+        using ExtensionMenuTestHost host = new(backgroundActivities: activities, additionalExtension: probe);
+
+        Assert.True(host.ViewModel.IsStarting);
+        Assert.Equal(UiStrings.StartingStatus, host.ViewModel.StatusText);
+
+        await host.ActivateAsync();
+
+        Assert.Same(activities, probe.ContextActivities);
+        Assert.Equal(string.Format(UiStrings.ActivatingExtensionStatus, probe.ExtensionId), probe.DescriptionDuringActivation);
+        Assert.Equal(ActivityProbeExtension.WORK_DESCRIPTION, host.ViewModel.StatusText);
+
+        startup.Dispose();
+        await host.FlushAsync();
+
+        Assert.True(host.ViewModel.IsStarting);
+        Assert.Equal(ActivityProbeExtension.WORK_DESCRIPTION, host.ViewModel.StatusText);
+
+        probe.Work!.Dispose();
+        await host.FlushAsync();
+
+        Assert.False(host.ViewModel.IsStarting);
+        Assert.Equal(UiStrings.Ready, host.ViewModel.StatusText);
+    }
+
+    /// <summary>Records the activity state during activation and starts work that outlives it.</summary>
+    private sealed class ActivityProbeExtension(BackgroundActivityTracker activities) : IXveExtension
+    {
+        public const string WORK_DESCRIPTION = "Probe work...";
+
+        public IBackgroundActivities? ContextActivities { get; private set; }
+
+        public string? ExtensionId { get; private set; }
+
+        public string? DescriptionDuringActivation { get; private set; }
+
+        public IDisposable? Work { get; private set; }
+
+        public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
+        {
+            ContextActivities = context.BackgroundActivities;
+            ExtensionId = context.ExtensionId;
+            DescriptionDuringActivation = activities.CurrentDescription;
+            Work = context.BackgroundActivities?.Begin(WORK_DESCRIPTION);
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class ExtensionMenuTestHost : IDisposable
     {
         private readonly IWorkspaceService _workspaceService = new StubWorkspaceService();
@@ -467,7 +521,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
         private readonly BuiltInExtensionHost _extensionHost;
 
         public ExtensionMenuTestHost(bool withTextEditing = false, IExtensionPackageStore? packageStore = null,
-            IExtensionStateStore? stateStore = null)
+            IExtensionStateStore? stateStore = null, BackgroundActivityTracker? backgroundActivities = null,
+            IXveExtension? additionalExtension = null)
         {
             _languageRegistry = new LanguageServiceRegistry(Array.Empty<ILanguageIntellisenseService>());
             ViewModel = new MainWindowViewModel(
@@ -479,7 +534,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 commandMetadata: _commandMetadata,
                 extensionContributionRegistry: _contributions,
                 extensionViewRegistry: _views,
-                contextKeys: ContextKeys);
+                contextKeys: ContextKeys,
+                backgroundActivities: backgroundActivities);
             TextEditorView = new TextEditorViewHost(
                 ViewModel.EditorContextMenuItems,
                 ViewModel.WhenAnyValue(x => x.ActiveTextDocument).Select(document => (object?)document),
@@ -497,6 +553,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
             IXveExtension[] extensions = withTextEditing
                 ? [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo), new TextEditingExtensionEntry()]
                 : [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo)];
+            if (additionalExtension is not null)
+                extensions = [.. extensions, additionalExtension];
             _extensionHost = new BuiltInExtensionHost(
                 extensions,
                 _commands,
@@ -529,7 +587,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 textEditorView: TextEditorView,
                 contextKeys: ContextKeys,
                 packageStore: packageStore,
-                stateStore: stateStore);
+                stateStore: stateStore,
+                backgroundActivities: backgroundActivities);
         }
 
         public MainWindowViewModel ViewModel { get; }

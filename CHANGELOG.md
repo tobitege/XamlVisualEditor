@@ -24,6 +24,7 @@ uses Semantic Versioning.
 - Extensions can refine the rendered design preview through `IDesignPreviewHook` and `DesignPreviewHookRegistry`.
 - Enabled installed extension packages whose manifest names a `main` assembly are loaded into the default load context and activated.
 - `XVE_DESIGN_APP_XAML` names the App.axaml whose themes and resources the design surface applies, for library workspaces without an application of their own.
+- The status bar shows startup work, extension activation, TFVC initialization and the language-service warmup of a loaded workspace while they run, and shows "Ready" only after the last of them ended. Extensions announce their own background work through `ExtensionContext.BackgroundActivities`.
 
 ### Changed
 
@@ -43,6 +44,7 @@ uses Semantic Versioning.
 ### Fixed
 
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
+- Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
 - Fixed workspace access errors caused by changes to the process-wide current directory.
 - Fixed preview startup for library projects that do not contain an application entry point.
 - Fixed preview sessions that displayed an endless wait after the preview host stopped.

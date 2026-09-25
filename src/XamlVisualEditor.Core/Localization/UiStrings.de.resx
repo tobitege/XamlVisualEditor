@@ -954,6 +954,9 @@
   <data name="SelectLocation" xml:space="preserve"><value>Speicherort auswählen</value></data>
   <data name="DiagnosticFirstSeen" xml:space="preserve"><value>{0}{1}Erstmals aufgetreten: {2}</value></data>
   <data name="ApplicationStartupFailed" xml:space="preserve"><value>Anwendungsstart fehlgeschlagen: {0}</value></data>
+  <data name="StartingStatus" xml:space="preserve"><value>Wird gestartet...</value></data>
+  <data name="ActivatingExtensionStatus" xml:space="preserve"><value>Erweiterung {0} wird aktiviert...</value></data>
+  <data name="LanguageWorkspaceWarmupStatus" xml:space="preserve"><value>Sprachdienste für {0} werden vorbereitet...</value></data>
   <data name="AcpRequestFailed" xml:space="preserve"><value>ACP-Anfrage fehlgeschlagen.</value></data>
   <data name="OpenAiAcpAgent" xml:space="preserve"><value>ACP-Agent für OpenAI Codex</value></data>
   <data name="AnthropicAcpAgent" xml:space="preserve"><value>ACP-Agent für Anthropic Claude</value></data>

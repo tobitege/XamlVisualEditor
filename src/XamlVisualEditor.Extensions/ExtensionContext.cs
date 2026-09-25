@@ -111,6 +111,9 @@ public sealed class ExtensionContext
     /// <summary>Gets the context keys that command and menu conditions read, when the host evaluates conditions.</summary>
     public IContextKeys? ContextKeys { get; init; }
 
+    /// <summary>Gets the registry for work that keeps the editor from being fully ready, when the host reports such work.</summary>
+    public IBackgroundActivities? BackgroundActivities { get; init; }
+
     /// <summary>Gets the workspace service.</summary>
     public IWorkspace Workspace { get; }
 

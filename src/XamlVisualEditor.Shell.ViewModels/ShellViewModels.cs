@@ -2222,6 +2222,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly SerialDisposable _statusTextExpiration = new();
     private string _statusText = UiStrings.Ready;
     private long _statusTextGeneration;
+    private readonly IBackgroundActivityMonitor? _backgroundActivities;
+    private string? _activityStatusText;
     private bool _suppressTreeSelectionSync;
     private string? _clipboard;
     private readonly HashSet<Guid> _visualExpandedIds = new();
@@ -2592,12 +2594,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         set => SetStatusText(value, persistent: false);
     }
 
+    /// <summary>
+    /// Gets whether the background activities that ran when the view model was created have not all ended yet.
+    /// </summary>
+    [Reactive]
+    public partial bool IsStarting { get; private set; }
+
     private void SetPersistentStatus(string message) => SetStatusText(message, persistent: true);
 
     private void SetStatusText(string message, bool persistent)
     {
         long generation = Interlocked.Increment(ref _statusTextGeneration);
-        this.RaiseAndSetIfChanged(ref _statusText, message);
+        this.RaiseAndSetIfChanged(ref _statusText, message, nameof(StatusText));
         _statusTextExpiration.Disposable = null;
         if (persistent || string.IsNullOrWhiteSpace(message) || string.Equals(message, UiStrings.Ready, StringComparison.Ordinal))
             return;
@@ -2607,8 +2615,33 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Subscribe(_ =>
             {
                 if (Interlocked.Read(ref _statusTextGeneration) == generation)
-                    StatusText = string.Empty;
+                    ShowIdleStatus();
             });
+    }
+
+    // "Ready" is the idle text only after startup; until then a running activity or the startup text stands in.
+    private void ShowIdleStatus()
+    {
+        string? activity = _backgroundActivities?.CurrentDescription;
+        _activityStatusText = activity;
+        SetPersistentStatus(activity ?? (IsStarting ? UiStrings.StartingStatus : UiStrings.Ready));
+    }
+
+    private void OnBackgroundActivitiesChanged()
+    {
+        string? activity = _backgroundActivities!.CurrentDescription;
+        if (activity is not null)
+        {
+            _activityStatusText = activity;
+            SetPersistentStatus(activity);
+            return;
+        }
+
+        bool showsActivity = _activityStatusText is not null && string.Equals(_statusText, _activityStatusText, StringComparison.Ordinal);
+        _activityStatusText = null;
+        IsStarting = false;
+        if (showsActivity || string.IsNullOrWhiteSpace(_statusText))
+            SetPersistentStatus(UiStrings.Ready);
     }
 
     /// <summary>
@@ -2873,9 +2906,27 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         EditorOptionsStore? editorOptions = null,
         IUserLayoutStore? userLayoutStore = null,
         IEditorThemeService? editorThemes = null,
-        IContextKeys? contextKeys = null)
+        IContextKeys? contextKeys = null,
+        IBackgroundActivityMonitor? backgroundActivities = null)
     {
         _recentFilesPath = recentFilesPath;
+        _backgroundActivities = backgroundActivities;
+        if (_backgroundActivities is not null)
+        {
+            // Subscribe first: an activity that ends before the state is read below still raises a re-evaluation.
+            IDisposable activitySubscription = Observable.FromEventPattern(
+                    handler => _backgroundActivities.Changed += handler,
+                    handler => _backgroundActivities.Changed -= handler)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(_ => OnBackgroundActivitiesChanged());
+            _disposables.Add(activitySubscription);
+            if (_backgroundActivities.CurrentDescription is { } startupActivity)
+            {
+                IsStarting = true;
+                _activityStatusText = startupActivity;
+                _statusText = startupActivity;
+            }
+        }
         _contextKeys = contextKeys;
         if (_contextKeys is not null)
         {
@@ -2897,7 +2948,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 else
                 {
                     if (themeStatusError is not null && StatusText == themeStatusError)
-                        StatusText = XamlVisualEditor.Core.Localization.UiStrings.Ready;
+                        ShowIdleStatus();
                     themeStatusError = null;
                 }
                 if (_editorThemes.Selection.ProviderId == "builtin")
@@ -8020,6 +8071,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async Task WarmLanguageWorkspaceAsync(ILanguageWorkspaceWarmup warmup, string workspacePath)
     {
+        using IDisposable? activity = _backgroundActivities?.Begin(
+            string.Format(UiStrings.LanguageWorkspaceWarmupStatus, (object?)(System.IO.Path.GetFileName(workspacePath))));
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);

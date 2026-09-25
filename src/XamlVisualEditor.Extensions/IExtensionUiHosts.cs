@@ -11,7 +11,9 @@ public interface IDialogHost
 }
 
 /// <summary>Requests a modal confirmation with explicit action text.</summary>
-public sealed record ConfirmationDialogRequest(string Title, string Message, string ConfirmText, bool IsDestructive = false)
+/// <remarks><see cref="CancelText"/> replaces the default "Cancel" label, for example when declining is an action of its own.</remarks>
+public sealed record ConfirmationDialogRequest(string Title, string Message, string ConfirmText, bool IsDestructive = false,
+    string? CancelText = null)
 {
     /// <summary>Identifier of the shared confirmation dialog.</summary>
     public const string DIALOG_ID = "xve.confirm";

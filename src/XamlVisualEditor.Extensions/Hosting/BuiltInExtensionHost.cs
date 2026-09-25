@@ -48,6 +48,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly ITextEditorViewHost? _textEditorView;
     private readonly IContextKeys? _contextKeys;
     private readonly IBackgroundActivities? _backgroundActivities;
+    private readonly IDocumentOpenInterceptors? _documentOpenInterceptors;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
 
@@ -87,7 +88,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         IExtensionPackageStore? packageStore = null,
         IExtensionStateStore? stateStore = null,
         ILogger<BuiltInExtensionHost>? logger = null,
-        IBackgroundActivities? backgroundActivities = null)
+        IBackgroundActivities? backgroundActivities = null,
+        IDocumentOpenInterceptors? documentOpenInterceptors = null)
     {
         _extensions = extensions;
         _packageStore = packageStore;
@@ -125,6 +127,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _textEditorView = textEditorView;
         _contextKeys = contextKeys;
         _backgroundActivities = backgroundActivities;
+        _documentOpenInterceptors = documentOpenInterceptors;
     }
 
     public async Task ActivateAsync(CancellationToken cancellationToken)
@@ -261,7 +264,8 @@ public sealed class BuiltInExtensionHost : IDisposable
             ControlCatalog = _controlCatalog,
             TextEditorView = _textEditorView,
             ContextKeys = _contextKeys,
-            BackgroundActivities = _backgroundActivities
+            BackgroundActivities = _backgroundActivities,
+            DocumentOpenInterceptors = _documentOpenInterceptors
         };
     }
 

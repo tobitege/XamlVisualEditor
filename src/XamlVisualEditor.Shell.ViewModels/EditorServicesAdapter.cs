@@ -170,9 +170,9 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
     private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath, EditorDocumentOpenBehavior behavior)
     {
-        await _mainViewModel.OpenFileAsync(filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
-        IEditorDocumentViewModel? document = _mainViewModel.Documents
-            .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
+        // The returned document can show a different file when an interceptor redirected the open.
+        IEditorDocumentViewModel? document = await _mainViewModel.OpenFileAsync(
+            filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
         return document is null ? null : GetAdapter(document);
     }
 

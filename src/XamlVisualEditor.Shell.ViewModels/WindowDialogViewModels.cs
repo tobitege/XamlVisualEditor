@@ -136,6 +136,7 @@ public sealed partial class ConfirmDialogViewModel : ReactiveObject
     public string Title { get; }
     public string Message { get; }
     public string ConfirmText { get; }
+    public string CancelText { get; }
     public bool IsDestructive { get; }
     public bool IsConfirmDefault => !IsDestructive;
 
@@ -144,11 +145,13 @@ public sealed partial class ConfirmDialogViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelCommand { get; }
 
-    public ConfirmDialogViewModel(string title, string message, string? confirmText = null, bool isDestructive = false)
+    public ConfirmDialogViewModel(string title, string message, string? confirmText = null, bool isDestructive = false,
+        string? cancelText = null)
     {
         Title = title;
         Message = message;
         ConfirmText = string.IsNullOrWhiteSpace(confirmText) ? UiStrings.Ok : confirmText;
+        CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
         IsDestructive = isDestructive;
 
         ConfirmCommand = ReactiveCommand.CreateFromTask(async () =>

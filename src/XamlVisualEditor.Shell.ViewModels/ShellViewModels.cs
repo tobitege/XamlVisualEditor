@@ -2223,6 +2223,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private string _statusText = UiStrings.Ready;
     private long _statusTextGeneration;
     private readonly IBackgroundActivityMonitor? _backgroundActivities;
+    private readonly IDocumentOpenResolver? _documentOpenResolver;
     private string? _activityStatusText;
     private bool _suppressTreeSelectionSync;
     private string? _clipboard;
@@ -2907,10 +2908,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IUserLayoutStore? userLayoutStore = null,
         IEditorThemeService? editorThemes = null,
         IContextKeys? contextKeys = null,
-        IBackgroundActivityMonitor? backgroundActivities = null)
+        IBackgroundActivityMonitor? backgroundActivities = null,
+        IDocumentOpenResolver? documentOpenResolver = null)
     {
         _recentFilesPath = recentFilesPath;
         _backgroundActivities = backgroundActivities;
+        _documentOpenResolver = documentOpenResolver;
         if (_backgroundActivities is not null)
         {
             // Subscribe first: an activity that ends before the state is read below still raises a re-evaluation.
@@ -7575,9 +7578,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return OpenFileAsync(filePath, allowWorkspaceLoad: true);
     }
 
-    internal System.Threading.Tasks.Task OpenFileAsync(string filePath, bool allowWorkspaceLoad)
+    internal async System.Threading.Tasks.Task<IEditorDocumentViewModel?> OpenFileAsync(string filePath, bool allowWorkspaceLoad)
     {
-        return EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
+        string resolvedPath = await ResolveUserOpenPathAsync(filePath);
+        return await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
+    }
+
+    // Only opens the user asked for consult the interceptors; navigation into a file keeps the file itself.
+    private async System.Threading.Tasks.Task<string> ResolveUserOpenPathAsync(string filePath)
+    {
+        if (_documentOpenResolver is null
+            || !System.IO.File.Exists(filePath)
+            || Documents.Any(document => FileSystemPathComparison.Equals(document.FilePath, filePath)))
+        {
+            return filePath;
+        }
+
+        return await _documentOpenResolver.ResolveAsync(filePath, CancellationToken.None);
     }
 
     private async Task CloseWorkspaceAsync()
@@ -7654,7 +7671,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task OpenFromSolutionExplorerAsync(string filePath)
     {
-        await EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
+        await EnsureDocumentOpenAsync(await ResolveUserOpenPathAsync(filePath), addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
     }
 
     private async System.Threading.Tasks.Task OpenDroppedPathsAsync(IReadOnlyList<string> paths)
@@ -7672,7 +7689,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         foreach (string path in paths.Distinct(FileSystemPathComparison.Comparer))
         {
-            await EnsureDocumentOpenAsync(path, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
+            await EnsureDocumentOpenAsync(await ResolveUserOpenPathAsync(path), addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
         }
 
         StatusText = string.Format(UiStrings.FilesOpened, (object?)(paths.Count));

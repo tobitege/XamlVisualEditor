@@ -228,6 +228,9 @@ public sealed class App : Application
         services.AddSingleton<BackgroundActivityTracker>();
         services.AddSingleton<IBackgroundActivities>(sp => sp.GetRequiredService<BackgroundActivityTracker>());
         services.AddSingleton<IBackgroundActivityMonitor>(sp => sp.GetRequiredService<BackgroundActivityTracker>());
+        services.AddSingleton<DocumentOpenInterceptorRegistry>();
+        services.AddSingleton<IDocumentOpenInterceptors>(sp => sp.GetRequiredService<DocumentOpenInterceptorRegistry>());
+        services.AddSingleton<IDocumentOpenResolver>(sp => sp.GetRequiredService<DocumentOpenInterceptorRegistry>());
 
         // LSP services
         services.AddSingleton<ILspSettingsStore, LspSettingsStore>();

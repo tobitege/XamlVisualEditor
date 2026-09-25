@@ -26,7 +26,7 @@ public sealed class AppDialogHost : IDialogHost
             return new ConfirmDialog
             {
                 DataContext = new ConfirmDialogViewModel(request.Title, request.Message, request.ConfirmText,
-                    request.IsDestructive)
+                    request.IsDestructive, request.CancelText)
             };
         };
     }

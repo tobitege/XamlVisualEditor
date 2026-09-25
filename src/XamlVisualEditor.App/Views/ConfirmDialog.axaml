@@ -18,7 +18,7 @@
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Name="ConfirmButton" Content="{CompiledBinding ConfirmText}" Command="{CompiledBinding ConfirmCommand}"
               IsDefault="{CompiledBinding IsConfirmDefault}" />
-      <Button Name="CancelButton" Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}"
+      <Button Name="CancelButton" Content="{CompiledBinding CancelText}" Command="{CompiledBinding CancelCommand}"
               IsDefault="{CompiledBinding IsDestructive}" IsCancel="True" />
     </StackPanel>
   </Grid>

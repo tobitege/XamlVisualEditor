@@ -158,7 +158,7 @@ public sealed class TfvcExtension : IXveExtension
         }
         catch (Exception ex)
         {
-            logger.Error("TFVC initialization failed.", ex);
+            logger.Error(TfvcStrings.LogInitializationFailed, ex);
         }
     }
 

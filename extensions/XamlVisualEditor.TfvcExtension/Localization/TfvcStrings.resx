@@ -155,4 +155,25 @@ Work offline? Versioned files stay read-only; when you edit one, XVE asks whethe
   <data name="SizeKilobytesFormat" xml:space="preserve"><value>{0:N0} KB</value></data>
   <data name="ReconcileFailedFormat" xml:space="preserve"><value>Reconciling the local changes failed: {0}</value></data>
   <data name="InitializingStatus" xml:space="preserve"><value>Initializing TFVC...</value></data>
+  <data name="LogTfCommandFinishedFormat" xml:space="preserve"><value>tf {0} exited with {1} after {2} ms in {3}</value></data>
+  <data name="LogAutoCheckOutFailedFormat" xml:space="preserve"><value>Automatic TFVC check-out failed for {0}.</value></data>
+  <data name="LogStatusFallbackFormat" xml:space="preserve"><value>tf status failed for {0}, using the read-only attribute: {1}</value></data>
+  <data name="LogItemLookupFailedFormat" xml:space="preserve"><value>TFVC item lookup failed for {0}: {1}</value></data>
+  <data name="LogWriteProtectionRemovedFormat" xml:space="preserve"><value>Write protection removed offline: {0}</value></data>
+  <data name="LogWriteProtectionRemovalFailedFormat" xml:space="preserve"><value>Removing the write protection failed for {0}.</value></data>
+  <data name="LogChangeHandlingFailed" xml:space="preserve"><value>TFVC change handling failed.</value></data>
+  <data name="LogStateLookupFailedFormat" xml:space="preserve"><value>TFVC state lookup failed for {0}.</value></data>
+  <data name="LogReconcileFailed" xml:space="preserve"><value>Reconciling local TFVC changes failed.</value></data>
+  <data name="LogReconcileAfterGoingOnlineFailed" xml:space="preserve"><value>Reconciling local TFVC changes after going online failed.</value></data>
+  <data name="LogLocalChangesFormat" xml:space="preserve"><value>Local changes below {0}: {1} candidate(s), {2} change(s) without pending change.</value></data>
+  <data name="LogNoEditorWorkspace" xml:space="preserve"><value>no editor workspace</value></data>
+  <data name="LogConnectedFormat" xml:space="preserve"><value>Connected to {0}: {1} workspace(s), selected {2}.</value></data>
+  <data name="LogNoWorkspaceSelected" xml:space="preserve"><value>none</value></data>
+  <data name="LogConnectionFailed" xml:space="preserve"><value>TFVC connection failed.</value></data>
+  <data name="LogWorkingOfflineFormat" xml:space="preserve"><value>Working offline with {0} known workspace(s).</value></data>
+  <data name="LogPendingChangesLoadFailed" xml:space="preserve"><value>Loading TFVC pending changes failed.</value></data>
+  <data name="LogCollectionDetectionFailedFormat" xml:space="preserve"><value>TFVC collection detection failed: {0}</value></data>
+  <data name="LogWorkspaceSelectionFailed" xml:space="preserve"><value>Selecting the TFVC workspace of the editor workspace failed.</value></data>
+  <data name="LogInitializationFailed" xml:space="preserve"><value>TFVC initialization failed.</value></data>
+  <data name="TfCommandTimeoutFormat" xml:space="preserve"><value>tf {0} did not finish within {1} seconds.</value></data>
 </root>

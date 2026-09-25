@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -161,12 +162,17 @@ public sealed class TfvcSession : IDisposable
 
             string? lastWorkspace = await _store.LoadLastWorkspaceAsync(cancellationToken);
             TfvcWorkspace? preferred = SelectPreferredWorkspace(workspaces, _workspaceInfo.WorkspacePath, lastWorkspace);
-            _logger.Info("Connected to " + collectionUrl + ": " + workspaces.Count + " workspace(s), selected " + (preferred?.Name ?? "none") + ".");
+            _logger.Info(string.Format(
+                CultureInfo.CurrentCulture,
+                TfvcStrings.LogConnectedFormat,
+                collectionUrl,
+                workspaces.Count,
+                preferred?.Name ?? TfvcStrings.LogNoWorkspaceSelected));
             await SetCurrentWorkspaceAsync(preferred, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.Error("TFVC connection failed.", ex);
+            _logger.Error(TfvcStrings.LogConnectionFailed, ex);
             ConnectionFailed = true;
             Workspaces = Array.Empty<TfvcWorkspace>();
             CurrentWorkspace = null;
@@ -190,7 +196,7 @@ public sealed class TfvcSession : IDisposable
         IReadOnlyList<TfvcWorkspace> workspaces = Workspaces.Count > 0
             ? Workspaces
             : await _store.LoadCachedWorkspacesAsync(cancellationToken);
-        _logger.Info("Working offline with " + workspaces.Count + " known workspace(s).");
+        _logger.Info(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogWorkingOfflineFormat, workspaces.Count));
         IsOffline = true;
         Workspaces = workspaces;
         CurrentWorkspace = null;
@@ -279,7 +285,7 @@ public sealed class TfvcSession : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.Error("Loading TFVC pending changes failed.", ex);
+            _logger.Error(TfvcStrings.LogPendingChangesLoadFailed, ex);
             StatusMessage = TfvcDisplayText.DescribeError(ex);
             RaiseStateChanged();
         }
@@ -392,7 +398,7 @@ public sealed class TfvcSession : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.Warn("TFVC collection detection failed: " + ex.Message);
+            _logger.Warn(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogCollectionDetectionFailedFormat, ex.Message));
             return null;
         }
     }
@@ -488,7 +494,7 @@ public sealed class TfvcSession : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error("Selecting the TFVC workspace of the editor workspace failed.", ex);
+            _logger.Error(TfvcStrings.LogWorkspaceSelectionFailed, ex);
         }
     }
 

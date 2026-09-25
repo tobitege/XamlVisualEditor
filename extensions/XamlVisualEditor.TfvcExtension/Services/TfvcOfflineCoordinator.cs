@@ -133,7 +133,7 @@ public sealed class TfvcOfflineCoordinator : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.Error("Reconciling local TFVC changes failed.", ex);
+            _logger.Error(TfvcStrings.LogReconcileFailed, ex);
             await _window.ShowErrorMessageAsync(
                 string.Format(CultureInfo.CurrentCulture, TfvcStrings.ReconcileFailedFormat, TfvcDisplayText.DescribeError(ex)),
                 CancellationToken.None);
@@ -171,7 +171,7 @@ public sealed class TfvcOfflineCoordinator : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error("Reconciling local TFVC changes after going online failed.", ex);
+            _logger.Error(TfvcStrings.LogReconcileAfterGoingOnlineFailed, ex);
         }
     }
 }

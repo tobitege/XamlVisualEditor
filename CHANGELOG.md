@@ -42,6 +42,7 @@ uses Semantic Versioning.
 - The first start and the reset layout command use the Debugging preset instead of a layout with every panel. A layout preset contains only the panels it lists, instead of hiding the others.
 - The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
 - The C# language workspace now warms in the background after the initial workspace load.
+- The messages of the TFVC output channel and the tf.exe timeout message follow the editor language; a unit test keeps the German TFVC resources complete and their placeholders aligned.
 - XVE now reads assemblies from a shared build output instead of unrelated output trees.
 - Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
 - The dock layout now saves before view teardown and loads during the next start.

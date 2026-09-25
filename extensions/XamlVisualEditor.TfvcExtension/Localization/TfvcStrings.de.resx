@@ -155,4 +155,25 @@ Offline arbeiten? Versionierte Dateien bleiben schreibgeschützt; beim Bearbeite
   <data name="SizeKilobytesFormat" xml:space="preserve"><value>{0:N0} KB</value></data>
   <data name="ReconcileFailedFormat" xml:space="preserve"><value>Abgleich der lokalen Änderungen fehlgeschlagen: {0}</value></data>
   <data name="InitializingStatus" xml:space="preserve"><value>TFVC wird initialisiert...</value></data>
+  <data name="LogTfCommandFinishedFormat" xml:space="preserve"><value>tf {0} beendet mit {1} nach {2} ms in {3}</value></data>
+  <data name="LogAutoCheckOutFailedFormat" xml:space="preserve"><value>Automatisches TFVC-Auschecken von {0} ist fehlgeschlagen.</value></data>
+  <data name="LogStatusFallbackFormat" xml:space="preserve"><value>tf status für {0} ist fehlgeschlagen, der Schreibschutz wird ausgewertet: {1}</value></data>
+  <data name="LogItemLookupFailedFormat" xml:space="preserve"><value>TFVC-Elementabfrage für {0} ist fehlgeschlagen: {1}</value></data>
+  <data name="LogWriteProtectionRemovedFormat" xml:space="preserve"><value>Schreibschutz offline aufgehoben: {0}</value></data>
+  <data name="LogWriteProtectionRemovalFailedFormat" xml:space="preserve"><value>Aufheben des Schreibschutzes von {0} ist fehlgeschlagen.</value></data>
+  <data name="LogChangeHandlingFailed" xml:space="preserve"><value>Verarbeitung der TFVC-Änderung ist fehlgeschlagen.</value></data>
+  <data name="LogStateLookupFailedFormat" xml:space="preserve"><value>TFVC-Statusabfrage für {0} ist fehlgeschlagen.</value></data>
+  <data name="LogReconcileFailed" xml:space="preserve"><value>Abgleich der lokalen TFVC-Änderungen ist fehlgeschlagen.</value></data>
+  <data name="LogReconcileAfterGoingOnlineFailed" xml:space="preserve"><value>Abgleich der lokalen TFVC-Änderungen nach dem Online-Gehen ist fehlgeschlagen.</value></data>
+  <data name="LogLocalChangesFormat" xml:space="preserve"><value>Lokale Änderungen unter {0}: {1} Kandidat(en), {2} Änderung(en) ohne ausstehende Änderung.</value></data>
+  <data name="LogNoEditorWorkspace" xml:space="preserve"><value>kein XVE-Workspace</value></data>
+  <data name="LogConnectedFormat" xml:space="preserve"><value>Verbunden mit {0}: {1} Arbeitsbereich(e), ausgewählt: {2}.</value></data>
+  <data name="LogNoWorkspaceSelected" xml:space="preserve"><value>keiner</value></data>
+  <data name="LogConnectionFailed" xml:space="preserve"><value>TFVC-Verbindung ist fehlgeschlagen.</value></data>
+  <data name="LogWorkingOfflineFormat" xml:space="preserve"><value>Offline mit {0} bekannten Arbeitsbereich(en).</value></data>
+  <data name="LogPendingChangesLoadFailed" xml:space="preserve"><value>Laden der ausstehenden TFVC-Änderungen ist fehlgeschlagen.</value></data>
+  <data name="LogCollectionDetectionFailedFormat" xml:space="preserve"><value>Ermittlung der TFVC-Sammlung ist fehlgeschlagen: {0}</value></data>
+  <data name="LogWorkspaceSelectionFailed" xml:space="preserve"><value>Auswahl des TFVC-Arbeitsbereichs zum XVE-Workspace ist fehlgeschlagen.</value></data>
+  <data name="LogInitializationFailed" xml:space="preserve"><value>TFVC-Initialisierung ist fehlgeschlagen.</value></data>
+  <data name="TfCommandTimeoutFormat" xml:space="preserve"><value>tf {0} wurde nicht innerhalb von {1} Sekunden beendet.</value></data>
 </root>

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.TfvcExtension.Localization;
 using XamlVisualEditor.TfvcExtension.Models;
 
 namespace XamlVisualEditor.TfvcExtension.Services;
@@ -121,8 +122,8 @@ public sealed class TfCommandRunner : ITfCommandRunner
             {
                 TryKill(process);
                 throw new TimeoutException(string.Format(
-                    CultureInfo.InvariantCulture,
-                    "tf {0} did not finish within {1} seconds.",
+                    CultureInfo.CurrentCulture,
+                    TfvcStrings.TfCommandTimeoutFormat,
                     arguments.Count > 0 ? arguments[0] : string.Empty,
                     (int)timeout.TotalSeconds));
             }
@@ -154,8 +155,8 @@ public sealed class TfCommandRunner : ITfCommandRunner
         }
 
         string message = string.Format(
-            CultureInfo.InvariantCulture,
-            "tf {0} exited with {1} after {2} ms in {3}",
+            CultureInfo.CurrentCulture,
+            TfvcStrings.LogTfCommandFinishedFormat,
             arguments.Count > 0 ? arguments[0] : string.Empty,
             result.ExitCode,
             elapsedMilliseconds,

@@ -182,7 +182,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             }
 
             _editor.SetWriteProtectionManaged(path, false);
-            _logger.Error("Automatic TFVC check-out failed for " + path + ".", ex);
+            _logger.Error(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogAutoCheckOutFailedFormat, path), ex);
             string message = string.Format(
                 CultureInfo.CurrentCulture,
                 TfvcStrings.AutoCheckOutFailedFormat,
@@ -283,7 +283,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
                 throw;
             }
 
-            _logger.Warn("tf status failed for " + localPath + ", using the read-only attribute: " + ex.Message);
+            _logger.Warn(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogStatusFallbackFormat, localPath, ex.Message));
             changes = Array.Empty<TfvcPendingChange>();
         }
 
@@ -315,7 +315,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         {
             // Without server access, a read-only file in a mapped folder is treated as a
             // checked-in file of a server workspace.
-            _logger.Warn("TFVC item lookup failed for " + serverPath + ": " + ex.Message);
+            _logger.Warn(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogItemLookupFailedFormat, serverPath, ex.Message));
             return IsReadOnlyFile(localPath)
                 ? new TfvcFileState(TfvcFileStateKind.CheckedIn, workspace, serverPath, null)
                 : new TfvcFileState(TfvcFileStateKind.Unknown, workspace, serverPath, null);
@@ -366,11 +366,11 @@ public sealed class TfvcAutoCheckOutService : IDisposable
 
             File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
             await _session.RecordOfflineEditAsync(path, cancellationToken);
-            _logger.Info("Write protection removed offline: " + path);
+            _logger.Info(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogWriteProtectionRemovedFormat, path));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.Error("Removing the write protection failed for " + path + ".", ex);
+            _logger.Error(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogWriteProtectionRemovalFailedFormat, path), ex);
             await _window.ShowErrorMessageAsync(
                 string.Format(CultureInfo.CurrentCulture, TfvcStrings.OfflineEditFailedFormat, fileName, ex.Message),
                 CancellationToken.None);
@@ -532,7 +532,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error("TFVC change handling failed.", ex);
+            _logger.Error(TfvcStrings.LogChangeHandlingFailed, ex);
         }
     }
 
@@ -554,7 +554,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error("TFVC state lookup failed for " + path + ".", ex);
+            _logger.Error(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogStateLookupFailedFormat, path), ex);
             state = TfvcFileState.Unknown;
             if (allowRetry)
             {

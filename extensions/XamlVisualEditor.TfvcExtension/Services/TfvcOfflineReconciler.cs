@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.TfvcExtension.Localization;
 using XamlVisualEditor.TfvcExtension.Models;
 
 namespace XamlVisualEditor.TfvcExtension.Services;
@@ -77,8 +79,12 @@ public sealed class TfvcOfflineReconciler
         }
 
         changes.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.LocalPath, right.LocalPath));
-        _logger.Info("Local changes below " + (scope ?? "no editor workspace") + ": " + candidates.Count + " candidate(s), "
-            + changes.Count + " change(s) without pending change.");
+        _logger.Info(string.Format(
+            CultureInfo.CurrentCulture,
+            TfvcStrings.LogLocalChangesFormat,
+            scope ?? TfvcStrings.LogNoEditorWorkspace,
+            candidates.Count,
+            changes.Count));
         return changes;
     }
 
@@ -143,7 +149,7 @@ public sealed class TfvcOfflineReconciler
         }
         catch (TfvcServerException ex)
         {
-            _logger.Warn("TFVC item lookup failed for " + serverPath + ": " + ex.Message);
+            _logger.Warn(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogItemLookupFailedFormat, serverPath, ex.Message));
             return _session.OfflineEdits.Contains(path);
         }
     }

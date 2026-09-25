@@ -18,9 +18,17 @@ uses Semantic Versioning.
 - Added the text editing extension: a context menu for the text and code editors with clipboard, find and replace, go to line and matching bracket, a Format submenu (toggle comment, upper and lower case, indentation, line sorting, enclosing in brackets), an Outlining submenu and a Display submenu with check-marked view toggles and zoom. The Editor Options dialog sets font, display, editing, link and color options with a live preview. The options and the caret position of each file persist across sessions.
 - Added the Window menu with the window layout commands, which leave the View menu, and a Manage Layouts dialog that renames and deletes saved layouts.
 - Extensions can contribute to the editor context menu (`ExtensionMenuLocations.EditorContext`), group menu items into submenus (`ExtensionMenuContribution.Submenu` and `SubmenuGroup`), show check marks that follow a condition (`ExtensionMenuContribution.CheckedWhen`) over their own context keys (`ExtensionContext.ContextKeys`), set selection and caret in one step (`IEditorDocument.SetSelection`), limit a keybinding to the focused text editor (`CommandMetadata.KeybindingScope`) and set editor view options and actions through `ExtensionContext.TextEditorView`; `textEditor.hasActiveEditor` tells whether the active document shows an editor.
+- Added an offline mode to the TFVC extension: when the server is unreachable at startup, XVE offers to work offline, removes the read-only attribute of an edited versioned file only after confirmation, and proposes the local changes for pending once when going online again. The Extensions menu has a TFVC submenu for going offline and online.
+- Added "Add Items to Folder..." to the TFVC source control explorer, which adds unversioned files and folders below a mapped folder.
+- Read-only files show a banner and a title marker in the editor.
+- Extensions can refine the rendered design preview through `IDesignPreviewHook` and `DesignPreviewHookRegistry`.
+- Enabled installed extension packages whose manifest names a `main` assembly are loaded into the default load context and activated.
+- `XVE_DESIGN_APP_XAML` names the App.axaml whose themes and resources the design surface applies, for library workspaces without an application of their own.
 
 ### Changed
 
+- Tool tabs no longer scroll: all tabs of a dock stay visible, and tabs that do not fit shrink and shorten their titles with an ellipsis.
+- The splitter between design surface and XAML code is visible in every theme and highlights under the pointer.
 - The word wrap and line number toggles and the font size of a document are editor options: a change in one document applies to every editor and persists.
 - Loading a layout no longer adds panels on its own: a debugger tool or extension panel that the saved layout does not contain stays closed until the view menu opens it. An extension panel with `PersistDockState = false` therefore starts closed after a restart.
 - A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
@@ -54,6 +62,14 @@ uses Semantic Versioning.
 - Fixed saving a window layout while several documents were open: the focus moved to another open document during the save and was written into the layout, which then failed to load and was replaced by the default layout. Such a layout file loads again without the document.
 - Fixed panels whose list stopped following the selection after their tab was hidden and shown again, for example the TFVC explorer after loading a workspace.
 - Fixed the TFVC panels forgetting whether their connection settings were shown; each panel keeps its own choice.
+- Fixed the C# language service writing documents to disk, which crashed the application for read-only files.
+- Fixed save, delete and rename errors showing system text; they report read-only, access-denied and in-use files in the current language.
+- Fixed the design artboard clipping documents without an explicit size at 800 x 600; it grows from the declared minimum size to the rendered content.
+- Fixed tests reading and overwriting the user's persisted layout files.
+- Fixed expanding a folder in the TFVC explorer scrolling the tree back to its root; only the rows of the expanded folder are replaced.
+- Fixed missing satellite resource assemblies being reported as unresolved workspace assemblies.
+- Fixed closing the editor logging a binding error for every tab, pin button and document: the dock views let go of their dockables before the layout is saved.
+- Fixed the references panel and the extension manager keeping their subscriptions after the shell was disposed; the throttled references filter still reached the UI dispatcher afterwards.
 
 ## [0.1.0] - 2026-08-20
 

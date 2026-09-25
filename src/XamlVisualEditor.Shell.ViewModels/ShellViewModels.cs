@@ -1694,7 +1694,7 @@ public sealed partial class ReferencesGroupViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the references panel.
 /// </summary>
-public sealed partial class ReferencesViewModel : ReactiveObject
+public sealed partial class ReferencesViewModel : ReactiveObject, IDisposable
 {
     private readonly Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> _navigateAsync;
     private readonly CompositeDisposable _groupDisposables = new();
@@ -1910,6 +1910,16 @@ public sealed partial class ReferencesViewModel : ReactiveObject
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Ends the filter and expansion subscriptions. The throttled filter would otherwise still reach the UI
+    /// dispatcher after the shell is gone.
+    /// </summary>
+    public void Dispose()
+    {
+        _lifetimeDisposables.Dispose();
+        _groupDisposables.Dispose();
     }
 }
 
@@ -8637,10 +8647,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private static string GetTrustedPreviewerRootsPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "previewer-trust.json");
+        return Path.Combine(ShellSettingsPaths.GetRoot(), "previewer-trust.json");
     }
 
     private void LogDiagnosticsSummary(IReadOnlyList<XamlDiagnostic> diagnostics)
@@ -8920,18 +8927,26 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // App.axaml so instantiated controls get the target app's themes and resources.
     private void UpdateWorkspaceDesignThemes(WorkspaceModel workspace)
     {
-        string? appXamlPath = FindApplicationXamlPath(workspace);
+        // Library workspaces have no application of their own; the override names the
+        // App.axaml whose themes the design surface should apply in that case.
+        string? overridePath = WorkspaceDesignThemeLoader.GetApplicationXamlOverridePath();
+        string? appXamlPath = overridePath ?? FindApplicationXamlPath(workspace);
         if (appXamlPath is null)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace");
+            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace"
+                + $" (set {WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable} to use another application's themes)");
             return;
         }
 
         try
         {
-            IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(appXamlPath);
-            LogOutput("Info", $"Design themes from {appXamlPath}: {string.Join("; ", details)}");
+            IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(
+                appXamlPath, message => LogOutput("Warning", message));
+            string sourceLabel = overridePath is null
+                ? appXamlPath
+                : $"{appXamlPath} ({WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable})";
+            LogOutput("Info", $"Design themes from {sourceLabel}: {string.Join("; ", details)}");
         }
         catch (Exception ex)
         {
@@ -9238,6 +9253,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _disposables.Dispose();
         Toolbox.Dispose();
         SolutionExplorer.Dispose();
+        References.Dispose();
+        ExtensionManager.Dispose();
         foreach (IDisposable view in ExtensionViews.OfType<IDisposable>())
         {
             view.Dispose();

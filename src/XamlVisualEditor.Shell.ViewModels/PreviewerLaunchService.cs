@@ -881,10 +881,7 @@ internal sealed class PreviewerTelemetryStore
 
     private static string GetTelemetryPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "previewer-telemetry.json");
+        return Path.Combine(ShellSettingsPaths.GetRoot(), "previewer-telemetry.json");
     }
 
     private sealed class PreviewerTelemetryData

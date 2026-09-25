@@ -3,10 +3,18 @@ using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.DataGridHierarchical;
+using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Xunit;
 using XamlVisualEditor.TfvcExtension.Models;
 using XamlVisualEditor.TfvcExtension.Services;
 using XamlVisualEditor.TfvcExtension.ViewModels;
+using XamlVisualEditor.TfvcExtension.Views;
 
 namespace XamlVisualEditor.Tests.Unit.Tfvc;
 
@@ -285,6 +293,123 @@ public sealed class TfvcPanelViewModelTests
         }
 
         Assert.Null(await session.LoadExplorerFocusAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_ExpandingAFolderReplacesOnlyItsOwnRows()
+    {
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null), new TfvcServerItem("$/Other", true, 20, null)];
+        server.Children["$/Product"] = [new TfvcServerItem("$/Product/src", true, 29, null)];
+        server.Children["$/Other"] = [new TfvcServerItem("$/Other/b.cs", false, 19, null)];
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            await viewModel.NavigateToAsync("$/Product", CancellationToken.None);
+            SourceControlItemViewModel other = Assert.Single(viewModel.Roots[0].Children, child => child.Name == "Other");
+            HierarchicalNode otherNode = Assert.IsType<HierarchicalNode>(viewModel.Model.FindNode(other));
+            int otherIndex = viewModel.Model.IndexOf(otherNode);
+            List<FlattenedChange> changes = new();
+            viewModel.Model.FlattenedChanged += (_, e) => changes.AddRange(e.Changes);
+
+            viewModel.Model.Expand(otherNode);
+            for (int attempt = 0; attempt < 50 && other.Children.Count != 1; attempt++)
+            {
+                await Task.Delay(10);
+            }
+
+            Assert.Equal("b.cs", Assert.Single(other.Children).Name);
+            // A refresh of the whole model would start at row 0 and scroll the grid back to the top.
+            Assert.NotEmpty(changes);
+            Assert.All(changes, change => Assert.True(change.Index > otherIndex));
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task SourceControlExplorer_ExpandingAFolderKeepsTheScrollPosition()
+    {
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 200, null)];
+        server.Children["$/Product"] = Enumerable.Range(0, 40)
+            .Select(index => new TfvcServerItem($"$/Product/Folder{index:00}", true, 100 - index, null)).ToArray();
+        server.Children["$/Product/Folder35"] = [new TfvcServerItem("$/Product/Folder35/a.cs", false, 10, null), new TfvcServerItem("$/Product/Folder35/b.cs", false, 9, null)];
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            // The user works in a focused folder.
+            await viewModel.NavigateToAsync("$/Product", CancellationToken.None);
+            await viewModel.FocusSelectedCommand.Execute().ToTask();
+            await viewModel.NavigateToAsync("$/Product/Folder39", CancellationToken.None);
+            SourceControlExplorerView view = new() { DataContext = viewModel };
+            Window window = new() { Width = 320, Height = 420, Content = view };
+            window.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+            window.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://XamlVisualEditor.Tests.Unit"))
+            {
+                Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml")
+            });
+            try
+            {
+                window.Show();
+                await FlushLayoutAsync(window);
+                DataGrid grid = view.GetVisualDescendants().OfType<DataGrid>().Single();
+                // The headless application has no application styles; the data grid takes its theme explicitly.
+                Assert.True(grid.TryFindResource(typeof(DataGrid), out object? theme));
+                grid.Theme = Assert.IsType<Avalonia.Styling.ControlTheme>(theme);
+                await FlushLayoutAsync(window);
+                grid.ScrollIntoView(grid.SelectedItem, null);
+                await FlushLayoutAsync(window);
+                int firstRowBefore = GetFirstVisibleRow(grid);
+                Assert.True(firstRowBefore > 0, "The selected last folder must scroll the tree away from its root.");
+
+                // Like the user: click the folder row, then its expander.
+                SourceControlItemViewModel folder = Assert.Single(viewModel.Roots[0].Children, child => child.Name == "Folder35");
+                HierarchicalNode folderNode = viewModel.Model.FindNode(folder)!;
+                DataGridRow folderRow = grid.GetVisualDescendants().OfType<DataGridRow>().Single(row => ReferenceEquals(row.DataContext, folderNode));
+                Click(window, folderRow, new Point(folderRow.Bounds.Width / 2, folderRow.Bounds.Height / 2));
+                await FlushLayoutAsync(window);
+                firstRowBefore = GetFirstVisibleRow(grid);
+                Avalonia.Controls.Primitives.ToggleButton expander = folderRow.GetVisualDescendants()
+                    .OfType<Avalonia.Controls.Primitives.ToggleButton>().Single(button => button.Name == "PART_Expander");
+                // The server answers after the expander shows its placeholder row, like a real round trip.
+                server.ChildrenGate = new TaskCompletionSource();
+                Click(window, expander, new Point(expander.Bounds.Width / 2, expander.Bounds.Height / 2));
+                await FlushLayoutAsync(window);
+                server.ChildrenGate.SetResult();
+                for (int attempt = 0; attempt < 50 && folder.Children.Count != 2; attempt++)
+                {
+                    await Task.Delay(10);
+                }
+
+                await FlushLayoutAsync(window);
+                Assert.Equal(2, folder.Children.Count);
+                Assert.InRange(GetFirstVisibleRow(grid), firstRowBefore - 1, firstRowBefore + 3);
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+    }
+
+    private static void Click(Window window, Visual target, Point point)
+    {
+        Point windowPoint = target.TranslatePoint(point, window)!.Value;
+        window.MouseDown(windowPoint, Avalonia.Input.MouseButton.Left);
+        window.MouseUp(windowPoint, Avalonia.Input.MouseButton.Left);
+    }
+
+    private static int GetFirstVisibleRow(DataGrid grid) =>
+        grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(row => row.IsVisible && row.Bounds.Bottom > 0)
+            .Min(row => row.Index);
+
+    private static async Task FlushLayoutAsync(Window window)
+    {
+        for (int pass = 0; pass < 3; pass++)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            window.UpdateLayout();
+        }
     }
 
     private static SourceControlExplorerViewModel CreateExplorer(TfvcSession session)

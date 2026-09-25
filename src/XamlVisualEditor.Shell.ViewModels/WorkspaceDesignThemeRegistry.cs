@@ -8,6 +8,7 @@ using System.Xml.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Markup.Xaml;
+using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Metadata;
 using Avalonia.Platform;
 using Avalonia.Styling;
@@ -50,7 +51,38 @@ public static class WorkspaceDesignThemeRegistry
 /// </summary>
 public static class WorkspaceDesignThemeLoader
 {
+    /// <summary>
+    /// Name of the environment variable that names the application XAML file whose styles
+    /// and resources the design surface should apply. It takes precedence over the
+    /// workspace scan, which finds nothing for library workspaces: their application
+    /// (and with it the control themes) lives outside the loaded project graph.
+    /// </summary>
+    public const string ApplicationXamlOverrideVariable = "XVE_DESIGN_APP_XAML";
+
     private static readonly ConditionalWeakTable<IStyle, IReadOnlyList<IDataTemplate>> ApplicationTemplates = new();
+
+    /// <summary>
+    /// Resolves the application XAML override from the environment. Returns the full
+    /// path when the variable is set and the file exists; otherwise null.
+    /// </summary>
+    public static string? GetApplicationXamlOverridePath()
+    {
+        string? value = Environment.GetEnvironmentVariable(ApplicationXamlOverrideVariable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            string fullPath = Path.GetFullPath(value.Trim());
+            return File.Exists(fullPath) ? fullPath : null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Gets templates created in the same resource scope as an application style instance.</summary>
     public static IReadOnlyList<IDataTemplate> GetApplicationDataTemplates(IStyle style) =>
@@ -59,9 +91,12 @@ public static class WorkspaceDesignThemeLoader
 
     /// <summary>
     /// Registers complete application style and resource declarations without running application startup code.
-    /// Returns human-readable detail lines for the output log.
+    /// Returns human-readable detail lines for the output log. When the declarations cannot be compiled as one
+    /// scope in the editor process (for example because the application assembly or one of its libraries is not
+    /// loaded there), the design surface applies the loadable includes and theme elements one by one instead;
+    /// <paramref name="report"/> receives the skipped parts once.
     /// </summary>
-    public static IReadOnlyList<string> LoadFromApplicationXaml(string appXamlPath)
+    public static IReadOnlyList<string> LoadFromApplicationXaml(string appXamlPath, Action<string>? report = null)
     {
         XDocument document = XDocument.Load(appXamlPath);
         XElement? root = document.Root;
@@ -144,10 +179,124 @@ public static class WorkspaceDesignThemeLoader
             return scope;
         }
 
+        bool loadItemByItem = false;
+        Styles CreateScopeOrItems()
+        {
+            if (!loadItemByItem)
+            {
+                try
+                {
+                    return CreateScope();
+                }
+                catch (Exception exception)
+                {
+                    loadItemByItem = true;
+                    report?.Invoke($"Design themes from {sourcePath} could not be compiled as one scope in the editor"
+                        + $" ({FirstMessage(exception)}); loadable includes and theme elements are applied one by one.");
+                    return CreateItemScope(root, resourcesElement, stylesElement, sourcePath, report);
+                }
+            }
+
+            return CreateItemScope(root, resourcesElement, stylesElement, sourcePath, report: null);
+        }
+
         WorkspaceDesignThemeRegistry.Update(
-            hasStyles || hasTemplates ? new Func<IStyle?>[] { CreateScope } : Array.Empty<Func<IStyle?>>(),
-            hasStyles || hasTemplates ? Array.Empty<Func<IResourceProvider?>>() : new Func<IResourceProvider?>[] { CreateScope });
+            hasStyles || hasTemplates ? new Func<IStyle?>[] { CreateScopeOrItems } : Array.Empty<Func<IStyle?>>(),
+            hasStyles || hasTemplates ? Array.Empty<Func<IResourceProvider?>>() : new Func<IResourceProvider?>[] { CreateScopeOrItems });
         return new[] { "Application styles, resources and data templates registered as one XAML scope." };
+    }
+
+    /// <summary>
+    /// Builds a scope from the parts of an application XAML that load on their own: absolute resource and style
+    /// includes are resolved from their precompiled assemblies, other style elements (themes, inline styles) are
+    /// compiled individually. Parts that fail are skipped; data templates need the application scope and are skipped.
+    /// </summary>
+    private static Styles CreateItemScope(XElement root, XElement? resourcesElement, XElement? stylesElement,
+        string sourcePath, Action<string>? report)
+    {
+        Uri baseUri = new(sourcePath, UriKind.Absolute);
+        Styles scope = new();
+        List<string> skipped = new();
+
+        foreach (XElement include in resourcesElement?.Descendants().Where(element => element.Name.LocalName == "ResourceInclude")
+                     ?? Enumerable.Empty<XElement>())
+        {
+            string? source = include.Attribute("Source")?.Value;
+            TryAdd(source, () =>
+            {
+                ResourceInclude resource = new(baseUri) { Source = ParseAbsoluteSource(source) };
+                _ = resource.Loaded;
+                scope.Resources.MergedDictionaries.Add(resource);
+            });
+        }
+
+        XNamespace avalonia = "https://github.com/avaloniaui";
+        foreach (XElement element in stylesElement?.Elements() ?? Enumerable.Empty<XElement>())
+        {
+            string localName = element.Name.LocalName;
+            if (localName == "FluentTheme")
+            {
+                // The editor provides the Fluent theme itself.
+                continue;
+            }
+
+            if (localName == "StyleInclude")
+            {
+                string? source = element.Attribute("Source")?.Value;
+                TryAdd(source, () =>
+                {
+                    StyleInclude style = new(baseUri) { Source = ParseAbsoluteSource(source) };
+                    _ = style.Loaded;
+                    scope.Add(style);
+                });
+                continue;
+            }
+
+            TryAdd(localName, () =>
+            {
+                XElement wrapper = new(avalonia + "Styles",
+                    root.Attributes().Where(attribute => attribute.IsNamespaceDeclaration).Select(attribute => new XAttribute(attribute)),
+                    new XElement(element));
+                string xaml = QualifyElementTypes(wrapper).ToString(SaveOptions.DisableFormatting);
+                scope.Add((IStyle)AvaloniaRuntimeXamlLoader.Load(xaml, null, null, baseUri, designMode: true));
+            });
+        }
+
+        if (report is not null && skipped.Count > 0)
+        {
+            report($"Design themes skipped from {sourcePath}: {string.Join("; ", skipped)}");
+        }
+
+        return scope;
+
+        void TryAdd(string? label, Action add)
+        {
+            try
+            {
+                add();
+            }
+            catch (Exception exception)
+            {
+                skipped.Add($"{label} ({FirstMessage(exception)})");
+            }
+        }
+    }
+
+    private static Uri ParseAbsoluteSource(string? source) =>
+        Uri.TryCreate(source, UriKind.Absolute, out Uri? uri)
+            ? uri
+            : throw new InvalidOperationException("Only absolute include sources can be loaded outside the application scope.");
+
+    // Reflection and type initializer wrappers hide the actual cause in their inner exception.
+    private static string FirstMessage(Exception exception)
+    {
+        while (exception is AggregateException or TargetInvocationException or TypeInitializationException
+               && exception.InnerException is { } inner)
+        {
+            exception = inner;
+        }
+
+        return exception.Message;
     }
 
     private static XElement QualifyElementTypes(XElement root)

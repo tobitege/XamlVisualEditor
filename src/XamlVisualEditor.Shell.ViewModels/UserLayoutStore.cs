@@ -45,11 +45,10 @@ public sealed class UserLayoutStore : IUserLayoutStore
         _directory = directory;
     }
 
-    /// <summary>Creates the store inside the roaming application data folder.</summary>
+    /// <summary>Creates the store inside the shell settings folder.</summary>
     public static UserLayoutStore CreateDefault()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return new UserLayoutStore(Path.Combine(appData, "XamlVisualEditor", "layouts"));
+        return new UserLayoutStore(Path.Combine(ShellSettingsPaths.GetRoot(), "layouts"));
     }
 
     public IReadOnlyList<string> ListNames()

@@ -503,7 +503,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         item.IsLoaded = true;
         item.Children.Clear();
         item.Children.Add(new SourceControlItemViewModel(new TfvcServerItem(TfvcWorkspace.CombineServerPath(item.ServerPath, "."), false, 0, null), null, isPlaceholder: true));
-        Model.Refresh();
+        RefreshRowsBelow(item);
         try
         {
             IReadOnlyList<TfvcServerItem> children = await _session.Server.GetChildrenAsync(collectionUrl, item.ServerPath, cancellationToken);
@@ -525,7 +525,21 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             OperationMessage = TfvcDisplayText.DescribeError(ex);
         }
 
-        Model.Refresh();
+        RefreshRowsBelow(item);
+    }
+
+    // Loading a folder replaces only its own child rows: a refresh of the whole model rebuilds every row, and the
+    // grid then shows the top of the tree again instead of the folder the user just expanded.
+    private void RefreshRowsBelow(SourceControlItemViewModel item)
+    {
+        if (Model.FindNode(item) is { } node)
+        {
+            Model.Refresh(node);
+        }
+        else
+        {
+            Model.Refresh();
+        }
     }
 
     private string GetIconPath(TfvcServerItem item)

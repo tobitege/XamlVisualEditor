@@ -134,7 +134,7 @@
             </Border>
 
             <GridSplitter Width="4"
-                          Background="Transparent"
+                          Classes="designer-splitter"
                           ResizeBehavior="PreviousAndNext"
                           ResizeDirection="Columns"
                           HorizontalAlignment="Stretch"
@@ -152,7 +152,7 @@
             </GridSplitter>
 
             <GridSplitter Height="4"
-                          Background="Transparent"
+                          Classes="designer-splitter"
                           ResizeBehavior="PreviousAndNext"
                           ResizeDirection="Rows"
                           HorizontalAlignment="Stretch"

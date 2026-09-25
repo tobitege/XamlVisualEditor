@@ -77,6 +77,28 @@
         <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
     </Style>
 
+    <!-- All tool tabs stay visible like in Visual Studio: tabs that do not fit shrink and shorten their titles with an
+         ellipsis instead of scrolling; the tooltip shows the full title. -->
+    <Style Selector="dock|ToolTabStrip">
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <styles:CompactTabStripPanel />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="dock|ToolTabStripItem" x:DataType="dockmodel:IDockable">
+        <Setter Property="ToolTip.Tip" Value="{CompiledBinding Title}" />
+    </Style>
+
+    <!-- The splitter between design surface and XAML code stays visible in every theme; the accent marks it
+         under the pointer and while dragging. -->
+    <Style Selector="GridSplitter.designer-splitter">
+        <Setter Property="Background" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+    </Style>
+    <Style Selector="GridSplitter.designer-splitter:pointerover, GridSplitter.designer-splitter:pressed">
+        <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
+    </Style>
+
     <!-- Nur Dialogbuttons; Designer-Controls und Dock-Toolbars behalten ihre Styles. -->
     <Style Selector="Window.editor-chrome Button">
         <Setter Property="Background" Value="{DynamicResource EditorDialogButtonBackgroundBrush}" />

@@ -1057,7 +1057,7 @@ public sealed partial class DesignSurfaceView : UserControl
             && _runtimeRenderedDocument is { } previous && _rootControl is not null && docVm.MetadataService is { } metadata
             && new RuntimeDesignRenderer(metadata).TryUpdateLayout(previous, doc, _rootControl))
         {
-            UpdateCanvasSizeFromRoot(docVm, doc.Root);
+            UpdateCanvasSizeFromRoot(docVm, doc.Root, _rootControl);
             if (_currentVm?.TakeRequestedSelection() is { } requested) _currentVm.SelectNodesFromSync(requested);
             RefreshSelectionAdorners();
             return;
@@ -1068,7 +1068,7 @@ public sealed partial class DesignSurfaceView : UserControl
         try
         {
             renderedDocument = RenderRuntimeDocument(docVm, doc);
-            tree = CreateRuntimeSurface(renderedDocument, docVm.MetadataService);
+            tree = CreateRuntimeSurface(renderedDocument, docVm.MetadataService, doc.Root);
         }
         catch (Exception exception)
         {
@@ -1087,7 +1087,7 @@ public sealed partial class DesignSurfaceView : UserControl
         docVm.SetRuntimeRenderDiagnostics(renderedDocument.Diagnostics);
         SetPreviewStatus(renderedDocument.Diagnostics.Count == 0 ? null :
             $"Preview incomplete: {renderedDocument.Diagnostics.Count} control(s) unavailable. See Problems.");
-        UpdateCanvasSizeFromRoot(docVm, doc.Root);
+        UpdateCanvasSizeFromRoot(docVm, doc.Root, tree);
         tree.UpdateLayout();
 
         ApplyEditMode();
@@ -1170,7 +1170,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
     }
 
-    private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root)
+    private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root, Control? rootControl)
     {
         if (_currentVm is null)
         {
@@ -1195,8 +1195,24 @@ public sealed partial class DesignSurfaceView : UserControl
             designHeight = GetNumericProperty(root, "Height");
         }
 
-        _currentVm.CanvasWidth = designWidth ?? 800;
-        _currentVm.CanvasHeight = designHeight ?? 600;
+        // The artboard clips its content, so a document without an explicit size grows from
+        // its declared minimum (or the default) to what it renders. The rendered root is
+        // already attached to the canvas, so templates and styles take part in the measure.
+        Size? measured = null;
+        if (rootControl is not null && (!designWidth.HasValue || !designHeight.HasValue))
+        {
+            rootControl.Measure(DesignCanvasSizing.MeasureConstraint);
+            measured = rootControl.DesiredSize;
+            rootControl.InvalidateMeasure();
+        }
+
+        (_currentVm.CanvasWidth, _currentVm.CanvasHeight) = DesignCanvasSizing.Compute(
+            designWidth,
+            designHeight,
+            GetNumericProperty(root, "MinWidth"),
+            GetNumericProperty(root, "MinHeight"),
+            measured?.Width,
+            measured?.Height);
     }
 
     private static void TryGetDesignSizeFromText(string? text, ref double? designWidth, ref double? designHeight)

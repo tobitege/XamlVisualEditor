@@ -32,6 +32,32 @@ namespace XamlVisualEditor.Tests.UI;
 public sealed class ExtensionCommandMenuIntegrationTests
 {
     [AvaloniaFact]
+    public async Task Only_Enabled_Installed_Packages_With_A_Main_Assembly_Are_Activated_From_Their_Installation_Directory()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-installed-packages-{Guid.NewGuid():N}");
+        try
+        {
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+            FileExtensionStateStore state = new(Path.Combine(root, "extension-state.json"));
+            ExtensionPackageInfo enabled = await store.InstallAsync(
+                InstalledPackageProbe.CreatePackage(root, "enabled"), CancellationToken.None);
+            ExtensionPackageInfo disabled = await store.InstallAsync(
+                InstalledPackageProbe.CreatePackage(root, "disabled"), CancellationToken.None);
+            await state.SetEnabledAsync(enabled.Manifest.ExtensionId, true, CancellationToken.None);
+
+            using ExtensionMenuTestHost host = new(packageStore: store, stateStore: state);
+            await host.ActivateAsync();
+
+            Assert.Equal(enabled.InstallationDirectory, InstalledPackageProbe.GetActivationPath(enabled.Manifest.ExtensionId));
+            Assert.Null(InstalledPackageProbe.GetActivationPath(disabled.Manifest.ExtensionId));
+        }
+        finally
+        {
+            InstalledPackageProbe.TryDeleteDirectory(root);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Text_Editing_Extension_Edits_The_Active_Document_And_Checks_Toggles_In_Place()
     {
         string filePath = Path.Combine(Path.GetTempPath(), $"xve-text-editing-{Guid.NewGuid():N}.cs");
@@ -440,7 +466,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
         private readonly WorkspaceModelAdapter _workspaceModel;
         private readonly BuiltInExtensionHost _extensionHost;
 
-        public ExtensionMenuTestHost(bool withTextEditing = false)
+        public ExtensionMenuTestHost(bool withTextEditing = false, IExtensionPackageStore? packageStore = null,
+            IExtensionStateStore? stateStore = null)
         {
             _languageRegistry = new LanguageServiceRegistry(Array.Empty<ILanguageIntellisenseService>());
             ViewModel = new MainWindowViewModel(
@@ -500,7 +527,9 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 _viewHost,
                 new InMemorySettingsStore(),
                 textEditorView: TextEditorView,
-                contextKeys: ContextKeys);
+                contextKeys: ContextKeys,
+                packageStore: packageStore,
+                stateStore: stateStore);
         }
 
         public MainWindowViewModel ViewModel { get; }

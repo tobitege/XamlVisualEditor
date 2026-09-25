@@ -394,10 +394,7 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
 
     private static string GetLayoutPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "mdi-canvas-layout.json");
+        return Path.Combine(ShellSettingsPaths.GetRoot(), "mdi-canvas-layout.json");
     }
 
     private static bool IsSupportedPath(string filePath)

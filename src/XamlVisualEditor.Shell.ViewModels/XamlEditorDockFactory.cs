@@ -799,10 +799,7 @@ public sealed partial class XamlEditorDockFactory : Factory
     /// </summary>
     public static string GetDefaultLayoutPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "dock-layout.json");
+        return Path.Combine(ViewModels.ShellSettingsPaths.GetRoot(), "dock-layout.json");
     }
 
     /// <summary>

@@ -46,8 +46,11 @@ public sealed partial class DesignSurfaceView
         return new RuntimeDesignRenderer(metadata).Render(source, new Uri(document.FilePath, UriKind.Absolute), localAssembly);
     }
 
-    private Control CreateRuntimeSurface(RuntimeDesignRenderResult rendered, ITypeMetadataService? metadata)
+    private Control CreateRuntimeSurface(RuntimeDesignRenderResult rendered, ITypeMetadataService? metadata,
+        MutableAstObjectNode rootNode)
     {
+        DesignPreviewHookRegistry.Apply(rendered.Root, rootNode, (hook, exception) =>
+            Log.Warning(exception, "Design preview hook {Hook} failed for {Document}", hook.GetType().FullName, rendered.DocumentUri));
         if (rendered.Root is not Window window)
         {
             ApplyWorkspaceThemes(rendered.Root, metadata);

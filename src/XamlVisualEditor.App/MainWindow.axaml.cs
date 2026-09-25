@@ -67,8 +67,16 @@ public sealed partial class MainWindow : Window
         };
 
         // Dispose handlers when window is closing
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
+            // Closing the window takes the tabs out of the visual tree; they have to let go of their dockables
+            // before, while they can still be found, or the layout save on shutdown logs a binding error per tab.
+            if (!e.Cancel)
+            {
+                DockViewRelease.Release(this);
+            }
+
+
             _openFileHandler?.Dispose();
             _saveFileHandler?.Dispose();
             _renameSymbolHandler?.Dispose();

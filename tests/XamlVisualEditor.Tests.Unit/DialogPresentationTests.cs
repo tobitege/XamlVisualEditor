@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
 
@@ -54,6 +55,61 @@ public sealed class DialogPresentationTests
             owner.Close();
             Application.Current.Styles.Remove(theme);
             CultureInfo.CurrentUICulture = previousCulture;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ProgressDialogClosesWhenTheCallerEndsItsWork()
+    {
+        Window owner = new() { Width = 800, Height = 700 };
+        AppDialogHost host = new(new MainWindowProvider { MainWindow = owner });
+        try
+        {
+            owner.Show();
+            using CancellationTokenSource workDone = new();
+            Task<bool?> dialogTask = host.ShowDialogAsync<bool?>(
+                ProgressDialogRequest.DIALOG_ID, new ProgressDialogRequest("Converting", "This can take a while."), workDone.Token);
+            Flush(owner);
+            ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
+            Assert.Single(dialog.GetVisualDescendants().OfType<ProgressBar>(), bar => bar.IsIndeterminate);
+            Assert.False(dialogTask.IsCompleted);
+
+            workDone.Cancel();
+            Flush(owner);
+
+            Assert.Null(await dialogTask);
+            Assert.Empty(owner.OwnedWindows);
+        }
+        finally
+        {
+            owner.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ProgressDialogReportsTheUserCancel()
+    {
+        Window owner = new() { Width = 800, Height = 700 };
+        AppDialogHost host = new(new MainWindowProvider { MainWindow = owner });
+        try
+        {
+            owner.Show();
+            using CancellationTokenSource workDone = new();
+            Task<bool?> dialogTask = host.ShowDialogAsync<bool?>(
+                ProgressDialogRequest.DIALOG_ID, new ProgressDialogRequest("Converting", "This can take a while.", "Stop"), workDone.Token);
+            Flush(owner);
+            ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
+            Button cancel = Assert.Single(dialog.GetVisualDescendants().OfType<Button>(), button => button.Name == "CancelButton");
+            Assert.Equal("Stop", cancel.Content);
+
+            cancel.Command!.Execute(null);
+            Flush(owner);
+
+            Assert.True(await dialogTask);
+        }
+        finally
+        {
+            owner.Close();
         }
     }
 

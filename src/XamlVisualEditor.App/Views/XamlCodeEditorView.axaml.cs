@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
@@ -186,6 +187,17 @@ public sealed partial class XamlCodeEditorView : UserControl
         ApplyTextMateTheme();
     }
 
+    // Runs after the caret sync has brought the caret just into view, so a line at the viewport edge moves to the
+    // middle; a line that already lies in the middle part of the viewport stays where it is.
+    private void RevealLine(int line)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_textEditor?.Document is { } document && line >= 1 && line <= document.LineCount)
+                _textEditor.ScrollToLine(line);
+        }, DispatcherPriority.Background);
+    }
+
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
     {
         ApplyTextMateTheme();
@@ -243,6 +255,17 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
 
         _foldingManager ??= FoldingManager.Install(_textEditor.TextArea);
+
+        // Next to the text, so the marker of the selected element sits between the line numbers and the code.
+        if (_textEditor.TextArea.LeftMargins.OfType<SelectedElementMargin>().FirstOrDefault() is not { } selectedElementMargin)
+        {
+            selectedElementMargin = new SelectedElementMargin();
+            _textEditor.TextArea.LeftMargins.Add(selectedElementMargin);
+        }
+
+        _vmSubscriptions.Add(vm.WhenAnyValue(x => x.SelectedElementLines)
+            .Subscribe(lines => selectedElementMargin.Lines = lines));
+        _vmSubscriptions.Add(vm.RevealLineRequests.Subscribe(RevealLine));
 
         _foldingSubscription?.Dispose();
         _foldingSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(

@@ -19,6 +19,18 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
     public const string DIALOG_ID = "xve.confirm";
 }
 
+/// <summary>Requests a modal, indeterminate progress dialog that blocks the editor while work runs.</summary>
+/// <remarks>
+/// The dialog closes when the cancellation token passed to <see cref="IDialogHost.ShowDialogAsync{T}"/> is cancelled,
+/// which the caller does when its work ends. The user can close it earlier with the cancel button or the window
+/// button; the dialog task then completes before the caller cancelled the token, and the caller cancels its work.
+/// </remarks>
+public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null)
+{
+    /// <summary>Identifier of the shared progress dialog.</summary>
+    public const string DIALOG_ID = "xve.progress";
+}
+
 /// <summary>Controls workspace opening behavior.</summary>
 public interface IWorkspaceHost
 {

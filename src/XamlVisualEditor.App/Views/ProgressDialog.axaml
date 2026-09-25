@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.ProgressDialog"
+        Classes="editor-chrome"
+        x:DataType="vm:ProgressDialogViewModel"
+        Title="{CompiledBinding Title}"
+        Width="420"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12">
+    <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+    <TextBlock Grid.Row="1" Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+    <ProgressBar Grid.Row="2" Name="Progress" />
+    <Button Grid.Row="3" Name="CancelButton" HorizontalAlignment="Right"
+            Content="{CompiledBinding CancelText}" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+  </Grid>
+</Window>

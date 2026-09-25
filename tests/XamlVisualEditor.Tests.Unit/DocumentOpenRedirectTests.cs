@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Shell.ViewModels;
@@ -50,6 +51,21 @@ public sealed class DocumentOpenRedirectTests : IDisposable
         Assert.Equal(1, interceptor.Calls);
     }
 
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task OpenFileAsync_Opens_Nothing_When_An_Interceptor_Cancels()
+    {
+        string sourcePath = CreateFile("Source.cs");
+        DocumentOpenInterceptorRegistry registry = new();
+        using IDisposable registration = registry.Register(new CancellingInterceptor());
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"), documentOpenResolver: registry);
+
+        await main.OpenFileAsync(sourcePath);
+
+        Assert.Empty(main.Documents);
+        Assert.Empty(main.RecentFiles);
+        Assert.Equal(string.Format(UiStrings.OpenCanceled, "Source.cs"), main.StatusText);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
@@ -61,6 +77,12 @@ public sealed class DocumentOpenRedirectTests : IDisposable
         string path = Path.Combine(_root, name);
         File.WriteAllText(path, "class Example { }");
         return path;
+    }
+
+    private sealed class CancellingInterceptor : IDocumentOpenInterceptor
+    {
+        public Task<string?> RedirectAsync(string filePath, CancellationToken cancellationToken) =>
+            throw new OperationCanceledException();
     }
 
     private sealed class RedirectingInterceptor(string sourcePath, string? targetPath) : IDocumentOpenInterceptor

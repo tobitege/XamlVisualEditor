@@ -958,6 +958,9 @@
   <data name="ActivatingExtensionStatus" xml:space="preserve"><value>Activating extension {0}...</value></data>
   <data name="LanguageWorkspaceWarmupStatus" xml:space="preserve"><value>Preparing language services for {0}...</value></data>
   <data name="InvalidPathRejected" xml:space="preserve"><value>Rejected invalid path: {0}</value></data>
+  <data name="OpenCanceled" xml:space="preserve"><value>Opening {0} canceled</value></data>
+  <data name="FollowDesignerSelection" xml:space="preserve"><value>Move to the element selected in the designer and mark its lines</value></data>
+  <data name="FollowDesignerSelectionShort" xml:space="preserve"><value>Follow</value></data>
   <data name="AcpRequestFailed" xml:space="preserve"><value>ACP request failed.</value></data>
   <data name="OpenAiAcpAgent" xml:space="preserve"><value>OpenAI Codex ACP agent</value></data>
   <data name="AnthropicAcpAgent" xml:space="preserve"><value>Anthropic Claude ACP agent</value></data>

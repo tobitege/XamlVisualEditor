@@ -29,6 +29,8 @@ uses Semantic Versioning.
 - `XVE_DESIGN_APP_XAML` names the App.axaml whose themes and resources the design surface applies, for library workspaces without an application of their own.
 - The status bar shows startup work, extension activation, TFVC initialization and the language-service warmup of a loaded workspace while they run, and shows "Ready" only after the last of them ended. Extensions announce their own background work through `ExtensionContext.BackgroundActivities`.
 - Extensions can redirect a file the user opens to another file through `ExtensionContext.DocumentOpenInterceptors`, for example to open a generated file in place of its source; navigation into a file is not redirected. `ConfirmationDialogRequest.CancelText` labels the declining button.
+- The XAML code editor marks the element selected in the designer with an arrow at its first line and a bar along its lines in the gutter, and a selection in the designer scrolls the element start away from the viewport edge. The "Follow" toggle in the code editor toolbar turns this off.
+- An interceptor cancels the open by throwing `OperationCanceledException`. Extensions show a modal, cancellable progress dialog through `ProgressDialogRequest` while long work runs.
 
 ### Changed
 
@@ -49,6 +51,7 @@ uses Semantic Versioning.
 
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
+- Fixed the line and column in the status bar, which stayed at 1, 1 for XAML documents.
 - Fixed property edits with several selected controls, which changed only the first control. The property editor now shows the properties shared by all selected controls, shows differing values as not set, and applies an edit to every selected control as one undo step. Names, collections, templates and events stay single-selection edits.
 - Fixed the selection in the designer, which stayed after a click on the empty area around the document.
 - Fixed previews that failed with an unresolved `using:` namespace when no code had loaded the referenced library yet; the previewer now loads the application libraries the project references before it compiles the XAML.

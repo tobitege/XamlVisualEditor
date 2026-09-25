@@ -128,6 +128,29 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
 }
 
 /// <summary>
+/// ViewModel for a modal, indeterminate progress dialog. The close interaction carries true when the user cancelled.
+/// </summary>
+public sealed class ProgressDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+    public string Message { get; }
+    public string CancelText { get; }
+
+    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public ProgressDialogViewModel(string title, string message, string? cancelText = null)
+    {
+        Title = title;
+        Message = message;
+        CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(true));
+    }
+}
+
+/// <summary>
 /// ViewModel for a yes/no confirmation dialog. The close interaction carries true when the
 /// user confirmed and false when the dialog was cancelled.
 /// </summary>

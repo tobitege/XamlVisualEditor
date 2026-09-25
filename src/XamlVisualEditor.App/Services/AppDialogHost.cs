@@ -29,6 +29,15 @@ public sealed class AppDialogHost : IDialogHost
                     request.IsDestructive, request.CancelText)
             };
         };
+        _factories[ProgressDialogRequest.DIALOG_ID] = input =>
+        {
+            if (input is not ProgressDialogRequest request)
+                throw new ArgumentException("Progress dialog requires a progress request.", nameof(input));
+            return new ProgressDialog
+            {
+                DataContext = new ProgressDialogViewModel(request.Title, request.Message, request.CancelText)
+            };
+        };
     }
 
     public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory)

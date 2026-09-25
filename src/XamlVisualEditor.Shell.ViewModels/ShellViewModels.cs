@@ -189,6 +189,14 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         SelectedNodeId = nodeId;
     }
 
+    private void UpdateSelectedElementLines()
+    {
+        CodeEditor.SelectedElementLines = CodeEditor.FollowDesignerSelection
+            && SelectedNodeId is { } id && NodeMap.FindById(id) is MutableAstObjectNode node
+            ? CodeEditor.GetLineRangeForNode(node)
+            : null;
+    }
+
     /// <summary>
     /// Command to save the document.
     /// </summary>
@@ -290,6 +298,16 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             .Subscribe(_ => UpdateFileModifiedState());
         _disposables.Add(isModifiedSubscription);
 
+        // CurrentLine and CurrentColumn forward the code editor caret; the status bar observes this document.
+        IDisposable caretPositionSubscription = this.WhenAnyValue(x => x.CodeEditor.CurrentLine, x => x.CodeEditor.CurrentColumn)
+            .Skip(1)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(CurrentLine));
+                this.RaisePropertyChanged(nameof(CurrentColumn));
+            });
+        _disposables.Add(caretPositionSubscription);
+
         // Watch for property changes to raise Title notification
         IDisposable titleSubscription = this.WhenAnyValue(x => x.IsModified, x => x.IsReadOnlyFile)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(Title)));
@@ -312,6 +330,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             .Subscribe(id =>
             {
                 SyncSource source = SelectionSource;
+                UpdateSelectedElementLines();
                 if (id is null)
                 {
                     if (source != SyncSource.DesignSurface)
@@ -327,9 +346,11 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                     int? offset = CodeEditor.GetOffsetForNode(objNode);
                     if (offset is not null)
                     {
-                        if (source != SyncSource.CodeEditor)
+                        if (source != SyncSource.CodeEditor && CodeEditor.FollowDesignerSelection)
                         {
                             CodeEditor.SetCaretOffsetFromSync(offset.Value);
+                            // Keeps the element start clear of the viewport edge instead of scrolling it just into view.
+                            CodeEditor.RevealLine(objNode.Line);
                         }
                     }
 
@@ -340,6 +361,16 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 }
             });
         _disposables.Add(selectedNodeSyncSubscription);
+
+        // A text change moves the lines of the selected element; the gutter marker follows the reparsed tree.
+        IDisposable selectedElementLinesSubscription = SyncEngine.SyncEvents
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => UpdateSelectedElementLines());
+        _disposables.Add(selectedElementLinesSubscription);
+        IDisposable followDesignerSelectionSubscription = this.WhenAnyValue(x => x.CodeEditor.FollowDesignerSelection)
+            .Skip(1)
+            .Subscribe(_ => UpdateSelectedElementLines());
+        _disposables.Add(followDesignerSelectionSubscription);
 
         void OnDesignSurfaceSelectionChanged(IReadOnlyList<IDesignItem> _)
         {
@@ -2628,20 +2659,29 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         SetPersistentStatus(activity ?? (IsStarting ? UiStrings.StartingStatus : UiStrings.Ready));
     }
 
+    // An activity replaces only an activity text or the idle text; any other message, such as the progress of a
+    // workspace load, stays until it expires and the idle text follows.
     private void OnBackgroundActivitiesChanged()
     {
         string? activity = _backgroundActivities!.CurrentDescription;
+        bool showsActivityOrIdle = string.IsNullOrWhiteSpace(_statusText)
+            || string.Equals(_statusText, _activityStatusText, StringComparison.Ordinal)
+            || string.Equals(_statusText, UiStrings.Ready, StringComparison.Ordinal)
+            || string.Equals(_statusText, UiStrings.StartingStatus, StringComparison.Ordinal);
         if (activity is not null)
         {
-            _activityStatusText = activity;
-            SetPersistentStatus(activity);
+            if (showsActivityOrIdle)
+            {
+                _activityStatusText = activity;
+                SetPersistentStatus(activity);
+            }
+
             return;
         }
 
-        bool showsActivity = _activityStatusText is not null && string.Equals(_statusText, _activityStatusText, StringComparison.Ordinal);
         _activityStatusText = null;
         IsStarting = false;
-        if (showsActivity || string.IsNullOrWhiteSpace(_statusText))
+        if (showsActivityOrIdle)
             SetPersistentStatus(UiStrings.Ready);
     }
 
@@ -7592,12 +7632,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     internal async System.Threading.Tasks.Task<IEditorDocumentViewModel?> OpenFileAsync(string filePath, bool allowWorkspaceLoad)
     {
-        string resolvedPath = await ResolveUserOpenPathAsync(filePath);
+        if (await ResolveUserOpenPathAsync(filePath) is not { } resolvedPath)
+            return null;
         return await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
     }
 
     // Only opens the user asked for consult the interceptors; navigation into a file keeps the file itself.
-    private async System.Threading.Tasks.Task<string> ResolveUserOpenPathAsync(string filePath)
+    // Returns null when an interceptor cancelled the open.
+    private async System.Threading.Tasks.Task<string?> ResolveUserOpenPathAsync(string filePath)
     {
         if (_documentOpenResolver is null
             || !FileSystemPathValidation.IsAccepted(filePath)
@@ -7607,7 +7649,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return filePath;
         }
 
-        return await _documentOpenResolver.ResolveAsync(filePath, CancellationToken.None);
+        try
+        {
+            return await _documentOpenResolver.ResolveAsync(filePath, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = string.Format(UiStrings.OpenCanceled, (object?)(System.IO.Path.GetFileName(filePath)));
+            return null;
+        }
     }
 
     private async Task CloseWorkspaceAsync()
@@ -7695,7 +7745,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task OpenFromSolutionExplorerAsync(string filePath)
     {
-        await EnsureDocumentOpenAsync(await ResolveUserOpenPathAsync(filePath), addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
+        if (await ResolveUserOpenPathAsync(filePath) is { } resolvedPath)
+            await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
     }
 
     private async System.Threading.Tasks.Task OpenDroppedPathsAsync(IReadOnlyList<string> paths)
@@ -7713,7 +7764,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         foreach (string path in paths.Distinct(FileSystemPathComparison.Comparer))
         {
-            await EnsureDocumentOpenAsync(await ResolveUserOpenPathAsync(path), addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
+            if (await ResolveUserOpenPathAsync(path) is { } resolvedPath)
+                await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
         }
 
         StatusText = string.Format(UiStrings.FilesOpened, (object?)(paths.Count));

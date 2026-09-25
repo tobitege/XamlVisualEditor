@@ -4,6 +4,7 @@ namespace XamlVisualEditor.Extensions;
 public interface IDocumentOpenInterceptor
 {
     /// <summary>Returns the path of the file to open instead of <paramref name="filePath"/>, or null to open it unchanged.</summary>
+    /// <remarks>Throwing <see cref="OperationCanceledException"/> cancels the open, for example when the user cancelled a conversion.</remarks>
     /// <param name="filePath">The existing file the user asked to open; it is not open in the editor yet.</param>
     /// <param name="cancellationToken">Cancels the decision.</param>
     Task<string?> RedirectAsync(string filePath, CancellationToken cancellationToken);

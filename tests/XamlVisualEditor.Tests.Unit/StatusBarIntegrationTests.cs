@@ -136,6 +136,22 @@ public sealed class StatusBarIntegrationTests
     }
 
     [Fact]
+    public void Activity_Changes_Do_Not_Replace_Another_Message()
+    {
+        BackgroundActivityTracker activities = new();
+        IDisposable startup = activities.Begin(UiStrings.StartingStatus);
+        using MainWindowViewModel viewModel = new(backgroundActivities: activities);
+
+        viewModel.StatusText = "Loading workspace Sample.csproj";
+        IDisposable extension = activities.Begin("Activating sample...");
+        extension.Dispose();
+
+        Assert.Equal("Loading workspace Sample.csproj", viewModel.StatusText);
+        startup.Dispose();
+        Assert.Equal("Loading workspace Sample.csproj", viewModel.StatusText);
+    }
+
+    [Fact]
     public void Activity_After_Startup_Returns_To_Ready_When_It_Ends()
     {
         BackgroundActivityTracker activities = new();

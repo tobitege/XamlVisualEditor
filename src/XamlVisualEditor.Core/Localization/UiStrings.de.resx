@@ -958,6 +958,9 @@
   <data name="ActivatingExtensionStatus" xml:space="preserve"><value>Erweiterung {0} wird aktiviert...</value></data>
   <data name="LanguageWorkspaceWarmupStatus" xml:space="preserve"><value>Sprachdienste für {0} werden vorbereitet...</value></data>
   <data name="InvalidPathRejected" xml:space="preserve"><value>Ungültiger Pfad abgewiesen: {0}</value></data>
+  <data name="OpenCanceled" xml:space="preserve"><value>Öffnen von {0} abgebrochen</value></data>
+  <data name="FollowDesignerSelection" xml:space="preserve"><value>Zum im Designer ausgewählten Element springen und seine Zeilen markieren</value></data>
+  <data name="FollowDesignerSelectionShort" xml:space="preserve"><value>Folgen</value></data>
   <data name="AcpRequestFailed" xml:space="preserve"><value>ACP-Anfrage fehlgeschlagen.</value></data>
   <data name="OpenAiAcpAgent" xml:space="preserve"><value>ACP-Agent für OpenAI Codex</value></data>
   <data name="AnthropicAcpAgent" xml:space="preserve"><value>ACP-Agent für Anthropic Claude</value></data>

@@ -39,6 +39,15 @@ public sealed class DocumentOpenInterceptorRegistryTests
     }
 
     [Fact]
+    public async Task ResolveAsync_Passes_A_Cancellation_On()
+    {
+        DocumentOpenInterceptorRegistry registry = new();
+        using IDisposable cancelling = registry.Register(new CancellingInterceptor());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => registry.ResolveAsync("a.cs", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Disposed_Registration_Is_No_Longer_Consulted()
     {
         DocumentOpenInterceptorRegistry registry = new();
@@ -59,6 +68,12 @@ public sealed class DocumentOpenInterceptorRegistryTests
             Calls++;
             return Task.FromResult(redirect);
         }
+    }
+
+    private sealed class CancellingInterceptor : IDocumentOpenInterceptor
+    {
+        public Task<string?> RedirectAsync(string filePath, CancellationToken cancellationToken) =>
+            throw new OperationCanceledException();
     }
 
     private sealed class FailingInterceptor : IDocumentOpenInterceptor

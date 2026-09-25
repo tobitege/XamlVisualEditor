@@ -27,6 +27,7 @@ namespace XamlVisualEditor.CodeEditor;
 public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, ITextEditorDisplayState
 {
     private readonly CompositeDisposable _disposables = new();
+    private readonly System.Reactive.Subjects.Subject<int> _revealLineRequests = new();
     private readonly SyncEngine _syncEngine;
     private readonly CompletionProviderRegistry _completionRegistry;
     private readonly ITypeMetadataService? _metadataService;
@@ -123,6 +124,28 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     [Reactive]
     public partial int? ExecutionLine { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a selection in the designer moves the caret to the element, scrolls to it and marks its lines.
+    /// </summary>
+    [Reactive]
+    public partial bool FollowDesignerSelection { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the lines of the element selected in the designer, which the editor marks in its gutter.
+    /// </summary>
+    [Reactive]
+    public partial SourceLineRange? SelectedElementLines { get; set; }
+
+    /// <summary>
+    /// Gets the line numbers the view scrolls into the middle of the editor.
+    /// </summary>
+    public IObservable<int> RevealLineRequests => _revealLineRequests;
+
+    /// <summary>
+    /// Asks the view to scroll a 1-based line into the middle of the editor.
+    /// </summary>
+    public void RevealLine(int line) => _revealLineRequests.OnNext(line);
 
     /// <summary>
     /// Gets the version used to refresh breakpoint line highlights.
@@ -412,6 +435,29 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
         int column = Math.Max(1, node.Column);
         int offset = Math.Min(line.EndOffset, line.Offset + column - 1);
         return offset;
+    }
+
+    /// <summary>
+    /// Gets the document lines the specified AST node spans, from its start tag to its end tag.
+    /// </summary>
+    public SourceLineRange? GetLineRangeForNode(MutableAstObjectNode node)
+    {
+        if (GetOffsetForNode(node) is not { } startOffset)
+        {
+            return null;
+        }
+
+        int startLine = Document.GetLineByOffset(startOffset).LineNumber;
+        string text = Document.Text;
+        // The XML line position of an element points at its name, one character after the '<'.
+        int tagStart = startOffset < text.Length && text[startOffset] == '<'
+            ? startOffset
+            : text.LastIndexOf('<', Math.Min(startOffset, text.Length - 1));
+        int endOffset = tagStart < 0 ? -1 : XmlElementExtent.FindEnd(text, tagStart);
+        int endLine = endOffset > startOffset
+            ? Document.GetLineByOffset(endOffset - 1).LineNumber
+            : startLine;
+        return new SourceLineRange(startLine, endLine);
     }
 
     /// <summary>
@@ -821,6 +867,8 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
     public void Dispose()
     {
         _disposables.Dispose();
+        _revealLineRequests.OnCompleted();
+        _revealLineRequests.Dispose();
     }
 
     private static IReadOnlyList<XamlDiagnostic> MapDiagnostics(

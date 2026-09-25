@@ -446,6 +446,7 @@ internal static class RuntimeXamlLoaderRegistrar
             SetLocalAssembly(configuration, resolvedAssembly);
         }
         EnsureReferencedAssembliesLoaded(resolvedAssembly ?? localAssembly);
+        EnsureIdentityAssemblyLoaded();
 
         object? stream = GetPropertyValue(document, "Stream") ?? GetPropertyValue(document, "XamlStream")
             ?? GetPropertyValue(document, "ContentStream");
@@ -1225,6 +1226,28 @@ internal static class RuntimeXamlLoaderRegistrar
     /// The runtime XAML compiler resolves a <c>using:</c> namespace only in assemblies that are already loaded, so a
     /// referenced library whose types no code has touched yet would stay unresolvable.
     /// </summary>
+    // The editor marks preview elements with DesignNodeIdentity attached properties. Their assembly ships with
+    // the editor, not with the previewed project, so EnsureReferencedAssembliesLoaded never loads it; the runtime
+    // XAML compiler only resolves types of loaded assemblies. The host resolver finds it next to the editor.
+    internal static void EnsureIdentityAssemblyLoaded()
+    {
+        const string assemblyName = "XamlVisualEditor.Designer.Rendering";
+        AssemblyLoadContext? context = AssemblyLoadContext.GetLoadContext(typeof(RuntimeXamlLoaderRegistrar).Assembly);
+        if (context == null || context.Assemblies.Any(assembly => assembly.GetName().Name == assemblyName))
+        {
+            return;
+        }
+
+        try
+        {
+            _ = context.LoadFromAssemblyName(new AssemblyName(assemblyName));
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
+        {
+            // Without the assembly the compiler reports the unresolved identity type, as before.
+        }
+    }
+
     private static void EnsureReferencedAssembliesLoaded(Assembly? localAssembly)
     {
         AssemblyLoadContext? context = AssemblyLoadContext.GetLoadContext(typeof(RuntimeXamlLoaderRegistrar).Assembly);

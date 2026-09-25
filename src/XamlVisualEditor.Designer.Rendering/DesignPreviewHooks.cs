@@ -33,12 +33,21 @@ public static class DesignPreviewHookRegistry
     /// <summary>Gets the currently registered hooks.</summary>
     public static IReadOnlyList<IDesignPreviewHook> Hooks => _hooks;
 
-    /// <summary>Registers a hook; disposing the result removes it again.</summary>
+    /// <summary>
+    /// Registers a hook; disposing the result removes it again. A hook that is already
+    /// registered is not added a second time: the call returns a registration whose
+    /// disposal does nothing, and the first registration keeps owning the hook.
+    /// </summary>
     public static IDisposable Register(IDesignPreviewHook hook)
     {
         ArgumentNullException.ThrowIfNull(hook);
         lock (Gate)
         {
+            if (_hooks.Any(existing => ReferenceEquals(existing, hook)))
+            {
+                return new Registration(null);
+            }
+
             _hooks = [.. _hooks, hook];
         }
 
@@ -75,7 +84,7 @@ public static class DesignPreviewHookRegistry
         }
     }
 
-    private sealed class Registration(IDesignPreviewHook hook) : IDisposable
+    private sealed class Registration(IDesignPreviewHook? hook) : IDisposable
     {
         private IDesignPreviewHook? _hook = hook;
 

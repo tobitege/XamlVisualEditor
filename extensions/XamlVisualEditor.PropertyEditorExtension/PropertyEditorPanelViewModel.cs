@@ -129,34 +129,53 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         BrushPresets = descriptor?.BrushPresets;
         EditorKind = descriptor?.Kind ?? (isTemplate ? PropertyEditorKind.Template
             : isCollection ? PropertyEditorKind.Collection : GetEditorKind(name, propertyType, resolvedEnumOptions, null));
-        SetValueInternal(value);
+        InitializeValue(value);
         _committedValue = _value;
         _committedHasLocalValue = hasLocalValue || _value is not null;
-        IsSet = _committedHasLocalValue;
-        CommitCommand = ReactiveCommand.Create(() => CommitRequested?.Invoke());
-        CancelEditCommand = ReactiveCommand.Create(() =>
-        {
-            Value = _committedValue;
-            IsSet = _committedHasLocalValue;
-            ValidationError = null;
-            EditCanceled?.Invoke();
-        });
-        ApplyPresetCommand = ReactiveCommand.Create<string?>(preset =>
-        {
-            Value = preset;
-            CommitRequested?.Invoke();
-        });
-        ResetCommand = ReactiveCommand.Create(
-            () => { Value = null; ResetRequested?.Invoke(); CommitRequested?.Invoke(); },
-            this.WhenAnyValue(x => x.IsSet));
-        SetNullCommand = ReactiveCommand.Create(
-            () => { NullRequested?.Invoke(); CommitRequested?.Invoke(); },
-            Observable.Return(CanAssignNull));
+        _isSet = _committedHasLocalValue;
     }
+
+    /// <summary>
+    /// Sets the initial values without change notifications. The panel constructs
+    /// one entry per property of the selected control; raising events for every
+    /// value here materializes per-object ReactiveUI state with no subscriber yet
+    /// and dominates selection time for large property sets.
+    /// </summary>
+    private void InitializeValue(string? value)
+    {
+        _value = value;
+        _boolValue = bool.TryParse(value, out bool parsedBool) ? parsedBool : null;
+        _numberValue = double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedNumber)
+            ? parsedNumber
+            : null;
+        _enumValue = FindEnumValue(EnumOptions, value);
+        if (FlagOptions.Count > 0)
+        {
+            ulong flags = ReadFlagBits(value ?? DefaultValue);
+            foreach (EnumFlagOptionViewModel option in FlagOptions)
+                option.Refresh(option.Bits == 0 ? flags == 0 : (flags & option.Bits) == option.Bits);
+        }
+
+        if (Color.TryParse(value, out Color parsedColor))
+        {
+            _colorValue = parsedColor;
+            _brushPreview = new SolidColorBrush(parsedColor);
+        }
+    }
+
+    // The commands are created on first use: the panel builds one entry per property of the
+    // selected control, and creating every command up front dominates selection time.
+    private ReactiveCommand<Unit, Unit>? _setNullCommand;
+    private ReactiveCommand<string?, Unit>? _applyPresetCommand;
+    private ReactiveCommand<Unit, Unit>? _resetCommand;
+    private ReactiveCommand<Unit, Unit>? _commitCommand;
+    private ReactiveCommand<Unit, Unit>? _cancelEditCommand;
 
     public string NodeId { get; }
     public bool CanAssignNull { get; }
-    public ReactiveCommand<Unit, Unit> SetNullCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetNullCommand => _setNullCommand ??= ReactiveCommand.Create(
+        () => { NullRequested?.Invoke(); CommitRequested?.Invoke(); },
+        Observable.Return(CanAssignNull));
     public event Action? NullRequested;
     public string Name { get; }
     public string DisplayName => Name;
@@ -178,10 +197,34 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public string FlagSummary => Value ?? DefaultValue ?? "Default";
     public IReadOnlyList<string>? EnumOptions { get; }
     public IReadOnlyList<string>? BrushPresets { get; }
-    public ReactiveCommand<string?, Unit> ApplyPresetCommand { get; }
-    public ReactiveCommand<Unit, Unit> ResetCommand { get; }
-    public ReactiveCommand<Unit, Unit> CommitCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelEditCommand { get; }
+    public ReactiveCommand<string?, Unit> ApplyPresetCommand => _applyPresetCommand ??= ReactiveCommand.Create<string?>(preset =>
+    {
+        Value = preset;
+        CommitRequested?.Invoke();
+    });
+    public ReactiveCommand<Unit, Unit> ResetCommand => _resetCommand ??= ReactiveCommand.Create(
+        () => { Value = null; ResetRequested?.Invoke(); CommitRequested?.Invoke(); },
+        this.WhenAnyValue(x => x.IsSet));
+    public ReactiveCommand<Unit, Unit> CommitCommand => _commitCommand ??= ReactiveCommand.Create(() => CommitRequested?.Invoke());
+    public ReactiveCommand<Unit, Unit> CancelEditCommand => _cancelEditCommand ??= ReactiveCommand.Create(() =>
+    {
+        Value = _committedValue;
+        IsSet = _committedHasLocalValue;
+        ValidationError = null;
+        EditCanceled?.Invoke();
+    });
+
+    /// <summary>
+    /// Direct notification hooks for the owning panel, raised when <see cref="Value" /> or
+    /// <see cref="IsSet" /> actually changes. Plain delegates instead of PropertyChanged
+    /// subscriptions: the panel hooks every entry on each selection change, and each
+    /// subscription materializes per-object ReactiveUI event state.
+    /// </summary>
+    public Action<PropertyEntryViewModel>? ValueChanged { get; set; }
+
+    /// <inheritdoc cref="ValueChanged" />
+    public Action<PropertyEntryViewModel>? IsSetChanged { get; set; }
+
     public event Action? CommitRequested;
     public event Action? ResetRequested;
     public event Action? EditCanceled;
@@ -236,8 +279,13 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         get => _isSet;
         private set
         {
+            bool changed = _isSet != value;
             this.RaiseAndSetIfChanged(ref _isSet, value);
             this.RaisePropertyChanged(nameof(ValueSourceDescription));
+            if (changed)
+            {
+                IsSetChanged?.Invoke(this);
+            }
         }
     }
 
@@ -324,6 +372,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
 
     private void SetValueInternal(string? value)
     {
+        bool valueChanged = !string.Equals(_value, value, StringComparison.Ordinal);
         _isUpdating = true;
         try
         {
@@ -375,6 +424,11 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         finally
         {
             _isUpdating = false;
+        }
+
+        if (valueChanged)
+        {
+            ValueChanged?.Invoke(this);
         }
     }
 
@@ -914,32 +968,36 @@ public sealed class EventEntryViewModel : ReactiveObject
         Description = description;
         _handlerName = handlerName;
         _committedHandler = handlerName;
-        IObservable<bool> canEdit = this.WhenAnyValue(entry => entry.IsApplying).Select(applying => !applying);
-        CommitCommand = ReactiveCommand.Create(() => CommitRequested?.Invoke(), canEdit);
-        CancelEditCommand = ReactiveCommand.Create(() =>
-        {
-            RestoreCommitted();
-            ValidationError = null;
-            EditCanceled?.Invoke();
-        }, canEdit);
-        ResetCommand = ReactiveCommand.Create(() =>
-        {
-            HandlerName = null;
-            CommitRequested?.Invoke();
-        }, canEdit);
-        NavigateCommand = ReactiveCommand.Create(() => NavigateRequested?.Invoke(),
-            this.WhenAnyValue(entry => entry.HandlerName, entry => entry.IsApplying,
-                (handler, applying) => !applying && !string.IsNullOrWhiteSpace(handler)));
     }
+
+    // Created on first use; see PropertyEntryViewModel for the rationale.
+    private ReactiveCommand<Unit, Unit>? _commitCommand;
+    private ReactiveCommand<Unit, Unit>? _cancelEditCommand;
+    private ReactiveCommand<Unit, Unit>? _resetCommand;
+    private ReactiveCommand<Unit, Unit>? _navigateCommand;
 
     public string NodeId { get; }
     public string Name { get; }
     public string? Description { get; }
 
+    /// <summary>
+    /// Direct notification hook for the owning panel, raised when <see cref="HandlerName" />
+    /// actually changes; see <see cref="PropertyEntryViewModel.ValueChanged" /> for the rationale.
+    /// </summary>
+    public Action<EventEntryViewModel>? HandlerNameChanged { get; set; }
+
     public string? HandlerName
     {
         get => _handlerName;
-        set => this.RaiseAndSetIfChanged(ref _handlerName, value);
+        set
+        {
+            bool changed = !string.Equals(_handlerName, value, StringComparison.Ordinal);
+            this.RaiseAndSetIfChanged(ref _handlerName, value);
+            if (changed)
+            {
+                HandlerNameChanged?.Invoke(this);
+            }
+        }
     }
 
     public bool IsApplying
@@ -959,10 +1017,25 @@ public sealed class EventEntryViewModel : ReactiveObject
     }
 
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationError);
-    public ReactiveCommand<Unit, Unit> CommitCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelEditCommand { get; }
-    public ReactiveCommand<Unit, Unit> ResetCommand { get; }
-    public ReactiveCommand<Unit, Unit> NavigateCommand { get; }
+    public ReactiveCommand<Unit, Unit> CommitCommand => _commitCommand ??=
+        ReactiveCommand.Create(() => CommitRequested?.Invoke(), CanEdit());
+    public ReactiveCommand<Unit, Unit> CancelEditCommand => _cancelEditCommand ??= ReactiveCommand.Create(() =>
+    {
+        RestoreCommitted();
+        ValidationError = null;
+        EditCanceled?.Invoke();
+    }, CanEdit());
+    public ReactiveCommand<Unit, Unit> ResetCommand => _resetCommand ??= ReactiveCommand.Create(() =>
+    {
+        HandlerName = null;
+        CommitRequested?.Invoke();
+    }, CanEdit());
+    public ReactiveCommand<Unit, Unit> NavigateCommand => _navigateCommand ??= ReactiveCommand.Create(
+        () => NavigateRequested?.Invoke(),
+        this.WhenAnyValue(entry => entry.HandlerName, entry => entry.IsApplying,
+            (handler, applying) => !applying && !string.IsNullOrWhiteSpace(handler)));
+
+    private IObservable<bool> CanEdit() => this.WhenAnyValue(entry => entry.IsApplying).Select(applying => !applying);
     public event Action? CommitRequested;
     public event Action? EditCanceled;
     public event Action? NavigateRequested;
@@ -1042,10 +1115,10 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     private readonly CompositeDisposable _disposables = new();
     private readonly CompositeDisposable _entrySubscriptions = new();
     private readonly CompositeDisposable _eventSubscriptions = new();
-    private readonly ObservableCollection<PropertyEntryViewModel> _properties = new();
-    private readonly ObservableCollection<PropertyRowViewModel> _groupedRows = new();
+    private readonly BulkObservableCollection<PropertyEntryViewModel> _properties = new();
+    private readonly BulkObservableCollection<PropertyRowViewModel> _groupedRows = new();
     private readonly Dictionary<string, bool> _expandedCategories = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ObservableCollection<EventEntryViewModel> _events = new();
+    private readonly BulkObservableCollection<EventEntryViewModel> _events = new();
     private readonly Dictionary<string, PendingPropertyValue> _pendingPropertyValues = new(StringComparer.Ordinal);
     private sealed record PendingPropertyValue(string DocumentPath, string? Value, string? Error,
         bool ForceReset = false, bool ForceNull = false);
@@ -1468,11 +1541,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
         if (structureChanged)
         {
-            _properties.Clear();
-            foreach (PropertyEntryViewModel entry in ordered)
-            {
-                _properties.Add(entry);
-            }
+            _properties.ReplaceAll(ordered);
         }
 
         foreach (PropertyEntryViewModel entry in _properties)
@@ -1520,11 +1589,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
         if (structureChanged)
         {
-            _events.Clear();
-            foreach (EventEntryViewModel entry in ordered)
-            {
-                _events.Add(entry);
-            }
+            _events.ReplaceAll(ordered);
         }
 
         foreach (EventEntryViewModel entry in _events)
@@ -1704,13 +1769,6 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             }
         }
 
-        _entrySubscriptions.Add(entry.CancelEditCommand.Subscribe(_ => CancelPendingCommit()));
-        _entrySubscriptions.Add(entry.WhenAnyValue(item => item.Value)
-            .Skip(1)
-            .DistinctUntilChanged()
-            .Where(_ => _suspendUpdates == 0)
-            .Subscribe(_ => CancelPendingCommit()));
-
         void SetNull()
         {
             if (!entry.CanAssignNull || string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath)) return;
@@ -1729,49 +1787,47 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         {
             _pendingPropertyValues.Remove(GetDraftKey(entry));
             StatusText = null;
+            CancelPendingCommit();
         }
         void Reset() => _pendingPropertyValues[GetDraftKey(entry)] = new(documentPath, null, null, ForceReset: true);
         entry.CommitRequested += Commit;
         entry.EditCanceled += Cancel;
         entry.ResetRequested += Reset;
+
+        // Direct callbacks instead of WhenAnyValue subscriptions: the panel hooks every entry on each
+        // selection change, and a per-entry subscription dominates selection time for large property sets.
+        entry.ValueChanged = changed =>
+        {
+            if (_suspendUpdates == 0)
+            {
+                CancelPendingCommit();
+                changed.ValidationError = null;
+                _pendingPropertyValues[GetDraftKey(changed)] = new(documentPath, changed.Value, null);
+            }
+            if (!string.IsNullOrWhiteSpace(SearchText)
+                && PropertiesView.Contains(changed) != MatchesPropertyFilter(changed))
+            {
+                PropertiesView.Refresh();
+                RequestGroupedRefresh();
+            }
+        };
+        entry.IsSetChanged = changed =>
+        {
+            if (_suspendUpdates > 0 || !string.Equals(changed.Value, changed.CommittedValue, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            RequestGroupedRefresh();
+        };
         _entrySubscriptions.Add(Disposable.Create(() =>
         {
             entry.CommitRequested -= Commit;
             entry.EditCanceled -= Cancel;
             entry.ResetRequested -= Reset;
+            entry.ValueChanged = null;
+            entry.IsSetChanged = null;
         }));
-        IDisposable subscription = entry.WhenAnyValue(x => x.Value)
-            .Skip(1)
-            .DistinctUntilChanged()
-            .Subscribe(value =>
-            {
-                if (_suspendUpdates == 0)
-                {
-                    entry.ValidationError = null;
-                    _pendingPropertyValues[GetDraftKey(entry)] = new(documentPath, value, null);
-                }
-                if (!string.IsNullOrWhiteSpace(SearchText)
-                    && PropertiesView.Contains(entry) != MatchesPropertyFilter(entry))
-                {
-                    PropertiesView.Refresh();
-                    RequestGroupedRefresh();
-                }
-            });
-        _entrySubscriptions.Add(subscription);
-
-        IDisposable setSubscription = entry.WhenAnyValue(x => x.IsSet)
-            .Skip(1)
-            .DistinctUntilChanged()
-            .Subscribe(_ =>
-            {
-                if (_suspendUpdates > 0 || !string.Equals(entry.Value, entry.CommittedValue, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                RequestGroupedRefresh();
-            });
-        _entrySubscriptions.Add(setSubscription);
     }
 
     private void UpdateEventSource(EventEntryViewModel entry, string? handlerName)
@@ -1791,24 +1847,22 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     private void HookEventEntry(EventEntryViewModel entry)
     {
-        IDisposable subscription = entry.WhenAnyValue(x => x.HandlerName)
-            .Skip(1)
-            .DistinctUntilChanged()
-            .Subscribe(value =>
+        // Direct callback instead of a WhenAnyValue subscription; see HookPropertyEntry.
+        entry.HandlerNameChanged = changed =>
+        {
+            if (_suspendUpdates > 0 || string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
             {
-                if (_suspendUpdates > 0 || string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
-                {
-                    return;
-                }
+                return;
+            }
 
-                _pendingEventHandlers[GetEventDraftKey(entry)] = new PendingEventHandler(_designer.ActiveDocumentPath, value, null);
-                entry.ValidationError = null;
-                if (!string.IsNullOrWhiteSpace(SearchText))
-                {
-                    EventsView.Refresh();
-                }
-            });
-        _eventSubscriptions.Add(subscription);
+            _pendingEventHandlers[GetEventDraftKey(changed)] =
+                new PendingEventHandler(_designer.ActiveDocumentPath, changed.HandlerName, null);
+            changed.ValidationError = null;
+            if (!string.IsNullOrWhiteSpace(SearchText))
+            {
+                EventsView.Refresh();
+            }
+        };
 
         void Commit() => RunBackground(ApplyEventChangeAsync(entry, entry.HandlerName));
         void Navigate() => RunBackground(NavigateEventHandlerAsync(entry));
@@ -1826,6 +1880,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             entry.CommitRequested -= Commit;
             entry.EditCanceled -= Cancel;
             entry.NavigateRequested -= Navigate;
+            entry.HandlerNameChanged = null;
         }));
     }
 
@@ -2068,19 +2123,21 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     private void RebuildGroupedView()
     {
-        _groupedRows.Clear();
-
         List<PropertyEntryViewModel> filtered = _properties
             .Where(MatchesPropertyFilter)
             .ToList();
 
         if (filtered.Count == 0)
         {
+            _groupedRows.Clear();
             GroupedPropertiesView.Refresh();
             _groupedViewDirty = false;
             return;
         }
 
+        // The rows are collected first and replaced with one reset: item-by-item inserts make the
+        // listening collection view process every insert separately.
+        List<PropertyRowViewModel> rows = new(filtered.Count + 8);
         List<PropertyEntryViewModel> essentials = filtered.Where(entry => IsEssential(entry.Name))
             .OrderBy(entry => EssentialRank(entry.Name)).ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToList();
         AddGroup(EssentialPropertiesGroupName, essentials, true, false);
@@ -2116,6 +2173,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 expanded || searching, !searching);
         }
 
+        _groupedRows.ReplaceAll(rows);
         GroupedPropertiesView.Refresh();
         _groupedViewDirty = false;
 
@@ -2123,11 +2181,11 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         {
             using IEnumerator<PropertyEntryViewModel> iterator = properties.GetEnumerator();
             if (!iterator.MoveNext()) return;
-            _groupedRows.Add(new PropertyRowViewModel(groupName, expanded, canCollapse,
+            rows.Add(new PropertyRowViewModel(groupName, expanded, canCollapse,
                 canCollapse ? SetCategoryExpanded : null));
             if (!expanded) return;
             do
-                _groupedRows.Add(new PropertyRowViewModel(iterator.Current, groupName));
+                rows.Add(new PropertyRowViewModel(iterator.Current, groupName));
             while (iterator.MoveNext());
         }
     }

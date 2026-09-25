@@ -382,7 +382,7 @@ public sealed class PreviewerLaunchServiceTests : IDisposable
     [Fact]
     public void ResolveHostApplicationPath_PreservesCaseDistinctCandidatesOnCaseSensitiveSystems()
     {
-        if (OperatingSystem.IsWindows())
+        if (!FileSystemCasing.IsCaseSensitive(_root))
         {
             return;
         }

@@ -2629,6 +2629,9 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private static void SetAttachedInt(DesignItem item, string propertyName, int value)
     {
+        // Grid.Row/Grid.Column reject negative values with an exception that would
+        // take down the application from an input event handler.
+        value = Math.Max(0, value);
         item.AstNode.SetPropertyValue(propertyName, value.ToString(CultureInfo.InvariantCulture));
 
         if (item.VisualElement is Control control)

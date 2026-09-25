@@ -43,6 +43,11 @@ uses Semantic Versioning.
 - The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
 - The C# language workspace now warms in the background after the initial workspace load.
 - The messages of the TFVC output channel and the tf.exe timeout message follow the editor language; a unit test keeps the German TFVC resources complete and their placeholders aligned.
+- Selecting a control with a large property set no longer stalls the UI: the property panel replaces its entry, event and grouped row collections with a single reset instead of per-item inserts, creates the entry commands on first use, sets initial entry values without change notifications, and notifies value changes through direct callbacks instead of per-entry subscriptions.
+- The design surface clamps Grid.Row and Grid.Column to zero before writing them, so a negative target index no longer throws from an input handler.
+- Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
+- Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
+- `DesignPreviewHookRegistry.Register` ignores a hook that is already registered: the hook runs once per preview, the repeated registration's disposal does nothing, and the first registration keeps owning the hook.
 - XVE now reads assemblies from a shared build output instead of unrelated output trees.
 - Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
 - The dock layout now saves before view teardown and loads during the next start.

@@ -153,6 +153,10 @@ public sealed class App : Application
             {
                 await mainVm.OpenFileAsync(startupPath);
             }
+            else if (services.GetRequiredService<EditorOptionsStore>().Current.RestoreLastWorkspace)
+            {
+                await mainVm.RestoreLastWorkspaceAsync();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

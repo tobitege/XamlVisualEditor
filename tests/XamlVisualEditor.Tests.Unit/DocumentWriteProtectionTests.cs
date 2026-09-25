@@ -47,6 +47,15 @@ public sealed class DocumentWriteProtectionTests : IDisposable
 
         Assert.True(document.IsReadOnlyFile);
         Assert.Equal($"Marked.cs {UiStrings.ReadOnlyTitleSuffix}", DocumentTitle.Format(document.FileName, false, document.IsReadOnlyFile));
+        Assert.True(document.ShowReadOnlyNotice);
+        using (EditorServicesAdapter editor = new(main))
+        {
+            editor.SetWriteProtectionManaged(codePath, true);
+            Assert.False(document.ShowReadOnlyNotice);
+            Assert.True(document.IsReadOnlyFile);
+            editor.SetWriteProtectionManaged(codePath, false);
+            Assert.True(document.ShowReadOnlyNotice);
+        }
 
         File.SetAttributes(codePath, FileAttributes.Normal);
         for (int attempt = 0; attempt < 100 && document.IsReadOnlyFile; attempt++)

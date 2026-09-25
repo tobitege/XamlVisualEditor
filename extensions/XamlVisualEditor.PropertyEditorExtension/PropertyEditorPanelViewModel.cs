@@ -1058,6 +1058,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     private CancellationTokenSource? _loadCts;
     private string? _selectedTypeName;
     private string? _selectedNodeId;
+    private string[] _secondaryNodeIds = [];
     private string? _searchText;
     private PropertyCategoryOption? _selectedCategory;
     private bool _updatingCategories;
@@ -1314,6 +1315,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             {
                 SelectedNodeId = null;
                 SelectedTypeName = null;
+                _secondaryNodeIds = [];
                 ClearProperties();
                 ClearEvents();
                 StatusText = null;
@@ -1322,7 +1324,8 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
             DesignerNodeSummary node = selectedNodes[0];
             SelectedNodeId = node.NodeId;
-            SelectedTypeName = node.TypeName;
+            SelectedTypeName = selectedNodes.Count == 1 ? node.TypeName
+                : $"{string.Join(", ", selectedNodes.Select(selected => selected.TypeName).Distinct(StringComparer.Ordinal))} ({selectedNodes.Count})";
             if (selectionChanged)
             {
                 _expandedCategories.Clear();
@@ -1333,11 +1336,17 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
             Task<IReadOnlyList<DesignerPropertyInfo>> propertiesTask = _designer.GetPropertiesAsync(node.NodeId, token);
             Task<IReadOnlyList<DesignerEventInfo>> eventsTask = _designer.GetEventsAsync(node.NodeId, token);
-            await Task.WhenAll(propertiesTask, eventsTask);
+            string[] secondaryNodeIds = selectedNodes.Skip(1).Select(selected => selected.NodeId).ToArray();
+            Task<IReadOnlyList<DesignerPropertyInfo>>[] secondaryTasks = secondaryNodeIds
+                .Select(nodeId => _designer.GetPropertiesAsync(nodeId, token)).ToArray();
+            await Task.WhenAll(secondaryTasks.Append<Task>(propertiesTask).Append(eventsTask));
             token.ThrowIfCancellationRequested();
             if (_isDisposed) return;
-            IReadOnlyList<DesignerPropertyInfo> properties = propertiesTask.Result;
-            IReadOnlyList<DesignerEventInfo> events = eventsTask.Result;
+            // A multi-selection shows the properties shared by all selected nodes and applies edits to each of them.
+            IReadOnlyList<DesignerPropertyInfo> properties = secondaryTasks.Length == 0 ? propertiesTask.Result
+                : MergeSelectionProperties(propertiesTask.Result, secondaryTasks.Select(task => task.Result).ToArray());
+            IReadOnlyList<DesignerEventInfo> events = secondaryTasks.Length == 0 ? eventsTask.Result : [];
+            _secondaryNodeIds = secondaryNodeIds;
 
             UpdatePropertyEntries(node, properties);
             RefreshCategoryChoices();
@@ -1606,6 +1615,56 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         return owner + "|" + name;
     }
 
+    /// <summary>
+    /// Keeps the primary node's properties that every other selected node exposes with the same type. Names and
+    /// structured values stay per node. A value that differs between the nodes is shown as not set.
+    /// </summary>
+    private static IReadOnlyList<DesignerPropertyInfo> MergeSelectionProperties(
+        IReadOnlyList<DesignerPropertyInfo> primary, IReadOnlyList<DesignerPropertyInfo>[] secondary)
+    {
+        Dictionary<string, DesignerPropertyInfo>[] secondaryMaps = new Dictionary<string, DesignerPropertyInfo>[secondary.Length];
+        for (int i = 0; i < secondary.Length; i++)
+        {
+            secondaryMaps[i] = new Dictionary<string, DesignerPropertyInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (DesignerPropertyInfo property in secondary[i])
+            {
+                secondaryMaps[i].TryAdd(BuildPropertyEntryKey(property.Name, property.OwnerType), property);
+            }
+        }
+
+        List<DesignerPropertyInfo> merged = new(primary.Count);
+        foreach (DesignerPropertyInfo property in primary)
+        {
+            if (property.IsCollection || property.IsTemplate || property.Name is "Name" or "x:Name")
+            {
+                continue;
+            }
+
+            string key = BuildPropertyEntryKey(property.Name, property.OwnerType);
+            bool shared = true;
+            bool mixed = false;
+            foreach (Dictionary<string, DesignerPropertyInfo> map in secondaryMaps)
+            {
+                if (!map.TryGetValue(key, out DesignerPropertyInfo? other) || other.IsReadOnly != property.IsReadOnly
+                    || !string.Equals(other.PropertyType, property.PropertyType, StringComparison.OrdinalIgnoreCase))
+                {
+                    shared = false;
+                    break;
+                }
+
+                mixed |= other.HasLocalValue != property.HasLocalValue
+                    || !string.Equals(other.Value, property.Value, StringComparison.Ordinal);
+            }
+
+            if (shared)
+            {
+                merged.Add(mixed ? property with { Value = null, HasLocalValue = false } : property);
+            }
+        }
+
+        return merged;
+    }
+
     private static bool AreSameEntrySequence<T>(IList<T> current, IList<T> next)
         where T : class
     {
@@ -1805,6 +1864,9 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         using CancellationTokenSource cancellation = new();
         PendingPropertyCommit commit = new(cancellation, draft);
         _propertyCommits[key] = commit;
+        string[] targetNodeIds = string.Equals(entry.NodeId, SelectedNodeId, StringComparison.OrdinalIgnoreCase)
+            ? [entry.NodeId, .. _secondaryNodeIds]
+            : [entry.NodeId];
         bool enteredGate = false;
         try
         {
@@ -1817,23 +1879,30 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             }
 
             string? committedValue = draft.ForceReset ? null : value;
-            bool applied;
-            if (draft.ForceNull && !draft.ForceReset)
+            bool forceNull = draft.ForceNull && !draft.ForceReset;
+            IDesignerPropertyValueHost? valueHost = _designer as IDesignerPropertyValueHost;
+            if (forceNull && valueHost is null)
             {
-                if (_designer is not IDesignerPropertyValueHost valueHost)
+                throw new InvalidOperationException(UiStrings.ExplicitNullUnsupported);
+            }
+
+            // One undo step for all selected nodes; a failure on any node rolls back the whole edit.
+            using IDesignerTransaction? transaction = targetNodeIds.Length > 1
+                ? _designer.BeginTransaction(string.Format(UiStrings.UndoSetProperty, entry.Name))
+                : null;
+            foreach (string nodeId in targetNodeIds)
+            {
+                if (forceNull)
                 {
-                    throw new InvalidOperationException(UiStrings.ExplicitNullUnsupported);
+                    committedValue = await valueHost!.SetPropertyNullAsync(nodeId, entry.Name, cancellation.Token);
                 }
-
-                committedValue = await valueHost.SetPropertyNullAsync(entry.NodeId, entry.Name, cancellation.Token);
-                applied = true;
-            }
-            else
-            {
-                applied = await _designer.SetPropertyAsync(entry.NodeId, entry.Name, committedValue, cancellation.Token);
+                else if (!await _designer.SetPropertyAsync(nodeId, entry.Name, committedValue, cancellation.Token))
+                {
+                    throw new InvalidOperationException(UiStrings.PropertyValueApplyFailed);
+                }
             }
 
-            if (!applied) throw new InvalidOperationException(UiStrings.PropertyValueApplyFailed);
+            if (transaction is not null) await transaction.CommitAsync(cancellation.Token);
             entry.MarkCommitted(committedValue);
             if (_pendingPropertyValues.TryGetValue(key, out PendingPropertyValue? current) && ReferenceEquals(current, draft))
             {

@@ -62,7 +62,7 @@
             </WrapPanel>
         </Border>
 
-        <Border DockPanel.Dock="Top" IsVisible="{CompiledBinding IsReadOnlyFile}"
+        <Border DockPanel.Dock="Top" IsVisible="{CompiledBinding ShowReadOnlyNotice}"
                 Background="#4A3B00" BorderBrush="#C9A227" BorderThickness="0,0,0,1" Padding="8,4">
             <TextBlock Text="{x:Static loc:UiStrings.ReadOnlyFileBanner}" Foreground="#FFE08A" TextWrapping="Wrap" />
         </Border>
@@ -123,7 +123,8 @@
                                              Guides="{CompiledBinding DesignSurface.HorizontalGuides}"
                                              IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
                             <ScrollViewer x:Name="PreviewerViewport" Grid.Row="1" Grid.Column="1"
-                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                          Background="Transparent" PointerPressed="OnPreviewerViewportPressed">
                                 <v:PreviewerSurfaceControl x:Name="ExternalPreviewSurface" Session="{CompiledBinding PreviewerSession}"
                                                            Document="{CompiledBinding}"
                                                            HorizontalAlignment="Left" VerticalAlignment="Top" />

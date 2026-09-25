@@ -181,6 +181,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
                 _failedCheckOuts.Add(path);
             }
 
+            _editor.SetWriteProtectionManaged(path, false);
             _logger.Error("Automatic TFVC check-out failed for " + path + ".", ex);
             string message = string.Format(
                 CultureInfo.CurrentCulture,
@@ -588,6 +589,16 @@ public sealed class TfvcAutoCheckOutService : IDisposable
 
         ActiveDocumentState = state;
         IsCheckingActiveDocument = isChecking;
+        if (!isChecking && ActiveDocumentPath is { } path)
+        {
+            // A connected workspace checks a versioned file out on its first edit; offline the user has to confirm.
+            bool managed;
+            lock (_gate)
+            {
+                managed = state.Kind is TfvcFileStateKind.CheckedIn or TfvcFileStateKind.Pending && !_failedCheckOuts.Contains(path);
+            }
+            _editor.SetWriteProtectionManaged(path, managed);
+        }
         ActiveDocumentStateChanged?.Invoke(this, EventArgs.Empty);
     }
 }

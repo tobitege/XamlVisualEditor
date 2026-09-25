@@ -12,6 +12,10 @@ public sealed record EditorOptions
 {
     public EditorThemeSelection EditorTheme { get; init; } = EditorThemeSelection.Default;
     public string Language { get; init; } = "en";
+    /// <summary>Opens the most recent workspace or folder at startup when no path is passed on the command line.</summary>
+    public bool RestoreLastWorkspace { get; init; }
+    /// <summary>Lists the folders of a project before its files in the Solution Explorer; otherwise both sort together by name.</summary>
+    public bool FoldersBeforeFiles { get; init; } = true;
     public TerminalLocation TerminalLocation { get; init; }
     public TerminalShell TerminalShell { get; init; }
     public string CommandPromptPath { get; init; } = Environment.GetEnvironmentVariable("ComSpec")

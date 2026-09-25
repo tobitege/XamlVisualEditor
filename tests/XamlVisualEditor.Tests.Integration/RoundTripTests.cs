@@ -706,4 +706,42 @@ public sealed class CollaborationLifecycleTests
         Assert.Equal("References", refsFolder.Name);
         Assert.Single(refsFolder.Children);
     }
+
+    [Theory]
+    [InlineData(true, "Assets|Views|App.axaml|Zeta.cs|References")]
+    [InlineData(false, "App.axaml|Assets|Views|Zeta.cs|References")]
+    public void SolutionExplorer_orders_project_items_and_hides_files_outside_the_project(bool foldersBeforeFiles, string expected)
+    {
+        string projectDirectory = Path.Combine(Path.GetTempPath(), "xve-tree", "App");
+        ProjectFileModel File(string relative) => new()
+        {
+            FilePath = Path.GetFullPath(Path.Combine(projectDirectory, relative)),
+            RelativePath = relative
+        };
+        string outsideRoot = Path.Combine(Path.GetPathRoot(projectDirectory)!, "obj", "App.AssemblyInfo.cs");
+        WorkspaceModel workspace = new()
+        {
+            Projects = new List<ProjectModel>
+            {
+                new()
+                {
+                    Name = "App",
+                    ProjectPath = Path.Combine(projectDirectory, "App.csproj"),
+                    XamlFiles = Array.Empty<XamlFileModel>(),
+                    Files = new[]
+                    {
+                        File("Zeta.cs"), File(Path.Combine("Views", "Main.axaml")), File("App.axaml"),
+                        File(Path.Combine("Assets", "logo.png")), File(Path.Combine("..", "..", "native", "lib.dll")),
+                        new ProjectFileModel { FilePath = outsideRoot, RelativePath = outsideRoot }
+                    },
+                    References = new List<AssemblyReference> { new() { Name = "Avalonia", Path = "/lib/Avalonia.dll" } }
+                }
+            }
+        };
+
+        SolutionExplorerNodeViewModel root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, "Tree", foldersBeforeFiles: foldersBeforeFiles);
+
+        SolutionExplorerNodeViewModel project = Assert.Single(root.Children);
+        Assert.Equal(expected, string.Join("|", project.Children.Select(child => child.Name)));
+    }
 }

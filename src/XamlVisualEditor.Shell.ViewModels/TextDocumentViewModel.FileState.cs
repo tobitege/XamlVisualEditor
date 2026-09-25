@@ -19,9 +19,26 @@ public sealed partial class TextDocumentViewModel
         UpdateReadOnlyState();
     }
 
+    private bool _isWriteProtectionManaged;
+
+    /// <summary>Gets or sets whether source control lifts the write protection on the first edit, which makes the notice unnecessary.</summary>
+    public bool IsWriteProtectionManaged
+    {
+        get => _isWriteProtectionManaged;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isWriteProtectionManaged, value);
+            this.RaisePropertyChanged(nameof(ShowReadOnlyNotice));
+        }
+    }
+
+    /// <summary>Gets whether the notice about a write-protected file is shown.</summary>
+    public bool ShowReadOnlyNotice => IsReadOnlyFile && !IsWriteProtectionManaged;
+
     private void UpdateReadOnlyState()
     {
         IsReadOnlyFile = _readOnlyMonitor?.IsReadOnly ?? false;
+        this.RaisePropertyChanged(nameof(ShowReadOnlyNotice));
     }
 
     private void UpdateFileModifiedState()

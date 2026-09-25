@@ -220,6 +220,23 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         _documents.Clear();
     }
 
+    /// <inheritdoc />
+    public void SetWriteProtectionManaged(string filePath, bool managed)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SetWriteProtectionManaged(filePath, managed));
+            return;
+        }
+
+        foreach (IEditorDocumentViewModel document in _mainViewModel.Documents)
+        {
+            if (!FileSystemPathComparison.Equals(document.FilePath, filePath)) continue;
+            if (document is DesignerDocumentViewModel designer) designer.IsWriteProtectionManaged = managed;
+            else if (document is TextDocumentViewModel text) text.IsWriteProtectionManaged = managed;
+        }
+    }
+
     private void OnDocumentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncDocuments();

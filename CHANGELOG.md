@@ -7,6 +7,9 @@ uses Semantic Versioning.
 
 ### Added
 
+- Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
+- Added the option to reopen the last workspace or folder at startup.
+- Added the option to list folders before files in the Solution Explorer; it is on by default.
 - Added `--mcp` to start the local HTTP MCP server from the command line.
 - Added MCP command-line options for the transport, HTTP port, and HTTP path.
 - Added per-user persistence for the main-window size and designer/code splitter ratios.
@@ -46,6 +49,12 @@ uses Semantic Versioning.
 
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
+- Fixed property edits with several selected controls, which changed only the first control. The property editor now shows the properties shared by all selected controls, shows differing values as not set, and applies an edit to every selected control as one undo step. Names, collections, templates and events stay single-selection edits.
+- Fixed the selection in the designer, which stayed after a click on the empty area around the document.
+- Fixed previews that failed with an unresolved `using:` namespace when no code had loaded the referenced library yet; the previewer now loads the application libraries the project references before it compiles the XAML.
+- Fixed the read-only notice, which also showed for files that source control checks out on the first edit; it now shows only when the write protection stays, for example while TFVC works offline.
+- Fixed Solution Explorer entries such as `Y:` or `..` for files outside the project folder; these files no longer appear in the tree.
+- Fixed the pointer cursor over the selection: resize handles show the resize direction, and the selection border shows the move cursor and moves the selection.
 - Opening files, folders and workspaces rejects paths that are not fully qualified in the canonical syntax of the operating system; on Windows only drive paths and UNC paths with backslashes are accepted. Recent entries with such paths are dropped and removed from the stored history.
 - Fixed workspace access errors caused by changes to the process-wide current directory.
 - Fixed preview startup for library projects that do not contain an application entry point.

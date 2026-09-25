@@ -251,6 +251,64 @@ public sealed class PropertyEditingWorkflowTests
         Assert.Equal(Colors.CornflowerBlue, Assert.IsAssignableFrom<ISolidColorBrush>(border.Background).Color);
     }
 
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Inspector_applies_an_edit_to_every_selected_node_in_one_undo_step()
+    {
+        string xaml = """
+            <StackPanel xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <Label x:Name="caption" VerticalAlignment="Center" Width="10" />
+              <TextBox x:Name="input" VerticalAlignment="Center" />
+            </StackPanel>
+            """;
+        string path = Path.Combine(Path.GetTempPath(), "xve-multi-properties-" + Guid.NewGuid().ToString("N") + ".axaml");
+        Assert.False(File.Exists(path));
+        await File.WriteAllTextAsync(path, xaml);
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(typeof(Control).Assembly.Location);
+        using DesignerDocumentViewModel document = new(path, metadata);
+        await document.LoadAsync();
+        using MainWindowViewModel main = new(metadataService: metadata);
+        main.Documents.Add(document);
+        main.ActiveDocument = document;
+        MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
+        MutableAstObjectNode label = Assert.Single(root.Children.OfType<MutableAstObjectNode>(), node => node.TypeName == "Label");
+        MutableAstObjectNode textBox = Assert.Single(root.Children.OfType<MutableAstObjectNode>(), node => node.TypeName == "TextBox");
+        DesignItem rootItem = new(root);
+        DesignItem labelItem = new(label);
+        DesignItem textBoxItem = new(textBox);
+        document.DesignSurface.SetDesignTree(rootItem,
+            new System.Collections.Generic.Dictionary<Guid, DesignItem>
+            {
+                [root.Id] = rootItem, [label.Id] = labelItem, [textBox.Id] = textBoxItem
+            },
+            new System.Collections.Generic.Dictionary<Control, DesignItem>());
+        document.DesignSurface.Selection.SetSelection([labelItem, textBoxItem]);
+        using ShellDesignerHost host = new(main);
+        using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry(), new InMemorySettingsStore());
+        await inspector.InitializeAsync(CancellationToken.None);
+        PropertyEntryViewModel[] entries = inspector.PropertiesView.Cast<PropertyEntryViewModel>().ToArray();
+        PropertyEntryViewModel Entry(string name) => Assert.Single(entries, entry => entry.Name == name);
+
+        Assert.Equal("Label, TextBox (2)", inspector.SelectedTypeName);
+        Assert.DoesNotContain(entries, entry => entry.Name is "Name" or "Text" or "Target");
+        Assert.Empty(inspector.EventsView.Cast<EventEntryViewModel>());
+        Assert.False(Entry("Width").IsSet);
+        PropertyEntryViewModel alignment = Entry("VerticalAlignment");
+        Assert.Equal("Center", alignment.Value);
+
+        alignment.Value = "Top";
+        await alignment.CommitCommand.Execute().ToTask();
+        Assert.Null(inspector.StatusText);
+        Assert.Equal("Top", label.GetPropertyValue("VerticalAlignment"));
+        Assert.Equal("Top", textBox.GetPropertyValue("VerticalAlignment"));
+
+        document.SyncEngine.Undo();
+        MutableAstObjectNode[] restored = document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>()
+            .Where(node => node.TypeName is "Label" or "TextBox").ToArray();
+        Assert.Equal(2, restored.Length);
+        Assert.All(restored, node => Assert.Equal("Center", node.GetPropertyValue("VerticalAlignment")));
+    }
+
     [AvaloniaFact]
     public async Task ExternalPreviewSuppressesInactiveLocalRenderErrorsButKeepsSyntaxAndHostErrors()
     {

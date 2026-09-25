@@ -26,6 +26,14 @@ public interface IEditorServices
         return Task.FromResult(false);
     }
 
+    /// <summary>
+    /// Marks whether an extension lifts the write protection of a file on its first edit, for example by a source control
+    /// check-out. The editor hides the read-only notice of such a file.
+    /// </summary>
+    void SetWriteProtectionManaged(string filePath, bool managed)
+    {
+    }
+
     /// <summary>Renders an open designer document in the previewer and saves the frame as PNG.</summary>
     Task<PreviewExportResult> ExportPreviewAsync(string filePath, string outputPath, int timeoutMs, CancellationToken ct)
     {

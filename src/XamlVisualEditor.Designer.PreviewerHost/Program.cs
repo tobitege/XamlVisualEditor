@@ -250,6 +250,7 @@ internal static class RuntimeXamlLoaderRegistrar
     private static string? s_targetDirectory;
     private static DesignerThemeProviderSession? s_themeProviders;
     private static readonly IncrementalPreviewUpdater s_incremental = new();
+    private static readonly HashSet<string> s_referenceScans = new(StringComparer.OrdinalIgnoreCase);
 
     internal static XamlVisualEditor.Core.DesignerUpdateResult ApplyIncrementalUpdate(XamlVisualEditor.Core.DesignerUpdateRequest request) =>
         s_incremental.Apply(request, DesignTreeReporter.FindControls, DesignTreeReporter.Refresh);
@@ -444,6 +445,7 @@ internal static class RuntimeXamlLoaderRegistrar
         {
             SetLocalAssembly(configuration, resolvedAssembly);
         }
+        EnsureReferencedAssembliesLoaded(resolvedAssembly ?? localAssembly);
 
         object? stream = GetPropertyValue(document, "Stream") ?? GetPropertyValue(document, "XamlStream")
             ?? GetPropertyValue(document, "ContentStream");
@@ -1215,6 +1217,44 @@ internal static class RuntimeXamlLoaderRegistrar
         catch
         {
             return localAssembly;
+        }
+    }
+
+    /// <summary>
+    /// Loads the application assemblies the local assembly references, directly or through other application assemblies.
+    /// The runtime XAML compiler resolves a <c>using:</c> namespace only in assemblies that are already loaded, so a
+    /// referenced library whose types no code has touched yet would stay unresolvable.
+    /// </summary>
+    private static void EnsureReferencedAssembliesLoaded(Assembly? localAssembly)
+    {
+        AssemblyLoadContext? context = AssemblyLoadContext.GetLoadContext(typeof(RuntimeXamlLoaderRegistrar).Assembly);
+        if (localAssembly == null || context == null || string.IsNullOrWhiteSpace(s_targetDirectory)
+            || !s_referenceScans.Add(localAssembly.FullName ?? localAssembly.Location))
+        {
+            return;
+        }
+
+        Queue<Assembly> pending = new();
+        pending.Enqueue(localAssembly);
+        while (pending.Count > 0)
+        {
+            foreach (AssemblyName reference in pending.Dequeue().GetReferencedAssemblies())
+            {
+                if (reference.Name is not { } name || !s_referenceScans.Add(name)
+                    || !File.Exists(Path.Combine(s_targetDirectory, name + ".dll")))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    pending.Enqueue(context.LoadFromAssemblyName(reference));
+                }
+                catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
+                {
+                    // An unloadable reference only matters when the XAML uses it; the compiler then reports the type.
+                }
+            }
         }
     }
 

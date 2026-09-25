@@ -1191,4 +1191,12 @@
   <data name="OAuthDeviceEndpoint" xml:space="preserve"><value>Device code endpoint URL</value></data>
   <data name="OAuthTokenEndpoint" xml:space="preserve"><value>Token endpoint URL</value></data>
   <data name="OAuthEndpointsRequired" xml:space="preserve"><value>Configure both OAuth endpoint URLs first.</value></data>
+  <data name="StartupGroup" xml:space="preserve"><value>Startup</value></data>
+  <data name="RestoreLastWorkspace" xml:space="preserve"><value>Reopen the last workspace or folder at startup</value></data>
+  <data name="RestoreLastWorkspaceHint" xml:space="preserve"><value>Applies when the editor starts without a file or workspace on the command line.</value></data>
+  <data name="SaveChangesTitle" xml:space="preserve"><value>Save changes?</value></data>
+  <data name="SaveChangesPrompt" xml:space="preserve"><value>The following files have unsaved changes:
+{0}</value></data>
+  <data name="DontSave" xml:space="preserve"><value>Don't save</value></data>
+  <data name="FoldersBeforeFiles" xml:space="preserve"><value>Show folders before files</value></data>
 </root>

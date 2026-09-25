@@ -2988,6 +2988,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
         InitializeThemePackages(extensionManager);
         SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
+        SolutionExplorer.SetFoldersBeforeFiles(_editorOptions.Current.FoldersBeforeFiles);
 
         if (_extensionContributions is not null)
         {
@@ -3109,8 +3110,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
         OpenDocumentCommand = ReactiveCommand.CreateFromTask(() => OpenDocumentAsync(openWorkspace: false));
         OpenWorkspaceCommand = ReactiveCommand.CreateFromTask(() => OpenDocumentAsync(openWorkspace: true));
-        CloseActiveDocumentCommand = ReactiveCommand.Create(
-            () => { if (ActiveDocument is { } document) CloseDocument(document); },
+        CloseActiveDocumentCommand = ReactiveCommand.CreateFromTask(
+            async () => { if (ActiveDocument is { } document) await ConfirmAndCloseDocumentAsync(document); },
             this.WhenAnyValue(x => x.ActiveDocument).Select(document => document is not null));
         CloseWorkspaceCommand = ReactiveCommand.CreateFromTask(CloseWorkspaceAsync,
             this.WhenAnyValue(x => x.HasWorkspace, x => x.IsWorkspaceLoading, x => x.IsWorkspaceCommandRunning,
@@ -3153,7 +3154,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         OpenOptionsCommand = ReactiveCommand.CreateFromTask(async () =>
         {
             using OptionsDialogViewModel dialog = new(_editorOptions, _editorThemes);
-            if (await OptionsInteraction.Handle(dialog)) StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
+            if (await OptionsInteraction.Handle(dialog))
+            {
+                SolutionExplorer.SetFoldersBeforeFiles(_editorOptions.Current.FoldersBeforeFiles);
+                StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
+            }
         });
         _disposables.Add(OpenOptionsCommand);
 
@@ -3211,10 +3216,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             (editable, clipboard) => editable && (_clipboardService is not null || clipboard));
         SaveDocumentCommand = ReactiveCommand.CreateFromTask(SaveActiveDocumentAsync, hasActiveDoc);
         SaveAllCommand = ReactiveCommand.CreateFromTask(SaveAllAsync);
-        ExitCommand = ReactiveCommand.Create(() =>
+        ExitCommand = ReactiveCommand.CreateFromTask(async () =>
         {
             if (Avalonia.Application.Current?.ApplicationLifetime
-                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                && await ConfirmShutdownAsync())
             {
                 desktop.Shutdown();
             }
@@ -3432,10 +3438,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _disposables.Add(extensionCommandEnablementSubscription);
 
         // Close document command (used by tab close buttons)
-        CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
-        {
-            CloseDocument(doc);
-        });
+        CloseDocumentCommand = ReactiveCommand.CreateFromTask<IEditorDocumentViewModel>(ConfirmAndCloseDocumentAsync);
 
         // Update trees when active document changes
         IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
@@ -7065,6 +7068,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private void WireDockEvents()
     {
         DockFactory.ActiveDockableChanged += OnActiveDockableChanged;
+        DockFactory.DockableClosing += OnDockableClosing;
         DockFactory.DockableClosed += OnDockableClosed;
     }
 
@@ -7545,7 +7549,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (!_isClosingFromDock)
         {
-            CloseDockDocument(doc);
+            _isClosingDocument = true;
+            try
+            {
+                CloseDockDocument(doc);
+            }
+            finally
+            {
+                _isClosingDocument = false;
+            }
         }
 
         if (_dockTitleSubscriptions.Remove(doc, out IDisposable? subscription))
@@ -7600,6 +7612,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async Task CloseWorkspaceAsync()
     {
+        if (!await ConfirmCloseAsync(Documents.ToArray()))
+        {
+            return;
+        }
+
         IsWorkspaceLoading = true;
         try
         {
@@ -9396,6 +9413,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _autoSaveSubscriptions.Clear();
 
         DockFactory.ActiveDockableChanged -= OnActiveDockableChanged;
+        DockFactory.DockableClosing -= OnDockableClosing;
         DockFactory.DockableClosed -= OnDockableClosed;
 
         if (DockLayout is not null)
@@ -9514,7 +9532,8 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
     public static SolutionExplorerNodeViewModel FromWorkspace(
         WorkspaceModel workspace,
         string? solutionName = null,
-        ISystemIconService? systemIcons = null)
+        ISystemIconService? systemIcons = null,
+        bool foldersBeforeFiles = true)
     {
         string rootName = solutionName ?? "Solution";
         SolutionExplorerNodeViewModel root = new(rootName, "🗂", SolutionExplorerNodeKind.Solution);
@@ -9538,6 +9557,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
             }
 
             AddProjectFiles(projectNode, project.Files, systemIcons);
+            SortProjectItems(projectNode, foldersBeforeFiles);
 
             // References folder
             if (project.References.Count > 0)
@@ -9575,7 +9595,9 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         {
             string relative = file.RelativePath.Replace('\\', '/');
             string[] parts = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0)
+            // Files outside the project folder, such as generated sources in a redirected intermediate folder or
+            // references to another folder, have no place in the project tree.
+            if (parts.Length == 0 || Path.IsPathRooted(file.RelativePath) || parts[0] == "..")
             {
                 continue;
             }
@@ -9604,6 +9626,25 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
             SolutionExplorerNodeViewModel fileNode = new(
                 fileName, GetFileIcon(file.FilePath, systemIcons), kind, file.FilePath);
             current.Children.Add(fileNode);
+        }
+    }
+
+    private static void SortProjectItems(SolutionExplorerNodeViewModel node, bool foldersBeforeFiles)
+    {
+        if (node.Children.Count == 0)
+        {
+            return;
+        }
+
+        SolutionExplorerNodeViewModel[] ordered = node.Children
+            .OrderBy(child => foldersBeforeFiles && child.Kind == SolutionExplorerNodeKind.Folder ? 0 : 1)
+            .ThenBy(child => child.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        node.Children.Clear();
+        foreach (SolutionExplorerNodeViewModel child in ordered)
+        {
+            node.Children.Add(child);
+            SortProjectItems(child, foldersBeforeFiles);
         }
     }
 
@@ -9890,9 +9931,25 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
     /// <summary>
     /// Loads a workspace into the Solution Explorer.
     /// </summary>
+    /// <summary>Gets whether folders are listed before files; <see cref="SetFoldersBeforeFiles"/> rebuilds the tree.</summary>
+    public bool FoldersBeforeFiles { get; private set; } = true;
+
+    /// <summary>Changes the order of folders and files and rebuilds a loaded tree.</summary>
+    public void SetFoldersBeforeFiles(bool value)
+    {
+        if (FoldersBeforeFiles == value) return;
+        FoldersBeforeFiles = value;
+        if (_loadedWorkspace is { } workspace) LoadWorkspace(workspace, _loadedSolutionName);
+    }
+
+    private WorkspaceModel? _loadedWorkspace;
+    private string? _loadedSolutionName;
+
     public void LoadWorkspace(WorkspaceModel workspace, string? solutionName = null)
     {
-        Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName, _systemIcons);
+        _loadedWorkspace = workspace;
+        _loadedSolutionName = solutionName;
+        Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName, _systemIcons, FoldersBeforeFiles);
         CollapseAll(Root);
         WireFileOpen(Root);
         SetRoot(Root);
@@ -9900,6 +9957,8 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
 
     public void Clear()
     {
+        _loadedWorkspace = null;
+        _loadedSolutionName = null;
         Root = null;
         RootItems.Clear();
         Model.Refresh();

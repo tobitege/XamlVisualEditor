@@ -37,6 +37,15 @@
         <ComboBox Name="LanguageChoice" ItemsSource="{CompiledBinding Languages}" SelectedItem="{CompiledBinding SelectedLanguage, Mode=TwoWay}" MinWidth="240" />
         <TextBlock Text="{x:Static loc:UiStrings.LanguageRestartHint}" TextWrapping="Wrap" />
         <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.StartupGroup}" FontWeight="SemiBold" />
+        <CheckBox Name="RestoreLastWorkspaceChoice" Content="{x:Static loc:UiStrings.RestoreLastWorkspace}"
+                  IsChecked="{CompiledBinding RestoreLastWorkspace, Mode=TwoWay}" />
+        <TextBlock Text="{x:Static loc:UiStrings.RestoreLastWorkspaceHint}" TextWrapping="Wrap" />
+        <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.SolutionExplorer}" FontWeight="SemiBold" />
+        <CheckBox Name="FoldersBeforeFilesChoice" Content="{x:Static loc:UiStrings.FoldersBeforeFiles}"
+                  IsChecked="{CompiledBinding FoldersBeforeFiles, Mode=TwoWay}" />
+        <Separator Margin="0,4" />
         <TextBlock Text="{x:Static loc:UiStrings.TerminalGroup}" FontWeight="SemiBold" />
         <TextBlock Text="{x:Static loc:UiStrings.WindowsTerminalOptionsHint}" TextWrapping="Wrap" />
         <StackPanel Spacing="10" IsEnabled="{CompiledBinding IsWindows}">

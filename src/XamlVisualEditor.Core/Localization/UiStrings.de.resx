@@ -575,7 +575,7 @@
   <data name="DocumentCreateFailed" xml:space="preserve"><value>Dokument konnte nicht erstellt werden: {0}</value></data>
   <data name="DocumentOpenFailed" xml:space="preserve"><value>Dokument konnte nicht geöffnet werden: {0}</value></data>
   <data name="DocumentSaveFailed" xml:space="preserve"><value>Dokument konnte nicht gespeichert werden; die Änderungen bleiben im Editor: {0}</value></data>
-  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(schreibgeschützt)</value></data>
+  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(nur-lesen)</value></data>
   <data name="ReadOnlyFileBanner" xml:space="preserve"><value>Diese Datei ist schreibgeschützt. Änderungen lassen sich erst speichern, wenn der Schreibschutz aufgehoben ist, zum Beispiel durch Auschecken in der Quellcodeverwaltung.</value></data>
   <data name="DocumentSaveReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gespeichert werden; die Änderungen bleiben im Editor.</value></data>
   <data name="SavingDisabled" xml:space="preserve"><value>Speichern ist deaktiviert</value></data>
@@ -1191,4 +1191,12 @@
   <data name="OAuthDeviceEndpoint" xml:space="preserve"><value>URL des Gerätecode-Endpunkts</value></data>
   <data name="OAuthTokenEndpoint" xml:space="preserve"><value>URL des Token-Endpunkts</value></data>
   <data name="OAuthEndpointsRequired" xml:space="preserve"><value>Zuerst beide OAuth-Endpunkt-URLs konfigurieren.</value></data>
+  <data name="StartupGroup" xml:space="preserve"><value>Start</value></data>
+  <data name="RestoreLastWorkspace" xml:space="preserve"><value>Beim Start den zuletzt geöffneten Arbeitsbereich oder Ordner öffnen</value></data>
+  <data name="RestoreLastWorkspaceHint" xml:space="preserve"><value>Gilt, wenn der Editor ohne Datei oder Arbeitsbereich in der Befehlszeile startet.</value></data>
+  <data name="SaveChangesTitle" xml:space="preserve"><value>Änderungen speichern?</value></data>
+  <data name="SaveChangesPrompt" xml:space="preserve"><value>Folgende Dateien haben ungespeicherte Änderungen:
+{0}</value></data>
+  <data name="DontSave" xml:space="preserve"><value>Nicht speichern</value></data>
+  <data name="FoldersBeforeFiles" xml:space="preserve"><value>Ordner vor Dateien anzeigen</value></data>
 </root>

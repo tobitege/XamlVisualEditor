@@ -1,6 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using System.Collections.Generic;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.Adorners;
@@ -69,6 +72,16 @@ public sealed partial class DesignerDocumentView : UserControl
 
     private void OnPreviewerFit(object? sender, RoutedEventArgs args) => FitPreviewer(false);
     private void OnPreviewerSelection(object? sender, RoutedEventArgs args) => FitPreviewer(true);
+
+    private void OnPreviewerViewportPressed(object? sender, PointerPressedEventArgs args)
+    {
+        // The surface handles presses on the document; a press on the empty viewport around it clears the selection.
+        PreviewerSurfaceControl? surface = this.FindControl<PreviewerSurfaceControl>("ExternalPreviewSurface");
+        if (surface is null || args.Source is not Visual source || surface.IsVisualAncestorOf(source)
+            || source.FindAncestorOfType<ScrollBar>(includeSelf: true) is not null
+            || args.KeyModifiers != KeyModifiers.None || !args.GetCurrentPoint(surface).Properties.IsLeftButtonPressed) return;
+        surface.ClearSelectionFromViewport();
+    }
 
     private void FitPreviewer(bool selection)
     {

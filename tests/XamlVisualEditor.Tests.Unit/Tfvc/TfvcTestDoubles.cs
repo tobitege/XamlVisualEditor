@@ -436,6 +436,10 @@ internal sealed class FakeEditorServices : IEditorServices
 
     public List<string> OpenedFiles { get; } = new();
 
+    public Dictionary<string, bool> ManagedWriteProtection { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public void SetWriteProtectionManaged(string filePath, bool managed) => ManagedWriteProtection[filePath] = managed;
+
     public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
 
     public void Activate(IEditorDocument document)

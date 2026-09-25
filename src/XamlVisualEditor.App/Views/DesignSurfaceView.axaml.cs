@@ -53,6 +53,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private TopLevel? _topLevel;
     private const double MinZoom = DesignSurfaceViewModel.MinimumZoom;
     private const double MaxZoom = DesignSurfaceViewModel.MaximumZoom;
+    private const double SelectionBorderHitWidth = 4;
     private DesignAdornerLayer? _adornerLayer;
     private ScrollViewer? _scrollViewer;
     private Border? _surfaceBorder;
@@ -185,10 +186,13 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_scrollViewer is not null)
         {
+            if (_scrollViewer.Background is null) _scrollViewer.SetCurrentValue(TemplatedControl.BackgroundProperty, Avalonia.Media.Brushes.Transparent);
             _scrollViewer.ScrollChanged -= OnSurfaceScrollChanged;
             _scrollViewer.SizeChanged -= OnSurfaceSizeChanged;
+            _scrollViewer.PointerPressed -= OnViewportPointerPressed;
             _scrollViewer.ScrollChanged += OnSurfaceScrollChanged;
             _scrollViewer.SizeChanged += OnSurfaceSizeChanged;
+            _scrollViewer.PointerPressed += OnViewportPointerPressed;
             UpdateSurfaceMargin();
             UpdateRulerOffsets();
         }
@@ -1320,6 +1324,16 @@ public sealed partial class DesignSurfaceView : UserControl
                 e.Handled = true;
                 return;
             }
+
+            // A press on the border of a selected control moves the selection, like a press inside the control.
+            if (e.KeyModifiers == KeyModifiers.None && e.ClickCount == 1
+                && _adornerLayer.HitTestSelectionBorder(e.GetPosition(_adornerLayer), SelectionBorderHitWidth) is { Parent: not null } bordered)
+            {
+                StartDrag(bordered, e.GetPosition(_canvas), e.Pointer);
+                e.Pointer.Capture(_canvas);
+                e.Handled = true;
+                return;
+            }
         }
 
         Point canvasPoint = e.GetPosition(_canvas);
@@ -1359,6 +1373,21 @@ public sealed partial class DesignSurfaceView : UserControl
         UpdateSelectedNode(null);
         StartMarquee(canvasPoint, e.KeyModifiers);
         e.Pointer.Capture(_canvas);
+    }
+
+    private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // The canvas handles presses on the document; a press on the empty viewport around it clears the selection.
+        if (_currentVm is not { IsEditMode: true } || _surfaceBorder is null || e.Source is not Visual source
+            || _surfaceBorder.IsVisualAncestorOf(source) || source.FindAncestorOfType<ScrollBar>(includeSelf: true) is not null
+            || e.KeyModifiers != KeyModifiers.None || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+            || _currentVm.Selection.SelectedItems.Count == 0)
+        {
+            return;
+        }
+
+        _currentVm.Selection.ClearSelection();
+        UpdateSelectedNode(null);
     }
 
     private void OnOpenDefinitionClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1414,7 +1443,22 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        UpdateSelectionCursor(e);
         UpdateHover(e.GetPosition(_rootControl));
+    }
+
+    private void UpdateSelectionCursor(PointerEventArgs e)
+    {
+        if (_canvas is null || _adornerLayer is null || _isSpaceDown)
+        {
+            return;
+        }
+
+        Point point = e.GetPosition(_adornerLayer);
+        ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(point);
+        _canvas.Cursor = handle is not null ? DesignerCursors.ForDirection(handle.Direction)
+            : _adornerLayer.HitTestSelectionBorder(point, SelectionBorderHitWidth) is { Parent: not null } ? DesignerCursors.Move
+            : null;
     }
 
     private void OnCanvasPointerReleased(object? sender, PointerReleasedEventArgs e)

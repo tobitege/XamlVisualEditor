@@ -225,6 +225,24 @@ public sealed class DesignAdornerLayer : Control
         return null;
     }
 
+    /// <summary>
+    /// Hit-tests the selection borders and returns the selected item whose border lies within the given width of the point.
+    /// </summary>
+    public DesignItem? HitTestSelectionBorder(Point point, double width)
+    {
+        foreach (IDesignItem selected in _selectedItems)
+        {
+            if (selected is not DesignItem { VisualElement: not null } designItem) continue;
+            Rect bounds = _surfaceRoot is not null ? designItem.GetBoundsRelativeTo(_surfaceRoot) : designItem.Bounds;
+            if (bounds.Width > 0 && bounds.Height > 0 && bounds.Inflate(width).Contains(point) && !bounds.Deflate(width).Contains(point))
+            {
+                return designItem;
+            }
+        }
+
+        return null;
+    }
+
     /// <inheritdoc/>
     public override void Render(DrawingContext context)
     {

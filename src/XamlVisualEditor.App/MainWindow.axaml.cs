@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window
     private IDisposable? _workspaceSymbolQueryHandler;
     private IDisposable? _layoutNameHandler;
     private IDisposable? _confirmLayoutDeleteHandler;
+    private IDisposable? _saveChangesHandler;
+    private bool _isConfirmingClose;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
     private IDisposable? _extensionManagerHandler;
@@ -69,6 +71,28 @@ public sealed partial class MainWindow : Window
         // Dispose handlers when window is closing
         Closing += (_, e) =>
         {
+            // Modified documents keep the window open until the user decides; a confirmed close runs again.
+            if (!e.Cancel && DataContext is MainWindowViewModel closingVm && !closingVm.IsShutdownConfirmed
+                && closingVm.Documents.Any(document => document.IsModified))
+            {
+                e.Cancel = true;
+                if (_isConfirmingClose) return;
+                _isConfirmingClose = true;
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        if (!await closingVm.ConfirmShutdownAsync()) return;
+                    }
+                    finally
+                    {
+                        _isConfirmingClose = false;
+                    }
+                    Close();
+                });
+                return;
+            }
+
             // Closing the window takes the tabs out of the visual tree; they have to let go of their dockables
             // before, while they can still be found, or the layout save on shutdown logs a binding error per tab.
             if (!e.Cancel)
@@ -85,6 +109,7 @@ public sealed partial class MainWindow : Window
             _workspaceSymbolQueryHandler?.Dispose();
             _layoutNameHandler?.Dispose();
             _confirmLayoutDeleteHandler?.Dispose();
+            _saveChangesHandler?.Dispose();
             _commandPaletteHandler?.Dispose();
             _extensionPackageOpenHandler?.Dispose();
             _extensionManagerHandler?.Dispose();
@@ -110,6 +135,7 @@ public sealed partial class MainWindow : Window
         _workspaceSymbolQueryHandler?.Dispose();
         _layoutNameHandler?.Dispose();
         _confirmLayoutDeleteHandler?.Dispose();
+        _saveChangesHandler?.Dispose();
         _commandPaletteHandler?.Dispose();
         _extensionPackageOpenHandler?.Dispose();
         _extensionManagerHandler?.Dispose();
@@ -248,6 +274,15 @@ public sealed partial class MainWindow : Window
 
             bool result = await dialog.ShowDialog<bool>(this);
             interaction.SetOutput(result);
+        });
+
+        _saveChangesHandler = vm.SaveChangesInteraction.RegisterHandler(async interaction =>
+        {
+            SaveChangesDialog dialog = new()
+            {
+                DataContext = new SaveChangesDialogViewModel(interaction.Input)
+            };
+            interaction.SetOutput(await dialog.ShowDialog<SaveChangesChoice>(this));
         });
 
         _commandPaletteHandler = vm.CommandPaletteInteraction.RegisterHandler(async interaction =>

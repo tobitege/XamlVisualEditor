@@ -28,6 +28,7 @@ public sealed class TfvcAutoCheckOutServiceTests
             Assert.Equal(TfvcFileStateKind.CheckedIn, state.Kind);
             Assert.Equal(ServerPath, state.ServerPath);
             Assert.Equal(TfvcFileStateKind.CheckedIn, service.ActiveDocumentState.Kind);
+            Assert.True(editor.ManagedWriteProtection[FilePath]);
             Assert.Equal(1, client.FileStatusQueries);
             Assert.Empty(client.CheckOuts);
         }

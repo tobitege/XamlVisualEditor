@@ -467,22 +467,29 @@ public sealed partial class PreviewerSurfaceControl : Control
         Focus();
         Point position = args.GetPosition(this);
         Point hostPosition = new(position.X * _designTree!.Width / Bounds.Width, position.Y * _designTree.Height / Bounds.Height);
-        if (_document!.DesignSurface.Selection.PrimarySelection is DesignItem primary && primary.HostInstanceId is { } primaryInstance
-            && _designTree.Nodes.FirstOrDefault(node => node.InstanceId == primaryInstance) is { Layout: not null } primaryNode)
+        PreviewerResizeEdges handleEdges = HitResizeHandle(position);
+        if (handleEdges != PreviewerResizeEdges.None && _document!.DesignSurface.Selection.PrimarySelection is DesignItem primary)
         {
-            var handle = ResizeHandles(primaryNode).FirstOrDefault(handle =>
-                new Rect(handle.Position.X - 5, handle.Position.Y - 5, 10, 10).Contains(position));
-            if (handle.Edges != PreviewerResizeEdges.None)
+            _pointerMove = new PointerMoveState
             {
-                _pointerMove = new PointerMoveState
-                {
-                    Pointer = args.Pointer, Tree = _designTree, Selection = new[] { primary }, PrimaryInstance = primaryInstance,
-                    SourceText = _document.SyncEngine.GetCurrentText(), Start = hostPosition, Current = hostPosition, ResizeEdges = handle.Edges
-                };
-                args.Pointer.Capture(this);
-                args.Handled = true;
-                return;
-            }
+                Pointer = args.Pointer, Tree = _designTree, Selection = new[] { primary }, PrimaryInstance = primary.HostInstanceId!.Value,
+                SourceText = _document.SyncEngine.GetCurrentText(), Start = hostPosition, Current = hostPosition, ResizeEdges = handleEdges
+            };
+            args.Pointer.Capture(this);
+            args.Handled = true;
+            return;
+        }
+        // A press on the border of a selected control moves the selection, like a press inside the control.
+        if (args.KeyModifiers == KeyModifiers.None && HitSelectionBorder(position) is { } borderNode)
+        {
+            _pointerMove = new PointerMoveState
+            {
+                Pointer = args.Pointer, Tree = _designTree, Selection = _document!.DesignSurface.Selection.SelectedItems.OfType<DesignItem>().ToArray(),
+                PrimaryInstance = borderNode.InstanceId, SourceText = _document.SyncEngine.GetCurrentText(), Start = hostPosition, Current = hostPosition
+            };
+            args.Pointer.Capture(this);
+            args.Handled = true;
+            return;
         }
         DesignerHostNode? hit = _designTree.Nodes.Reverse().FirstOrDefault(node => node.IsVisible
             && _hostItems.ContainsKey(node.InstanceId) && new Rect(node.X, node.Y, node.Width, node.Height).Contains(hostPosition)
@@ -529,8 +536,16 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnPointerMoved(PointerEventArgs args)
     {
         base.OnPointerMoved(args);
-        if (ForwardPreviewMove(args)) return;
-        if (_pointerMove is not { } state) return;
+        if (ForwardPreviewMove(args))
+        {
+            Cursor = null;
+            return;
+        }
+        if (_pointerMove is not { } state)
+        {
+            if (_designTree is not null) UpdateChromeCursor(args.GetPosition(this));
+            return;
+        }
         if (_document?.SyncEngine.GetCurrentText() != state.SourceText || !CanSelect)
         {
             CancelPointerMove();

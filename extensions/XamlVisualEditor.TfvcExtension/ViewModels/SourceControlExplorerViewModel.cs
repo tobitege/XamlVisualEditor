@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
@@ -108,6 +109,10 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         GetLatestCommand = ReactiveCommand.CreateFromTask(GetLatestAsync, canGet);
         CheckOutCommand = ReactiveCommand.CreateFromTask(CheckOutAsync, canCheckOut);
         UndoCommand = ReactiveCommand.CreateFromTask(UndoAsync, canUndo);
+        AddItemsToFolderCommand = ReactiveCommand.CreateFromTask(
+            AddItemsToFolderAsync,
+            selected.CombineLatest(notWorking, (item, idle) => idle && _dialogHost is not null
+                && item is { IsFolder: true, LocalPath: { } folder } && Directory.Exists(folder)));
         LocateActiveDocumentCommand = ReactiveCommand.CreateFromTask(LocateActiveDocumentAsync);
         FocusSelectedCommand = ReactiveCommand.CreateFromTask(
             ct => SetFocusAsync(SelectedItem?.ServerPath, ct),
@@ -164,6 +169,9 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
 
     /// <summary>Undoes the pending changes of the selected item.</summary>
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
+
+    /// <summary>Adds unversioned items of the selected mapped folder to version control.</summary>
+    public ReactiveCommand<Unit, Unit> AddItemsToFolderCommand { get; }
 
     /// <summary>Selects the active editor document in the tree.</summary>
     public ReactiveCommand<Unit, Unit> LocateActiveDocumentCommand { get; }
@@ -704,6 +712,62 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             await NavigateToAsync(serverPath, cancellationToken);
         }
     }
+
+    private async Task AddItemsToFolderAsync(CancellationToken cancellationToken)
+    {
+        TfvcWorkspace? workspace = _session.CurrentWorkspace;
+        string? localPath = SelectedItem is { IsFolder: true } item ? item.LocalPath : null;
+        if (workspace is null || localPath is null || _dialogHost is null || !Directory.Exists(localPath))
+        {
+            return;
+        }
+
+        TfvcAddItemsScanner scanner = new(_session, workspace, localPath);
+        TfvcAddItemsDialogViewModel? dialog = null;
+        await RunOperationAsync(async () =>
+        {
+            await scanner.ScanAsync(cancellationToken);
+            TfvcAddItemsDialogViewModel loaded = new(scanner, GetIcon);
+            await loaded.ShowFolderAsync(scanner.RootFolder, cancellationToken);
+            dialog = loaded;
+        });
+        if (dialog is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<TfvcAddEntry>? selected = await _dialogHost.ShowDialogAsync<IReadOnlyList<TfvcAddEntry>>(
+            TfvcAddItemsDialogViewModel.DIALOG_ID,
+            dialog,
+            cancellationToken);
+        if (selected is not { Count: > 0 })
+        {
+            return;
+        }
+
+        // A selected folder is added with its content, so items below it are not added a second time.
+        List<string> folders = selected.Where(entry => entry.IsFolder).Select(entry => entry.LocalPath).ToList();
+        folders.RemoveAll(folder => folders.Any(other => IsBelow(folder, other)));
+        List<string> files = selected
+            .Where(entry => !entry.IsFolder && !folders.Any(folder => IsBelow(entry.LocalPath, folder)))
+            .Select(entry => entry.LocalPath)
+            .ToList();
+        await RunOperationAsync(async () =>
+        {
+            if (folders.Count > 0)
+            {
+                await _session.Client.AddFoldersAsync(workspace, folders, cancellationToken);
+            }
+
+            if (files.Count > 0)
+            {
+                await _session.Client.AddAsync(workspace, files, cancellationToken);
+            }
+        });
+    }
+
+    private static bool IsBelow(string path, string folder) =>
+        path.StartsWith(Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     private async Task RunOperationAsync(Func<Task> operation)
     {

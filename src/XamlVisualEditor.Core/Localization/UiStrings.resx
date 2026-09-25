@@ -574,6 +574,10 @@
   <data name="DocumentCreated" xml:space="preserve"><value>Created {0}</value></data>
   <data name="DocumentCreateFailed" xml:space="preserve"><value>Failed to create document: {0}</value></data>
   <data name="DocumentOpenFailed" xml:space="preserve"><value>Open document failed: {0}</value></data>
+  <data name="DocumentSaveFailed" xml:space="preserve"><value>Save document failed; the changes remain in the editor: {0}</value></data>
+  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(read-only)</value></data>
+  <data name="ReadOnlyFileBanner" xml:space="preserve"><value>This file is marked as read-only. Changes can only be saved after the write protection is removed, for example by a source control check-out.</value></data>
+  <data name="DocumentSaveReadOnly" xml:space="preserve"><value>"{0}" is marked as read-only and cannot be saved; the changes remain in the editor.</value></data>
   <data name="SavingDisabled" xml:space="preserve"><value>Saving is disabled</value></data>
   <data name="DocumentSaved" xml:space="preserve"><value>Saved {0}</value></data>
   <data name="AllDocumentsSaved" xml:space="preserve"><value>All documents saved</value></data>
@@ -809,6 +813,11 @@
   <data name="KeepItem" xml:space="preserve"><value>Keep the item</value></data>
   <data name="ConfirmDelete" xml:space="preserve"><value>Confirm Delete</value></data>
   <data name="DeleteFailed" xml:space="preserve"><value>Delete failed: {0}</value></data>
+  <data name="DeleteReadOnly" xml:space="preserve"><value>"{0}" is marked as read-only and cannot be deleted.</value></data>
+  <data name="FileIsReadOnly" xml:space="preserve"><value>"{0}" is marked as read-only.</value></data>
+  <data name="FileAccessDenied" xml:space="preserve"><value>Access to "{0}" was denied.</value></data>
+  <data name="FileInUse" xml:space="preserve"><value>"{0}" is being used by another process.</value></data>
+  <data name="FileChangedOutsideEditor" xml:space="preserve"><value>"{0}" was changed outside the editor. Reload it before saving.</value></data>
   <data name="FileNamePrompt" xml:space="preserve"><value>Enter the file name</value></data>
   <data name="CreateFileFailed" xml:space="preserve"><value>Create file failed: {0}</value></data>
   <data name="FolderNamePrompt" xml:space="preserve"><value>Enter the folder name</value></data>

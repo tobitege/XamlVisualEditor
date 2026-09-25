@@ -54,6 +54,9 @@ public sealed class LspUiTests
         XamlVisualEditor.OutputExtension.Views.ProblemsPanelView panel = new() { DataContext = problems };
         DataGrid grid = panel.FindControl<DataGrid>("DiagnosticsGrid")!;
         DataGridColumn timeColumn = grid.Columns.Single(column => Equals(column.Header, "Since"));
+        Assert.Equal(5, grid.Columns.Count);
+        Assert.All(grid.Columns.OfType<DataGridTemplateColumn>(), column => Assert.NotNull(column.CellTemplate));
+        Assert.NotNull(grid.Columns.OfType<DataGridHierarchicalColumn>().Single().CellTemplate);
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
         Assert.False(timeColumn.IsVisible);
         problems.ShowFirstSeen = true;

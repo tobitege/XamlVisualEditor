@@ -66,6 +66,8 @@ public interface IEditorDocumentViewModel : IDisposable
     string FilePath { get; }
     string FileName { get; }
     bool IsModified { get; }
+    /// <summary>Gets whether the file on disk carries the read-only attribute.</summary>
+    bool IsReadOnlyFile { get; }
     int CurrentLine { get; }
     int CurrentColumn { get; }
     ReactiveCommand<Unit, Unit> SaveCommand { get; }
@@ -128,9 +130,15 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     public partial bool IsModified { get; set; }
 
     /// <summary>
-    /// Gets the title for display (includes dirty indicator).
+    /// Gets or sets whether the file on disk carries the read-only attribute.
     /// </summary>
-    public string Title => IsModified ? $"{FileName}*" : FileName;
+    [Reactive]
+    public partial bool IsReadOnlyFile { get; set; }
+
+    /// <summary>
+    /// Gets the title for display (includes dirty and read-only indicators).
+    /// </summary>
+    public string Title => DocumentTitle.Format(FileName, IsModified, IsReadOnlyFile);
 
     // Sub-ViewModels
     public DesignSurfaceViewModel DesignSurface { get; }
@@ -283,7 +291,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         _disposables.Add(isModifiedSubscription);
 
         // Watch for property changes to raise Title notification
-        IDisposable titleSubscription = this.WhenAnyValue(x => x.IsModified)
+        IDisposable titleSubscription = this.WhenAnyValue(x => x.IsModified, x => x.IsReadOnlyFile)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(Title)));
         _disposables.Add(titleSubscription);
 
@@ -363,6 +371,8 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 
         SaveCommand = ReactiveCommand.CreateFromTask(SaveDocumentFileAsync,
             this.WhenAnyValue(document => document.IsLoading).Select(loading => !loading));
+        // A failed save reaches the caller of Execute, which reports it; without a subscriber ReactiveUI would end the application.
+        _disposables.Add(SaveCommand.ThrownExceptions.Subscribe(_ => { }));
 
         CloseCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(this));
 
@@ -621,6 +631,10 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
     [Reactive]
     public partial bool IsModified { get; set; }
 
+    /// <summary>Gets or sets whether the file on disk carries the read-only attribute.</summary>
+    [Reactive]
+    public partial bool IsReadOnlyFile { get; set; }
+
     [Reactive]
     public partial bool WordWrap { get; set; }
 
@@ -663,6 +677,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
     {
         FilePath = filePath;
         TrackDocumentHistory();
+        InitializeReadOnlyState();
         LanguageId = GetLanguageIdForFile(filePath);
         _languageService = languageRegistry?.GetService(filePath, LanguageId);
         _documentSyncService = _languageService as ILanguageDocumentSync;
@@ -702,6 +717,8 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         _disposables.Add(syncSubscription);
 
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
+        // A failed save reaches the caller of Execute, which reports it; without a subscriber ReactiveUI would end the application.
+        _disposables.Add(SaveCommand.ThrownExceptions.Subscribe(_ => { }));
 
         if (_diagnosticsSource is not null)
         {
@@ -3982,8 +3999,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            await ActiveDocument.SaveCommand.Execute();
-            StatusText = string.Format(UiStrings.DocumentSaved, (object?)(ActiveDocument.FileName));
+            if (await TrySaveDocumentAsync(ActiveDocument))
+            {
+                StatusText = string.Format(UiStrings.DocumentSaved, (object?)(ActiveDocument.FileName));
+            }
         }
     }
 
@@ -3995,6 +4014,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
+        bool allSaved = true;
         foreach (IEditorDocumentViewModel doc in Documents.ToList())
         {
             if (doc.IsModified)
@@ -4010,10 +4030,35 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     continue;
                 }
 
-                await doc.SaveCommand.Execute();
+                allSaved &= await TrySaveDocumentAsync(doc);
             }
         }
-        StatusText = UiStrings.AllDocumentsSaved;
+
+        if (allSaved)
+        {
+            StatusText = UiStrings.AllDocumentsSaved;
+        }
+    }
+
+    /// <summary>
+    /// Saves a document and reports a file that cannot be written, such as a read-only file that source control has
+    /// not checked out. The document stays modified, so no change is lost.
+    /// </summary>
+    private async System.Threading.Tasks.Task<bool> TrySaveDocumentAsync(IEditorDocumentViewModel doc)
+    {
+        try
+        {
+            await doc.SaveCommand.Execute();
+            return true;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning("Save document failed: {Message}", ex.Message);
+            SetPersistentStatus(FileSystemErrorMessages.TryGetReadOnlyEntryName(ex, doc.FilePath, out string? readOnlyName)
+                ? string.Format(UiStrings.DocumentSaveReadOnly, (object?)readOnlyName)
+                : string.Format(UiStrings.DocumentSaveFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, doc.FilePath)));
+            return false;
+        }
     }
 
     private static bool IsUntitledDocument(IEditorDocumentViewModel doc)
@@ -4204,7 +4249,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         SetDockableVisibility("References", true);
     }
 
-    private async System.Threading.Tasks.Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit)
+    // Edits go through editor documents: a closed file opens with the change pending, so it is saved and checked
+    // out by source control extensions like any other edit instead of being written behind their back.
+    internal async System.Threading.Tasks.Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit)
     {
         foreach (LanguageDocumentEdit docEdit in edit.DocumentEdits)
         {
@@ -4213,48 +4260,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 continue;
             }
 
-            TextDocumentViewModel? openText = Documents
+            TextDocumentViewModel? textDocument = Documents
                 .OfType<TextDocumentViewModel>()
                 .FirstOrDefault(doc =>
                     FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
 
-            if (openText is not null)
+            if (textDocument is null && System.IO.File.Exists(docEdit.FilePath))
             {
-                openText.ApplyTextEdits(docEdit.Edits);
-                continue;
+                textDocument = await EnsureDocumentOpenAsync(
+                    docEdit.FilePath,
+                    addRecent: false,
+                    updateStatus: false,
+                    allowWorkspaceLoad: false) as TextDocumentViewModel;
             }
 
-            if (!System.IO.File.Exists(docEdit.FilePath))
-            {
-                continue;
-            }
-
-            string text = await System.IO.File.ReadAllTextAsync(docEdit.FilePath);
-            string updated = ApplyEditsToText(text, docEdit.Edits);
-            if (!string.Equals(text, updated, StringComparison.Ordinal))
-            {
-                await System.IO.File.WriteAllTextAsync(docEdit.FilePath, updated);
-            }
+            textDocument?.ApplyTextEdits(docEdit.Edits);
         }
-    }
-
-    private static string ApplyEditsToText(string text, IReadOnlyList<TextEdit> edits)
-    {
-        if (edits.Count == 0)
-        {
-            return text;
-        }
-
-        StringBuilder builder = new(text);
-        foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
-        {
-            int offset = Math.Clamp(edit.Offset, 0, builder.Length);
-            int length = Math.Clamp(edit.Length, 0, builder.Length - offset);
-            builder.Remove(offset, length);
-            builder.Insert(offset, edit.NewText ?? string.Empty);
-        }
-
-        return builder.ToString();
     }
 
     private async System.Threading.Tasks.Task NavigateToLocationAsync(
@@ -4481,8 +4502,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await doc.SaveCommand.Execute();
-        StatusText = string.Format(UiStrings.DocumentAutoSaved, (object?)(doc.FileName));
+        if (await TrySaveDocumentAsync(doc))
+        {
+            StatusText = string.Format(UiStrings.DocumentAutoSaved, (object?)(doc.FileName));
+        }
     }
 
     private async System.Threading.Tasks.Task AutoSaveAsync(TextDocumentViewModel doc)
@@ -4497,8 +4520,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await doc.SaveCommand.Execute();
-        StatusText = string.Format(UiStrings.DocumentAutoSaved, (object?)(doc.FileName));
+        if (await TrySaveDocumentAsync(doc))
+        {
+            StatusText = string.Format(UiStrings.DocumentAutoSaved, (object?)(doc.FileName));
+        }
     }
 
     public bool TryGetExtensionView(string viewId, out ExtensionViewModel? viewModel)
@@ -4764,6 +4789,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 item.SubmenuGroup));
         }
 
+        ArrangeMenuItems(ExtensionMenuItems, ExtensionMenuGroupOrder);
         ArrangeMenuItems(ViewMenuItems, ViewMenuGroupOrder);
         ArrangeMenuItems(EditMenuItems, []);
         ArrangeMenuItems(EditorContextMenuItems, []);
@@ -4772,6 +4798,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     private static readonly string[] ViewMenuGroupOrder = ["views.debug", "views.bottom", "views.left", "views.right"];
+
+    private static readonly string[] ExtensionMenuGroupOrder = ["management"];
 
     // Separates the groups of a menu and nests the items that name a submenu under one header per group and
     // submenu title; inside a submenu the submenu groups are separated. Groups listed in the order come first, the
@@ -5158,42 +5186,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         HashSet<string> activeCommandIds = new(StringComparer.Ordinal);
 
-        foreach (ExtensionMenuItemViewModel item in ExtensionMenuItems)
+        // Commands inside submenus stay cached, so context key changes keep updating their enablement.
+        foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
         {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in FileMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in FileNewMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in ViewMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in ServerMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in DebugMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        AddMenuCommandIds(EditMenuItems, activeCommandIds);
-        AddMenuCommandIds(EditorContextMenuItems, activeCommandIds);
-
-        foreach (ExtensionMenuItemViewModel item in WorkspaceMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
+            AddMenuCommandIds(menu, activeCommandIds);
         }
 
         foreach (ExtensionToolbarItemViewModel item in MainToolbarItems)
@@ -6947,8 +6943,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return document switch
         {
             DesignerDocumentViewModel designer => designer.Title,
-            TextDocumentViewModel text => text.IsModified ? $"{text.FileName}*" : text.FileName,
-            _ => document.IsModified ? $"{document.FileName}*" : document.FileName
+            _ => DocumentTitle.Format(document.FileName, document.IsModified, document.IsReadOnlyFile)
         };
     }
 
@@ -6968,7 +6963,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 h => notifying.PropertyChanged += h,
                 h => notifying.PropertyChanged -= h)
             .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) ||
-                        e.EventArgs.PropertyName == nameof(IEditorDocumentViewModel.IsModified))
+                        e.EventArgs.PropertyName is nameof(IEditorDocumentViewModel.IsModified)
+                            or nameof(IEditorDocumentViewModel.IsReadOnlyFile))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateDockTitle(document, dockDoc));
 

@@ -120,4 +120,38 @@
   <data name="ChangeRollback" xml:space="preserve"><value>Rollback</value></data>
   <data name="ChangeProperty" xml:space="preserve"><value>Eigenschaft</value></data>
   <data name="ChangeSourceRename" xml:space="preserve"><value>Quellumbenennung</value></data>
+  <data name="FileStateOffline" xml:space="preserve"><value>offline</value></data>
+  <data name="OfflineStatus" xml:space="preserve"><value>Offline. Ausstehende Änderungen sind nach dem Online-Gehen wieder verfügbar.</value></data>
+  <data name="OfflineEditTitle" xml:space="preserve"><value>TFVC offline</value></data>
+  <data name="OfflineEditMessageFormat" xml:space="preserve"><value>„{0}“ ist schreibgeschützt, und TFVC arbeitet offline, daher kann die Datei nicht ausgecheckt werden. Schreibschutz aufheben, um die Datei zu bearbeiten? Beim Online-Gehen wird die Änderung zum Auschecken vorgeschlagen.</value></data>
+  <data name="OfflineEditConfirm" xml:space="preserve"><value>Schreibschutz aufheben</value></data>
+  <data name="OfflineEditFailedFormat" xml:space="preserve"><value>Der Schreibschutz von „{0}“ konnte nicht aufgehoben werden: {1}</value></data>
+  <data name="GoOfflinePromptTitle" xml:space="preserve"><value>TFVC-Server nicht erreichbar</value></data>
+  <data name="GoOfflinePromptMessageFormat" xml:space="preserve"><value>Der TFVC-Server {0} ist nicht erreichbar:
+{1}
+
+Offline arbeiten? Versionierte Dateien bleiben schreibgeschützt; beim Bearbeiten fragt XVE, ob der Schreibschutz aufgehoben werden soll. Über Erweiterungen &gt; TFVC &gt; Online gehen wird die Verbindung wiederhergestellt.</value></data>
+  <data name="GoOfflineConfirm" xml:space="preserve"><value>Offline arbeiten</value></data>
+  <data name="MenuWorkOffline" xml:space="preserve"><value>Offline arbeiten</value></data>
+  <data name="MenuGoOnline" xml:space="preserve"><value>Online gehen</value></data>
+  <data name="GoOnlineFailedFormat" xml:space="preserve"><value>Online gehen fehlgeschlagen: {0}</value></data>
+  <data name="ReconcileTitle" xml:space="preserve"><value>Lokale Änderungen</value></data>
+  <data name="ReconcileMessage" xml:space="preserve"><value>Diese Dateien wurden außerhalb der Versionskontrolle geändert, zum Beispiel beim Offline-Arbeiten. Die ausgewählten Änderungen werden als ausstehende Änderungen vorgemerkt.</value></data>
+  <data name="ReconcileApply" xml:space="preserve"><value>Änderungen vormerken</value></data>
+  <data name="AddItemsToFolder" xml:space="preserve"><value>Elemente zu Ordner hinzufügen...</value></data>
+  <data name="AddItemsTitle" xml:space="preserve"><value>Zur Quellcodeverwaltung hinzufügen</value></data>
+  <data name="AddItemsLookIn" xml:space="preserve"><value>Suchen in:</value></data>
+  <data name="AddItemsUp" xml:space="preserve"><value>Eine Ebene höher</value></data>
+  <data name="AddItemsMessage" xml:space="preserve"><value>Wählen Sie die Dateien aus, die der Quellcodeverwaltung hinzugefügt werden sollen. Dateien, die sich bereits in der Versionskontrolle befinden, werden nicht angezeigt. Ein Doppelklick öffnet einen Ordner.</value></data>
+  <data name="AddItemsTargetFolder" xml:space="preserve"><value>Zielordner der Quellcodeverwaltung:</value></data>
+  <data name="AddItemsFinish" xml:space="preserve"><value>Fertig stellen</value></data>
+  <data name="AddItemsNone" xml:space="preserve"><value>Dieser Ordner enthält keine Elemente zum Hinzufügen.</value></data>
+  <data name="ColumnModified" xml:space="preserve"><value>Geändert am</value></data>
+  <data name="ColumnType" xml:space="preserve"><value>Typ</value></data>
+  <data name="ColumnSize" xml:space="preserve"><value>Größe</value></data>
+  <data name="FolderType" xml:space="preserve"><value>Dateiordner</value></data>
+  <data name="FileType" xml:space="preserve"><value>Datei</value></data>
+  <data name="FileTypeFormat" xml:space="preserve"><value>{0}-Datei</value></data>
+  <data name="SizeKilobytesFormat" xml:space="preserve"><value>{0:N0} KB</value></data>
+  <data name="ReconcileFailedFormat" xml:space="preserve"><value>Abgleich der lokalen Änderungen fehlgeschlagen: {0}</value></data>
 </root>

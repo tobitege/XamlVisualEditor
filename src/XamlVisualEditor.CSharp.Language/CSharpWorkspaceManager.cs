@@ -21,7 +21,6 @@ public sealed class CSharpWorkspaceManager : IDisposable
         new(FileSystemPathComparison.Comparer);
     private MSBuildWorkspace? _msbuildWorkspace;
     private AdhocWorkspace? _adhocWorkspace;
-    private Workspace? _workspace;
     private Solution? _solution;
 
     // Files outside the loaded projects live in their own workspace, so the project workspace stays in place.
@@ -61,7 +60,6 @@ public sealed class CSharpWorkspaceManager : IDisposable
             _adhocWorkspace = null;
             _adhocSolution = null;
             _adhocProjectId = null;
-            _workspace = null;
             _solution = null;
             _workspacePath = workspacePath;
             _workspaceLoadTask = null;
@@ -94,7 +92,6 @@ public sealed class CSharpWorkspaceManager : IDisposable
             _adhocProjectId = null;
             _workspacePath = null;
             _solution = null;
-            _workspace = null;
             _workspaceLoadTask = null;
             _workspaceLoadCancellation = null;
             _workspaceGeneration++;
@@ -228,7 +225,6 @@ public sealed class CSharpWorkspaceManager : IDisposable
                 if (accepted)
                 {
                     _msbuildWorkspace = workspace;
-                    _workspace = workspace;
                     _solution = solution;
                     workspace = null;
                 }
@@ -364,13 +360,11 @@ public sealed class CSharpWorkspaceManager : IDisposable
         return document;
     }
 
+    // The project snapshot stays in memory: MSBuildWorkspace.TryApplyChanges would write every changed document
+    // to disk, including read-only files and edits the shell applies to the files itself.
     private void ApplySolution(Solution solution)
     {
         _solution = solution;
-        if (_workspace is not null)
-        {
-            _workspace.TryApplyChanges(solution);
-        }
     }
 
     private void ApplyAdhocSolution(Solution solution)

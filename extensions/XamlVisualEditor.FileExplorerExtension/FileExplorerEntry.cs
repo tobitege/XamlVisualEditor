@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Linq;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 
 using XamlVisualEditor.Core.Localization;
@@ -118,7 +119,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync(string.Format(UiStrings.RenameFailed, (object?)(ex.Message)), cancellationToken);
+            await _window.ShowErrorMessageAsync(string.Format(UiStrings.RenameFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, FullPath)), cancellationToken);
         }
     }
 
@@ -160,7 +161,10 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync(string.Format(UiStrings.DeleteFailed, (object?)(ex.Message)), cancellationToken);
+            string message = FileSystemErrorMessages.TryGetReadOnlyEntryName(ex, FullPath, out string? readOnlyName)
+                ? string.Format(UiStrings.DeleteReadOnly, (object?)readOnlyName)
+                : string.Format(UiStrings.DeleteFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, FullPath));
+            await _window.ShowErrorMessageAsync(message, cancellationToken);
         }
     }
 
@@ -195,7 +199,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync(string.Format(UiStrings.CreateFileFailed, (object?)(ex.Message)), cancellationToken);
+            await _window.ShowErrorMessageAsync(string.Format(UiStrings.CreateFileFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, path)), cancellationToken);
         }
     }
 
@@ -229,7 +233,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync(string.Format(UiStrings.CreateFolderFailed, (object?)(ex.Message)), cancellationToken);
+            await _window.ShowErrorMessageAsync(string.Format(UiStrings.CreateFolderFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, path)), cancellationToken);
         }
     }
 

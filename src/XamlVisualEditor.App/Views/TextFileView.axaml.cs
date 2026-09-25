@@ -257,6 +257,7 @@ public sealed partial class TextFileView : UserControl
         _textMateInstallation?.Dispose();
         _registryOptions = new RegistryOptions(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(_registryOptions);
+        TextMateEditorColors.Apply(_textEditor, _textMateInstallation);
         _currentTextMateTheme = targetTheme;
         if (DataContext is TextDocumentViewModel vm)
         {

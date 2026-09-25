@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dg="using:Avalonia.Controls"
+        xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+        xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+        xmlns:core="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+        x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcReconcileDialog"
+        x:DataType="vm:TfvcReconcileDialogViewModel"
+        Title="{x:Static loc:TfvcStrings.ReconcileTitle}"
+        Classes="editor-chrome"
+        Width="760"
+        Height="460"
+        MinWidth="420"
+        MinHeight="260"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="16">
+    <TextBlock DockPanel.Dock="Top"
+               Text="{x:Static loc:TfvcStrings.ReconcileTitle}"
+               FontSize="16"
+               FontWeight="SemiBold"
+               Margin="0,0,0,8" />
+    <TextBlock DockPanel.Dock="Top"
+               Text="{x:Static loc:TfvcStrings.ReconcileMessage}"
+               TextWrapping="Wrap"
+               Margin="0,0,0,12" />
+    <StackPanel DockPanel.Dock="Bottom"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="8"
+                Margin="0,12,0,0">
+      <Button Content="{x:Static loc:TfvcStrings.ReconcileApply}"
+              Command="{CompiledBinding ApplyCommand}"
+              IsDefault="True"
+              MinWidth="90" />
+      <Button Content="{x:Static core:UiStrings.Cancel}"
+              Command="{CompiledBinding CancelCommand}"
+              IsCancel="True"
+              MinWidth="90" />
+    </StackPanel>
+    <dg:DataGrid ItemsSource="{CompiledBinding Items}"
+                 AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
+                 CanUserSortColumns="True"
+                 GridLinesVisibility="None">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTemplateColumn Width="36" x:DataType="vm:TfvcReconcileItemViewModel">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:TfvcReconcileItemViewModel">
+              <CheckBox IsChecked="{CompiledBinding IsSelected, Mode=TwoWay}" HorizontalAlignment="Center" />
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnChange}" Width="110" IsReadOnly="True"
+                               x:DataType="vm:TfvcReconcileItemViewModel"
+                               Binding="{CompiledBinding ChangeText}" SortMemberPath="ChangeText" />
+        <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnItem}" Width="*" IsReadOnly="True"
+                                   SortMemberPath="LocalPath" x:DataType="vm:TfvcReconcileItemViewModel">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:TfvcReconcileItemViewModel">
+              <TextBlock Text="{CompiledBinding WrappableLocalPath}" TextWrapping="Wrap" Margin="4,3" VerticalAlignment="Center" />
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</Window>

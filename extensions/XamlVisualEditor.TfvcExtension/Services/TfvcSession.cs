@@ -23,6 +23,7 @@ public sealed class TfvcSession : IDisposable
     private readonly IWorkspaceInfo _workspaceInfo;
     private readonly IExtensionLogger _logger;
     private readonly HashSet<string> _excludedServerPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _offlineEdits = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _connectGate = new(1, 1);
     private int _pendingRefreshVersion;
     private int _busyCount;
@@ -77,14 +78,31 @@ public sealed class TfvcSession : IDisposable
     /// <summary>Gets whether a connection or refresh is running.</summary>
     public bool IsBusy { get; private set; }
 
-    /// <summary>Gets whether the session holds workspaces of a configured collection.</summary>
-    public bool IsConnected => Settings.IsConfigured && Workspaces.Count > 0;
+    /// <summary>Gets whether the session holds workspaces of a configured collection and works online.</summary>
+    public bool IsConnected => !IsOffline && Settings.IsConfigured && Workspaces.Count > 0;
+
+    /// <summary>
+    /// Gets whether the user chose to work offline. The workspaces of the last successful connection stay known for
+    /// their mappings, but no tf.exe or server call is made.
+    /// </summary>
+    public bool IsOffline { get; private set; }
+
+    /// <summary>Gets whether the last connection attempt failed.</summary>
+    public bool ConnectionFailed { get; private set; }
+
+    /// <summary>Gets the local paths whose write protection was removed while working offline.</summary>
+    public IReadOnlyCollection<string> OfflineEdits => _offlineEdits;
 
     /// <summary>Loads the stored settings and connects when a collection URL is configured.</summary>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         Settings = await _store.LoadSettingsAsync(cancellationToken);
         Client.ConfiguredTfExePath = Settings.TfExePath;
+        foreach (string path in await _store.LoadOfflineEditsAsync(cancellationToken))
+        {
+            _offlineEdits.Add(path);
+        }
+
         if (!Settings.IsConfigured)
         {
             StatusMessage = TfvcStrings.NotConfigured;
@@ -130,10 +148,17 @@ public sealed class TfvcSession : IDisposable
         await _connectGate.WaitAsync(cancellationToken);
         try
         {
+            IsOffline = false;
             SetBusy(true);
             IReadOnlyList<TfvcWorkspace> workspaces = await Client.GetWorkspacesAsync(collectionUrl, cancellationToken);
             Workspaces = workspaces;
+            ConnectionFailed = false;
             StatusMessage = workspaces.Count == 0 ? TfvcStrings.NoWorkspace : null;
+            if (workspaces.Count > 0)
+            {
+                await _store.SaveCachedWorkspacesAsync(workspaces, cancellationToken);
+            }
+
             string? lastWorkspace = await _store.LoadLastWorkspaceAsync(cancellationToken);
             TfvcWorkspace? preferred = SelectPreferredWorkspace(workspaces, _workspaceInfo.WorkspacePath, lastWorkspace);
             _logger.Info("Connected to " + collectionUrl + ": " + workspaces.Count + " workspace(s), selected " + (preferred?.Name ?? "none") + ".");
@@ -142,6 +167,7 @@ public sealed class TfvcSession : IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.Error("TFVC connection failed.", ex);
+            ConnectionFailed = true;
             Workspaces = Array.Empty<TfvcWorkspace>();
             CurrentWorkspace = null;
             PendingChanges = Array.Empty<TfvcPendingChange>();
@@ -153,6 +179,59 @@ public sealed class TfvcSession : IDisposable
             SetBusy(false);
             _connectGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Switches to offline work. The workspaces of the current or last successful connection keep their mappings
+    /// known; pending changes are not queried until the next connection.
+    /// </summary>
+    public async Task GoOfflineAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<TfvcWorkspace> workspaces = Workspaces.Count > 0
+            ? Workspaces
+            : await _store.LoadCachedWorkspacesAsync(cancellationToken);
+        _logger.Info("Working offline with " + workspaces.Count + " known workspace(s).");
+        IsOffline = true;
+        Workspaces = workspaces;
+        CurrentWorkspace = null;
+        PendingChanges = Array.Empty<TfvcPendingChange>();
+        StatusMessage = TfvcStrings.OfflineStatus;
+        RaiseStateChanged();
+        RaisePendingChangesChanged();
+    }
+
+    /// <summary>Runs an operation while the session reports itself busy, so the panels show their activity.</summary>
+    public async Task<T> RunBusyAsync<T>(Func<Task<T>> operation)
+    {
+        SetBusy(true);
+        try
+        {
+            return await operation();
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    /// <summary>Remembers a local file whose write protection was removed while working offline.</summary>
+    public Task RecordOfflineEditAsync(string localPath, CancellationToken cancellationToken)
+    {
+        return _offlineEdits.Add(localPath)
+            ? _store.SaveOfflineEditsAsync(_offlineEdits, cancellationToken)
+            : Task.CompletedTask;
+    }
+
+    /// <summary>Forgets local files remembered as offline edits.</summary>
+    public Task ForgetOfflineEditsAsync(IEnumerable<string> localPaths, CancellationToken cancellationToken)
+    {
+        bool changed = false;
+        foreach (string path in localPaths)
+        {
+            changed |= _offlineEdits.Remove(path);
+        }
+
+        return changed ? _store.SaveOfflineEditsAsync(_offlineEdits, cancellationToken) : Task.CompletedTask;
     }
 
     /// <summary>Selects a workspace and loads its pending changes.</summary>
@@ -173,7 +252,7 @@ public sealed class TfvcSession : IDisposable
         TfvcWorkspace? workspace = CurrentWorkspace;
         string? collectionUrl = Settings.CollectionUrl;
         int version = Interlocked.Increment(ref _pendingRefreshVersion);
-        if (workspace is null || string.IsNullOrWhiteSpace(collectionUrl))
+        if (IsOffline || workspace is null || string.IsNullOrWhiteSpace(collectionUrl))
         {
             PendingChanges = Array.Empty<TfvcPendingChange>();
             RaisePendingChangesChanged();

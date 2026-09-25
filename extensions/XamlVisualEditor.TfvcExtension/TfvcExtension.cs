@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -28,6 +29,18 @@ public sealed class TfvcExtension : IXveExtension
     /// <summary>View id of the history panel.</summary>
     public const string HISTORY_VIEW_ID = "tfvc.history";
 
+    /// <summary>Command that switches to offline work.</summary>
+    public const string WORK_OFFLINE_COMMAND_ID = "tfvc.workOffline";
+
+    /// <summary>Command that connects again after offline work.</summary>
+    public const string GO_ONLINE_COMMAND_ID = "tfvc.goOnline";
+
+    /// <summary>Context key that is true while TFVC works offline.</summary>
+    public const string OFFLINE_CONTEXT_KEY = "tfvc.offline";
+
+    /// <summary>Context key that is true when a collection URL is configured.</summary>
+    public const string CONFIGURED_CONTEXT_KEY = "tfvc.configured";
+
     /// <inheritdoc />
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
@@ -40,12 +53,28 @@ public sealed class TfvcExtension : IXveExtension
             new TfvcSettingsStore(context.Storage),
             context.WorkspaceInfo,
             logger);
-        TfvcAutoCheckOutService autoCheckOut = new(session, context.Editor, context.Window, logger);
+        TfvcAutoCheckOutService autoCheckOut = new(session, context.Editor, context.Window, logger, dialogHost: context.DialogHost);
+        TfvcOfflineCoordinator offline = new(
+            session,
+            new TfvcOfflineReconciler(session, context.WorkspaceInfo, logger),
+            context.Window,
+            context.DialogHost,
+            logger);
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, 40);
         statusBarItem.Tooltip = TfvcStrings.PendingChangesTitle;
 
         EventHandler statusHandler = (_, _) => Dispatcher.UIThread.Post(() => UpdateStatusBar(statusBarItem, autoCheckOut));
         autoCheckOut.ActiveDocumentStateChanged += statusHandler;
+        EventHandler contextKeysHandler = (_, _) => Dispatcher.UIThread.Post(() => UpdateContextKeys(context.ContextKeys, session));
+        session.StateChanged += contextKeysHandler;
+        UpdateContextKeys(context.ContextKeys, session);
+        RegisterOfflineCommands(context, offline);
+        context.Subscriptions.Add(context.DialogHost.RegisterDialog(
+            TfvcReconcileDialogViewModel.DIALOG_ID,
+            viewModel => new Views.TfvcReconcileDialog { DataContext = viewModel }));
+        context.Subscriptions.Add(context.DialogHost.RegisterDialog(
+            TfvcAddItemsDialogViewModel.DIALOG_ID,
+            viewModel => new Views.TfvcAddItemsDialog { DataContext = viewModel }));
 
         TfvcChangesetDetailsViewModel changesetDetails = new(session);
         TfvcHistoryViewModel history = new(session, async changeset =>
@@ -96,7 +125,9 @@ public sealed class TfvcExtension : IXveExtension
         context.Subscriptions.Add(new ActionDisposable(() =>
         {
             autoCheckOut.ActiveDocumentStateChanged -= statusHandler;
+            session.StateChanged -= contextKeysHandler;
             changesetDetails.ChangesetUpdated -= changesetUpdatedHandler;
+            offline.Dispose();
             autoCheckOut.Dispose();
             statusBarItem.Dispose();
             session.Dispose();
@@ -105,20 +136,57 @@ public sealed class TfvcExtension : IXveExtension
         }));
 
         autoCheckOut.Start();
-        _ = InitializeAsync(session, logger);
+        _ = InitializeAsync(session, offline, logger);
         return Task.CompletedTask;
     }
 
-    private static async Task InitializeAsync(TfvcSession session, IExtensionLogger logger)
+    private static async Task InitializeAsync(TfvcSession session, TfvcOfflineCoordinator offline, IExtensionLogger logger)
     {
         try
         {
             await session.InitializeAsync(CancellationToken.None);
+            await offline.HandleInitializedAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
             logger.Error("TFVC initialization failed.", ex);
         }
+    }
+
+    private static void RegisterOfflineCommands(ExtensionContext context, TfvcOfflineCoordinator offline)
+    {
+        context.Subscriptions.Add(context.Commands.Register(WORK_OFFLINE_COMMAND_ID, _ => offline.GoOfflineAsync(CancellationToken.None)));
+        context.Subscriptions.Add(context.Commands.Register(GO_ONLINE_COMMAND_ID, _ => offline.GoOnlineAsync(CancellationToken.None)));
+
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            WORK_OFFLINE_COMMAND_ID,
+            new CommandMetadata(TfvcStrings.MenuWorkOffline, "TFVC", When: CONFIGURED_CONTEXT_KEY + " && !" + OFFLINE_CONTEXT_KEY, Priority: 10)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            GO_ONLINE_COMMAND_ID,
+            new CommandMetadata(TfvcStrings.MenuGoOnline, "TFVC", When: OFFLINE_CONTEXT_KEY, Priority: 20)));
+
+        context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
+            context.ExtensionId,
+            [
+                new ExtensionMenuContribution(WORK_OFFLINE_COMMAND_ID, TfvcStrings.MenuWorkOffline, ExtensionMenuLocations.Extensions, "tfvc", 10)
+                {
+                    Submenu = "TFVC",
+                    CheckedWhen = OFFLINE_CONTEXT_KEY
+                },
+                new ExtensionMenuContribution(GO_ONLINE_COMMAND_ID, TfvcStrings.MenuGoOnline, ExtensionMenuLocations.Extensions, "tfvc", 20)
+                {
+                    Submenu = "TFVC"
+                }
+            ]));
+    }
+
+    private static void UpdateContextKeys(IContextKeys? contextKeys, TfvcSession session)
+    {
+        contextKeys?.Set(
+        [
+            new KeyValuePair<string, bool>(CONFIGURED_CONTEXT_KEY, session.Settings.IsConfigured),
+            new KeyValuePair<string, bool>(OFFLINE_CONTEXT_KEY, session.IsOffline)
+        ]);
     }
 
     private static void UpdateStatusBar(IStatusBarItem item, TfvcAutoCheckOutService autoCheckOut)

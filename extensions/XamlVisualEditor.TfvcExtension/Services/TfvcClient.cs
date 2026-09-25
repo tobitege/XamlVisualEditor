@@ -29,6 +29,18 @@ public interface ITfvcClient
     /// <summary>Adds local files to version control.</summary>
     Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken);
 
+    /// <summary>Adds local folders with every item below them that version control does not ignore.</summary>
+    Task<TfCommandResult> AddFoldersAsync(TfvcWorkspace workspace, IReadOnlyList<string> localFolders, CancellationToken cancellationToken);
+
+    /// <summary>Pends the deletion of files.</summary>
+    Task<TfCommandResult> DeleteAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists the local paths below a folder that differ from the workspace without a pending change: added, deleted,
+    /// or changed without check-out. Ignored items are left out.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(TfvcWorkspace workspace, string localFolder, CancellationToken cancellationToken);
+
     /// <summary>Undoes pending changes of the given items.</summary>
     Task<TfCommandResult> UndoAsync(TfvcWorkspace workspace, IReadOnlyList<string> itemSpecs, bool recursive, CancellationToken cancellationToken);
 
@@ -161,6 +173,38 @@ public sealed class TfvcClient : ITfvcClient
         List<string> arguments = ["add", "/noprompt"];
         arguments.AddRange(localPaths);
         return RunChangeAsync(workspace, arguments, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<TfCommandResult> AddFoldersAsync(TfvcWorkspace workspace, IReadOnlyList<string> localFolders, CancellationToken cancellationToken)
+    {
+        List<string> arguments = ["add", "/recursive", "/noprompt"];
+        arguments.AddRange(localFolders);
+        return RunChangeAsync(workspace, arguments, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<TfCommandResult> DeleteAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
+    {
+        List<string> arguments = ["delete", "/noprompt"];
+        arguments.AddRange(localPaths);
+        return RunChangeAsync(workspace, arguments, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(
+        TfvcWorkspace workspace,
+        string localFolder,
+        CancellationToken cancellationToken)
+    {
+        List<string> arguments = ["reconcile", "/promote", "/adds", "/deletes", "/preview", "/recursive", "/noprompt", localFolder];
+        TfCommandResult result = await _runner.RunAsync(localFolder, arguments, ChangeTimeout, cancellationToken).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            throw new TfCommandException(arguments[0], result);
+        }
+
+        return TfvcReconcileOutputParser.ParseCandidatePaths(result.StandardOutput, localFolder);
     }
 
     /// <inheritdoc />

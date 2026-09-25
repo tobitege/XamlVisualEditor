@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -55,14 +56,14 @@ internal sealed class DocumentFileState
             {
                 if (stream.Length != _persistedBytes.Length)
                 {
-                    throw new IOException($"The file changed outside the editor. Reload it before saving: {filePath}");
+                    throw new IOException(string.Format(UiStrings.FileChangedOutsideEditor, Path.GetFileName(filePath)));
                 }
 
                 byte[] currentBytes = new byte[_persistedBytes.Length];
                 await stream.ReadExactlyAsync(currentBytes);
                 if (!currentBytes.AsSpan().SequenceEqual(_persistedBytes))
                 {
-                    throw new IOException($"The file changed outside the editor. Reload it before saving: {filePath}");
+                    throw new IOException(string.Format(UiStrings.FileChangedOutsideEditor, Path.GetFileName(filePath)));
                 }
 
                 if (currentBytes.AsSpan().SequenceEqual(bytes))

@@ -73,8 +73,10 @@ internal sealed class FakeTfvcClient : ITfvcClient
 
     public int FileStatusQueries { get; private set; }
 
+    public Exception? WorkspacesFailure { get; set; }
+
     public Task<IReadOnlyList<TfvcWorkspace>> GetWorkspacesAsync(string collectionUrl, CancellationToken cancellationToken)
-        => Task.FromResult(Workspaces);
+        => WorkspacesFailure is null ? Task.FromResult(Workspaces) : Task.FromException<IReadOnlyList<TfvcWorkspace>>(WorkspacesFailure);
 
     public Task<IReadOnlyList<TfvcPendingChange>> GetPendingChangesAsync(string collectionUrl, TfvcWorkspace workspace, CancellationToken cancellationToken)
     {
@@ -117,8 +119,39 @@ internal sealed class FakeTfvcClient : ITfvcClient
         return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
     }
 
+    public List<IReadOnlyList<string>> Adds { get; } = new();
+
     public Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
-        => Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    {
+        Adds.Add(localPaths);
+        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    }
+
+    public List<IReadOnlyList<string>> FolderAdds { get; } = new();
+
+    public Task<TfCommandResult> AddFoldersAsync(TfvcWorkspace workspace, IReadOnlyList<string> localFolders, CancellationToken cancellationToken)
+    {
+        FolderAdds.Add(localFolders);
+        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    }
+
+    public List<IReadOnlyList<string>> Deletes { get; } = new();
+
+    public Task<TfCommandResult> DeleteAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
+    {
+        Deletes.Add(localPaths);
+        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    }
+
+    public List<string> LocalChangeCandidates { get; } = new();
+
+    public List<string> LocalChangeScopes { get; } = new();
+
+    public Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(TfvcWorkspace workspace, string localFolder, CancellationToken cancellationToken)
+    {
+        LocalChangeScopes.Add(localFolder);
+        return Task.FromResult<IReadOnlyCollection<string>>(LocalChangeCandidates.ToArray());
+    }
 
     public Task<TfCommandResult> UndoAsync(TfvcWorkspace workspace, IReadOnlyList<string> itemSpecs, bool recursive, CancellationToken cancellationToken)
     {
@@ -289,7 +322,13 @@ internal sealed class RecordingWindow : IWindow
 
     public string? InputBoxResult { get; set; }
 
-    public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
+    public List<string> Infos { get; } = new();
+
+    public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken)
+    {
+        Infos.Add(message);
+        return Task.CompletedTask;
+    }
 
     public Task ShowWarningMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -317,6 +356,26 @@ internal sealed class RecordingWindow : IWindow
 #pragma warning restore CS0067
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => throw new NotSupportedException();
+}
+
+internal sealed class ScriptedDialogHost : IDialogHost
+{
+    private readonly Func<string, object?, object?> _respond;
+
+    public ScriptedDialogHost(Func<string, object?, object?> respond)
+    {
+        _respond = respond;
+    }
+
+    public List<(string DialogId, object? ViewModel)> Requests { get; } = new();
+
+    public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory) => throw new NotSupportedException();
+
+    public Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
+    {
+        Requests.Add((dialogId, viewModel));
+        return Task.FromResult(_respond(dialogId, viewModel) is T result ? result : default);
+    }
 }
 
 internal sealed class ConfirmingDialogHost : IDialogHost

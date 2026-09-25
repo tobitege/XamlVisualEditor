@@ -33,6 +33,9 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     private readonly Dictionary<string, Task<TfvcFileState>> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _checkOutsInProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _failedCheckOuts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _declinedOfflineEdits = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IDialogHost? _dialogHost;
+    private bool _wasOffline;
     private readonly Dictionary<IEditorDocument, EventHandler<EditorDocumentChangedEventArgs>> _documentHandlers = new();
     private readonly object _gate = new();
     private int _stateGeneration;
@@ -46,7 +49,8 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         IWindow window,
         IExtensionLogger logger,
         Func<string, string?>? readFile = null,
-        TimeSpan? retryDelay = null)
+        TimeSpan? retryDelay = null,
+        IDialogHost? dialogHost = null)
     {
         _session = session;
         _editor = editor;
@@ -54,6 +58,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         _logger = logger;
         _readFile = readFile ?? ReadFileOrNull;
         _retryDelay = retryDelay ?? TimeSpan.FromSeconds(15);
+        _dialogHost = dialogHost;
     }
 
     /// <summary>Raised when the state of the active document changes.</summary>
@@ -87,6 +92,15 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     /// <summary>Determines the version control state of a local file; results are cached until the pending changes change.</summary>
     public Task<TfvcFileState> GetStateAsync(string localPath, CancellationToken cancellationToken)
     {
+        if (_session.IsOffline)
+        {
+            TfvcWorkspace? workspace = _session.FindWorkspaceForLocalPath(localPath);
+            string? serverPath = workspace?.TryGetServerPath(localPath);
+            return Task.FromResult(workspace is null || serverPath is null
+                ? TfvcFileState.NotInWorkspace
+                : new TfvcFileState(TfvcFileStateKind.Offline, workspace, serverPath, null));
+        }
+
         if (!_session.IsConnected)
         {
             return Task.FromResult(TfvcFileState.Unknown);
@@ -111,6 +125,12 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         string path = document.FilePath;
         if (string.IsNullOrWhiteSpace(path))
         {
+            return;
+        }
+
+        if (_session.IsOffline)
+        {
+            await HandleOfflineChangeAsync(document, path, cancellationToken);
             return;
         }
 
@@ -301,6 +321,68 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         }
     }
 
+    // Offline, a read-only mapped file cannot be checked out; after confirmation its write protection is removed and
+    // the file is remembered, so going online proposes it as an edit.
+    private async Task HandleOfflineChangeAsync(IEditorDocument document, string path, CancellationToken cancellationToken)
+    {
+        if (_dialogHost is null || _session.FindWorkspaceForLocalPath(path) is null || !IsReadOnlyFile(path))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_declinedOfflineEdits.Contains(path) || !_checkOutsInProgress.Add(path))
+            {
+                return;
+            }
+        }
+
+        string fileName = Path.GetFileName(path);
+        try
+        {
+            if (await IsUnchangedAsync(document, cancellationToken))
+            {
+                return;
+            }
+
+            bool confirmed = await _dialogHost.ShowDialogAsync<bool>(
+                ConfirmationDialogRequest.DIALOG_ID,
+                new ConfirmationDialogRequest(
+                    TfvcStrings.OfflineEditTitle,
+                    string.Format(CultureInfo.CurrentCulture, TfvcStrings.OfflineEditMessageFormat, fileName),
+                    TfvcStrings.OfflineEditConfirm),
+                CancellationToken.None);
+            if (!confirmed)
+            {
+                lock (_gate)
+                {
+                    _declinedOfflineEdits.Add(path);
+                }
+
+                return;
+            }
+
+            File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+            await _session.RecordOfflineEditAsync(path, cancellationToken);
+            _logger.Info("Write protection removed offline: " + path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Error("Removing the write protection failed for " + path + ".", ex);
+            await _window.ShowErrorMessageAsync(
+                string.Format(CultureInfo.CurrentCulture, TfvcStrings.OfflineEditFailedFormat, fileName, ex.Message),
+                CancellationToken.None);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _checkOutsInProgress.Remove(path);
+            }
+        }
+    }
+
     private async Task<bool> IsUnchangedAsync(IEditorDocument document, CancellationToken cancellationToken)
     {
         string? diskText = _readFile(document.FilePath);
@@ -383,6 +465,21 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     {
         if (_session.IsBusy)
         {
+            return;
+        }
+
+        bool isOffline = _session.IsOffline;
+        if (isOffline != _wasOffline)
+        {
+            _wasOffline = isOffline;
+            lock (_gate)
+            {
+                _states.Clear();
+                _failedCheckOuts.Clear();
+                _declinedOfflineEdits.Clear();
+            }
+
+            _ = UpdateActiveDocumentStateAsync(ActiveDocumentPath);
             return;
         }
 

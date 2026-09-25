@@ -110,6 +110,7 @@
           <Separator />
           <MenuItem Header="{x:Static loc:TfvcStrings.GetLatest}" Command="{CompiledBinding GetLatestCommand}" />
           <MenuItem Header="{x:Static loc:TfvcStrings.CheckOut}" Command="{CompiledBinding CheckOutCommand}" />
+          <MenuItem Header="{x:Static loc:TfvcStrings.AddItemsToFolder}" Command="{CompiledBinding AddItemsToFolderCommand}" />
           <Separator />
           <MenuItem Header="{x:Static loc:TfvcStrings.Undo}" Command="{CompiledBinding UndoCommand}" />
           <Separator />

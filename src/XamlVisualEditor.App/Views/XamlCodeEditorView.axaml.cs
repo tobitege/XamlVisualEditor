@@ -208,6 +208,7 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         RegistryOptions registryOptions = new(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
+        TextMateEditorColors.Apply(_textEditor, _textMateInstallation);
         _textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("xml"));
         _currentTextMateTheme = targetTheme;
     }

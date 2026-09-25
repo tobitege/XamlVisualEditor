@@ -16,6 +16,8 @@ public sealed class TfvcSettingsStore
     private const string EXPLORER_FOCUS_KEY = "tfvc.explorerFocus";
     private const string EXCLUDED_CHANGES_KEY_PREFIX = "tfvc.excludedChanges.";
     private const string SETTINGS_VISIBLE_KEY_PREFIX = "tfvc.settingsVisible.";
+    private const string CACHED_WORKSPACES_KEY = "tfvc.cachedWorkspaces";
+    private const string OFFLINE_EDITS_KEY = "tfvc.offlineEdits";
 
     private readonly IExtensionStorage _storage;
 
@@ -100,6 +102,55 @@ public sealed class TfvcSettingsStore
         }
 
         return _storage.SetAsync(key, values, cancellationToken);
+    }
+
+    /// <summary>Loads the workspaces of the last successful connection.</summary>
+    public async Task<IReadOnlyList<TfvcWorkspace>> LoadCachedWorkspacesAsync(CancellationToken cancellationToken)
+    {
+        TfvcCachedWorkspace[]? cached = await _storage.GetAsync<TfvcCachedWorkspace[]>(CACHED_WORKSPACES_KEY, cancellationToken).ConfigureAwait(false);
+        if (cached is null)
+        {
+            return Array.Empty<TfvcWorkspace>();
+        }
+
+        TfvcWorkspace[] workspaces = new TfvcWorkspace[cached.Length];
+        for (int i = 0; i < cached.Length; i++)
+        {
+            workspaces[i] = cached[i].ToWorkspace();
+        }
+
+        return workspaces;
+    }
+
+    /// <summary>Saves the workspaces of a successful connection.</summary>
+    public Task SaveCachedWorkspacesAsync(IReadOnlyList<TfvcWorkspace> workspaces, CancellationToken cancellationToken)
+    {
+        TfvcCachedWorkspace[] cached = new TfvcCachedWorkspace[workspaces.Count];
+        for (int i = 0; i < workspaces.Count; i++)
+        {
+            cached[i] = TfvcCachedWorkspace.From(workspaces[i]);
+        }
+
+        return _storage.SetAsync(CACHED_WORKSPACES_KEY, cached, cancellationToken);
+    }
+
+    /// <summary>Loads the local paths whose write protection was removed while TFVC was offline.</summary>
+    public async Task<IReadOnlyList<string>> LoadOfflineEditsAsync(CancellationToken cancellationToken)
+    {
+        string[]? paths = await _storage.GetAsync<string[]>(OFFLINE_EDITS_KEY, cancellationToken).ConfigureAwait(false);
+        return paths ?? Array.Empty<string>();
+    }
+
+    /// <summary>Saves the local paths whose write protection was removed while TFVC was offline.</summary>
+    public Task SaveOfflineEditsAsync(IReadOnlyCollection<string> localPaths, CancellationToken cancellationToken)
+    {
+        if (localPaths.Count == 0)
+        {
+            return _storage.RemoveAsync(OFFLINE_EDITS_KEY, cancellationToken);
+        }
+
+        string[] values = [.. localPaths];
+        return _storage.SetAsync(OFFLINE_EDITS_KEY, values, cancellationToken);
     }
 
     private Task SetOrRemoveAsync(string key, string? value, CancellationToken cancellationToken)

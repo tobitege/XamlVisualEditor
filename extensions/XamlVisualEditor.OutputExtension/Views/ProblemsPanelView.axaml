@@ -14,6 +14,52 @@
     <DataTemplate x:Key="FilterLabelTemplate" x:DataType="sys:String">
       <TextBlock Text="{CompiledBinding ., Converter={x:Static views:ProblemsPanelView.FilterLabelConverter}}" />
     </DataTemplate>
+    <!-- Cell templates referenced by the column definitions of ProblemsPanelViewModel.Columns. -->
+    <DataTemplate x:Key="ProblemsFirstSeenCell" x:DataType="dh:HierarchicalNode">
+      <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
+          <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
+            <TextBlock Text="{CompiledBinding FirstSeenTime}" ToolTip.Tip="{CompiledBinding FirstSeenDetails}" />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </DataTemplate>
+    <DataTemplate x:Key="ProblemsMessageCell" x:DataType="x:Object">
+      <ContentControl Content="{Binding}" VerticalContentAlignment="Center" />
+    </DataTemplate>
+    <DataTemplate x:Key="ProblemsSeverityCell" x:DataType="dh:HierarchicalNode">
+      <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
+          <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
+            <TextBlock Text="{CompiledBinding Severity}" />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </DataTemplate>
+    <DataTemplate x:Key="ProblemsLocationCell" x:DataType="dh:HierarchicalNode">
+      <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
+          <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
+            <TextBlock Text="{CompiledBinding Location}" TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="{CompiledBinding FilePath}" />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </DataTemplate>
+    <DataTemplate x:Key="ProblemsSourceCell" x:DataType="dh:HierarchicalNode">
+      <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
+          <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
+            <TextBlock Text="{CompiledBinding Source}" TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="{CompiledBinding Code}" />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </DataTemplate>
   </UserControl.Resources>
   <Grid RowDefinitions="Auto,Auto,*" Margin="4" RowSpacing="4">
     <WrapPanel Classes="editor-toolbar" Orientation="Horizontal">
@@ -61,6 +107,7 @@
                  ItemsSource="{CompiledBinding Model.Flattened}"
                  HierarchicalModel="{CompiledBinding Model}"
                  HierarchicalRowsEnabled="True"
+                 ColumnDefinitionsSource="{CompiledBinding Columns}"
                  SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
                  AutoGenerateColumns="False"
                  CanUserResizeColumns="True"
@@ -87,79 +134,6 @@
                      ToolTip.Tip="{CompiledBinding Tooltip}" />
         </DataTemplate>
       </dg:DataGrid.DataTemplates>
-      <dg:DataGrid.Columns>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Since}" Width="80" SortMemberPath="Item.FirstSeen"
-                                   IsVisible="{ReflectionBinding DataContext.ShowFirstSeen, ElementName=DiagnosticsGrid}">
-          <dg:DataGridTemplateColumn.CellTemplate>
-            <DataTemplate x:DataType="dh:HierarchicalNode">
-              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
-                <ContentControl.DataTemplates>
-                  <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
-                  <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
-                    <TextBlock Text="{CompiledBinding FirstSeenTime}" ToolTip.Tip="{CompiledBinding FirstSeenDetails}" />
-                  </DataTemplate>
-                </ContentControl.DataTemplates>
-              </ContentControl>
-            </DataTemplate>
-          </dg:DataGridTemplateColumn.CellTemplate>
-        </dg:DataGridTemplateColumn>
-        <dg:DataGridHierarchicalColumn Header="{x:Static loc:UiStrings.Message}"
-                                       Width="*"
-                                       MinWidth="120"
-                                       Binding="{CompiledBinding Item}"
-                                       SortMemberPath="Item.Message"
-                                       x:DataType="dh:HierarchicalNode">
-          <dg:DataGridHierarchicalColumn.CellTemplate>
-            <DataTemplate x:DataType="x:Object">
-              <ContentControl Content="{Binding}" VerticalContentAlignment="Center" />
-            </DataTemplate>
-          </dg:DataGridHierarchicalColumn.CellTemplate>
-        </dg:DataGridHierarchicalColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Severity}" Width="68">
-          <dg:DataGridTemplateColumn.CellTemplate>
-            <DataTemplate x:DataType="dh:HierarchicalNode">
-              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
-                <ContentControl.DataTemplates>
-                  <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
-                  <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
-                    <TextBlock Text="{CompiledBinding Severity}" />
-                  </DataTemplate>
-                </ContentControl.DataTemplates>
-              </ContentControl>
-            </DataTemplate>
-          </dg:DataGridTemplateColumn.CellTemplate>
-        </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Location}" Width="150">
-          <dg:DataGridTemplateColumn.CellTemplate>
-            <DataTemplate x:DataType="dh:HierarchicalNode">
-              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
-                <ContentControl.DataTemplates>
-                  <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
-                  <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
-                    <TextBlock Text="{CompiledBinding Location}" TextTrimming="CharacterEllipsis"
-                               ToolTip.Tip="{CompiledBinding FilePath}" />
-                  </DataTemplate>
-                </ContentControl.DataTemplates>
-              </ContentControl>
-            </DataTemplate>
-          </dg:DataGridTemplateColumn.CellTemplate>
-        </dg:DataGridTemplateColumn>
-        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Source}" Width="90">
-          <dg:DataGridTemplateColumn.CellTemplate>
-            <DataTemplate x:DataType="dh:HierarchicalNode">
-              <ContentControl Content="{CompiledBinding Item}" VerticalContentAlignment="Center">
-                <ContentControl.DataTemplates>
-                  <DataTemplate DataType="vm:ProblemsGroupViewModel"><Panel /></DataTemplate>
-                  <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
-                    <TextBlock Text="{CompiledBinding Source}" TextTrimming="CharacterEllipsis"
-                               ToolTip.Tip="{CompiledBinding Code}" />
-                  </DataTemplate>
-                </ContentControl.DataTemplates>
-              </ContentControl>
-            </DataTemplate>
-          </dg:DataGridTemplateColumn.CellTemplate>
-        </dg:DataGridTemplateColumn>
-      </dg:DataGrid.Columns>
     </dg:DataGrid>
   </Grid>
 </UserControl>

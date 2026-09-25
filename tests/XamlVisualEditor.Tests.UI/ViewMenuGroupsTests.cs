@@ -78,6 +78,72 @@ public sealed class ViewMenuGroupsTests
     }
 
     [AvaloniaFact]
+    public async Task ExtensionsMenuKeepsTheManagerFirstAndNestsSubmenus()
+    {
+        ExtensionContributionRegistry contributions = new();
+        using MainWindowViewModel viewModel = new(
+            extensionCommands: new CommandRegistry(),
+            extensionContributionRegistry: contributions,
+            extensionViewRegistry: new ExtensionViewRegistry());
+        string location = ExtensionMenuLocations.Extensions;
+        using IDisposable registeredMenus = contributions.RegisterMenuItems("test.extensions", new[]
+        {
+            new ExtensionMenuContribution("terminal", "Terminal", location, "terminal", 0),
+            new ExtensionMenuContribution("online", "Go Online", location, "scc", 20) { Submenu = "Source Control", SubmenuGroup = "1" },
+            new ExtensionMenuContribution("offline", "Work Offline", location, "scc", 10) { Submenu = "Source Control", SubmenuGroup = "1" },
+            new ExtensionMenuContribution("reconcile", "Reconcile", location, "scc", 30) { Submenu = "Source Control", SubmenuGroup = "2" }
+        });
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+        Assert.Equal("shell.extensions.manage", viewModel.ExtensionMenuItems[0].CommandId);
+        Assert.Equal(
+            new[] { "-", "Source Control", "-", "Terminal" },
+            viewModel.ExtensionMenuItems.Skip(1).Select(item => item.Header));
+        Assert.Equal(
+            new[] { "Work Offline", "Go Online", "-", "Reconcile" },
+            viewModel.ExtensionMenuItems[2].Children.Select(item => item.Header));
+    }
+
+    [AvaloniaFact]
+    public async Task SubmenuItemsFollowTheirWhenConditionsAfterContextKeyChanges()
+    {
+        ExtensionContributionRegistry contributions = new();
+        CommandMetadataRegistry metadata = new();
+        ContextKeyRegistry contextKeys = new();
+        contextKeys.Set([new("test.offline", false), new("test.connected", false)]);
+        using MainWindowViewModel viewModel = new(
+            extensionCommands: new CommandRegistry(),
+            extensionContributionRegistry: contributions,
+            extensionViewRegistry: new ExtensionViewRegistry(),
+            commandMetadata: metadata,
+            contextKeys: contextKeys);
+        using IDisposable offlineMetadata = metadata.Register("offline", new CommandMetadata("Work Offline", When: "!test.offline"));
+        using IDisposable reconcileMetadata = metadata.Register("reconcile", new CommandMetadata("Reconcile", When: "test.connected"));
+        string location = ExtensionMenuLocations.Extensions;
+        using IDisposable registeredMenus = contributions.RegisterMenuItems("test.submenu-enablement", new[]
+        {
+            new ExtensionMenuContribution("offline", "Work Offline", location, "scc", 10) { Submenu = "Source Control", CheckedWhen = "test.offline" },
+            new ExtensionMenuContribution("reconcile", "Reconcile", location, "scc", 20) { Submenu = "Source Control" }
+        });
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        ExtensionMenuItemViewModel submenu = viewModel.ExtensionMenuItems.Single(item => item.Header == "Source Control");
+        ExtensionMenuItemViewModel offline = submenu.Children.Single(item => item.Header == "Work Offline");
+        ExtensionMenuItemViewModel reconcile = submenu.Children.Single(item => item.Header == "Reconcile");
+        Assert.True(offline.IsEnabled);
+        Assert.False(reconcile.IsEnabled);
+
+        contextKeys.Set("test.connected", true);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        Assert.True(reconcile.IsEnabled);
+
+        contextKeys.Set([new("test.offline", true), new("test.connected", false)]);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        Assert.False(offline.IsEnabled);
+        Assert.True(offline.IsChecked);
+        Assert.False(reconcile.IsEnabled);
+    }
+
+    [AvaloniaFact]
     public async Task MenuItemTitledWithTheReservedDashIsDrawnAsASeparatorButKeepsItsCommand()
     {
         ExtensionContributionRegistry contributions = new();

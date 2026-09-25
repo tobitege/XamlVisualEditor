@@ -1,12 +1,15 @@
 ﻿using System;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
+using ReactiveUI;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
 public sealed partial class DesignerDocumentViewModel
 {
     private readonly DocumentFileState _fileState = new();
+    private ReadOnlyFileMonitor? _readOnlyMonitor;
 
     private void InitializeDesignerFileState()
     {
@@ -14,6 +17,16 @@ public sealed partial class DesignerDocumentViewModel
                 handler => CodeEditor.Document.TextChanged += handler,
                 handler => CodeEditor.Document.TextChanged -= handler)
             .Subscribe(_ => UpdateFileModifiedState()));
+
+        _readOnlyMonitor = new ReadOnlyFileMonitor(FilePath,
+            () => RxSchedulers.MainThreadScheduler.Schedule(UpdateReadOnlyState));
+        _disposables.Add(_readOnlyMonitor);
+        UpdateReadOnlyState();
+    }
+
+    private void UpdateReadOnlyState()
+    {
+        IsReadOnlyFile = _readOnlyMonitor?.IsReadOnly ?? false;
     }
 
     private void UpdateFileModifiedState()

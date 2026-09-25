@@ -574,6 +574,10 @@
   <data name="DocumentCreated" xml:space="preserve"><value>{0} erstellt</value></data>
   <data name="DocumentCreateFailed" xml:space="preserve"><value>Dokument konnte nicht erstellt werden: {0}</value></data>
   <data name="DocumentOpenFailed" xml:space="preserve"><value>Dokument konnte nicht geöffnet werden: {0}</value></data>
+  <data name="DocumentSaveFailed" xml:space="preserve"><value>Dokument konnte nicht gespeichert werden; die Änderungen bleiben im Editor: {0}</value></data>
+  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(schreibgeschützt)</value></data>
+  <data name="ReadOnlyFileBanner" xml:space="preserve"><value>Diese Datei ist schreibgeschützt. Änderungen lassen sich erst speichern, wenn der Schreibschutz aufgehoben ist, zum Beispiel durch Auschecken in der Quellcodeverwaltung.</value></data>
+  <data name="DocumentSaveReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gespeichert werden; die Änderungen bleiben im Editor.</value></data>
   <data name="SavingDisabled" xml:space="preserve"><value>Speichern ist deaktiviert</value></data>
   <data name="DocumentSaved" xml:space="preserve"><value>{0} gespeichert</value></data>
   <data name="AllDocumentsSaved" xml:space="preserve"><value>Alle Dokumente gespeichert</value></data>
@@ -809,6 +813,11 @@
   <data name="KeepItem" xml:space="preserve"><value>Eintrag behalten</value></data>
   <data name="ConfirmDelete" xml:space="preserve"><value>Löschen bestätigen</value></data>
   <data name="DeleteFailed" xml:space="preserve"><value>Löschen fehlgeschlagen: {0}</value></data>
+  <data name="DeleteReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gelöscht werden.</value></data>
+  <data name="FileIsReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt.</value></data>
+  <data name="FileAccessDenied" xml:space="preserve"><value>Der Zugriff auf „{0}“ wurde verweigert.</value></data>
+  <data name="FileInUse" xml:space="preserve"><value>„{0}“ wird von einem anderen Prozess verwendet.</value></data>
+  <data name="FileChangedOutsideEditor" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Vor dem Speichern neu laden.</value></data>
   <data name="FileNamePrompt" xml:space="preserve"><value>Dateinamen eingeben</value></data>
   <data name="CreateFileFailed" xml:space="preserve"><value>Datei konnte nicht erstellt werden: {0}</value></data>
   <data name="FolderNamePrompt" xml:space="preserve"><value>Ordnernamen eingeben</value></data>

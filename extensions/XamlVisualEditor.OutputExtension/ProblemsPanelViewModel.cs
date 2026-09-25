@@ -13,7 +13,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Collections;
+using Avalonia.Controls;
 using Avalonia.Controls.DataGridHierarchical;
+using Avalonia.Data.Core;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
@@ -121,12 +123,36 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     private string _selectedGroupBy = "File";
     private bool _showFirstSeen;
     private CancellationTokenSource? _loadCts;
+    private readonly DataGridTemplateColumnDefinition _firstSeenColumn;
+
+    private static readonly ClrPropertyInfo NodeItemProperty = new(
+        nameof(HierarchicalNode.Item), target => ((HierarchicalNode)target).Item, null, typeof(object));
 
     public ProblemsPanelViewModel(IDiagnosticsService diagnostics, IEditorServices editor, TimeProvider? timeProvider = null)
     {
         _diagnostics = diagnostics;
         _editor = editor;
         _timeProvider = timeProvider ?? TimeProvider.System;
+
+        _firstSeenColumn = CreateTemplateColumn("FirstSeen", UiStrings.Since, "ProblemsFirstSeenCell", 80, "Item.FirstSeen");
+        _firstSeenColumn.IsVisible = false;
+        Columns = new DataGridColumnDefinition[]
+        {
+            _firstSeenColumn,
+            new DataGridHierarchicalColumnDefinition
+            {
+                ColumnKey = "Message",
+                Header = UiStrings.Message,
+                Width = new DataGridLength(1, DataGridLengthUnitType.Star),
+                MinWidth = 120,
+                SortMemberPath = "Item.Message",
+                Binding = DataGridBindingDefinition.Create<HierarchicalNode, object>(NodeItemProperty, node => node.Item),
+                CellTemplateKey = "ProblemsMessageCell"
+            },
+            CreateTemplateColumn("Severity", UiStrings.Severity, "ProblemsSeverityCell", 120),
+            CreateTemplateColumn("Location", UiStrings.Location, "ProblemsLocationCell", 150),
+            CreateTemplateColumn("Source", UiStrings.Source, "ProblemsSourceCell", 90)
+        };
 
         ChannelsView = new DataGridCollectionView(_channels);
 
@@ -206,6 +232,9 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
 
     public HierarchicalModel Model { get; }
 
+    /// <summary>Gets the diagnostics grid columns; the cell templates are resources of the problems view.</summary>
+    public IReadOnlyList<DataGridColumnDefinition> Columns { get; }
+
     public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
@@ -269,7 +298,11 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     public bool ShowFirstSeen
     {
         get => _showFirstSeen;
-        set => this.RaiseAndSetIfChanged(ref _showFirstSeen, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _showFirstSeen, value);
+            _firstSeenColumn.IsVisible = value;
+        }
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -353,6 +386,23 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         };
 
         return await _editor.OpenLocationAsync(location, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static DataGridTemplateColumnDefinition CreateTemplateColumn(
+        string key,
+        string header,
+        string cellTemplateKey,
+        double width,
+        string? sortMemberPath = null)
+    {
+        return new DataGridTemplateColumnDefinition
+        {
+            ColumnKey = key,
+            Header = header,
+            Width = new DataGridLength(width),
+            SortMemberPath = sortMemberPath,
+            CellTemplateKey = cellTemplateKey
+        };
     }
 
     public void Dispose()

@@ -60,6 +60,7 @@ public static class TfvcDisplayText
                 TfvcFileStateKind.NotInWorkspace => TfvcStrings.FileStateNotInWorkspace,
                 TfvcFileStateKind.NotVersioned => TfvcStrings.FileStateNotVersioned,
                 TfvcFileStateKind.CheckedIn => TfvcStrings.FileStateCheckedIn,
+                TfvcFileStateKind.Offline => TfvcStrings.FileStateOffline,
                 TfvcFileStateKind.Pending => string.Format(
                     CultureInfo.CurrentCulture,
                     TfvcStrings.FileStatePendingFormat,

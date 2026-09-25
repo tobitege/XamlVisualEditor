@@ -62,6 +62,11 @@
             </WrapPanel>
         </Border>
 
+        <Border DockPanel.Dock="Top" IsVisible="{CompiledBinding IsReadOnlyFile}"
+                Background="#4A3B00" BorderBrush="#C9A227" BorderThickness="0,0,0,1" Padding="8,4">
+            <TextBlock Text="{x:Static loc:UiStrings.ReadOnlyFileBanner}" Foreground="#FFE08A" TextWrapping="Wrap" />
+        </Border>
+
         <Grid v:SplitterLayoutBehavior.PersistenceKey="DesignerDocument">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />

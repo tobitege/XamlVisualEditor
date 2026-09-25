@@ -22,6 +22,11 @@
       </ToggleButton>
     </StackPanel>
 
+    <Border DockPanel.Dock="Top" IsVisible="{CompiledBinding IsReadOnlyFile}"
+            Background="#4A3B00" BorderBrush="#C9A227" BorderThickness="0,0,0,1" Padding="8,4">
+      <TextBlock Text="{x:Static loc:UiStrings.ReadOnlyFileBanner}" Foreground="#FFE08A" TextWrapping="Wrap" />
+    </Border>
+
     <ae:TextEditor Name="TextEditor"
              v:BreakpointMarginBehavior.IsEnabled="True"
              v:TextEditorFeaturesBehavior.IsEnabled="True"

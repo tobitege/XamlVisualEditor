@@ -334,7 +334,43 @@ public enum TfvcFileStateKind
     CheckedIn,
 
     /// <summary>The file has a pending change.</summary>
-    Pending
+    Pending,
+
+    /// <summary>TFVC works offline and the file lies in a mapped folder.</summary>
+    Offline
+}
+
+/// <summary>Kind of a local change made while TFVC was offline.</summary>
+public enum TfvcOfflineChangeKind
+{
+    /// <summary>A versioned file was changed without check-out.</summary>
+    Edit,
+
+    /// <summary>A file exists locally but not in version control.</summary>
+    Add,
+
+    /// <summary>A versioned file no longer exists locally.</summary>
+    Delete
+}
+
+/// <summary>A local change that can be pended when going online.</summary>
+/// <param name="LocalPath">Local path of the file.</param>
+/// <param name="Kind">Kind of the change.</param>
+public sealed record TfvcOfflineChange(string LocalPath, TfvcOfflineChangeKind Kind);
+
+/// <summary>Stored copy of a workspace, so its mappings are known while the server is unreachable.</summary>
+/// <param name="Name">Workspace name.</param>
+/// <param name="OwnerDisplayName">Display name of the owner.</param>
+/// <param name="Computer">Computer of the workspace.</param>
+/// <param name="Folders">Working folder mappings.</param>
+public sealed record TfvcCachedWorkspace(string Name, string? OwnerDisplayName, string? Computer, TfvcWorkingFolder[] Folders)
+{
+    /// <summary>Creates the stored copy of a workspace.</summary>
+    public static TfvcCachedWorkspace From(TfvcWorkspace workspace) =>
+        new(workspace.Name, workspace.OwnerDisplayName, workspace.Computer, [.. workspace.Folders]);
+
+    /// <summary>Creates the workspace from the stored copy.</summary>
+    public TfvcWorkspace ToWorkspace() => new(Name, OwnerDisplayName, Computer, Folders);
 }
 
 /// <summary>Version control state of a local file together with its context.</summary>

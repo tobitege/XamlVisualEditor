@@ -707,11 +707,10 @@ public sealed class CollaborationLifecycleTests
         Assert.Single(refsFolder.Children);
     }
 
-    [Theory]
-    [InlineData(true, "{References}|Assets|Views|App.axaml|Zeta.cs")]
-    [InlineData(false, "{References}|App.axaml|Assets|Views|Zeta.cs")]
-    public void SolutionExplorer_orders_project_items_and_hides_files_outside_the_project(bool foldersBeforeFiles, string expected)
+    [Fact]
+    public void SolutionExplorer_orders_project_items_and_hides_files_outside_the_project()
     {
+        const string expected = "{References}|Assets|Views|App.axaml|Zeta.cs";
         string projectDirectory = Path.Combine(Path.GetTempPath(), "xve-tree", "App");
         ProjectFileModel File(string relative) => new()
         {
@@ -739,7 +738,7 @@ public sealed class CollaborationLifecycleTests
             }
         };
 
-        SolutionExplorerNodeViewModel root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, "Tree", foldersBeforeFiles: foldersBeforeFiles);
+        SolutionExplorerNodeViewModel root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, "Tree");
 
         SolutionExplorerNodeViewModel project = Assert.Single(root.Children);
         Assert.Equal(expected.Replace("{References}", XamlVisualEditor.Core.Localization.UiStrings.References),

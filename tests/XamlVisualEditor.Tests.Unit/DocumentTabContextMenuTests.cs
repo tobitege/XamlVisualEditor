@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Logging;
 using Avalonia.Markup.Xaml.Styling;
+using Avalonia.VisualTree;
 using Dock.Avalonia.Themes.Fluent;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core;
@@ -49,6 +50,111 @@ public sealed class DocumentTabContextMenuTests : IDisposable
         Assert.Equal([path], revealedInFileExplorer);
         Assert.Equal([path], revealedInSolutionExplorer);
         Assert.Equal([path, "View.axaml"], copied);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Solution_Explorer_View_Selects_The_Revealed_File_Row(bool revealBeforeShow, bool selectOtherFirst)
+    {
+        string file = Path.Combine(_directory, "Controls", "Main.axaml");
+        List<ProjectFileModel> files = Enumerable.Range(0, 200)
+            .Select(index => new ProjectFileModel
+            {
+                FilePath = Path.Combine(_directory, "Aaa", $"File{index:000}.cs"),
+                RelativePath = Path.Combine("Aaa", $"File{index:000}.cs")
+            })
+            .ToList();
+        files.Add(new ProjectFileModel { FilePath = Path.Combine(_directory, "App.cs"), RelativePath = "App.cs" });
+        files.Add(new ProjectFileModel { FilePath = file, RelativePath = Path.Combine("Controls", "Main.axaml") });
+        SolutionExplorerViewModel explorer = new();
+        explorer.LoadWorkspace(new WorkspaceModel
+        {
+            Projects =
+            [
+                new ProjectModel
+                {
+                    Name = "App",
+                    ProjectPath = Path.Combine(_directory, "App.csproj"),
+                    Files = files,
+                    References = Array.Empty<AssemblyReference>(),
+                    XamlFiles = Array.Empty<XamlFileModel>()
+                }
+            ],
+            ProjectFolders = new Dictionary<string, string>()
+        }, "Solution");
+        SolutionExplorerView view = new() { DataContext = explorer };
+        Window window = new() { Content = view, Width = 300, Height = 400 };
+        window.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+        window.Styles.Add(new StyleInclude(new Uri("avares://XamlVisualEditor.App/"))
+        {
+            Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml")
+        });
+        if (revealBeforeShow) Assert.True(explorer.RevealFile(file));
+        window.Show();
+        try
+        {
+            Settle(window);
+            if (selectOtherFirst)
+            {
+                Assert.True(explorer.RevealFile(Path.Combine(_directory, "Aaa", "File150.cs")));
+                Settle(window);
+            }
+
+            if (!revealBeforeShow) Assert.True(explorer.RevealFile(file));
+            Settle(window);
+
+            DataGrid grid = view.GetVisualDescendants().OfType<DataGrid>().Single();
+            Assert.NotNull(explorer.SelectedRow);
+            Assert.Same(explorer.SelectedRow, grid.SelectedItem);
+            Assert.Equal(file, explorer.SelectedNode?.FullPath);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task File_Explorer_View_Selects_A_Revealed_File_After_Another()
+    {
+        string first = Path.Combine(_directory, "Aaa", "First.axaml");
+        string second = Path.Combine(_directory, "Zzz", "Second.axaml");
+        // The files of the first folder push the second folder below the visible rows.
+        IEnumerable<string> fillers = Enumerable.Range(0, 100).Select(index => Path.Combine(_directory, "Aaa", $"File{index:000}.cs"));
+        foreach (string path in fillers.Append(first).Append(second))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "<UserControl />");
+        }
+
+        using ExtensionTreeViewModel explorer = new(
+            new ExtensionViewContribution("files.panel", "Files", ExtensionViewType.Tree, ExtensionViewLocation.Left, 0),
+            new PathTreeProvider(_directory));
+        ExtensionTreeView view = new() { DataContext = explorer };
+        Window window = new() { Content = view, Width = 300, Height = 400 };
+        window.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+        window.Styles.Add(new StyleInclude(new Uri("avares://XamlVisualEditor.App/"))
+        {
+            Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml")
+        });
+        window.Show();
+        try
+        {
+            Assert.True(await explorer.RevealPathAsync(first, CancellationToken.None));
+            Settle(window);
+            Assert.True(await explorer.RevealPathAsync(second, CancellationToken.None));
+            Settle(window);
+
+            DataGrid grid = view.GetVisualDescendants().OfType<DataGrid>().Single();
+            Assert.Same(explorer.SelectedRow, grid.SelectedItem);
+            Assert.Equal(second, Assert.IsType<PathEntry>(explorer.SelectedNode?.Element).FullPath);
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact(Timeout = 30000)]
@@ -147,9 +253,60 @@ public sealed class DocumentTabContextMenuTests : IDisposable
         Assert.True(fileItemErrors.Length == 0, string.Join(Environment.NewLine, fileItemErrors));
     }
 
+    // Runs the posted scroll request and the layout it needs.
+    private static void Settle(Window window)
+    {
+        for (int pass = 0; pass < 2; pass++)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+        }
+    }
+
     private sealed record PathEntry(string FullPath) : IExtensionTreeItemPathProvider, IExtensionTreeItemChildrenProvider
     {
         public bool HasChildren => Directory.Exists(FullPath);
+
+        public bool IsDirectory => Directory.Exists(FullPath);
+    }
+
+    [Theory]
+    [InlineData(true, false, "Zeta|Alpha.txt|Beta.txt")]
+    [InlineData(true, true, "Zeta|Beta.txt|Alpha.txt")]
+    [InlineData(false, false, "Alpha.txt|Beta.txt|Zeta")]
+    public void File_Explorer_Keeps_Folders_First_In_Both_Directions_When_The_Option_Is_On(
+        bool foldersBeforeFiles, bool descending, string expected)
+    {
+        Directory.CreateDirectory(Path.Combine(_directory, "Zeta"));
+        File.WriteAllText(Path.Combine(_directory, "Alpha.txt"), string.Empty);
+        File.WriteAllText(Path.Combine(_directory, "Beta.txt"), string.Empty);
+        PathTreeProvider provider = new(_directory);
+        using ExtensionTreeViewModel explorer = new(
+            new ExtensionViewContribution("fileExplorer.panel", "Files", ExtensionViewType.Tree, ExtensionViewLocation.Left, 0),
+            provider, foldersBeforeFiles);
+        if (descending)
+            explorer.SortingModel.SetOrUpdate(new Avalonia.Controls.DataGridSorting.SortingDescriptor(
+                "Name", System.ComponentModel.ListSortDirection.Descending));
+        ExtensionTreeNodeViewModel[] nodes = new[] { "Beta.txt", "Zeta", "Alpha.txt" }
+            .Select(name => new PathEntry(Path.Combine(_directory, name)))
+            .Select(entry => new ExtensionTreeNodeViewModel(entry, new TreeItem(Path.GetFileName(entry.FullPath), null, null), provider, () => { }))
+            .ToArray();
+        System.Collections.IComparer comparer = Assert.IsAssignableFrom<System.Collections.IComparer>(explorer.SortComparer);
+
+        // The grid negates the result of a descending sort, as the test does here.
+        Array.Sort(nodes, (left, right) => (descending ? -1 : 1) * comparer.Compare(left, right));
+
+        Assert.Equal(expected, string.Join("|", nodes.Select(node => node.Label)));
+    }
+
+    [Fact]
+    public void Other_Trees_Keep_The_Order_Of_Their_Provider()
+    {
+        using ExtensionTreeViewModel tree = new(
+            new ExtensionViewContribution("files.panel", "Files", ExtensionViewType.Tree, ExtensionViewLocation.Left, 0),
+            new PathTreeProvider(_directory));
+
+        Assert.Null(tree.SortComparer);
     }
 
     // Lists the real file system below one root folder.

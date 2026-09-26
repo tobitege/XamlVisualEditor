@@ -528,14 +528,18 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
     public bool IsFileExplorer => ViewId == "fileExplorer.panel";
 
     private const string FilterPropertyPath = "Item.Label";
+    private readonly System.Reactive.Subjects.Subject<object> _revealRequests = new();
     private readonly IExtensionTreeDataProvider _provider;
     private readonly IDisposable _filterSubscription;
     private bool _isDisposed;
 
-    public ExtensionTreeViewModel(ExtensionViewContribution contribution, IExtensionTreeDataProvider provider)
+    public ExtensionTreeViewModel(ExtensionViewContribution contribution, IExtensionTreeDataProvider provider,
+        bool foldersBeforeFiles = true)
         : base(contribution)
     {
         _provider = provider;
+        FoldersBeforeFiles = foldersBeforeFiles;
+        SortComparer = IsFileExplorer ? new FileExplorerComparer(this) : null;
 
         SortingModel = new SortingModel();
         FilteringModel = new FilteringModel();
@@ -554,11 +558,20 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
             IsExpandedSelector = item => ((ExtensionTreeNodeViewModel)item).IsExpanded,
             IsExpandedSetter = (item, value) => SetExpanded(item, value),
             VirtualizeChildren = true,
-            AllowExpandToItemSearch = true
+            AllowExpandToItemSearch = true,
+            SiblingComparer = SortComparer as IComparer<object>
         };
 
         Model = new HierarchicalModel(options);
         Model.SetRoots(RootItems);
+        // Sorting moves the rows under the grid selection; the selected item is selected again at its new place.
+        SortingModel.SortingChanged += (_, _) =>
+        {
+            if (SelectedNode is { } node && Model.FindNode(node) is { } row)
+            {
+                _revealRequests.OnNext(row);
+            }
+        };
 
         _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
@@ -708,6 +721,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
                 }
 
                 SelectedRow = row;
+                _revealRequests.OnNext(row);
                 return true;
             }
 
@@ -717,6 +731,58 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         }
 
         return false;
+    }
+
+    /// <summary>Gets the rows that <see cref="RevealPathAsync"/> selected and the view scrolls into view.</summary>
+    public IObservable<object> RevealRequests => _revealRequests;
+
+    /// <summary>Gets whether the File Explorer lists folders before files, also when sorted by its column header.</summary>
+    public bool FoldersBeforeFiles { get; private set; }
+
+    /// <summary>
+    /// Gets the comparer of the File Explorer rows, for its default order and its column header sorting; null for other
+    /// trees, which keep the order of their provider.
+    /// </summary>
+    public System.Collections.IComparer? SortComparer { get; }
+
+    /// <summary>Changes whether folders come before files and sorts the loaded rows again.</summary>
+    public void SetFoldersBeforeFiles(bool value)
+    {
+        if (FoldersBeforeFiles == value) return;
+        FoldersBeforeFiles = value;
+        if (SortComparer is IComparer<object> comparer && SortingModel.Descriptors.Count == 0)
+            Model.ApplySiblingComparer(comparer, recursive: true);
+    }
+
+    // Folders stay in front in both sort directions: the grid negates the whole result for a descending sort, so the
+    // folder part is negated here in advance.
+    private sealed class FileExplorerComparer(ExtensionTreeViewModel owner) : System.Collections.IComparer, IComparer<object>
+    {
+        public int Compare(object? x, object? y)
+        {
+            if (Unwrap(x) is not { } left || Unwrap(y) is not { } right) return 0;
+            if (owner.FoldersBeforeFiles)
+            {
+                int folders = IsFolder(right).CompareTo(IsFolder(left));
+                if (folders != 0)
+                {
+                    bool descending = owner.SortingModel.Descriptors.Count > 0
+                        && owner.SortingModel.Descriptors[0].Direction == System.ComponentModel.ListSortDirection.Descending;
+                    return descending ? -folders : folders;
+                }
+            }
+
+            return string.Compare(left.Label, right.Label, StringComparison.CurrentCultureIgnoreCase);
+        }
+
+        private static ExtensionTreeNodeViewModel? Unwrap(object? item) => item switch
+        {
+            HierarchicalNode node => node.Item as ExtensionTreeNodeViewModel,
+            _ => item as ExtensionTreeNodeViewModel
+        };
+
+        private static bool IsFolder(ExtensionTreeNodeViewModel node) =>
+            node.Element is IExtensionTreeItemPathProvider { IsDirectory: true };
     }
 
     public void Dispose()

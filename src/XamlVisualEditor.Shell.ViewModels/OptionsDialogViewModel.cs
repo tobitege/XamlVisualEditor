@@ -27,7 +27,7 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
     private EditorTheme? _theme;
     private OptionChoice<string> _language;
     private bool _restoreLastWorkspace;
-    private bool _foldersBeforeFiles;
+    private bool _fileExplorerFoldersBeforeFiles;
     private bool _showFullPathInTitle;
     private OptionChoice<TerminalLocation> _location;
     private OptionChoice<TerminalShell> _shell;
@@ -43,7 +43,7 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
         _originalTheme = editorThemes?.Selection ?? store.Current.EditorTheme;
         _language = Languages.Single(item => item.Value == store.Current.Language);
         _restoreLastWorkspace = store.Current.RestoreLastWorkspace;
-        _foldersBeforeFiles = store.Current.FoldersBeforeFiles;
+        _fileExplorerFoldersBeforeFiles = store.Current.FileExplorerFoldersBeforeFiles;
         _showFullPathInTitle = store.Current.ShowFullPathInTitle;
         _location = Locations.Single(item => item.Value == store.Current.TerminalLocation);
         _shell = Shells.Single(item => item.Value == store.Current.TerminalShell);
@@ -113,7 +113,11 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
     }
     public OptionChoice<string> SelectedLanguage { get => _language; set => this.RaiseAndSetIfChanged(ref _language, value); }
     public bool RestoreLastWorkspace { get => _restoreLastWorkspace; set => this.RaiseAndSetIfChanged(ref _restoreLastWorkspace, value); }
-    public bool FoldersBeforeFiles { get => _foldersBeforeFiles; set => this.RaiseAndSetIfChanged(ref _foldersBeforeFiles, value); }
+    public bool FileExplorerFoldersBeforeFiles
+    {
+        get => _fileExplorerFoldersBeforeFiles;
+        set => this.RaiseAndSetIfChanged(ref _fileExplorerFoldersBeforeFiles, value);
+    }
     public bool ShowFullPathInTitle { get => _showFullPathInTitle; set => this.RaiseAndSetIfChanged(ref _showFullPathInTitle, value); }
     public OptionChoice<TerminalLocation> SelectedLocation { get => _location; set => this.RaiseAndSetIfChanged(ref _location, value); }
     public OptionChoice<TerminalShell> SelectedShell { get => _shell; set => this.RaiseAndSetIfChanged(ref _shell, value); }
@@ -133,7 +137,7 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
         {
             EditorTheme = _themeProvider is { } provider && _theme is { } theme
                 ? new EditorThemeSelection(provider.Id, theme.Id) : _store.Current.EditorTheme,
-            Language = SelectedLanguage.Value, RestoreLastWorkspace = RestoreLastWorkspace, FoldersBeforeFiles = FoldersBeforeFiles, ShowFullPathInTitle = ShowFullPathInTitle, TerminalLocation = SelectedLocation.Value, TerminalShell = SelectedShell.Value,
+            Language = SelectedLanguage.Value, RestoreLastWorkspace = RestoreLastWorkspace, FileExplorerFoldersBeforeFiles = FileExplorerFoldersBeforeFiles, ShowFullPathInTitle = ShowFullPathInTitle, TerminalLocation = SelectedLocation.Value, TerminalShell = SelectedShell.Value,
             CommandPromptPath = CommandPromptPath.Trim(), WindowsPowerShellPath = WindowsPowerShellPath.Trim(), PowerShell7Path = PowerShell7Path.Trim()
         };
         if (IsWindows && !File.Exists(options.ShellPath))

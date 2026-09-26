@@ -46,9 +46,9 @@
         <CheckBox Name="ShowFullPathInTitleChoice" Content="{x:Static loc:UiStrings.ShowFullPathInTitle}"
                   IsChecked="{CompiledBinding ShowFullPathInTitle, Mode=TwoWay}" />
         <Separator Margin="0,4" />
-        <TextBlock Text="{x:Static loc:UiStrings.SolutionExplorer}" FontWeight="SemiBold" />
-        <CheckBox Name="FoldersBeforeFilesChoice" Content="{x:Static loc:UiStrings.FoldersBeforeFiles}"
-                  IsChecked="{CompiledBinding FoldersBeforeFiles, Mode=TwoWay}" />
+        <TextBlock Text="{x:Static loc:UiStrings.FileExplorer}" FontWeight="SemiBold" />
+        <CheckBox Name="FileExplorerFoldersBeforeFilesChoice" Content="{x:Static loc:UiStrings.FoldersBeforeFiles}"
+                  IsChecked="{CompiledBinding FileExplorerFoldersBeforeFiles, Mode=TwoWay}" />
         <Separator Margin="0,4" />
         <TextBlock Text="{x:Static loc:UiStrings.TerminalGroup}" FontWeight="SemiBold" />
         <TextBlock Text="{x:Static loc:UiStrings.WindowsTerminalOptionsHint}" TextWrapping="Wrap" />

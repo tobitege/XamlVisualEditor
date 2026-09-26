@@ -14,8 +14,8 @@ public sealed record EditorOptions
     public string Language { get; init; } = "en";
     /// <summary>Opens the most recent workspace or folder at startup when no path is passed on the command line.</summary>
     public bool RestoreLastWorkspace { get; init; }
-    /// <summary>Lists the folders of a project before its files in the Solution Explorer; otherwise both sort together by name.</summary>
-    public bool FoldersBeforeFiles { get; init; } = true;
+    /// <summary>Lists folders before files in the File Explorer, also when it sorts by its column header; otherwise both sort together by name.</summary>
+    public bool FileExplorerFoldersBeforeFiles { get; init; } = true;
     /// <summary>Shows the full path of the active document in the window title instead of its file name.</summary>
     public bool ShowFullPathInTitle { get; init; }
     public TerminalLocation TerminalLocation { get; init; }

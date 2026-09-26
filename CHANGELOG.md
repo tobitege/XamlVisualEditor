@@ -10,7 +10,7 @@ uses Semantic Versioning.
 - The context menu of a file document tab offers "Open in File Explorer", "Open in Solution Explorer", "Copy Path" and "Copy File Name", in the tabbed and the MDI layout. The two "Open in" commands show the File Explorer or Solution Explorer panel, expand its tree to the file and select it; the status bar tells when the file is not part of the tree. Extension trees take part through `IExtensionTreeItemPathProvider`, which the File Explorer entries implement.
 - Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
 - Added the option to reopen the last workspace or folder at startup.
-- Added the option to list folders before files in the Solution Explorer; it is on by default.
+- Added the option to list folders before files in the File Explorer (Options, File Explorer; on by default). It also holds when the File Explorer sorts by its column header, in both directions; the setting is stored as `FileExplorerFoldersBeforeFiles`.
 - Added `--mcp` to start the local HTTP MCP server from the command line.
 - Added MCP command-line options for the transport, HTTP port, and HTTP path.
 - Added per-user persistence for the main-window size and designer/code splitter ratios.
@@ -52,6 +52,7 @@ uses Semantic Versioning.
 - A workspace remembers its session independently of the dock layout: opening it again reopens the documents that were open, in their order and including files outside the workspace, activates the document that was active and restores the startup project. The sessions of the 50 most recently used workspaces are kept in `workspace-sessions.json`; closing a workspace keeps its session.
 - The Solution Explorer marks only the startup project, like Visual Studio: its name is bold after the ▶ marker, and the "RUN" label of other executable projects is gone. A tooltip on a project node tells whether it is the startup project or an executable project, and "Set as Startup Project" is available for executable projects only. The references folder is the first child of a project, whatever the sort option, and its name follows the editor language.
 - Added the option "Show the full file path in the window title" (off by default) under Window in the Options dialog; the window title also follows a "Save As" of the active document. The tooltip of a document tab always shows the full path of its file.
+- The Solution Explorer no longer sorts by a click on its column header and always lists folders before files, like Visual Studio. The File Explorer keeps its header sorting.
 - Opening a problem from the Problems panel in a XAML code editor marks its location like a designer selection, but in the error color: a red bar and arrow in the gutter along the start tag that contains the diagnostic (or along its line outside a start tag), scrolled into the middle of the editor with the caret at the diagnostic. The marker disappears with the next edit. Extensions open a diagnostic location this way through `IEditorServices.OpenDiagnosticLocationAsync`.
 - Fixed the external previewer failing with "Could not load file or assembly 'System.Xaml'" when the previewed project references a .NET Framework library: the previewer host no longer preloads project references whose assembly-level attributes come from an assembly the runtime cannot load, because the XAML compiler reads those attributes of every loaded assembly.
 - `DesignPreviewHookRegistry.Register` ignores a hook that is already registered: the hook runs once per preview, the repeated registration's disposal does nothing, and the first registration keeps owning the hook.
@@ -62,6 +63,7 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- Fixed the Solution Explorer search missing files in collapsed folders: the search matches any part of a name, ignoring case, and opens the folders above every match while the tree keeps its structure; clearing the search restores the folders that were open before.
 - Fixed the Solution Explorer missing the XAML files of an SDK-style project that lists other items, such as a `None Update` of a text file: the default XAML files of the project folder are always part of the tree unless `EnableDefaultItems` or `EnableDefaultAvaloniaItems` is false, and `AvaloniaXaml Remove` patterns still exclude files. The tree search and "Open in Solution Explorer" find these files now.
 - Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.
 - Fixed `IEditorServices.OpenLocationAsync` failing with "Call from invalid thread" when the file was not open yet: after opening the document, the caret and selection are set on the UI thread.

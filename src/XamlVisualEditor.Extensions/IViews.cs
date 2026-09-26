@@ -81,6 +81,9 @@ public interface IExtensionTreeItemPathProvider
 {
     /// <summary>Gets the full path of the file or folder.</summary>
     string FullPath { get; }
+
+    /// <summary>Gets whether the item is a folder; the host can list folders before files.</summary>
+    bool IsDirectory { get; }
 }
 
 /// <summary>Provides a hint about child availability for a tree item.</summary>

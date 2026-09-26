@@ -3036,7 +3036,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
         InitializeThemePackages(extensionManager);
         SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
-        SolutionExplorer.SetFoldersBeforeFiles(_editorOptions.Current.FoldersBeforeFiles);
         DocumentTabCommands = new DocumentTabCommands(RevealInFileExplorerAsync, RevealInSolutionExplorer,
             text => RunClipboardEditAsync(() => WriteClipboardAsync(text)));
 
@@ -3208,7 +3207,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             using OptionsDialogViewModel dialog = new(_editorOptions, _editorThemes);
             if (await OptionsInteraction.Handle(dialog))
             {
-                SolutionExplorer.SetFoldersBeforeFiles(_editorOptions.Current.FoldersBeforeFiles);
+                foreach (ExtensionTreeViewModel tree in ExtensionViews.OfType<ExtensionTreeViewModel>())
+                    tree.SetFoldersBeforeFiles(_editorOptions.Current.FileExplorerFoldersBeforeFiles);
                 UpdateWindowTitle();
                 StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
             }
@@ -4841,7 +4841,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             ExtensionViewType.Tree => new ExtensionTreeViewModel(
                 contribution,
-                ResolveTreeProvider(contribution.ViewId)),
+                ResolveTreeProvider(contribution.ViewId),
+                _editorOptions.Current.FileExplorerFoldersBeforeFiles),
             ExtensionViewType.Webview => new ExtensionWebviewViewModel(
                 contribution,
                 UiStrings.WebviewUnavailable),
@@ -9708,8 +9709,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
     public static SolutionExplorerNodeViewModel FromWorkspace(
         WorkspaceModel workspace,
         string? solutionName = null,
-        ISystemIconService? systemIcons = null,
-        bool foldersBeforeFiles = true)
+        ISystemIconService? systemIcons = null)
     {
         string rootName = solutionName ?? "Solution";
         SolutionExplorerNodeViewModel root = new(rootName, "🗂", SolutionExplorerNodeKind.Solution);
@@ -9733,7 +9733,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
             }
 
             AddProjectFiles(projectNode, project.Files, systemIcons);
-            SortProjectItems(projectNode, foldersBeforeFiles);
+            SortProjectItems(projectNode);
 
             // The references folder is the first child of the project, whatever the sort option.
             if (project.References.Count > 0)
@@ -9805,7 +9805,8 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         }
     }
 
-    private static void SortProjectItems(SolutionExplorerNodeViewModel node, bool foldersBeforeFiles)
+    // Like Visual Studio, folders come before files.
+    private static void SortProjectItems(SolutionExplorerNodeViewModel node)
     {
         if (node.Children.Count == 0)
         {
@@ -9813,14 +9814,14 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         }
 
         SolutionExplorerNodeViewModel[] ordered = node.Children
-            .OrderBy(child => foldersBeforeFiles && child.Kind == SolutionExplorerNodeKind.Folder ? 0 : 1)
+            .OrderBy(child => child.Kind == SolutionExplorerNodeKind.Folder ? 0 : 1)
             .ThenBy(child => child.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
         node.Children.Clear();
         foreach (SolutionExplorerNodeViewModel child in ordered)
         {
             node.Children.Add(child);
-            SortProjectItems(child, foldersBeforeFiles);
+            SortProjectItems(child);
         }
     }
 
@@ -9932,6 +9933,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
 {
     private const string FilterPropertyPath = "Item.Name";
     private const string SetStartupProjectCommandId = "workspace.setStartupProject";
+    private readonly System.Reactive.Subjects.Subject<object> _revealRequests = new();
     private readonly ISystemIconService? _systemIcons;
     private readonly ICommands? _extensionCommands;
     private readonly IDisposable _filterSubscription;
@@ -10099,14 +10101,23 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         SolutionExplorerNodeViewModel? match = RootItems.SelectMany(EnumerateNodes)
             .FirstOrDefault(node => node.Kind is SolutionExplorerNodeKind.File or SolutionExplorerNodeKind.XamlFile
                 && node.FullPath is not null && FileSystemPathComparison.Equals(node.FullPath, filePath));
-        if (match is null || !Model.TryExpandToItem(match, out HierarchicalNode? row) || row is null)
+        if (match is null)
+        {
+            return false;
+        }
+
+        if (!Model.TryExpandToItem(match, out HierarchicalNode? row) || row is null)
         {
             return false;
         }
 
         SelectedRow = row;
+        _revealRequests.OnNext(row);
         return true;
     }
+
+    /// <summary>Gets the rows that <see cref="RevealFile"/> selected and the view scrolls into view.</summary>
+    public IObservable<object> RevealRequests => _revealRequests;
 
     private static IEnumerable<SolutionExplorerNodeViewModel> EnumerateNodes(SolutionExplorerNodeViewModel root)
     {
@@ -10126,25 +10137,10 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
     /// <summary>
     /// Loads a workspace into the Solution Explorer.
     /// </summary>
-    /// <summary>Gets whether folders are listed before files; <see cref="SetFoldersBeforeFiles"/> rebuilds the tree.</summary>
-    public bool FoldersBeforeFiles { get; private set; } = true;
-
-    /// <summary>Changes the order of folders and files and rebuilds a loaded tree.</summary>
-    public void SetFoldersBeforeFiles(bool value)
-    {
-        if (FoldersBeforeFiles == value) return;
-        FoldersBeforeFiles = value;
-        if (_loadedWorkspace is { } workspace) LoadWorkspace(workspace, _loadedSolutionName);
-    }
-
-    private WorkspaceModel? _loadedWorkspace;
-    private string? _loadedSolutionName;
-
     public void LoadWorkspace(WorkspaceModel workspace, string? solutionName = null)
     {
-        _loadedWorkspace = workspace;
-        _loadedSolutionName = solutionName;
-        Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName, _systemIcons, FoldersBeforeFiles);
+        _expandedBeforeFilter = null;
+        Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName, _systemIcons);
         CollapseAll(Root);
         WireFileOpen(Root);
         SetRoot(Root);
@@ -10152,8 +10148,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
 
     public void Clear()
     {
-        _loadedWorkspace = null;
-        _loadedSolutionName = null;
+        _expandedBeforeFilter = null;
         Root = null;
         RootItems.Clear();
         Model.Refresh();
@@ -10191,28 +10186,42 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         }
     }
 
-    private void ApplyFilterAndSearch(string? text)
+    internal void ApplyFilterAndSearch(string? text)
     {
         ApplyFiltering(text);
         ApplySearch(text);
     }
 
+    // The grid filters only the rows of expanded folders, so the folders above every match are expanded while a filter
+    // is set; clearing the filter restores the folders the user had expanded.
     private void ApplyFiltering(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             FilteringModel.Remove(FilterPropertyPath);
+            if (_expandedBeforeFilter is { } expanded)
+            {
+                _expandedBeforeFilter = null;
+                foreach (SolutionExplorerNodeViewModel node in RootItems.SelectMany(EnumerateNodes))
+                    node.IsExpanded = expanded.Contains(node);
+                Model.Refresh();
+            }
+
             return;
         }
 
+        _expandedBeforeFilter ??= RootItems.SelectMany(EnumerateNodes).Where(node => node.IsExpanded).ToHashSet();
         string query = text.Trim();
         HashSet<object> matches = BuildMatchSet(RootItems, query);
+        Model.Refresh();
         FilteringModel.SetOrUpdate(new FilteringDescriptor(
             columnId: FilterPropertyPath,
             @operator: FilteringOperator.Custom,
             propertyPath: FilterPropertyPath,
             predicate: item => MatchesFilter(item, matches)));
     }
+
+    private HashSet<SolutionExplorerNodeViewModel>? _expandedBeforeFilter;
 
     private void ApplySearch(string? text)
     {
@@ -10231,9 +10240,11 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             comparison: StringComparison.OrdinalIgnoreCase));
     }
 
+    // The grid hands over its rows, which wrap the tree nodes.
     private static bool MatchesFilter(object? item, HashSet<object> matches)
     {
-        return item is not null && matches.Contains(item);
+        object? node = item is HierarchicalNode row ? row.Item : item;
+        return node is not null && matches.Contains(node);
     }
 
     private static HashSet<object> BuildMatchSet(
@@ -10263,6 +10274,12 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             {
                 childMatch = true;
             }
+        }
+
+        // An ancestor of a match opens, so the match becomes a visible row.
+        if (childMatch)
+        {
+            node.IsExpanded = true;
         }
 
         if (isMatch)

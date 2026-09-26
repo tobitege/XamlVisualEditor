@@ -2244,6 +2244,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private const int RecentFilesLimit = 10;
     private readonly string? _recentFilesPath;
     private readonly EditorOptionsStore _editorOptions;
+    private bool _applyingDesignerViewport;
     private readonly WorkspaceSessionStore _workspaceSessions;
     private bool _isRestoringWorkspaceSession;
     private readonly IContextKeys? _contextKeys;
@@ -3773,6 +3774,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private void ConfigureDesignerCommands(DesignerDocumentViewModel document)
     {
         document.DesignSurface.EditorThemeService = _editorThemes;
+        document.DesignSurface.ClipboardService = _clipboardService;
+        _editorOptions.Current.DesignerViewport.ApplyTo(document.DesignSurface);
+        document.DesignSurface.PropertyChanged += (_, args) => OnDesignerViewportChanged(document, args.PropertyName);
         document.DesignSurface.CutCommand = CutCommand;
         document.DesignSurface.CopyCommand = CopyCommand;
         document.DesignSurface.PasteCommand = PasteCommand;
@@ -3797,6 +3801,36 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 Icon = Avalonia.Media.Geometry.Parse(DesignerLayoutEditor.IconData(operation))
             });
         }
+    }
+
+    // Stores a changed grid, ruler or coordinate strip setting and applies it to the other designer documents.
+    private void OnDesignerViewportChanged(DesignerDocumentViewModel source, string? propertyName)
+    {
+        if (_applyingDesignerViewport || propertyName is not (nameof(DesignSurfaceViewModel.ShowGrid)
+            or nameof(DesignSurfaceViewModel.SnapToGrid) or nameof(DesignSurfaceViewModel.GridSnapSize)
+            or nameof(DesignSurfaceViewModel.ShowRulers) or nameof(DesignSurfaceViewModel.ShowCoordinateStrip)))
+        {
+            return;
+        }
+
+        DesignerViewportOptions options = DesignerViewportOptions.Normalize(DesignerViewportOptions.From(source.DesignSurface));
+        if (options == _editorOptions.Current.DesignerViewport)
+        {
+            return;
+        }
+
+        _applyingDesignerViewport = true;
+        try
+        {
+            foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())
+            {
+                if (!ReferenceEquals(document, source)) options.ApplyTo(document.DesignSurface);
+            }
+
+            _editorOptions.Save(_editorOptions.Current with { DesignerViewport = options });
+        }
+        catch (Exception error) { SetPersistentStatus(string.Format(UiStrings.OptionsSaveError, error.Message)); }
+        finally { _applyingDesignerViewport = false; }
     }
 
     private static IReadOnlyList<MutableAstObjectNode> GetSelectedObjects(DesignerDocumentViewModel document)

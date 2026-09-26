@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Designer.Core;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -18,6 +19,8 @@ public sealed record EditorOptions
     public bool FileExplorerFoldersBeforeFiles { get; init; } = true;
     /// <summary>Shows the full path of the active document in the window title instead of its file name.</summary>
     public bool ShowFullPathInTitle { get; init; }
+    /// <summary>Grid, ruler and coordinate strip settings that every designer document starts with.</summary>
+    public DesignerViewportOptions DesignerViewport { get; init; } = new();
     public TerminalLocation TerminalLocation { get; init; }
     public TerminalShell TerminalShell { get; init; }
     public string CommandPromptPath { get; init; } = Environment.GetEnvironmentVariable("ComSpec")
@@ -35,6 +38,47 @@ public sealed record EditorOptions
         TerminalShell.PowerShell7 => PowerShell7Path,
         _ => throw new InvalidOperationException("Unknown terminal shell.")
     };
+}
+
+/// <summary>Stored viewport settings of the designer; a change in one document applies to all designer documents.</summary>
+public sealed record DesignerViewportOptions
+{
+    public bool ShowGrid { get; init; }
+    public bool SnapToGrid { get; init; } = true;
+    /// <summary>Grid size in pixels for the visible grid and for snapping.</summary>
+    public double GridSize { get; init; } = 8;
+    public bool ShowRulers { get; init; } = true;
+    public bool ShowCoordinateStrip { get; init; } = true;
+
+    /// <summary>Reads the settings of a design surface.</summary>
+    public static DesignerViewportOptions From(DesignSurfaceViewModel surface) => new()
+    {
+        ShowGrid = surface.ShowGrid,
+        SnapToGrid = surface.SnapToGrid,
+        GridSize = surface.GridSnapSize,
+        ShowRulers = surface.ShowRulers,
+        ShowCoordinateStrip = surface.ShowCoordinateStrip
+    };
+
+    /// <summary>Applies the settings to a design surface.</summary>
+    public void ApplyTo(DesignSurfaceViewModel surface)
+    {
+        surface.ShowGrid = ShowGrid;
+        surface.SnapToGrid = SnapToGrid;
+        surface.GridSnapSize = GridSize;
+        surface.ShowRulers = ShowRulers;
+        surface.ShowCoordinateStrip = ShowCoordinateStrip;
+    }
+
+    /// <summary>Replaces a missing file entry with the defaults and limits the grid size to the offered range.</summary>
+    public static DesignerViewportOptions Normalize(DesignerViewportOptions? options)
+    {
+        DesignerViewportOptions value = options ?? new();
+        double gridSize = double.IsFinite(value.GridSize)
+            ? Math.Clamp(Math.Round(value.GridSize), DesignSurfaceViewModel.MinimumGridSize, DesignSurfaceViewModel.MaximumGridSize)
+            : new DesignerViewportOptions().GridSize;
+        return value with { GridSize = gridSize };
+    }
 }
 
 /// <summary>Ohne Dateipfad bleiben Optionen im Speicher, insbesondere in Tests.</summary>
@@ -55,7 +99,7 @@ public sealed class EditorOptionsStore
                 throw new JsonException("Unsupported language or terminal option.");
             if (loaded.EditorTheme is null || string.IsNullOrWhiteSpace(loaded.EditorTheme.ProviderId) || string.IsNullOrWhiteSpace(loaded.EditorTheme.ThemeId))
                 throw new JsonException("Invalid editor theme selection.");
-            Current = loaded;
+            Current = loaded with { DesignerViewport = DesignerViewportOptions.Normalize(loaded.DesignerViewport) };
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {

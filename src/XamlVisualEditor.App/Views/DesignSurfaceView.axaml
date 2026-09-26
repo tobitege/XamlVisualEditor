@@ -19,6 +19,8 @@
         <TextBlock x:Name="PreviewStatusText" DockPanel.Dock="Top" IsVisible="False"
                    Margin="8,3" FontSize="11" TextWrapping="Wrap" />
 
+        <v:DesignerCoordinateStrip DockPanel.Dock="Bottom" />
+
         <!-- Artboard / design canvas with rulers -->
         <Grid>
             <Grid.RowDefinitions>
@@ -41,6 +43,7 @@
                              Orientation="Horizontal"
                              Zoom="{CompiledBinding Zoom}"
                              Guides="{CompiledBinding VerticalGuides}"
+                             PointerPosition="{CompiledBinding Readout.PointerX}"
                              IsVisible="{CompiledBinding ShowRulers}" />
 
             <ad:RulerControl Name="VerticalRuler"
@@ -49,6 +52,7 @@
                              Orientation="Vertical"
                              Zoom="{CompiledBinding Zoom}"
                              Guides="{CompiledBinding HorizontalGuides}"
+                             PointerPosition="{CompiledBinding Readout.PointerY}"
                              IsVisible="{CompiledBinding ShowRulers}" />
 
             <ScrollViewer Name="SurfaceScrollViewer"
@@ -99,7 +103,11 @@
                                     <!-- Child controls will be added programmatically -->
                                 </Panel>
                                 <ad:DesignGridLayer ShowGrid="{CompiledBinding ShowGrid}"
-                                                    GridSize="{CompiledBinding GridSnapSize}" />
+                                                    GridSize="{CompiledBinding GridSnapSize}"
+                                                    Zoom="{CompiledBinding Zoom}" />
+                                <ad:DesignMeasureLayer Start="{CompiledBinding Readout.MeasureStart}"
+                                                       End="{CompiledBinding Readout.MeasureEnd}"
+                                                       Zoom="{CompiledBinding Zoom}" />
                                 <ad:DesignAdornerLayer Name="AdornerLayer"
                                                        IsVisible="{CompiledBinding IsEditMode}" />
                             </Grid>

@@ -1211,4 +1211,27 @@
   <data name="FoldersBeforeFiles" xml:space="preserve"><value>Ordner vor Dateien anzeigen</value></data>
   <data name="WindowGroup" xml:space="preserve"><value>Fenster</value></data>
   <data name="ShowFullPathInTitle" xml:space="preserve"><value>Vollständigen Dateipfad im Fenstertitel anzeigen</value></data>
+  <data name="ShowGridHint" xml:space="preserve"><value>Raster anzeigen</value></data>
+  <data name="ShowRulersHint" xml:space="preserve"><value>Lineale anzeigen</value></data>
+  <data name="GridSize" xml:space="preserve"><value>Rastergröße</value></data>
+  <data name="GridSizePixels" xml:space="preserve"><value>Rastergröße in Pixeln</value></data>
+  <data name="GridSizeHint" xml:space="preserve"><value>Abstand der Rasterlinien in Pixeln; das Einrasten am Raster verwendet dieselbe Größe.</value></data>
+  <data name="CoordinateStrip" xml:space="preserve"><value>Positionsleiste</value></data>
+  <data name="CoordinateStripHint" xml:space="preserve"><value>Pixelpositionen relativ zum Wurzelelement unter der Fläche anzeigen</value></data>
+  <data name="CoordinateStripPointer" xml:space="preserve"><value>X {0}  Y {1}</value></data>
+  <data name="CoordinateStripSelection" xml:space="preserve"><value>X {0}  Y {1}  B {2}  H {3}</value></data>
+  <data name="CoordinateStripSelectionCount" xml:space="preserve"><value>{0}  ({1} ausgewählt)</value></data>
+  <data name="CoordinateStripChange" xml:space="preserve"><value>ΔX {0}  ΔY {1}  ΔB {2}  ΔH {3}</value></data>
+  <data name="CoordinateStripMeasure" xml:space="preserve"><value>ΔX {0}  ΔY {1}  Abstand {2}</value></data>
+  <data name="PointerPosition" xml:space="preserve"><value>Zeigerposition</value></data>
+  <data name="PointerPositionHint" xml:space="preserve"><value>Pixel unter dem Zeiger, relativ zum Wurzelelement. Klicken kopiert den Wert als x,y.</value></data>
+  <data name="ElementUnderPointer" xml:space="preserve"><value>Element unter dem Zeiger</value></data>
+  <data name="ElementUnderPointerHint" xml:space="preserve"><value>Typ und Name des Elements unter dem Zeiger. Klicken kopiert den Wert.</value></data>
+  <data name="SelectionBounds" xml:space="preserve"><value>Position und Größe der Auswahl</value></data>
+  <data name="SelectionBoundsHint" xml:space="preserve"><value>Position und Größe der Auswahl, relativ zum Wurzelelement. Klicken kopiert den Wert als x,y,Breite,Höhe.</value></data>
+  <data name="SelectionChange" xml:space="preserve"><value>Änderung der Auswahl beim Verschieben oder Ändern der Größe</value></data>
+  <data name="Measure" xml:space="preserve"><value>Messen</value></data>
+  <data name="MeasureHint" xml:space="preserve"><value>Messen: auf der Fläche ziehen, um einen Abstand in Pixeln zu messen</value></data>
+  <data name="MeasureResult" xml:space="preserve"><value>Gemessener Abstand</value></data>
+  <data name="MeasureResultHint" xml:space="preserve"><value>Waagerechter und senkrechter Abstand sowie direkte Länge. Klicken kopiert den Wert als dx,dy.</value></data>
 </root>

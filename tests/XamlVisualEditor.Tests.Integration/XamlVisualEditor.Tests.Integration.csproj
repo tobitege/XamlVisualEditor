@@ -11,6 +11,9 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\TestTempDirectory.cs" Link="Shared\TestTempDirectory.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\tools\ExtensionHostSpike\ExtensionHostSpike.Host\ExtensionHostSpike.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\tools\ExtensionHostSpike\ExtensionHostSpike.Extension\ExtensionHostSpike.Extension.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />

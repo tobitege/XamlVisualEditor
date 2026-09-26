@@ -170,4 +170,28 @@
         <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonDisabledForegroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonDisabledBorderBrush}" />
     </Style>
+
+    <!-- Designer toolbars and the coordinate strip use the dialog button look, so that enabled buttons and switched-off
+         toggles do not look disabled; switched-on toggles keep the accent. -->
+    <Style Selector=".designer-toolbar Button, .designer-toolbar ToggleButton:not(:checked)">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+        <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonDisabledBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonDisabledForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonDisabledBorderBrush}" />
+        </Style>
+    </Style>
 </Styles>

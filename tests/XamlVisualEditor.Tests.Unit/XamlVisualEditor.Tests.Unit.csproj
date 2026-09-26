@@ -14,6 +14,9 @@
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\TestTempDirectory.cs" Link="Shared\TestTempDirectory.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.TestControls\XamlVisualEditor.TestControls.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />

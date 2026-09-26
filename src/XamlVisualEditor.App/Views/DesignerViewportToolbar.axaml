@@ -4,7 +4,7 @@
              xmlns:v="using:XamlVisualEditor.App.Views"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.DesignerViewportToolbar"
-             Classes="editor-chrome"
+             Classes="editor-chrome designer-toolbar"
              x:DataType="dc:DesignSurfaceViewModel" x:Name="ToolbarRoot">
     <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="4,2">
         <WrapPanel Orientation="Horizontal">
@@ -35,6 +35,24 @@
                 </ComboBox.ItemTemplate>
             </ComboBox>
             <Separator />
+            <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}"
+                          Width="26" Height="26" MinWidth="26" MinHeight="26" Padding="4" VerticalAlignment="Center"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                          AutomationProperties.Name="{x:Static loc:UiStrings.ViewportGrid}" ToolTip.Tip="{x:Static loc:UiStrings.ShowGridHint}">
+                <PathIcon Width="14" Height="14" Data="{x:Static dc:DesignerViewportIcons.GridIconPath}" />
+            </ToggleButton>
+            <ToggleButton IsChecked="{CompiledBinding ShowRulers, Mode=TwoWay}"
+                          Width="26" Height="26" MinWidth="26" MinHeight="26" Padding="4" VerticalAlignment="Center"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                          AutomationProperties.Name="{x:Static loc:UiStrings.Rulers}" ToolTip.Tip="{x:Static loc:UiStrings.ShowRulersHint}">
+                <PathIcon Width="14" Height="14" Data="{x:Static dc:DesignerViewportIcons.RulersIconPath}" />
+            </ToggleButton>
+            <ToggleButton IsChecked="{CompiledBinding ShowCoordinateStrip, Mode=TwoWay}"
+                          Width="26" Height="26" MinWidth="26" MinHeight="26" Padding="4" VerticalAlignment="Center"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                          AutomationProperties.Name="{x:Static loc:UiStrings.CoordinateStrip}" ToolTip.Tip="{x:Static loc:UiStrings.CoordinateStripHint}">
+                <PathIcon Width="14" Height="14" Data="{x:Static dc:DesignerViewportIcons.CoordinateStripIconPath}" />
+            </ToggleButton>
             <Button Content="{x:Static loc:UiStrings.Settings}" Padding="6,2" FontSize="12">
                 <Button.Flyout>
                     <Flyout Placement="Bottom">
@@ -46,6 +64,13 @@
                             </StackPanel.Styles>
                             <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}" Content="{x:Static loc:UiStrings.ViewportGrid}" />
                             <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}" Content="{x:Static loc:UiStrings.SnapGrid}" />
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                <TextBlock Text="{x:Static loc:UiStrings.GridSize}" VerticalAlignment="Center" />
+                                <NumericUpDown Grid.Column="1" Value="{CompiledBinding GridSnapSize, Mode=TwoWay}"
+                                               Minimum="4" Maximum="99" Increment="1" FormatString="0" Width="100"
+                                               HorizontalAlignment="Left" AutomationProperties.Name="{x:Static loc:UiStrings.GridSizePixels}"
+                                               ToolTip.Tip="{x:Static loc:UiStrings.GridSizeHint}" />
+                            </Grid>
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock Text="{x:Static loc:UiStrings.Variant}" VerticalAlignment="Center" />
                                 <ComboBox ItemsSource="{CompiledBinding ThemeVariants}" SelectedItem="{CompiledBinding PreviewThemeVariant, Mode=TwoWay}" MinWidth="140" />
@@ -66,8 +91,8 @@
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                                 <TextBlock Text="{x:Static loc:UiStrings.CanvasGap}" VerticalAlignment="Center" />
                                 <NumericUpDown Grid.Column="1" Value="{CompiledBinding CanvasGap, Mode=TwoWay}"
-                                               Minimum="0" Maximum="64" Increment="1" FormatString="0" MinWidth="140"
-                                               HorizontalAlignment="Stretch" AutomationProperties.Name="{x:Static loc:UiStrings.CanvasGapPixels}"
+                                               Minimum="0" Maximum="64" Increment="1" FormatString="0" Width="100"
+                                               HorizontalAlignment="Left" AutomationProperties.Name="{x:Static loc:UiStrings.CanvasGapPixels}"
                                                ToolTip.Tip="{x:Static loc:UiStrings.CanvasGapHint}" />
                             </Grid>
                             <Separator />

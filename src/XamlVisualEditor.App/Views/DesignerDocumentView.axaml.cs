@@ -32,14 +32,34 @@ public sealed partial class DesignerDocumentView : UserControl
         base.OnAttachedToVisualTree(e);
         _isAttached = true;
         AttachRulerDocument(DataContext as DesignerDocumentViewModel);
+        if (this.FindControl<ScrollViewer>("PreviewerViewport") is { } viewport)
+        {
+            // Also sees moves the surface handles, so the strip follows drags and positions outside the document.
+            viewport.AddHandler(PointerMovedEvent, OnPreviewerViewportMoved, RoutingStrategies.Bubble, handledEventsToo: true);
+            viewport.PointerExited += OnPreviewerViewportExited;
+        }
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _isAttached = false;
         AttachRulerDocument(null);
+        if (this.FindControl<ScrollViewer>("PreviewerViewport") is { } viewport)
+        {
+            viewport.RemoveHandler(PointerMovedEvent, OnPreviewerViewportMoved);
+            viewport.PointerExited -= OnPreviewerViewportExited;
+        }
         base.OnDetachedFromVisualTree(e);
     }
+
+    private void OnPreviewerViewportMoved(object? sender, PointerEventArgs args)
+    {
+        if (this.FindControl<PreviewerSurfaceControl>("ExternalPreviewSurface") is { } surface)
+            surface.ReportPointer(args.GetPosition(surface));
+    }
+
+    private void OnPreviewerViewportExited(object? sender, PointerEventArgs args) =>
+        this.FindControl<PreviewerSurfaceControl>("ExternalPreviewSurface")?.ReportPointer(null);
 
     private void AttachRulerDocument(DesignerDocumentViewModel? document)
     {

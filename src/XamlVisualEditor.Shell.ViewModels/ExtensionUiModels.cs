@@ -619,7 +619,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         _provider.Changed += OnProviderChanged;
     }
 
-    public ObservableCollection<ExtensionTreeNodeViewModel> RootItems { get; } = new();
+    public BatchObservableCollection<ExtensionTreeNodeViewModel> RootItems { get; } = new();
 
     public HierarchicalModel Model { get; }
 
@@ -673,12 +673,8 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
 
         await ScheduleOnMainThreadAsync(() =>
         {
-            RootItems.Clear();
-            foreach (ExtensionTreeNodeViewModel node in nodes)
-            {
-                RootItems.Add(node);
-            }
-
+            // The model rebuilds all root rows for each notification; one reset keeps large folders linear.
+            RootItems.ReplaceAll(nodes);
             Model.Refresh();
             ApplyFilterAndSearch(FilterText);
         });
@@ -1171,7 +1167,7 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
 
     public bool CanOpenWorkspace { get; }
 
-    public ObservableCollection<ExtensionTreeNodeViewModel> Children { get; } = new();
+    public BatchObservableCollection<ExtensionTreeNodeViewModel> Children { get; } = new();
 
     [Reactive]
     public partial bool IsExpanded { get; set; }
@@ -1234,12 +1230,7 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
                 nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, _refresh));
             }
 
-            Children.Clear();
-            foreach (ExtensionTreeNodeViewModel node in nodes)
-            {
-                Children.Add(node);
-            }
-
+            Children.ReplaceAll(nodes);
             HasChildren = Children.Count > 0;
             _isLoaded = true;
             _refresh();

@@ -150,6 +150,9 @@ public sealed partial class PreviewerSurfaceControl : Control
         context.DrawImage(_bitmap, sourceRect, destRect);
         DrawDesignerGuides(context);
         DrawSelection(context);
+        using (context.PushClip(new Rect(Bounds.Size)))
+        using (context.PushTransform(Matrix.CreateScale(PreviewZoom, PreviewZoom)))
+            DrawMeasure(context);
         if (_hasError)
             DrawStatusOverlay(context, "Preview out of date. See Problems for details.");
         else if (!_isConnected)
@@ -274,7 +277,7 @@ public sealed partial class PreviewerSurfaceControl : Control
             or nameof(DesignSurfaceViewModel.SnapToGrid) or nameof(DesignSurfaceViewModel.GridSnapSize)
             or nameof(DesignSurfaceViewModel.ShowGrid) or nameof(DesignSurfaceViewModel.ShowGuides)
             or nameof(DesignSurfaceViewModel.SnapToGuides) or nameof(DesignSurfaceViewModel.ShowSpacingGuides)
-            or nameof(DesignSurfaceViewModel.ShowMarginPadding)) InvalidateVisual();
+            or nameof(DesignSurfaceViewModel.ShowMarginPadding) or nameof(DesignSurfaceViewModel.IsMeasuring)) InvalidateVisual();
         if (args.PropertyName == nameof(DesignSurfaceViewModel.IsEditMode))
         {
             ReleasePreviewInput();
@@ -303,8 +306,7 @@ public sealed partial class PreviewerSurfaceControl : Control
         double width = viewport.Width - gap * 2;
         double height = viewport.Height - gap * 2;
         if (width <= 0 || height <= 0) return null;
-        _document.DesignSurface.Zoom = Math.Clamp(Math.Min(width / target.Width, height / target.Height),
-            DesignSurfaceViewModel.MinimumZoom, DesignSurfaceViewModel.MaximumZoom);
+        _document.DesignSurface.Zoom = DesignSurfaceViewModel.FitZoom(Math.Min(width / target.Width, height / target.Height));
         UpdateScaledBounds();
         return target;
     }
@@ -339,7 +341,7 @@ public sealed partial class PreviewerSurfaceControl : Control
         {
             if (surface.ShowGrid)
                 using (context.PushTransform(Matrix.CreateScale(zoom, zoom)))
-                    DesignGridLayer.Draw(context, new Size(Bounds.Width / zoom, Bounds.Height / zoom), surface.GridSnapSize);
+                    DesignGridLayer.Draw(context, new Size(Bounds.Width / zoom, Bounds.Height / zoom), surface.GridSnapSize, zoom);
             if (!surface.ShowGuides) return;
             foreach (double x in surface.VerticalGuides)
                 if (double.IsFinite(x)) context.DrawLine(ManualGuidePen, new Point(x * zoom, 0), new Point(x * zoom, Bounds.Height));
@@ -462,6 +464,7 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnPointerPressed(PointerPressedEventArgs args)
     {
         base.OnPointerPressed(args);
+        if (TryStartMeasure(args)) return;
         if (ForwardPreviewPress(args)) return;
         if (!CanSelect || !args.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         Focus();
@@ -536,6 +539,7 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnPointerMoved(PointerEventArgs args)
     {
         base.OnPointerMoved(args);
+        if (UpdateMeasure(args)) return;
         if (ForwardPreviewMove(args))
         {
             Cursor = null;
@@ -554,8 +558,11 @@ public sealed partial class PreviewerSurfaceControl : Control
         Point position = args.GetPosition(this);
         state.Current = new Point(position.X * state.Tree.Width / Bounds.Width, position.Y * state.Tree.Height / Bounds.Height);
         Vector distance = state.Current - state.Start;
+        bool wasMoved = state.Moved;
         state.Moved |= Math.Abs(distance.X * Bounds.Width / state.Tree.Width) >= 3
             || Math.Abs(distance.Y * Bounds.Height / state.Tree.Height) >= 3;
+        // The strip still holds the bounds before the move; the ghost bounds follow with the next render.
+        if (!wasMoved && state.Moved && !state.IsMarquee) Readout?.BeginChange();
         InvalidateVisual();
         args.Handled = true;
     }
@@ -563,11 +570,13 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs args)
     {
         base.OnPointerReleased(args);
+        if (EndMeasure(args)) return;
         if (ForwardPreviewRelease(args)) return;
         PointerMoveState? state = _pointerMove;
         if (state is null) return;
         _pointerMove = null;
         state.Pointer.Capture(null);
+        Readout?.EndChange();
         if (state.Moved && CanSelect && _document!.SyncEngine.GetCurrentText() == state.SourceText)
         {
             try
@@ -591,6 +600,7 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs args)
     {
         base.OnPointerCaptureLost(args);
+        _measureAnchor = null;
         if (_previewPointer is not null) ReleasePreviewInput();
         CancelPointerMove();
     }
@@ -600,6 +610,7 @@ public sealed partial class PreviewerSurfaceControl : Control
         PointerMoveState? state = _pointerMove;
         _pointerMove = null;
         state?.Pointer.Capture(null);
+        if (state is not null) Readout?.EndChange();
         if (state is { IsMarquee: true, Moved: true } && _document is { UseExternalPreviewer: true }
             && _document.SyncEngine.GetCurrentText() == state.SourceText)
             SelectFromInput(state.Selection);
@@ -721,7 +732,11 @@ public sealed partial class PreviewerSurfaceControl : Control
 
     private void DrawSelection(DrawingContext context)
     {
-        if (!CanSelect) return;
+        if (!CanSelect)
+        {
+            if (Readout is not null) ReportSelection(null, 0);
+            return;
+        }
         double scaleX = Bounds.Width / _designTree!.Width;
         double scaleY = Bounds.Height / _designTree.Height;
         PreviewerMovePreview? movePreview = null;
@@ -789,6 +804,9 @@ public sealed partial class PreviewerSurfaceControl : Control
                     context.DrawRectangle(Brushes.White, new Pen(Brushes.DeepSkyBlue, 1),
                         new Rect(handle.Position.X - 3, handle.Position.Y - 3, 6, 6));
         }
+        ReportSelection(selectedBounds is { } shown
+            ? new Rect(shown.X / scaleX, shown.Y / scaleY, shown.Width / scaleX, shown.Height / scaleY) : null,
+            selectedInstances.Count);
         if (_document.DesignSurface.ShowSpacingGuides && selectedBounds is { } selection)
         {
             Rect logical = new(selection.X / scaleX, selection.Y / scaleY, selection.Width / scaleX, selection.Height / scaleY);

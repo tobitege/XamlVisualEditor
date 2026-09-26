@@ -7,6 +7,9 @@ uses Semantic Versioning.
 
 ### Added
 
+- Added a coordinate strip below the design surface and the external previewer. It shows, in logical pixels relative to the root element, the pixel under the pointer (also outside the root within the viewport), the element under the pointer as `Type#Name`, the position and size of the selection with its change while moving or resizing, a distance measured with the new measure tool, and the zoom level. A click copies a value as `x,y`, `x,y,width,height` or `dx,dy`. The rulers mark the pixel under the pointer.
+- The viewport toolbar has toggle buttons for the grid, the rulers and the coordinate strip, and the viewport settings set the grid size. The visible grid and snapping use the same size; at small zoom levels the grid thins out its lines. Grid, snapping, grid size, rulers and coordinate strip are stored as `DesignerViewport` in `editor-options.json` and apply to all designer documents.
+- The zoom level keeps whole percentages; fitting to the viewport rounds down.
 - The context menu of a file document tab offers "Open in File Explorer", "Open in Solution Explorer", "Copy Path" and "Copy File Name", in the tabbed and the MDI layout. The two "Open in" commands show the File Explorer or Solution Explorer panel, expand its tree to the file and select it; the status bar tells when the file is not part of the tree. Extension trees take part through `IExtensionTreeItemPathProvider`, which the File Explorer entries implement.
 - Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
 - Added the option to reopen the last workspace or folder at startup.

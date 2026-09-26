@@ -138,7 +138,8 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
             EditorTheme = _themeProvider is { } provider && _theme is { } theme
                 ? new EditorThemeSelection(provider.Id, theme.Id) : _store.Current.EditorTheme,
             Language = SelectedLanguage.Value, RestoreLastWorkspace = RestoreLastWorkspace, FileExplorerFoldersBeforeFiles = FileExplorerFoldersBeforeFiles, ShowFullPathInTitle = ShowFullPathInTitle, TerminalLocation = SelectedLocation.Value, TerminalShell = SelectedShell.Value,
-            CommandPromptPath = CommandPromptPath.Trim(), WindowsPowerShellPath = WindowsPowerShellPath.Trim(), PowerShell7Path = PowerShell7Path.Trim()
+            CommandPromptPath = CommandPromptPath.Trim(), WindowsPowerShellPath = WindowsPowerShellPath.Trim(), PowerShell7Path = PowerShell7Path.Trim(),
+            DesignerViewport = _store.Current.DesignerViewport
         };
         if (IsWindows && !File.Exists(options.ShellPath))
         {

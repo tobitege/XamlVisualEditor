@@ -3,6 +3,7 @@ using System.Reactive.Concurrency;
 using ReactiveUI;
 using ReactiveUI.Builder;
 using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.Tests.Shared;
 
 namespace XamlVisualEditor.Tests.Unit;
 
@@ -16,6 +17,7 @@ internal static class ReactiveUiBootstrap
     [ModuleInitializer]
     internal static void Initialize()
     {
+        TestTempDirectory.Initialize();
         RxAppBuilder.CreateReactiveUIBuilder()
             .WithPlatformServices()
             .WithCoreServices()
@@ -27,6 +29,6 @@ internal static class ReactiveUiBootstrap
 
         // Tests build real shell view models; without an isolated settings folder they
         // read and overwrite the user's persisted layout files.
-        ShellSettingsPaths.RootOverride = Path.Combine(Path.GetTempPath(), "xve-tests", Guid.NewGuid().ToString("N"));
+        ShellSettingsPaths.RootOverride = Path.Combine(TestTempDirectory.Root, "settings");
     }
 }

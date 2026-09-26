@@ -27,6 +27,7 @@ public sealed class RulerControl : Control
     private static readonly IBrush LabelBrush = Brushes.White;
     private static readonly IBrush SelectionBrush = new ImmutableSolidColorBrush(Color.FromArgb(60, 0, 120, 215));
     private static readonly IBrush GuideBrush = new ImmutableSolidColorBrush(Color.Parse("#3FA9F5"));
+    private static readonly IPen PointerPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.Parse("#FF8C00")), 1);
 
     private int _dragGuideIndex = -1;
     private bool _isDragging;
@@ -54,6 +55,10 @@ public sealed class RulerControl : Control
 
     public static readonly StyledProperty<double?> SelectionEndProperty =
         AvaloniaProperty.Register<RulerControl, double?>(nameof(SelectionEnd));
+
+    /// <summary>Identifies the <see cref="PointerPosition"/> property.</summary>
+    public static readonly StyledProperty<double?> PointerPositionProperty =
+        AvaloniaProperty.Register<RulerControl, double?>(nameof(PointerPosition));
 
     public RulerOrientation Orientation
     {
@@ -91,6 +96,13 @@ public sealed class RulerControl : Control
         set => SetValue(SelectionEndProperty, value);
     }
 
+    /// <summary>Gets or sets the pixel under the pointer in document coordinates; null hides the marker.</summary>
+    public double? PointerPosition
+    {
+        get => GetValue(PointerPositionProperty);
+        set => SetValue(PointerPositionProperty, value);
+    }
+
     public RulerControl()
     {
         ClipToBounds = true;
@@ -102,7 +114,8 @@ public sealed class RulerControl : Control
 
     static RulerControl()
     {
-        AffectsRender<RulerControl>(ZoomProperty, OffsetProperty, SelectionStartProperty, SelectionEndProperty, GuidesProperty);
+        AffectsRender<RulerControl>(ZoomProperty, OffsetProperty, SelectionStartProperty, SelectionEndProperty, GuidesProperty,
+            PointerPositionProperty);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -184,6 +197,31 @@ public sealed class RulerControl : Control
         }
 
         DrawGuideMarkers(context, thickness, zoom, length);
+        DrawPointerMarker(context, thickness, zoom, length);
+    }
+
+    private void DrawPointerMarker(DrawingContext context, double thickness, double zoom, double length)
+    {
+        if (PointerPosition is not { } pointer || !double.IsFinite(pointer))
+        {
+            return;
+        }
+
+        // The marker runs through the middle of the pixel; Math.Floor keeps it on whole screen pixels.
+        double pos = Math.Floor((pointer + 0.5) * zoom - Offset) + 0.5;
+        if (pos < 0 || pos > length)
+        {
+            return;
+        }
+
+        if (Orientation == RulerOrientation.Horizontal)
+        {
+            context.DrawLine(PointerPen, new Point(pos, 0), new Point(pos, thickness));
+        }
+        else
+        {
+            context.DrawLine(PointerPen, new Point(0, pos), new Point(thickness, pos));
+        }
     }
 
     private void DrawSelectionRange(DrawingContext context, double thickness, double zoom, double length)

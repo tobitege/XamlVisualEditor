@@ -15,6 +15,9 @@
     <PackageReference Include="Avalonia" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\TestTempDirectory.cs" Link="Shared\TestTempDirectory.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.App\XamlVisualEditor.App.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />

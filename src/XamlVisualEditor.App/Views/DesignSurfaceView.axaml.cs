@@ -74,6 +74,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private bool _isPanning;
     private Point _panStart;
     private Vector _panStartOffset;
+    private Point? _measureAnchor;
     private readonly SurfaceDropHandler _surfaceDropHandler = new();
     private NotifyCollectionChangedEventHandler? _guideChangedHandler;
     private readonly ContextMenu _surfaceContextMenu;
@@ -102,7 +103,12 @@ public sealed partial class DesignSurfaceView : UserControl
 
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
-        LayoutUpdated += (_, _) => UpdateRulerOffsets();
+        LayoutUpdated += (_, _) =>
+        {
+            UpdateRulerOffsets();
+            // Moves, resizes and property edits change the selection bounds in a later layout pass.
+            UpdateRulerSelectionBounds();
+        };
 
         // Wire drag-and-drop handlers (listen even if handled by inner controls)
         AddHandler(
@@ -190,9 +196,15 @@ public sealed partial class DesignSurfaceView : UserControl
             _scrollViewer.ScrollChanged -= OnSurfaceScrollChanged;
             _scrollViewer.SizeChanged -= OnSurfaceSizeChanged;
             _scrollViewer.PointerPressed -= OnViewportPointerPressed;
+            _scrollViewer.RemoveHandler(PointerMovedEvent, OnViewportPointerMoved);
+            _scrollViewer.PointerExited -= OnViewportPointerExited;
             _scrollViewer.ScrollChanged += OnSurfaceScrollChanged;
             _scrollViewer.SizeChanged += OnSurfaceSizeChanged;
             _scrollViewer.PointerPressed += OnViewportPointerPressed;
+            // Also sees moves the canvas handles, so the strip follows drags and positions outside the root.
+            _scrollViewer.AddHandler(PointerMovedEvent, OnViewportPointerMoved,
+                Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+            _scrollViewer.PointerExited += OnViewportPointerExited;
             UpdateSurfaceMargin();
             UpdateRulerOffsets();
         }
@@ -450,6 +462,45 @@ public sealed partial class DesignSurfaceView : UserControl
             _verticalRuler.SelectionStart = selectionBounds?.Top;
             _verticalRuler.SelectionEnd = selectionBounds?.Bottom;
         }
+
+        // The external previewer shares the view model and reports its own bounds while this view is hidden.
+        if (_currentVm is not null && IsEffectivelyVisible)
+        {
+            _currentVm.Readout.SetSelection(selectionBounds, _currentVm.Selection.SelectedItems.Count);
+        }
+    }
+
+    private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_currentVm is null || _canvas is null || !IsEffectivelyVisible)
+        {
+            return;
+        }
+
+        Point position = e.GetPosition(_canvas);
+        _currentVm.Readout.SetPointer(position);
+        if ((_hoveredItem is not null || _currentVm.Readout.HoverText is not null)
+            && (!new Rect(_canvas.Bounds.Size).Contains(position) || _dragState is not null))
+        {
+            ClearHover();
+        }
+    }
+
+    private void OnViewportPointerExited(object? sender, PointerEventArgs e)
+    {
+        // A captured drag or measurement keeps reporting positions outside the viewport.
+        if (_currentVm is null || !IsEffectivelyVisible || _measureAnchor is not null || _dragState is not null)
+        {
+            return;
+        }
+
+        _currentVm.Readout.SetPointer(null);
+        ClearHover();
+    }
+
+    private void SetReadoutHover(IDesignItem? item)
+    {
+        _currentVm?.Readout.SetHover(item?.TypeName, item?.GetProperty("x:Name") ?? item?.GetProperty("Name"));
     }
 
     private Rect? GetSelectionBounds()
@@ -747,7 +798,7 @@ public sealed partial class DesignSurfaceView : UserControl
         double height = Math.Max(1, bounds.Height);
         double zoomX = (viewport.Width - padding * 2 - border.Left - border.Right) / width;
         double zoomY = (viewport.Height - padding * 2 - border.Top - border.Bottom) / height;
-        double targetZoom = ClampZoom(Math.Min(zoomX, zoomY));
+        double targetZoom = DesignSurfaceViewModel.FitZoom(Math.Min(zoomX, zoomY));
         _currentVm.Zoom = targetZoom;
         UpdateSurfaceMargin();
 
@@ -780,9 +831,16 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        double clamped = ClampZoom(newZoom);
         double oldZoom = _currentVm.Zoom;
-        if (Math.Abs(oldZoom - clamped) < 0.0001 || oldZoom <= 0)
+        if (oldZoom <= 0)
+        {
+            return;
+        }
+
+        _currentVm.Zoom = ClampZoom(newZoom);
+        // The view model keeps whole percentages; the offset follows the zoom it actually applied.
+        double clamped = _currentVm.Zoom;
+        if (Math.Abs(oldZoom - clamped) < 0.0001)
         {
             return;
         }
@@ -790,8 +848,6 @@ public sealed partial class DesignSurfaceView : UserControl
         Vector focus = new(focusInScrollViewer.X, focusInScrollViewer.Y);
         Vector offset = _scrollViewer.Offset;
         double scale = clamped / oldZoom;
-
-        _currentVm.Zoom = clamped;
         UpdateSurfaceMargin();
 
         Dispatcher.UIThread.Post(() =>
@@ -1302,6 +1358,17 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (_currentVm.IsMeasuring && e.GetCurrentPoint(_canvas).Properties.IsLeftButtonPressed)
+        {
+            Focus();
+            Point anchor = e.GetPosition(_canvas);
+            _measureAnchor = anchor;
+            _currentVm.Readout.SetMeasure(anchor, anchor);
+            e.Pointer.Capture(_canvas);
+            e.Handled = true;
+            return;
+        }
+
         if (!_currentVm.IsEditMode || FindDocumentViewModel()?.SyncEngine.CanEditAst != true)
         {
             return;
@@ -1426,6 +1493,12 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (_measureAnchor is { } anchor)
+        {
+            _currentVm.Readout.SetMeasure(anchor, e.GetPosition(_canvas));
+            return;
+        }
+
         if (!_currentVm.IsEditMode)
         {
             return;
@@ -1475,6 +1548,14 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (_measureAnchor is not null)
+        {
+            // The measured distance stays visible until the next measurement or until measuring ends.
+            _measureAnchor = null;
+            e.Pointer.Capture(null);
+            return;
+        }
+
         if (_dragState is null)
         {
             if (_marqueeState is not null)
@@ -1493,6 +1574,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnCanvasPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
+        _measureAnchor = null;
         if (_isPanning)
         {
             EndPan();
@@ -1870,6 +1952,7 @@ public sealed partial class DesignSurfaceView : UserControl
         {
             _hoveredItem = hover;
             _adornerLayer?.UpdateHover(_hoveredItem);
+            SetReadoutHover(_hoveredItem);
         }
     }
 
@@ -1877,6 +1960,7 @@ public sealed partial class DesignSurfaceView : UserControl
     {
         _hoveredItem = null;
         _adornerLayer?.UpdateHover(null);
+        SetReadoutHover(null);
     }
 
     private void RefreshSelectionAdorners()
@@ -1924,6 +2008,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _dragState = state;
+        _currentVm?.Readout.BeginChange();
     }
 
     private void StartResize(DesignItem item, ResizeHandle handle, Point startPoint, IPointer pointer)
@@ -1943,6 +2028,7 @@ public sealed partial class DesignSurfaceView : UserControl
             StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
             StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
         };
+        _currentVm?.Readout.BeginChange();
     }
 
     private void UpdateDragState(Point currentPoint)
@@ -2028,6 +2114,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
         _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+        _currentVm.Readout.EndChange();
         ClearHover();
         RefreshSelectionAdorners();
     }
@@ -2038,6 +2125,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _dragState = null;
         state?.Transaction?.Rollback();
         state?.Pointer?.Capture(null);
+        _currentVm?.Readout.EndChange();
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
         _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());

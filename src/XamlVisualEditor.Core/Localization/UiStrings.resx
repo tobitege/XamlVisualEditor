@@ -1211,4 +1211,27 @@
   <data name="FoldersBeforeFiles" xml:space="preserve"><value>Show folders before files</value></data>
   <data name="WindowGroup" xml:space="preserve"><value>Window</value></data>
   <data name="ShowFullPathInTitle" xml:space="preserve"><value>Show the full file path in the window title</value></data>
+  <data name="ShowGridHint" xml:space="preserve"><value>Show the grid</value></data>
+  <data name="ShowRulersHint" xml:space="preserve"><value>Show the rulers</value></data>
+  <data name="GridSize" xml:space="preserve"><value>Grid size</value></data>
+  <data name="GridSizePixels" xml:space="preserve"><value>Grid size in pixels</value></data>
+  <data name="GridSizeHint" xml:space="preserve"><value>Distance of the grid lines in pixels; snapping to the grid uses the same size.</value></data>
+  <data name="CoordinateStrip" xml:space="preserve"><value>Coordinate strip</value></data>
+  <data name="CoordinateStripHint" xml:space="preserve"><value>Show pixel positions relative to the root element below the surface</value></data>
+  <data name="CoordinateStripPointer" xml:space="preserve"><value>X {0}  Y {1}</value></data>
+  <data name="CoordinateStripSelection" xml:space="preserve"><value>X {0}  Y {1}  W {2}  H {3}</value></data>
+  <data name="CoordinateStripSelectionCount" xml:space="preserve"><value>{0}  ({1} selected)</value></data>
+  <data name="CoordinateStripChange" xml:space="preserve"><value>ΔX {0}  ΔY {1}  ΔW {2}  ΔH {3}</value></data>
+  <data name="CoordinateStripMeasure" xml:space="preserve"><value>ΔX {0}  ΔY {1}  Distance {2}</value></data>
+  <data name="PointerPosition" xml:space="preserve"><value>Pointer position</value></data>
+  <data name="PointerPositionHint" xml:space="preserve"><value>Pixel under the pointer, relative to the root element. Click to copy as x,y.</value></data>
+  <data name="ElementUnderPointer" xml:space="preserve"><value>Element under the pointer</value></data>
+  <data name="ElementUnderPointerHint" xml:space="preserve"><value>Type and name of the element under the pointer. Click to copy.</value></data>
+  <data name="SelectionBounds" xml:space="preserve"><value>Selection position and size</value></data>
+  <data name="SelectionBoundsHint" xml:space="preserve"><value>Position and size of the selection, relative to the root element. Click to copy as x,y,width,height.</value></data>
+  <data name="SelectionChange" xml:space="preserve"><value>Change of the selection while moving or resizing</value></data>
+  <data name="Measure" xml:space="preserve"><value>Measure</value></data>
+  <data name="MeasureHint" xml:space="preserve"><value>Measure: drag on the surface to measure a distance in pixels</value></data>
+  <data name="MeasureResult" xml:space="preserve"><value>Measured distance</value></data>
+  <data name="MeasureResultHint" xml:space="preserve"><value>Horizontal and vertical distance and direct length. Click to copy as dx,dy.</value></data>
 </root>

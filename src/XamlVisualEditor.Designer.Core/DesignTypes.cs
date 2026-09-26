@@ -333,18 +333,35 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public bool IsSelectionSyncing => _selectionSyncDepth > 0;
 
     /// <summary>
-    /// Gets or sets the zoom level (1.0 = 100%).
+    /// Gets or sets the zoom level (1.0 = 100%), rounded to a whole percentage.
     /// </summary>
     public double Zoom
     {
         get => _zoom;
-        set => this.RaiseAndSetIfChanged(ref _zoom, Math.Clamp(double.IsNaN(value) ? 1 : value, MinimumZoom, MaximumZoom));
+        set => this.RaiseAndSetIfChanged(ref _zoom,
+            Math.Clamp(Math.Round((double.IsNaN(value) ? 1 : value) * 100) / 100, MinimumZoom, MaximumZoom));
     }
 
     public const double MinimumZoom = 0.25;
     public const double MaximumZoom = 3.0;
     public const double ZoomStep = 0.25;
     private double _zoom = 1.0;
+
+    /// <summary>
+    /// Gets the largest whole-percentage zoom level that does not exceed <paramref name="zoom"/>,
+    /// so that content fitted to a viewport stays inside it.
+    /// </summary>
+    public static double FitZoom(double zoom) =>
+        Math.Clamp(Math.Floor((double.IsNaN(zoom) ? 1 : zoom) * 100 + 1e-9) / 100, MinimumZoom, MaximumZoom);
+
+    /// <summary>Gets the pixel positions shown in the coordinate strip.</summary>
+    public DesignerCoordinateReadout Readout { get; } = new();
+
+    /// <summary>Gets or sets the clipboard that <see cref="CopyReadoutCommand"/> writes to.</summary>
+    public IClipboardService? ClipboardService { get; set; }
+
+    /// <summary>Copies a value of the coordinate strip to the clipboard.</summary>
+    public ReactiveCommand<string?, Unit> CopyReadoutCommand { get; }
 
     public static double StepZoom(double zoom, int direction)
     {
@@ -407,6 +424,18 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public partial bool ShowRulers { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the coordinate strip below the surface is visible.
+    /// </summary>
+    [Reactive]
+    public partial bool ShowCoordinateStrip { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether a drag on the surface measures a distance instead of editing.
+    /// </summary>
+    [Reactive]
+    public partial bool IsMeasuring { get; set; }
+
+    /// <summary>
     /// Gets the available theme variants for preview.
     /// </summary>
     public IReadOnlyList<ThemeVariant> ThemeVariants { get; } = new List<ThemeVariant>
@@ -460,10 +489,16 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public partial bool SnapToGrid { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the grid snap size.
+    /// Gets or sets the grid size in pixels. The visible grid and snapping to the grid both use it.
     /// </summary>
     [Reactive]
     public partial double GridSnapSize { get; set; } = 8.0;
+
+    /// <summary>Smallest grid size the viewport settings offer.</summary>
+    public const double MinimumGridSize = 4;
+
+    /// <summary>Largest grid size the viewport settings offer.</summary>
+    public const double MaximumGridSize = 99;
 
     /// <summary>
     /// Gets the horizontal guide positions (in surface coordinates).
@@ -537,6 +572,28 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         SelectNextControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: false));
         SelectPreviousControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: true));
         SelectParentControlCommand = ReactiveCommand.Create(SelectParentControl);
+        CopyReadoutCommand = ReactiveCommand.CreateFromTask<string?>(CopyReadoutAsync);
+        this.WhenAnyValue(surface => surface.IsMeasuring).Subscribe(measuring =>
+        {
+            if (!measuring) Readout.ClearMeasure();
+        });
+    }
+
+    private async System.Threading.Tasks.Task CopyReadoutAsync(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || ClipboardService is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(value);
+        }
+        catch (InvalidOperationException)
+        {
+            // Without a system clipboard the value stays visible in the strip.
+        }
     }
 
     /// <summary>

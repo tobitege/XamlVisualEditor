@@ -8,6 +8,12 @@
              x:DataType="vm:SolutionExplorerViewModel"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.SolutionExplorerView">
+  <UserControl.Styles>
+    <!-- Like Visual Studio: the startup project stands out by its bold name. -->
+    <Style Selector="TextBlock.startup-project">
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <TextBox DockPanel.Dock="Top"
              PlaceholderText="{x:Static loc:UiStrings.SearchFiles}"
@@ -40,15 +46,11 @@
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:SolutionExplorerNodeViewModel" x:DataType="vm:SolutionExplorerNodeViewModel">
           <Grid>
-            <StackPanel Classes="explorer-row" Orientation="Horizontal">
+            <StackPanel Classes="explorer-row" Orientation="Horizontal"
+                        ToolTip.Tip="{CompiledBinding ProjectToolTip}">
               <TextBlock Text="▶"
                          Foreground="#2E8B57"
                          IsVisible="{CompiledBinding IsStartupProject}" />
-              <TextBlock Text="{x:Static loc:UiStrings.RunUpper}"
-                         Foreground="#3C7A3C"
-                         FontSize="10"
-                         FontWeight="SemiBold"
-                         IsVisible="{CompiledBinding IsRunnableButNotStartup}" />
               <ContentControl Content="{CompiledBinding Icon}">
                 <ContentControl.DataTemplates>
                   <DataTemplate x:DataType="media:IImage">
@@ -59,7 +61,8 @@
                   </DataTemplate>
                 </ContentControl.DataTemplates>
               </ContentControl>
-              <TextBlock Text="{CompiledBinding Name}" />
+              <TextBlock Text="{CompiledBinding Name}"
+                         Classes.startup-project="{CompiledBinding IsStartupProject}" />
             </StackPanel>
           </Grid>
         </DataTemplate>

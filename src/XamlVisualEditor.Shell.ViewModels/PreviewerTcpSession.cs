@@ -392,8 +392,11 @@ public sealed class PreviewerTcpSession : IDisposable
             }
             if (!string.IsNullOrWhiteSpace(updateResult.Error))
             {
-                _log?.Invoke("Error", updateResult.Error);
-                SetError(CreateXamlError(updateResult, xaml, _xamlFilePath), connection);
+                PreviewerErrorInfo error = CreateXamlError(updateResult, xaml, _xamlFilePath);
+                // A XAML error with a position reaches the output as a diagnostic at its source position; the stack
+                // trace and the position in the preview copy only help with other exceptions.
+                if (error.Line is null) _log?.Invoke("Error", updateResult.Error);
+                SetError(error, connection);
                 return;
             }
 

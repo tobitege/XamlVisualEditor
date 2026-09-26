@@ -16,6 +16,8 @@ public sealed record EditorOptions
     public bool RestoreLastWorkspace { get; init; }
     /// <summary>Lists the folders of a project before its files in the Solution Explorer; otherwise both sort together by name.</summary>
     public bool FoldersBeforeFiles { get; init; } = true;
+    /// <summary>Shows the full path of the active document in the window title instead of its file name.</summary>
+    public bool ShowFullPathInTitle { get; init; }
     public TerminalLocation TerminalLocation { get; init; }
     public TerminalShell TerminalShell { get; init; }
     public string CommandPromptPath { get; init; } = Environment.GetEnvironmentVariable("ComSpec")

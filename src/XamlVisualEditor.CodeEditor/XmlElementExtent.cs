@@ -60,6 +60,18 @@ public static class XmlElementExtent
         return -1;
     }
 
+    /// <summary>
+    /// Returns the offset just after the "&gt;" of the start tag that begins at <paramref name="startOffset"/>, or -1
+    /// when the text ends before the start tag does. Quoted attribute values are skipped.
+    /// </summary>
+    public static int FindStartTagEnd(string text, int startOffset)
+    {
+        if (startOffset < 0 || startOffset >= text.Length || text[startOffset] != '<')
+            return -1;
+
+        return SkipStartTag(text, startOffset + 1).End;
+    }
+
     private static (int End, bool SelfClosing) SkipStartTag(string text, int position)
     {
         char quote = '\0';

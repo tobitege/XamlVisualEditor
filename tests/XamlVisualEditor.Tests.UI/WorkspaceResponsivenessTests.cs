@@ -84,6 +84,67 @@ public sealed class WorkspaceResponsivenessTests
     }
 
     [AvaloniaFact]
+    public async Task ReopeningAWorkspaceRestoresItsOpenDocumentsAndActiveDocument()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-session-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string workspacePath = Path.Combine(root, "Test.csproj");
+        string firstPath = Path.Combine(root, "First.cs");
+        string secondPath = Path.Combine(root, "Second.cs");
+        string outsidePath = Path.Combine(Path.GetTempPath(), $"xve-session-outside-{Guid.NewGuid():N}.cs");
+        await File.WriteAllTextAsync(workspacePath, "<Project />");
+        await File.WriteAllTextAsync(firstPath, "class First { }");
+        await File.WriteAllTextAsync(secondPath, "class Second { }");
+        await File.WriteAllTextAsync(outsidePath, "class Outside { }");
+        WorkspaceSessionStore sessions = new(Path.Combine(root, "sessions.json"));
+
+        using (MainWindowViewModel first = CreateSessionHost(sessions, workspacePath))
+        {
+            await first.OpenWorkspaceCommand.Execute().FirstAsync();
+            await first.OpenFileAsync(firstPath);
+            await first.OpenFileAsync(outsidePath);
+            await first.OpenFileAsync(secondPath);
+            first.ActiveDocument = first.Documents.Single(document => document.FilePath == outsidePath);
+        }
+
+        using MainWindowViewModel second = CreateSessionHost(new WorkspaceSessionStore(Path.Combine(root, "sessions.json")), workspacePath);
+        await second.OpenWorkspaceCommand.Execute().FirstAsync();
+
+        Assert.Equal(new[] { firstPath, outsidePath, secondPath }, second.Documents.Select(document => document.FilePath));
+        Assert.Equal(outsidePath, second.ActiveDocument?.FilePath);
+        Assert.Equal(workspacePath, second.ActiveProject?.ProjectPath);
+    }
+
+    [AvaloniaFact]
+    public async Task ClosingAWorkspaceKeepsItsSavedSession()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-session-close-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string workspacePath = Path.Combine(root, "Test.csproj");
+        string codePath = Path.Combine(root, "Code.cs");
+        await File.WriteAllTextAsync(workspacePath, "<Project />");
+        await File.WriteAllTextAsync(codePath, "class Code { }");
+        WorkspaceSessionStore sessions = new();
+        using MainWindowViewModel main = CreateSessionHost(sessions, workspacePath);
+
+        await main.OpenWorkspaceCommand.Execute().FirstAsync();
+        await main.OpenFileAsync(codePath);
+        await main.CloseWorkspaceCommand.Execute().FirstAsync();
+
+        Assert.Empty(main.Documents);
+        Assert.Equal(new[] { codePath }, sessions.Load(workspacePath)?.OpenDocuments);
+    }
+
+    private static MainWindowViewModel CreateSessionHost(WorkspaceSessionStore sessions, string workspacePath)
+    {
+        MainWindowViewModel main = new(
+            workspaceService: new StubWorkspaceService(), metadataService: new StubMetadataService(),
+            dotNetCli: new ControllableDotNetCli(), workspaceSessions: sessions);
+        main.OpenWorkspaceInteraction.RegisterHandler(context => context.SetOutput(new WorkspaceOpenRequest(workspacePath)));
+        return main;
+    }
+
+    [AvaloniaFact]
     public async Task WorkspaceRegistersMetadataOffTheUiThreadWithoutEnumeratingToolboxControls()
     {
         string root = Path.Combine(Path.GetTempPath(), $"xve-metadata-thread-{Guid.NewGuid():N}");

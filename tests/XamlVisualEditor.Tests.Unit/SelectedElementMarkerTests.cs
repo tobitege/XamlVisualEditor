@@ -52,6 +52,17 @@ public sealed class SelectedElementMarkerTests : IDisposable
         Assert.Equal(-1, XmlElementExtent.FindEnd(text, 0));
     }
 
+    [Theory]
+    [InlineData("<A />", 5)]
+    [InlineData("<A B=\"a>b\"\n  C='x' >text</A>", 20)]
+    [InlineData("<A><B /></A>", 3)]
+    [InlineData("<A B=\"unterminated >", -1)]
+    [InlineData("A />", -1)]
+    public void FindStartTagEnd_Returns_The_Offset_After_The_Start_Tag(string text, int expected)
+    {
+        Assert.Equal(expected, XmlElementExtent.FindStartTagEnd(text, 0));
+    }
+
     [Fact]
     public void SourceLineRange_Contains_Its_Inclusive_Lines()
     {
@@ -110,6 +121,62 @@ public sealed class SelectedElementMarkerTests : IDisposable
 
         document.CodeEditor.FollowDesignerSelection = true;
         Assert.Equal(new SourceLineRange(5, 7), document.CodeEditor.SelectedElementLines);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(5, 10, 5, 7)]
+    [InlineData(6, 13, 5, 7)]
+    [InlineData(3, 6, 3, 3)]
+    [InlineData(8, 7, 8, 8)]
+    public async Task Diagnostic_Marks_The_Start_Tag_Around_Its_Position_Or_Its_Line(
+        int line, int column, int expectedStart, int expectedEnd)
+    {
+        using DesignerDocumentViewModel document = await LoadAsync();
+        List<int> revealedLines = new();
+        using IDisposable reveal = document.CodeEditor.RevealLineRequests.Subscribe(revealedLines.Add);
+
+        document.CodeEditor.MarkDiagnostic(line, column);
+
+        Assert.Equal(new SourceLineRange(expectedStart, expectedEnd), document.CodeEditor.DiagnosticLines);
+        Assert.Equal([expectedStart], revealedLines);
+        Assert.Equal(document.CodeEditor.GetOffsetForLineColumn(line, column), document.CodeEditor.CaretOffset);
+        Assert.Equal(0, document.CodeEditor.SelectionLength);
+    }
+
+    [AvaloniaFact]
+    public async Task Editing_The_Text_Removes_The_Diagnostic_Marker()
+    {
+        using DesignerDocumentViewModel document = await LoadAsync();
+        document.CodeEditor.MarkDiagnostic(5, 10);
+        Assert.NotNull(document.CodeEditor.DiagnosticLines);
+
+        document.CodeEditor.Document.Insert(0, " ");
+
+        Assert.Null(document.CodeEditor.DiagnosticLines);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Editor_Services_Mark_A_Diagnostic_Location_But_Only_Select_A_Plain_Location()
+    {
+        string path = Path.Combine(_root, "View.axaml");
+        File.WriteAllText(path, Xaml);
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        using EditorServicesAdapter editor = new(main);
+        LanguageLocation location = new()
+        {
+            FilePath = path,
+            Range = new LanguageTextRange(new LanguageTextPosition(6, 13), new LanguageTextPosition(6, 19))
+        };
+
+        Assert.True(await editor.OpenLocationAsync(location, CancellationToken.None));
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(Assert.Single(main.Documents));
+        Assert.Null(document.CodeEditor.DiagnosticLines);
+        Assert.Equal(6, document.CodeEditor.SelectionLength);
+
+        Assert.True(await editor.OpenDiagnosticLocationAsync(location, CancellationToken.None));
+        Assert.Equal(new SourceLineRange(5, 7), document.CodeEditor.DiagnosticLines);
+        Assert.Equal(0, document.CodeEditor.SelectionLength);
+        Assert.Equal(document.CodeEditor.GetOffsetForLineColumn(6, 13), document.CodeEditor.CaretOffset);
     }
 
     [AvaloniaFact]

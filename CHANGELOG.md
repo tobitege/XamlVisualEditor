@@ -48,6 +48,10 @@ uses Semantic Versioning.
 - Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
 - Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
 - Fixed the external previewer reporting "Design tree unavailable: Ambiguous match found" for controls that hide an inherited property with `new`, such as a Padding of their own type: the design tree reader walks the type hierarchy and takes the Avalonia Thickness declaration of Padding.
+- A workspace remembers its session independently of the dock layout: opening it again reopens the documents that were open, in their order and including files outside the workspace, activates the document that was active and restores the startup project. The sessions of the 50 most recently used workspaces are kept in `workspace-sessions.json`; closing a workspace keeps its session.
+- The Solution Explorer marks only the startup project, like Visual Studio: its name is bold after the ▶ marker, and the "RUN" label of other executable projects is gone. A tooltip on a project node tells whether it is the startup project or an executable project, and "Set as Startup Project" is available for executable projects only. The references folder is the first child of a project, whatever the sort option, and its name follows the editor language.
+- Added the option "Show the full file path in the window title" (off by default) under Window in the Options dialog; the window title also follows a "Save As" of the active document. The tooltip of a document tab always shows the full path of its file.
+- Opening a problem from the Problems panel in a XAML code editor marks its location like a designer selection, but in the error color: a red bar and arrow in the gutter along the start tag that contains the diagnostic (or along its line outside a start tag), scrolled into the middle of the editor with the caret at the diagnostic. The marker disappears with the next edit. Extensions open a diagnostic location this way through `IEditorServices.OpenDiagnosticLocationAsync`.
 - Fixed the external previewer failing with "Could not load file or assembly 'System.Xaml'" when the previewed project references a .NET Framework library: the previewer host no longer preloads project references whose assembly-level attributes come from an assembly the runtime cannot load, because the XAML compiler reads those attributes of every loaded assembly.
 - `DesignPreviewHookRegistry.Register` ignores a hook that is already registered: the hook runs once per preview, the repeated registration's disposal does nothing, and the first registration keeps owning the hook.
 - XVE now reads assemblies from a shared build output instead of unrelated output trees.
@@ -57,6 +61,8 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.
+- Fixed `IEditorServices.OpenLocationAsync` failing with "Call from invalid thread" when the file was not open yet: after opening the document, the caret and selection are set on the UI thread.
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
 - Fixed the line and column in the status bar, which stayed at 1, 1 for XAML documents.

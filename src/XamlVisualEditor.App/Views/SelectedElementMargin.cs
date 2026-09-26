@@ -8,8 +8,9 @@ using XamlVisualEditor.CodeEditor;
 namespace XamlVisualEditor.App.Views;
 
 /// <summary>
-/// Gutter margin that marks the source lines of the element selected in the designer: an arrow at the first line
-/// and a bar along every line of the element.
+/// Gutter margin that marks the source lines of the element selected in the designer, and in the error color the
+/// lines of a diagnostic location opened from the problems list: an arrow at the first line and a bar along every
+/// marked line.
 /// </summary>
 public sealed class SelectedElementMargin : AbstractMargin
 {
@@ -19,8 +20,10 @@ public sealed class SelectedElementMargin : AbstractMargin
     private const double ARROW_HALF_HEIGHT = 5;
     private const double ARROW_TIP = 7;
     private static readonly Color FallbackAccentColor = Color.Parse("#0078D4");
+    private static readonly Color FallbackErrorColor = Colors.Red;
 
     private SourceLineRange? _lines;
+    private SourceLineRange? _diagnosticLines;
 
     public SelectedElementMargin()
     {
@@ -41,16 +44,38 @@ public sealed class SelectedElementMargin : AbstractMargin
         }
     }
 
+    /// <summary>Gets or sets the lines marked in the error color, or null when no diagnostic location is marked.</summary>
+    public SourceLineRange? DiagnosticLines
+    {
+        get => _diagnosticLines;
+        set
+        {
+            if (_diagnosticLines == value)
+                return;
+            _diagnosticLines = value;
+            InvalidateVisual();
+        }
+    }
+
     // The base class redraws the margin whenever the text view rebuilds its visual lines, which scrolling does too.
     protected override Size MeasureOverride(Size availableSize) => new(MARGIN_WIDTH, 0);
 
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        if (_lines is not { } lines || TextView is not { VisualLinesValid: true } textView)
+        if (TextView is not { VisualLinesValid: true } textView)
             return;
 
-        IBrush brush = new SolidColorBrush(ResolveAccentColor());
+        // The diagnostic marker is drawn last, so it stays visible where it overlaps the selected element.
+        if (_lines is { } lines)
+            DrawMarker(context, textView, lines, ResolveColor("SystemAccentColor", FallbackAccentColor));
+        if (_diagnosticLines is { } diagnosticLines)
+            DrawMarker(context, textView, diagnosticLines, ResolveColor("SystemFillColorCritical", FallbackErrorColor));
+    }
+
+    private static void DrawMarker(DrawingContext context, TextView textView, SourceLineRange lines, Color color)
+    {
+        IBrush brush = new SolidColorBrush(color);
         double scrollTop = textView.ScrollOffset.Y;
         foreach (VisualLine line in textView.VisualLines)
         {
@@ -69,10 +94,10 @@ public sealed class SelectedElementMargin : AbstractMargin
         }
     }
 
-    private Color ResolveAccentColor() =>
-        this.TryFindResource("SystemAccentColor", ActualThemeVariant, out object? value) && value is Color accent
-            ? accent
-            : FallbackAccentColor;
+    private Color ResolveColor(string resourceKey, Color fallback) =>
+        this.TryFindResource(resourceKey, ActualThemeVariant, out object? value) && value is Color color
+            ? color
+            : fallback;
 
     private static StreamGeometry CreateArrow(double middle)
     {

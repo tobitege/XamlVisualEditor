@@ -385,7 +385,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             Range = next.Range
         };
 
-        return await _editor.OpenLocationAsync(location, cancellationToken).ConfigureAwait(false);
+        return await _editor.OpenDiagnosticLocationAsync(location, cancellationToken).ConfigureAwait(false);
     }
 
     private static DataGridTemplateColumnDefinition CreateTemplateColumn(
@@ -656,7 +656,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             Range = SelectedDiagnostic.Range
         };
 
-        await _editor.OpenLocationAsync(location, CancellationToken.None).ConfigureAwait(false);
+        await _editor.OpenDiagnosticLocationAsync(location, CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task CopySelectedAsync()

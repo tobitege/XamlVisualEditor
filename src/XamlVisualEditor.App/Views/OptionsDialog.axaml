@@ -42,6 +42,10 @@
                   IsChecked="{CompiledBinding RestoreLastWorkspace, Mode=TwoWay}" />
         <TextBlock Text="{x:Static loc:UiStrings.RestoreLastWorkspaceHint}" TextWrapping="Wrap" />
         <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.WindowGroup}" FontWeight="SemiBold" />
+        <CheckBox Name="ShowFullPathInTitleChoice" Content="{x:Static loc:UiStrings.ShowFullPathInTitle}"
+                  IsChecked="{CompiledBinding ShowFullPathInTitle, Mode=TwoWay}" />
+        <Separator Margin="0,4" />
         <TextBlock Text="{x:Static loc:UiStrings.SolutionExplorer}" FontWeight="SemiBold" />
         <CheckBox Name="FoldersBeforeFilesChoice" Content="{x:Static loc:UiStrings.FoldersBeforeFiles}"
                   IsChecked="{CompiledBinding FoldersBeforeFiles, Mode=TwoWay}" />

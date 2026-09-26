@@ -220,13 +220,24 @@ public sealed partial class ExtensionTool : Tool
     }
 }
 
+/// <summary>A dock document that shows a file; the document tab shows its full path as tooltip.</summary>
+public interface IFileDockable
+{
+    /// <summary>Gets the full path of the shown file.</summary>
+    string FilePath { get; }
+}
+
 /// <summary>
 /// Dock document for a XAML designer document.
 /// </summary>
-public sealed partial class DesignerDocument : Document
+public sealed partial class DesignerDocument : Document, IFileDockable
 {
     [IgnoreDataMember]
     public DesignerDocumentViewModel DocumentViewModel { get; }
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public string FilePath => DocumentViewModel.FilePath;
 
     public DesignerDocument(DesignerDocumentViewModel documentViewModel)
     {
@@ -240,10 +251,14 @@ public sealed partial class DesignerDocument : Document
 /// <summary>
 /// Dock document for a text file.
 /// </summary>
-public sealed partial class TextDocument : Document
+public sealed partial class TextDocument : Document, IFileDockable
 {
     [IgnoreDataMember]
     public TextDocumentViewModel DocumentViewModel { get; }
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public string FilePath => DocumentViewModel.FilePath;
 
     public TextDocument(TextDocumentViewModel documentViewModel)
     {

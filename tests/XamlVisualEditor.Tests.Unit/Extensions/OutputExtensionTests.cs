@@ -48,6 +48,7 @@ public sealed class OutputExtensionTests
         await viewModel.OpenLocationCommand.Execute().ToTask();
         Assert.Equal(2, editor.OpenedLocations[0].Range.Start.Line);
         Assert.Equal(5, editor.OpenedLocations[0].Range.Start.Column);
+        Assert.Empty(editor.PlainLocations);
         viewModel.SelectedRow = null;
 
         bool first = await viewModel.NavigateToRelativeAsync(1, CancellationToken.None);
@@ -228,7 +229,16 @@ public sealed class OutputExtensionTests
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
             => Task.FromResult<IEditorDocument?>(null);
 
+        // The problems list opens diagnostics only through OpenDiagnosticLocationAsync.
+        public List<LanguageLocation> PlainLocations { get; } = new();
+
         public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
+        {
+            PlainLocations.Add(location);
+            return Task.FromResult(OpenLocationResult);
+        }
+
+        public Task<bool> OpenDiagnosticLocationAsync(LanguageLocation location, CancellationToken ct)
         {
             OpenedLocations.Add(location);
             return Task.FromResult(OpenLocationResult);

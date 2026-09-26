@@ -3,7 +3,8 @@
         xmlns:dock="using:Dock.Avalonia.Controls"
         xmlns:recycling="using:Avalonia.Controls.Recycling"
         xmlns:dockmodel="using:Dock.Model.Core"
-        xmlns:styles="using:XamlVisualEditor.App.Styles">
+        xmlns:styles="using:XamlVisualEditor.App.Styles"
+        xmlns:v="using:XamlVisualEditor.App.Views">
     <Styles.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
@@ -88,6 +89,16 @@
     </Style>
     <Style Selector="dock|ToolTabStripItem" x:DataType="dockmodel:IDockable">
         <Setter Property="ToolTip.Tip" Value="{CompiledBinding Title}" />
+    </Style>
+
+    <!-- Document tabs show the full path of their file; the tab itself only has room for the file name. -->
+    <Style Selector="dock|DocumentTabStripItem" x:DataType="dockmodel:IDockable">
+        <Setter Property="ToolTip.Tip">
+            <MultiBinding Converter="{x:Static v:DockableToolTipConverter.Instance}">
+                <Binding />
+                <Binding Path="Title" />
+            </MultiBinding>
+        </Setter>
     </Style>
 
     <!-- The splitter between design surface and XAML code stays visible in every theme; the accent marks it

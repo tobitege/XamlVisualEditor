@@ -265,6 +265,8 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         _vmSubscriptions.Add(vm.WhenAnyValue(x => x.SelectedElementLines)
             .Subscribe(lines => selectedElementMargin.Lines = lines));
+        _vmSubscriptions.Add(vm.WhenAnyValue(x => x.DiagnosticLines)
+            .Subscribe(lines => selectedElementMargin.DiagnosticLines = lines));
         _vmSubscriptions.Add(vm.RevealLineRequests.Subscribe(RevealLine));
 
         _foldingSubscription?.Dispose();

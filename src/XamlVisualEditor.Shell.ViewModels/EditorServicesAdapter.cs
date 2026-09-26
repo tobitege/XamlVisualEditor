@@ -168,6 +168,26 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         return result;
     }
 
+    public async Task<bool> OpenDiagnosticLocationAsync(LanguageLocation location, CancellationToken ct)
+    {
+        if (location is null || string.IsNullOrWhiteSpace(location.FilePath))
+        {
+            return false;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await OpenDiagnosticLocationCoreAsync(location, ct).ConfigureAwait(false);
+        }
+
+        bool result = false;
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            result = await OpenDiagnosticLocationCoreAsync(location, ct).ConfigureAwait(false);
+        }, DispatcherPriority.Background, ct);
+        return result;
+    }
+
     private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath, EditorDocumentOpenBehavior behavior)
     {
         // The returned document can show a different file when an interceptor redirected the open.
@@ -176,9 +196,27 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         return document is null ? null : GetAdapter(document);
     }
 
+    // The caret, selection and text document belong to the UI thread, so both methods continue on it after opening.
+    private async Task<bool> OpenDiagnosticLocationCoreAsync(LanguageLocation location, CancellationToken ct)
+    {
+        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct);
+        if (doc is CodeEditorDocumentAdapter codeEditor)
+        {
+            codeEditor.MarkDiagnostic(location.Range.Start);
+            return true;
+        }
+
+        return SelectLocation(doc, location);
+    }
+
     private async Task<bool> OpenLocationCoreAsync(LanguageLocation location, CancellationToken ct)
     {
-        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct).ConfigureAwait(false);
+        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct);
+        return SelectLocation(doc, location);
+    }
+
+    private static bool SelectLocation(IEditorDocument? doc, LanguageLocation location)
+    {
         if (doc is not EditorDocumentAdapter adapter)
         {
             return false;
@@ -412,6 +450,11 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             ApplyEdits(Document, edits);
             _editor.IsModified = true;
             return Task.CompletedTask;
+        }
+
+        public void MarkDiagnostic(LanguageTextPosition position)
+        {
+            _editor.MarkDiagnostic(position.Line, position.Column);
         }
 
         public CodeEditorDocumentAdapter(CodeEditorViewModel editor)

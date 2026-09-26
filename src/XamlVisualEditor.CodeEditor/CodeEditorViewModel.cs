@@ -138,6 +138,13 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
     public partial SourceLineRange? SelectedElementLines { get; set; }
 
     /// <summary>
+    /// Gets or sets the lines of the diagnostic location opened from the problems list, which the editor marks in its
+    /// gutter in the error color until the text changes.
+    /// </summary>
+    [Reactive]
+    public partial SourceLineRange? DiagnosticLines { get; set; }
+
+    /// <summary>
     /// Gets the line numbers the view scrolls into the middle of the editor.
     /// </summary>
     public IObservable<int> RevealLineRequests => _revealLineRequests;
@@ -314,6 +321,14 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
             .Subscribe(evt => { _ = NotifyDocumentChangedAsync(); });
         _disposables.Add(syncDocumentSubscription);
 
+        // Any edit shifts or invalidates the marked diagnostic location.
+        IDisposable diagnosticLinesSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => Document.TextChanged += h,
+                h => Document.TextChanged -= h)
+            .Where(_ => DiagnosticLines is not null)
+            .Subscribe(_ => DiagnosticLines = null);
+        _disposables.Add(diagnosticLinesSubscription);
+
         // Subscribe to sync events to receive AST→text updates
         IDisposable syncSubscription = _syncEngine.SyncEvents
             .Where(e => e.Source != SyncSource.CodeEditor)
@@ -458,6 +473,44 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
             ? Document.GetLineByOffset(endOffset - 1).LineNumber
             : startLine;
         return new SourceLineRange(startLine, endLine);
+    }
+
+    /// <summary>
+    /// Moves the caret to a diagnostic location, marks the start tag that contains it (or only its line when it lies
+    /// outside a start tag) and scrolls the marked lines into the middle of the editor.
+    /// </summary>
+    public void MarkDiagnostic(int line, int column)
+    {
+        if (Document.TextLength == 0)
+        {
+            return;
+        }
+
+        int offset = GetOffsetForLineColumn(line, column);
+        SetSelection(offset, 0, offset);
+        int offsetLine = Document.GetLineByOffset(offset).LineNumber;
+        SourceLineRange lines = GetStartTagLines(offset) ?? new SourceLineRange(offsetLine, offsetLine);
+        DiagnosticLines = lines;
+        RevealLine(lines.StartLine);
+    }
+
+    private SourceLineRange? GetStartTagLines(int offset)
+    {
+        string text = Document.Text;
+        // Attribute values cannot contain '<', so the nearest '<' before a position inside a start tag begins that tag.
+        int tagStart = text.LastIndexOf('<', Math.Min(offset, text.Length - 1));
+        if (tagStart < 0 || tagStart + 1 >= text.Length || !(char.IsLetter(text[tagStart + 1]) || text[tagStart + 1] == '_'))
+        {
+            return null;
+        }
+
+        int tagEnd = XmlElementExtent.FindStartTagEnd(text, tagStart);
+        if (tagEnd <= offset)
+        {
+            return null;
+        }
+
+        return new SourceLineRange(Document.GetLineByOffset(tagStart).LineNumber, Document.GetLineByOffset(tagEnd - 1).LineNumber);
     }
 
     /// <summary>

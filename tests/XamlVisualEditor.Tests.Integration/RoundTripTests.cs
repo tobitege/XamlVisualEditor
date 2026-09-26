@@ -703,13 +703,13 @@ public sealed class CollaborationLifecycleTests
         Assert.Single(project.Children); // References folder only
 
         SolutionExplorerNodeViewModel refsFolder = project.Children[0];
-        Assert.Equal("References", refsFolder.Name);
+        Assert.Equal(XamlVisualEditor.Core.Localization.UiStrings.References, refsFolder.Name);
         Assert.Single(refsFolder.Children);
     }
 
     [Theory]
-    [InlineData(true, "Assets|Views|App.axaml|Zeta.cs|References")]
-    [InlineData(false, "App.axaml|Assets|Views|Zeta.cs|References")]
+    [InlineData(true, "{References}|Assets|Views|App.axaml|Zeta.cs")]
+    [InlineData(false, "{References}|App.axaml|Assets|Views|Zeta.cs")]
     public void SolutionExplorer_orders_project_items_and_hides_files_outside_the_project(bool foldersBeforeFiles, string expected)
     {
         string projectDirectory = Path.Combine(Path.GetTempPath(), "xve-tree", "App");
@@ -742,6 +742,7 @@ public sealed class CollaborationLifecycleTests
         SolutionExplorerNodeViewModel root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, "Tree", foldersBeforeFiles: foldersBeforeFiles);
 
         SolutionExplorerNodeViewModel project = Assert.Single(root.Children);
-        Assert.Equal(expected, string.Join("|", project.Children.Select(child => child.Name)));
+        Assert.Equal(expected.Replace("{References}", XamlVisualEditor.Core.Localization.UiStrings.References),
+            string.Join("|", project.Children.Select(child => child.Name)));
     }
 }

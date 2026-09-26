@@ -20,6 +20,15 @@ public interface IEditorServices
     /// <summary>Opens a document and navigates to a location.</summary>
     Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct);
 
+    /// <summary>
+    /// Opens a document at the start of a diagnostic location. An editor that supports it marks the location in the
+    /// error color instead of selecting its range; otherwise this behaves like <see cref="OpenLocationAsync"/>.
+    /// </summary>
+    Task<bool> OpenDiagnosticLocationAsync(LanguageLocation location, CancellationToken ct)
+    {
+        return OpenLocationAsync(location, ct);
+    }
+
     /// <summary>Closes an open document without saving; returns false when it is not open.</summary>
     Task<bool> CloseDocumentAsync(string filePath, CancellationToken ct)
     {

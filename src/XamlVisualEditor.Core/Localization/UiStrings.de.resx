@@ -450,7 +450,8 @@
   <data name="Item" xml:space="preserve"><value>Eintrag</value></data>
   <data name="SearchFiles" xml:space="preserve"><value>🔍 Dateien suchen...</value></data>
   <data name="SetStartupProject" xml:space="preserve"><value>Als Startprojekt festlegen</value></data>
-  <data name="RunUpper" xml:space="preserve"><value>AUSFÜHREN</value></data>
+  <data name="StartupProjectToolTip" xml:space="preserve"><value>Startprojekt: „Ausführen“ startet dieses Projekt.</value></data>
+  <data name="ExecutableProjectToolTip" xml:space="preserve"><value>Ausführbares Projekt: „Als Startprojekt festlegen“ im Kontextmenü lässt „Ausführen“ es starten.</value></data>
   <data name="WordWrap" xml:space="preserve"><value>Zeilenumbruch</value></data>
   <data name="Wrap" xml:space="preserve"><value>Umbruch</value></data>
   <data name="ShowLineNumbers" xml:space="preserve"><value>Zeilennummern anzeigen</value></data>
@@ -1202,4 +1203,6 @@
 {0}</value></data>
   <data name="DontSave" xml:space="preserve"><value>Nicht speichern</value></data>
   <data name="FoldersBeforeFiles" xml:space="preserve"><value>Ordner vor Dateien anzeigen</value></data>
+  <data name="WindowGroup" xml:space="preserve"><value>Fenster</value></data>
+  <data name="ShowFullPathInTitle" xml:space="preserve"><value>Vollständigen Dateipfad im Fenstertitel anzeigen</value></data>
 </root>

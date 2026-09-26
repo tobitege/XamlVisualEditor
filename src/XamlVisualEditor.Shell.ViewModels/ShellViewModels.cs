@@ -2244,6 +2244,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private const int RecentFilesLimit = 10;
     private readonly string? _recentFilesPath;
     private readonly EditorOptionsStore _editorOptions;
+    private readonly WorkspaceSessionStore _workspaceSessions;
+    private bool _isRestoringWorkspaceSession;
     private readonly IContextKeys? _contextKeys;
     private readonly IEditorThemeService? _editorThemes;
 
@@ -2949,9 +2951,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IEditorThemeService? editorThemes = null,
         IContextKeys? contextKeys = null,
         IBackgroundActivityMonitor? backgroundActivities = null,
-        IDocumentOpenResolver? documentOpenResolver = null)
+        IDocumentOpenResolver? documentOpenResolver = null,
+        WorkspaceSessionStore? workspaceSessions = null)
     {
         _recentFilesPath = recentFilesPath;
+        _workspaceSessions = workspaceSessions
+            ?? new WorkspaceSessionStore(System.IO.Path.Combine(ShellSettingsPaths.GetRoot(), "workspace-sessions.json"));
         _backgroundActivities = backgroundActivities;
         _documentOpenResolver = documentOpenResolver;
         if (_backgroundActivities is not null)
@@ -3145,6 +3150,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         InfiniteCanvas.UpdateOpenDocuments(Documents);
         Documents.CollectionChanged += (_, _) => InfiniteCanvas.UpdateOpenDocuments(Documents);
+        Documents.CollectionChanged += (_, _) => SaveWorkspaceSession();
+        _disposables.Add(this.WhenAnyValue(x => x.ActiveDocument).Skip(1).Subscribe(_ => SaveWorkspaceSession()));
 
         // File commands
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
@@ -3197,6 +3204,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             if (await OptionsInteraction.Handle(dialog))
             {
                 SolutionExplorer.SetFoldersBeforeFiles(_editorOptions.Current.FoldersBeforeFiles);
+                UpdateWindowTitle();
                 StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
             }
         });
@@ -3622,10 +3630,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
 
-        // Update title when active document changes
+        // The window title follows the active document and its path, which changes with "Save As".
         IDisposable titleUpdateSubscription = this.WhenAnyValue(x => x.ActiveDocument)
-            .Select(doc => doc is not null ? $"XAML Visual Editor — {doc.FileName}" : "XAML Visual Editor")
-            .Subscribe(t => Title = t);
+            .Select(doc => doc is INotifyPropertyChanged notifying
+                ? Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                        handler => notifying.PropertyChanged += handler,
+                        handler => notifying.PropertyChanged -= handler)
+                    .Where(change => change.EventArgs.PropertyName is nameof(IEditorDocumentViewModel.FilePath)
+                        or nameof(IEditorDocumentViewModel.FileName))
+                    .Select(_ => Unit.Default)
+                    .StartWith(Unit.Default)
+                : Observable.Return(Unit.Default))
+            .Switch()
+            .Subscribe(_ => UpdateWindowTitle());
         _disposables.Add(titleUpdateSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFromSolutionExplorerAsync(path); };
@@ -6601,6 +6618,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 StatusText = UiStrings.StartupProjectCleared;
                 LogOutput("Info", $"Startup project cleared (was {previous.Name}).");
             }
+            SaveWorkspaceSession();
             return;
         }
 
@@ -6623,6 +6641,68 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 $"Startup project changed: {previousName} ({previousTfm}) -> {project.Name} ({currentTfm}) [{project.ProjectPath}]");
         }
         SolutionExplorer.SetStartupProject(project);
+        SaveWorkspaceSession();
+    }
+
+    // Saves the startup project and the open documents of the loaded workspace. Loading, closing and restoring a
+    // workspace change both on their own and must not overwrite the saved session.
+    private void SaveWorkspaceSession()
+    {
+        if (!HasWorkspace || _workspacePath is not { } workspacePath || IsWorkspaceLoading || _isRestoringWorkspaceSession)
+        {
+            return;
+        }
+
+        string[] openDocuments = Documents
+            .Select(document => document.FilePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+            .ToArray();
+        _workspaceSessions.Save(workspacePath, new WorkspaceSession
+        {
+            StartupProjectPath = ActiveProject?.ProjectPath,
+            StartupTargetFramework = ActiveProject?.TargetFramework,
+            OpenDocuments = openDocuments,
+            ActiveDocument = ActiveDocument?.FilePath is { } active && openDocuments.Contains(active, FileSystemPathComparison.Comparer)
+                ? active : null
+        });
+    }
+
+    // Reopens the documents of the previous session in their order and restores the startup project. The documents
+    // open without the open interceptors: the user asked for them in the earlier session.
+    private async System.Threading.Tasks.Task RestoreWorkspaceSessionAsync(string workspacePath, WorkspaceSession? session)
+    {
+        if (session is null || !FileSystemPathComparison.Equals(_workspacePath, workspacePath))
+        {
+            return;
+        }
+
+        _isRestoringWorkspaceSession = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(session.StartupProjectPath)
+                && ResolveProjectByPath(session.StartupProjectPath, session.StartupTargetFramework) is { } startup)
+            {
+                SetActiveProject(startup);
+            }
+
+            IEditorDocumentViewModel? active = null;
+            foreach (string path in session.OpenDocuments)
+            {
+                if (!FileSystemPathValidation.IsAccepted(path) || !System.IO.File.Exists(path)) continue;
+                IEditorDocumentViewModel? document = await EnsureDocumentOpenAsync(path, addRecent: false, updateStatus: false,
+                    allowWorkspaceLoad: false);
+                if (!FileSystemPathComparison.Equals(_workspacePath, workspacePath)) return;
+                if (document is not null && FileSystemPathComparison.Equals(path, session.ActiveDocument)) active = document;
+            }
+
+            if (active is not null && Documents.Contains(active)) ActiveDocument = active;
+        }
+        finally
+        {
+            _isRestoringWorkspaceSession = false;
+        }
+
+        SaveWorkspaceSession();
     }
 
     private void SetActiveProjectByPath(string projectPath)
@@ -7039,6 +7119,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             SubscribeDockTitleUpdates(document, dockDoc);
         }
     }
+
+    private void UpdateWindowTitle() =>
+        Title = DocumentTitle.FormatWindow(ActiveDocument?.FileName, ActiveDocument?.FilePath,
+            _editorOptions.Current.ShowFullPathInTitle);
 
     private void UpdateDockTitle(IEditorDocumentViewModel document, IDockable dockDoc)
     {
@@ -8086,6 +8170,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         SetPersistentStatus(string.Format(UiStrings.WorkspaceLoadingStatus, (object?)(workspaceName)));
         LogOutput("Info", $"Loading workspace: {workspacePath}");
         IsWorkspaceLoading = true;
+        WorkspaceSession? session = _workspaceSessions.Load(workspacePath);
+        bool loaded = false;
 
         try
         {
@@ -8174,10 +8260,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             StatusText = string.Format(UiStrings.WorkspaceLoadedStatus, (object?)(name));
             LogOutput("Info", $"Loaded workspace: {name}");
             StartLanguageWorkspaceWarmup();
+            loaded = true;
         }
         finally
         {
             IsWorkspaceLoading = false;
+        }
+
+        if (loaded)
+        {
+            await RestoreWorkspaceSessionAsync(workspacePath, session);
         }
     }
 
@@ -8846,7 +8938,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         LogOutput("Info", $"XAML diagnostics: {errorCount} error(s), {warningCount} warning(s)");
     }
 
-    private void OnPreviewerErrorReceived(PreviewerErrorInfo error)
+    internal void OnPreviewerErrorReceived(PreviewerErrorInfo error)
     {
         Dispatcher.UIThread.Post(() =>
         {
@@ -8856,8 +8948,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            int line = error.Line is > 0 ? error.Line.Value : 1;
-            int column = error.Column is > 0 ? error.Column.Value : 1;
+            // The previewer reports positions in its preview copy; the output names the position in the source.
+            DesignerDocumentViewModel? document = Documents.OfType<DesignerDocumentViewModel>()
+                .FirstOrDefault(candidate => FileSystemPathComparison.Equals(candidate.FilePath, error.FilePath));
+            (int line, int column) = DesignerDocumentViewModel.ResolvePreviewerErrorPosition(error, document?.SyncEngine.CurrentText);
             Output.AddDiagnostic(new XamlDiagnostic
             {
                 Severity = DiagnosticSeverity.Error,
@@ -9540,7 +9634,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         {
             if (this.RaiseAndSetIfChanged(ref _isStartupProject, value))
             {
-                this.RaisePropertyChanged(nameof(IsRunnableButNotStartup));
+                this.RaisePropertyChanged(nameof(ProjectToolTip));
             }
         }
     }
@@ -9548,8 +9642,14 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
     /// <summary>Gets whether this project is runnable.</summary>
     public bool IsRunnableProject => Project?.IsExecutable == true;
 
-    /// <summary>Gets whether this project is runnable but not selected as startup.</summary>
-    public bool IsRunnableButNotStartup => IsRunnableProject && !IsStartupProject;
+    /// <summary>
+    /// Gets the tooltip of a project node: whether it is the startup project or an executable project that can
+    /// become one; null for libraries and other nodes.
+    /// </summary>
+    public string? ProjectToolTip => Kind != SolutionExplorerNodeKind.Project ? null
+        : IsStartupProject ? UiStrings.StartupProjectToolTip
+        : IsRunnableProject ? UiStrings.ExecutableProjectToolTip
+        : null;
 
     /// <summary>Raised when a file node is double-clicked (opened).</summary>
     public event Action<string>? FileOpened;
@@ -9611,11 +9711,11 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
             AddProjectFiles(projectNode, project.Files, systemIcons);
             SortProjectItems(projectNode, foldersBeforeFiles);
 
-            // References folder
+            // The references folder is the first child of the project, whatever the sort option.
             if (project.References.Count > 0)
             {
                 object referencesFolderIcon = GetIconWithFallback(systemIcons, null, isDirectory: true, fallbackIcon: "📚");
-                SolutionExplorerNodeViewModel refsFolder = new("References", referencesFolderIcon, SolutionExplorerNodeKind.Folder);
+                SolutionExplorerNodeViewModel refsFolder = new(UiStrings.References, referencesFolderIcon, SolutionExplorerNodeKind.Folder);
 
                 foreach (AssemblyReference asmRef in project.References)
                 {
@@ -9625,7 +9725,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
                     refsFolder.Children.Add(refNode);
                 }
 
-                projectNode.Children.Add(refsFolder);
+                projectNode.Children.Insert(0, refsFolder);
             }
 
             projectParent.Children.Add(projectNode);
@@ -9892,7 +9992,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         IObservable<bool> canSetStartup = this.WhenAnyValue(x => x.SelectedNode)
             .Select(node => _extensionCommands is not null
                             && node?.Kind == SolutionExplorerNodeKind.Project
-                            && node.Project is not null);
+                            && node.Project?.IsExecutable == true);
 
         OpenSelectedCommand = ReactiveCommand.Create(() =>
         {

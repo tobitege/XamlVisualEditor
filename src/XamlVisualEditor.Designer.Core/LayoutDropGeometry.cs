@@ -32,17 +32,34 @@ public static class LayoutDropGeometry
         return Math.Max(0, sizes.Count - 1);
     }
 
-    /// <summary>Returns the measured cell, or the implicit single cell when no tracks are declared.</summary>
+    /// <summary>
+    /// Returns the measured cells a control with the given spans occupies from <paramref name="row"/> and
+    /// <paramref name="column"/>, or the implicit single cell when no tracks are declared.
+    /// </summary>
     public static LayoutDropIndicator GridCell(Size size, IReadOnlyList<double> rows, IReadOnlyList<double> columns,
-        double rowSpacing, double columnSpacing, int row, int column)
+        double rowSpacing, double columnSpacing, int row, int column, int rowSpan = 1, int columnSpan = 1)
     {
         row = Math.Clamp(row, 0, Math.Max(0, rows.Count - 1));
         column = Math.Clamp(column, 0, Math.Max(0, columns.Count - 1));
-        double x = column * columnSpacing, y = row * rowSpacing;
-        for (int i = 0; i < column; i++) x += columns[i];
-        for (int i = 0; i < row; i++) y += rows[i];
-        return new(new Rect(x, y, columns.Count == 0 ? size.Width : columns[column],
-            rows.Count == 0 ? size.Height : rows[row]));
+        int lastRow = Math.Min(rows.Count, row + Math.Max(1, rowSpan)) - 1;
+        int lastColumn = Math.Min(columns.Count, column + Math.Max(1, columnSpan)) - 1;
+        return new(new Rect(TrackStart(columns, columnSpacing, column), TrackStart(rows, rowSpacing, row),
+            columns.Count == 0 ? size.Width : TrackStart(columns, columnSpacing, lastColumn) + columns[lastColumn] - TrackStart(columns, columnSpacing, column),
+            rows.Count == 0 ? size.Height : TrackStart(rows, rowSpacing, lastRow) + rows[lastRow] - TrackStart(rows, rowSpacing, row)));
+    }
+
+    /// <summary>
+    /// Clamps a start track so that a control spanning <paramref name="span"/> tracks stays inside the grid,
+    /// as the layout edit that places the control does.
+    /// </summary>
+    public static int SpanStart(int index, int trackCount, int span) =>
+        Math.Clamp(index, 0, Math.Max(0, Math.Max(1, trackCount) - Math.Max(1, span)));
+
+    private static double TrackStart(IReadOnlyList<double> sizes, double spacing, int index)
+    {
+        double start = index * spacing;
+        for (int i = 0; i < index; i++) start += sizes[i];
+        return start;
     }
 
     /// <summary>Finds the source insertion index from measured sibling centers.</summary>

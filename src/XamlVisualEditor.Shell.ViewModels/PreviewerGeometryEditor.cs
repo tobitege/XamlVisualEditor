@@ -98,7 +98,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         DesignerHostNode View, LayoutPlacement? Placement, int? Index);
 
     private LayoutDropIndicator PlacementIndicator(MutableAstObjectNode parent, DesignerHostNode view, Point pointer,
-        LayoutPlacement? placement = null, int? index = null, ISet<Guid>? excluded = null)
+        LayoutPlacement? placement = null, int? index = null, ISet<Guid>? excluded = null, int rowSpan = 1, int columnSpan = 1)
     {
         DesignerHostLayout layout = view.Layout!;
         Vector position = ToLocalVector(layout, new Vector(pointer.X - layout.M31, pointer.Y - layout.M32));
@@ -107,7 +107,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
             indicator = GridCell(new Size(layout.Width, layout.Height), layout.RowHeights, layout.ColumnWidths,
                 layout.RowSpacing, layout.ColumnSpacing,
                 placement?.Row ?? TrackIndex(layout.RowHeights, layout.RowSpacing, position.Y),
-                placement?.Column ?? TrackIndex(layout.ColumnWidths, layout.ColumnSpacing, position.X));
+                placement?.Column ?? TrackIndex(layout.ColumnWidths, layout.ColumnSpacing, position.X), rowSpan, columnSpan);
         else if (layout.Kind == "Stack")
         {
             Rect?[] children = new LayoutEditService(document.MetadataService).GetChildren(parent).OfType<MutableAstObjectNode>()
@@ -257,9 +257,13 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         Rect? targetBounds = plan is null ? null : new Rect(plan.View.X, plan.View.Y, plan.View.Width, plan.View.Height);
         if (plan?.Error is not null) return new(viewportDelta, targetBounds, plan.Error);
         DesignerHostNode target = plan?.View ?? sourceParent;
+        DesignerHostLayout moved = primary.View.Layout!;
+        // The indicator marks the cells the drop assigns, so that it shows where the control lands.
         LayoutDropIndicator? indicator = target.Layout?.Kind is "Grid" or "Stack"
             ? PlacementIndicator(plan?.Parent ?? LayoutEditService.GetParent(primary.Node)!, target, viewportPoint,
-                excluded: nodes.Select(entry => entry.Node.Id).ToHashSet()) : null;
+                target.Layout!.Kind == "Grid" ? GridTarget(target.Layout, moved, viewportPoint) : null,
+                excluded: nodes.Select(entry => entry.Node.Id).ToHashSet(),
+                rowSpan: moved.GridRowSpan, columnSpan: moved.GridColumnSpan) : null;
         return SnapCanvasSelection(nodes, primary, source, target, viewportDelta, plan is not null)
             with { TargetBounds = targetBounds, DropIndicator = indicator };
     }
@@ -404,6 +408,18 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
     private static Point LayoutOrigin(DesignerHostNode node, DesignerHostLayout parent) =>
         TransformPoint(parent, new Point(node.Layout!.X, node.Layout.Y));
 
+    /// <summary>
+    /// Finds the first cell of a moved control: the cell under the pointer, clamped so that the control's spans stay
+    /// inside the grid. Preview and drop both use it.
+    /// </summary>
+    private static LayoutPlacement GridTarget(DesignerHostLayout grid, DesignerHostLayout moved, Point viewportPoint)
+    {
+        Vector anchor = ToLocalVector(grid, new Vector(viewportPoint.X - grid.M31, viewportPoint.Y - grid.M32));
+        return new(
+            Row: SpanStart(TrackIndex(grid.RowHeights, grid.RowSpacing, anchor.Y), grid.RowHeights.Count, moved.GridRowSpan),
+            Column: SpanStart(TrackIndex(grid.ColumnWidths, grid.ColumnSpacing, anchor.X), grid.ColumnWidths.Count, moved.GridColumnSpan));
+    }
+
     private Vector SnapReparentDelta(DesignerHostNode primary, DesignerHostLayout source,
         DesignerHostLayout target, Vector delta)
     {
@@ -451,11 +467,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         {
             DesignerHostLayout layout = entry.View.Layout!;
             Point origin = LayoutOrigin(entry.View, source);
-            Point cellPoint = pointer + (origin - primaryOrigin);
-            Vector cell = ToLocalVector(target, new Vector(cellPoint.X - target.M31, cellPoint.Y - target.M32));
-            LayoutPlacement? placement = target.Kind == "Grid"
-                ? new(Row: TrackIndex(target.RowHeights, target.RowSpacing, cell.Y),
-                    Column: TrackIndex(target.ColumnWidths, target.ColumnSpacing, cell.X)) : null;
+            LayoutPlacement? placement = target.Kind == "Grid" ? GridTarget(target, layout, pointer + (origin - primaryOrigin)) : null;
             if (!editor.TryMove(entry.Node, plan.Parent, out string? error, index, placement))
                 throw new InvalidOperationException(error);
             if (index.HasValue) index++;
@@ -654,10 +666,9 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
                 Move(selection, delta.X, delta.Y, false);
                 return;
             case "Grid":
-                int row = TrackIndex(layout.RowHeights, layout.RowSpacing, position.Y);
-                int column = TrackIndex(layout.ColumnWidths, layout.ColumnSpacing, position.X);
-                Move(selection, column - CurrentNumber(primary.Node, "Grid.Column", primary.View.Layout!.GridColumn),
-                    row - CurrentNumber(primary.Node, "Grid.Row", primary.View.Layout!.GridRow), true);
+                LayoutPlacement cell = GridTarget(layout, primary.View.Layout!, viewportPoint);
+                Move(selection, cell.Column!.Value - CurrentNumber(primary.Node, "Grid.Column", primary.View.Layout!.GridColumn),
+                    cell.Row!.Value - CurrentNumber(primary.Node, "Grid.Row", primary.View.Layout!.GridRow), true);
                 return;
             case "Stack":
             case "Panel":

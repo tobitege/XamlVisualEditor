@@ -477,6 +477,37 @@ public sealed class PreviewerGeometryEditingTests
         Assert.Equal(moved, document.SyncEngine.GetCurrentText());
     }
 
+    [AvaloniaFact]
+    public async Task GridMovePreviewMarksTheSpannedCellsTheDropAssigns()
+    {
+        const string xaml = "<Grid xmlns=\"https://github.com/avaloniaui\"><Button Name=\"Wide\" Grid.ColumnSpan=\"2\" /></Grid>";
+        using DesignerDocumentViewModel document = new("SpanMove.axaml");
+        document.DesignSurface.SnapToGrid = false;
+        document.DesignSurface.SnapLinesEnabled = false;
+        await document.SyncEngine.LoadAsync(xaml);
+        MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
+        MutableAstObjectNode wide = root.Children.OfType<MutableAstObjectNode>().Single();
+        DesignerHostSnapshot tree = new(Guid.NewGuid(), 160, 100, new[]
+        {
+            new DesignerHostNode(root.Id, 1, null, "Grid", null, 0, 0, 160, 100, true,
+                Layout: new() { Kind = "Grid", Width = 160, Height = 100,
+                    RowHeights = new[] { 30d, 30d, 30d }, ColumnWidths = new[] { 50d, 50d, 50d }, RowSpacing = 5, ColumnSpacing = 5 }),
+            new DesignerHostNode(wide.Id, 2, 1, "Button", "Wide", 0, 0, 105, 30, true,
+                Layout: new() { Width = 105, Height = 30, GridColumnSpan = 2 })
+        });
+        PreviewerGeometryEditor editor = new(document, tree);
+        DesignItem[] selection = { new(wide) { HostInstanceId = 2 } };
+        // The pointer lies in the last column; a control spanning two columns can start only in the middle one.
+        Avalonia.Point pointer = new(140, 45);
+
+        PreviewerMovePreview preview = editor.PreviewMove(selection, 2, new Avalonia.Vector(130, 40), pointer);
+        editor.MovePointer(selection, 2, new Avalonia.Vector(130, 40), pointer);
+
+        Assert.Equal(new Avalonia.Rect(55, 35, 105, 30), preview.DropIndicator!.Value.Bounds);
+        Assert.Equal("1", wide.GetPropertyValue("Grid.Column"));
+        Assert.Equal("1", wide.GetPropertyValue("Grid.Row"));
+    }
+
     [AvaloniaTheory]
     [InlineData("Canvas", 1, 0, 0, 1)]
     [InlineData("Grid", 1, 0, 0, 1)]

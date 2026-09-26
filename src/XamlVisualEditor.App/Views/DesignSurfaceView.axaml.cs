@@ -2195,9 +2195,14 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        // Like the external previewer: the cell under the pointer, with the spans kept inside the grid.
         Point inGrid = TranslateFromCanvas(grid, currentPoint);
-        int row = LayoutDropGeometry.TrackIndex(grid.RowDefinitions.Select(definition => definition.ActualHeight).ToArray(), grid.RowSpacing, inGrid.Y);
-        int column = LayoutDropGeometry.TrackIndex(grid.ColumnDefinitions.Select(definition => definition.ActualWidth).ToArray(), grid.ColumnSpacing, inGrid.X);
+        int row = LayoutDropGeometry.SpanStart(
+            LayoutDropGeometry.TrackIndex(grid.RowDefinitions.Select(definition => definition.ActualHeight).ToArray(), grid.RowSpacing, inGrid.Y),
+            grid.RowDefinitions.Count, Grid.GetRowSpan(state.Item.VisualElement));
+        int column = LayoutDropGeometry.SpanStart(
+            LayoutDropGeometry.TrackIndex(grid.ColumnDefinitions.Select(definition => definition.ActualWidth).ToArray(), grid.ColumnSpacing, inGrid.X),
+            grid.ColumnDefinitions.Count, Grid.GetColumnSpan(state.Item.VisualElement));
 
         SetAttachedInt(state.Item, "Grid.Row", row);
         SetAttachedInt(state.Item, "Grid.Column", column);

@@ -66,6 +66,8 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- Fixed the drop preview of a control moved in a Grid of the external previewer showing one cell under the pointer while the drop placed a control with a row or column span elsewhere: preview and drop both keep the spans inside the grid, and the preview marks all spanned cells. The design surface keeps spans inside the grid in the same way.
+- Fixed the File Explorer freezing the window on folders with thousands of entries; a loaded folder level is added to the tree in one step.
 - Fixed the Solution Explorer search missing files in collapsed folders: the search matches any part of a name, ignoring case, and opens the folders above every match while the tree keeps its structure; clearing the search restores the folders that were open before.
 - Fixed the Solution Explorer missing the XAML files of an SDK-style project that lists other items, such as a `None Update` of a text file: the default XAML files of the project folder are always part of the tree unless `EnableDefaultItems` or `EnableDefaultAvaloniaItems` is false, and `AvaloniaXaml Remove` patterns still exclude files. The tree search and "Open in Solution Explorer" find these files now.
 - Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.

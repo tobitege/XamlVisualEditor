@@ -12,6 +12,7 @@ internal static class TestTempDirectory
 {
     // Folders of test processes that were killed stay behind; they are removed by a later run.
     private static readonly TimeSpan StaleAge = TimeSpan.FromHours(12);
+    private const string RootVariable = "XVE_TEST_TEMP_ROOT";
 
     /// <summary>Gets the temporary folder of this test process.</summary>
     public static string Root { get; private set; } = string.Empty;
@@ -19,6 +20,14 @@ internal static class TestTempDirectory
     /// <summary>Redirects the temporary folder of this process; call once per process before any test runs.</summary>
     public static void Initialize()
     {
+        // Another load of a test assembly and the processes that tests start keep the folder of the first
+        // initialization instead of nesting a new one inside it.
+        if (Environment.GetEnvironmentVariable(RootVariable) is { Length: > 0 } inherited && Directory.Exists(inherited))
+        {
+            Root = inherited;
+            return;
+        }
+
         string parent = Path.Combine(Path.GetTempPath(), "xve-tests");
         RemoveStaleRuns(parent);
         Root = Path.Combine(parent, "run-" + Guid.NewGuid().ToString("N"));
@@ -27,6 +36,7 @@ internal static class TestTempDirectory
         Environment.SetEnvironmentVariable("TMP", rootWithSeparator);
         Environment.SetEnvironmentVariable("TEMP", rootWithSeparator);
         Environment.SetEnvironmentVariable("TMPDIR", rootWithSeparator);
+        Environment.SetEnvironmentVariable(RootVariable, Root);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => TryDelete(Root);
     }
 

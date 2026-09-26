@@ -22,6 +22,10 @@ public static class LocalizedResources
         resources["DocumentTabStripItemCloseTabsBelowString"] = UiStrings.DockCloseTabsBelow;
         resources["DocumentTabStripItemNewHorizontalDockString"] = UiStrings.DockNewHorizontal;
         resources["DocumentTabStripItemNewVerticalDockString"] = UiStrings.DockNewVertical;
+        resources["DocumentTabRevealInFileExplorerString"] = UiStrings.DockRevealInFileExplorer;
+        resources["DocumentTabRevealInSolutionExplorerString"] = UiStrings.DockRevealInSolutionExplorer;
+        resources["DocumentTabCopyPathString"] = UiStrings.DockCopyPath;
+        resources["DocumentTabCopyFileNameString"] = UiStrings.DockCopyFileName;
         resources["DocumentTabStripItemTabLayoutString"] = UiStrings.DockTabLayout;
         resources["DocumentTabStripItemTabLayoutLeftString"] = UiStrings.DockTabsLeft;
         resources["DocumentTabStripItemTabLayoutTopString"] = UiStrings.DockTabsTop;

@@ -41,6 +41,29 @@
                  text of the row becomes unreadable, so a selected row keeps its color while hovered. -->
             <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">0.6</x:Double>
             <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">0.6</x:Double>
+            <!-- File commands that DocumentTabContextMenus moves into the document context menus of Dock; every lookup
+                 creates new items, because a control can belong to one menu only. The items inherit the dockable of
+                 the tab as data context; the converters read its file commands, since the menus also exist without a
+                 tab and a dockable can show no file. -->
+            <ContextMenu x:Key="DocumentFileMenuItems" x:Shared="False">
+                <Separator IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabRevealInFileExplorerString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=RevealInFileExplorerCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabRevealInSolutionExplorerString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=RevealInSolutionExplorerCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabCopyPathString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=CopyPathCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabCopyFileNameString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=CopyFileNameCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+            </ContextMenu>
         </ResourceDictionary>
     </Styles.Resources>
     <Style Selector="Window">

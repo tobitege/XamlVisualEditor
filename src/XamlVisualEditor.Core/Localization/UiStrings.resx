@@ -1176,6 +1176,12 @@
   <data name="DockCloseTabsBelow" xml:space="preserve"><value>_Close all tabs below</value></data>
   <data name="DockNewHorizontal" xml:space="preserve"><value>New Horizontal Document Dock</value></data>
   <data name="DockNewVertical" xml:space="preserve"><value>New Vertical Document Dock</value></data>
+  <data name="DockRevealInFileExplorer" xml:space="preserve"><value>Open in File Explorer</value></data>
+  <data name="DockRevealInSolutionExplorer" xml:space="preserve"><value>Open in Solution Explorer</value></data>
+  <data name="DockCopyPath" xml:space="preserve"><value>Copy Path</value></data>
+  <data name="DockCopyFileName" xml:space="preserve"><value>Copy File Name</value></data>
+  <data name="FileNotInFileExplorer" xml:space="preserve"><value>{0} is not part of the File Explorer.</value></data>
+  <data name="FileNotInSolutionExplorer" xml:space="preserve"><value>{0} is not part of the Solution Explorer.</value></data>
   <data name="DockTabLayout" xml:space="preserve"><value>Tab Layout</value></data>
   <data name="DockTabsLeft" xml:space="preserve"><value>_Place Tabs on the Left</value></data>
   <data name="DockTabsTop" xml:space="preserve"><value>_Place Tabs on the Top</value></data>

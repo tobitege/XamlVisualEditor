@@ -73,6 +73,16 @@ public interface IExtensionTreeItemOperationsProvider
     Task CreateFolderAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Marks a tree item that stands for a file or folder; the host uses the path to reveal a file in the tree, expanding
+/// the folders that contain it.
+/// </summary>
+public interface IExtensionTreeItemPathProvider
+{
+    /// <summary>Gets the full path of the file or folder.</summary>
+    string FullPath { get; }
+}
+
 /// <summary>Provides a hint about child availability for a tree item.</summary>
 public interface IExtensionTreeItemChildrenProvider
 {

@@ -2359,6 +2359,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     public SolutionExplorerViewModel SolutionExplorer { get; }
 
+    /// <summary>Gets the commands of the context menu of a file document tab.</summary>
+    public DocumentTabCommands DocumentTabCommands { get; }
+
     /// <summary>
     /// Gets the workspace projects.
     /// </summary>
@@ -3034,6 +3037,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         InitializeThemePackages(extensionManager);
         SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
         SolutionExplorer.SetFoldersBeforeFiles(_editorOptions.Current.FoldersBeforeFiles);
+        DocumentTabCommands = new DocumentTabCommands(RevealInFileExplorerAsync, RevealInSolutionExplorer,
+            text => RunClipboardEditAsync(() => WriteClipboardAsync(text)));
 
         if (_extensionContributions is not null)
         {
@@ -3817,6 +3822,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             SetPersistentStatus(exception.Message);
             _logger.LogWarning(exception, "Designer edit failed");
         }
+    }
+
+    private async Task RevealInFileExplorerAsync(string filePath)
+    {
+        const string fileExplorerViewId = "fileExplorer.panel";
+        ActivateExtensionView(fileExplorerViewId);
+        ExtensionTreeViewModel? fileExplorer = ExtensionViews.OfType<ExtensionTreeViewModel>()
+            .FirstOrDefault(view => view.ViewId == fileExplorerViewId);
+        if (fileExplorer is null || !await fileExplorer.RevealPathAsync(filePath, CancellationToken.None))
+            SetPersistentStatus(string.Format(UiStrings.FileNotInFileExplorer, System.IO.Path.GetFileName(filePath)));
+    }
+
+    private void RevealInSolutionExplorer(string filePath)
+    {
+        ActivateExtensionView("solutionExplorer.panel");
+        if (!SolutionExplorer.RevealFile(filePath))
+            SetPersistentStatus(string.Format(UiStrings.FileNotInSolutionExplorer, System.IO.Path.GetFileName(filePath)));
     }
 
     private async Task RunClipboardEditAsync(Func<Task> action)
@@ -7111,6 +7133,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             TextDocumentViewModel text => DockFactory.AddTextDocument(DockLayout, text),
             _ => null
         };
+        if (dockDoc is DesignerDocument designerDock) designerDock.TabCommands = DocumentTabCommands;
+        else if (dockDoc is TextDocument textDock) textDock.TabCommands = DocumentTabCommands;
 
         if (dockDoc is not null)
         {
@@ -9965,7 +9989,8 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             IsLeafSelector = item => ((SolutionExplorerNodeViewModel)item).Children.Count == 0,
             IsExpandedSelector = item => ((SolutionExplorerNodeViewModel)item).IsExpanded,
             IsExpandedSetter = (item, value) => ((SolutionExplorerNodeViewModel)item).IsExpanded = value,
-            VirtualizeChildren = true
+            VirtualizeChildren = true,
+            AllowExpandToItemSearch = true
         };
 
         Model = new HierarchicalModel(options);
@@ -10063,6 +10088,24 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             .FirstOrDefault(project => project is not null &&
                                        FileSystemPathComparison.Equals(project.ProjectPath, projectPath));
         SetStartupProject(match);
+    }
+
+    /// <summary>
+    /// Expands the tree down to the node of a file and selects it; returns false when no node shows the file, for
+    /// example because it lies outside the workspace or the filter hides it.
+    /// </summary>
+    public bool RevealFile(string filePath)
+    {
+        SolutionExplorerNodeViewModel? match = RootItems.SelectMany(EnumerateNodes)
+            .FirstOrDefault(node => node.Kind is SolutionExplorerNodeKind.File or SolutionExplorerNodeKind.XamlFile
+                && node.FullPath is not null && FileSystemPathComparison.Equals(node.FullPath, filePath));
+        if (match is null || !Model.TryExpandToItem(match, out HierarchicalNode? row) || row is null)
+        {
+            return false;
+        }
+
+        SelectedRow = row;
+        return true;
     }
 
     private static IEnumerable<SolutionExplorerNodeViewModel> EnumerateNodes(SolutionExplorerNodeViewModel root)

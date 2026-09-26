@@ -7,6 +7,7 @@ uses Semantic Versioning.
 
 ### Added
 
+- The context menu of a file document tab offers "Open in File Explorer", "Open in Solution Explorer", "Copy Path" and "Copy File Name", in the tabbed and the MDI layout. The two "Open in" commands show the File Explorer or Solution Explorer panel, expand its tree to the file and select it; the status bar tells when the file is not part of the tree. Extension trees take part through `IExtensionTreeItemPathProvider`, which the File Explorer entries implement.
 - Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
 - Added the option to reopen the last workspace or folder at startup.
 - Added the option to list folders before files in the Solution Explorer; it is on by default.
@@ -61,6 +62,7 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- Fixed the Solution Explorer missing the XAML files of an SDK-style project that lists other items, such as a `None Update` of a text file: the default XAML files of the project folder are always part of the tree unless `EnableDefaultItems` or `EnableDefaultAvaloniaItems` is false, and `AvaloniaXaml Remove` patterns still exclude files. The tree search and "Open in Solution Explorer" find these files now.
 - Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.
 - Fixed `IEditorServices.OpenLocationAsync` failing with "Call from invalid thread" when the file was not open yet: after opening the document, the caret and selection are set on the UI thread.
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.

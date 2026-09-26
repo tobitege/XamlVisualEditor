@@ -842,7 +842,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return trimmed;
     }
 
-    private IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
+    internal IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
     {
         if (string.IsNullOrWhiteSpace(projectPath) || !System.IO.File.Exists(projectPath))
         {
@@ -889,16 +889,41 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             }
         }
 
-        if (results.Count == 0)
+        // An SDK-style project includes its XAML files by default glob, whatever other items it lists; explicit items
+        // such as a None update of a text file must not hide them.
+        if (results.Count == 0 || UsesDefaultXamlItems(doc))
         {
+            string[] removed = doc.Descendants()
+                .Where(e => string.Equals(e.Name.LocalName, "AvaloniaXaml", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(e.Name.LocalName, "Page", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(e => SplitPatterns(e.Attribute("Remove")?.Value))
+                .ToArray();
             foreach (string file in EnumerateProjectXamlFiles(projectDir))
             {
                 string rel = System.IO.Path.GetRelativePath(projectDir, file);
+                if (removed.Any(pattern => GlobMatch(rel.Replace('\\', '/'), pattern)))
+                {
+                    continue;
+                }
+
                 results.Add(new XamlFileModel { FilePath = file, RelativePath = rel });
             }
         }
 
         return results;
+    }
+
+    // SDK-style projects glob their items unless EnableDefaultItems or the Avalonia switch EnableDefaultAvaloniaItems
+    // turns that off.
+    internal static bool UsesDefaultXamlItems(XDocument project)
+    {
+        XElement? root = project.Root;
+        bool sdkStyle = root?.Attribute("Sdk") is not null
+            || root?.Elements().Any(e => string.Equals(e.Name.LocalName, "Sdk", StringComparison.OrdinalIgnoreCase)) == true;
+        return sdkStyle && !project.Descendants().Any(e =>
+            (string.Equals(e.Name.LocalName, "EnableDefaultItems", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(e.Name.LocalName, "EnableDefaultAvaloniaItems", StringComparison.OrdinalIgnoreCase))
+            && string.Equals(e.Value.Trim(), "false", StringComparison.OrdinalIgnoreCase));
     }
 
     private IEnumerable<string> EnumerateProjectXamlFiles(string projectDir)

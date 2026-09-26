@@ -1176,6 +1176,12 @@
   <data name="DockCloseTabsBelow" xml:space="preserve"><value>Alle Tabs _unterhalb schließen</value></data>
   <data name="DockNewHorizontal" xml:space="preserve"><value>Neuer horizontaler Dokumentbereich</value></data>
   <data name="DockNewVertical" xml:space="preserve"><value>Neuer vertikaler Dokumentbereich</value></data>
+  <data name="DockRevealInFileExplorer" xml:space="preserve"><value>Im Datei-Explorer öffnen</value></data>
+  <data name="DockRevealInSolutionExplorer" xml:space="preserve"><value>Im Solution-Explorer öffnen</value></data>
+  <data name="DockCopyPath" xml:space="preserve"><value>Pfad kopieren</value></data>
+  <data name="DockCopyFileName" xml:space="preserve"><value>Dateiname kopieren</value></data>
+  <data name="FileNotInFileExplorer" xml:space="preserve"><value>{0} ist nicht im Datei-Explorer enthalten.</value></data>
+  <data name="FileNotInSolutionExplorer" xml:space="preserve"><value>{0} ist nicht im Solution-Explorer enthalten.</value></data>
   <data name="DockTabLayout" xml:space="preserve"><value>Tab-Anordnung</value></data>
   <data name="DockTabsLeft" xml:space="preserve"><value>Tabs _links anordnen</value></data>
   <data name="DockTabsTop" xml:space="preserve"><value>Tabs _oben anordnen</value></data>

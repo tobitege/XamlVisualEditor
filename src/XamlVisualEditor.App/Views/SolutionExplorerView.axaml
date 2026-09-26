@@ -24,6 +24,7 @@
                 HierarchicalModel="{CompiledBinding Model}"
                 HierarchicalRowsEnabled="True"
                 SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                AutoScrollToSelectedItem="True"
                 SortingModel="{CompiledBinding SortingModel}"
                 FilteringModel="{CompiledBinding FilteringModel}"
                 SearchModel="{CompiledBinding SearchModel}"

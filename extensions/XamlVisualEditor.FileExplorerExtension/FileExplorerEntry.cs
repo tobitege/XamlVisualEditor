@@ -7,7 +7,8 @@ using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.FileExplorerExtension;
 
-public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IExtensionTreeItemChildrenProvider, IExtensionTreeItemWorkspaceProvider
+public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IExtensionTreeItemChildrenProvider, IExtensionTreeItemWorkspaceProvider,
+    IExtensionTreeItemPathProvider
 {
     private readonly IEditorServices _editor;
     private readonly IWindow _window;

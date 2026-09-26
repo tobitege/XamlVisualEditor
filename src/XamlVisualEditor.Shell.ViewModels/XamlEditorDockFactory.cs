@@ -220,11 +220,17 @@ public sealed partial class ExtensionTool : Tool
     }
 }
 
-/// <summary>A dock document that shows a file; the document tab shows its full path as tooltip.</summary>
+/// <summary>
+/// A dock document that shows a file; the document tab shows its full path as tooltip and offers the file commands
+/// in its context menu.
+/// </summary>
 public interface IFileDockable
 {
     /// <summary>Gets the full path of the shown file.</summary>
     string FilePath { get; }
+
+    /// <summary>Gets the commands of the tab context menu, or null when the tab offers none.</summary>
+    DocumentTabCommands? TabCommands { get; }
 }
 
 /// <summary>
@@ -238,6 +244,10 @@ public sealed partial class DesignerDocument : Document, IFileDockable
     /// <inheritdoc />
     [IgnoreDataMember]
     public string FilePath => DocumentViewModel.FilePath;
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public DocumentTabCommands? TabCommands { get; set; }
 
     public DesignerDocument(DesignerDocumentViewModel documentViewModel)
     {
@@ -259,6 +269,10 @@ public sealed partial class TextDocument : Document, IFileDockable
     /// <inheritdoc />
     [IgnoreDataMember]
     public string FilePath => DocumentViewModel.FilePath;
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public DocumentTabCommands? TabCommands { get; set; }
 
     public TextDocument(TextDocumentViewModel documentViewModel)
     {

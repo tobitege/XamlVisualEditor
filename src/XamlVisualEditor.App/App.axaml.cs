@@ -78,6 +78,7 @@ public sealed class App : Application
         System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
         AvaloniaXamlLoader.Load(this);
         LocalizedResources.Apply(this);
+        Views.DocumentTabContextMenus.Extend(this);
         DialogAppearance.Initialize();
     }
 

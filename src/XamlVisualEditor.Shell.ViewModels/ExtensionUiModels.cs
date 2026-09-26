@@ -16,6 +16,7 @@ using Avalonia.Controls.DataGridSearching;
 using Avalonia.Controls.DataGridSorting;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -552,7 +553,8 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
             IsLeafSelector = item => item is ExtensionTreeNodeViewModel node && !node.HasChildren,
             IsExpandedSelector = item => ((ExtensionTreeNodeViewModel)item).IsExpanded,
             IsExpandedSetter = (item, value) => SetExpanded(item, value),
-            VirtualizeChildren = true
+            VirtualizeChildren = true,
+            AllowExpandToItemSearch = true
         };
 
         Model = new HierarchicalModel(options);
@@ -680,6 +682,41 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
     public async Task ReloadAsync(CancellationToken cancellationToken)
     {
         await LoadAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Expands the folders down to the item of a file and selects it; items take part through
+    /// <see cref="IExtensionTreeItemPathProvider"/>. Returns false when no item stands for the file.
+    /// </summary>
+    public async Task<bool> RevealPathAsync(string filePath, CancellationToken cancellationToken)
+    {
+        if (RootItems.Count == 0)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        IReadOnlyList<ExtensionTreeNodeViewModel> level = RootItems.ToArray();
+        while (level.FirstOrDefault(node => node.Element is IExtensionTreeItemPathProvider item
+                   && FileSystemPathComparison.IsSameOrDescendant(filePath, item.FullPath)) is { } next)
+        {
+            if (FileSystemPathComparison.Equals(((IExtensionTreeItemPathProvider)next.Element).FullPath, filePath))
+            {
+                Model.Refresh();
+                if (!Model.TryExpandToItem(next, out HierarchicalNode? row) || row is null)
+                {
+                    return false;
+                }
+
+                SelectedRow = row;
+                return true;
+            }
+
+            next.IsExpanded = true;
+            await next.EnsureChildrenAsync(cancellationToken);
+            level = next.Children.ToArray();
+        }
+
+        return false;
     }
 
     public void Dispose()

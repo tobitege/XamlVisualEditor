@@ -12,7 +12,7 @@ public sealed record OptionChoice<T>(T Value, string Label)
     public override string ToString() => Label;
 }
 
-/// <summary>Bearbeitet Optionen mit sofortiger Theme-Vorschau; nur Speichern übernimmt die Änderungen dauerhaft.</summary>
+/// <summary>Edits options with an immediate theme preview; only saving makes the changes permanent.</summary>
 public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
 {
     private readonly EditorOptionsStore _store;

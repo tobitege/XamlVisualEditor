@@ -35,7 +35,7 @@ public sealed class EditorThemeTests
     [InlineData("save")]
     public async Task OptionsPreviewFloweryImmediatelyAndOnlySaveKeepsChanges(string completion)
     {
-        // Fenster-Commands benötigen den UI-Scheduler; die übrigen Unit-Tests verwenden Inline-Scheduling.
+        // Window commands need the UI scheduler; the other unit tests use inline scheduling.
         System.Reactive.Concurrency.IScheduler previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
         using IDisposable scheduler = System.Reactive.Disposables.Disposable.Create(() => ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler);
         ReactiveUI.RxSchedulers.MainThreadScheduler = ReactiveUI.Avalonia.AvaloniaScheduler.Instance;

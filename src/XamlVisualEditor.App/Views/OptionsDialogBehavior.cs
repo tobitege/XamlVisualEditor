@@ -7,7 +7,7 @@ using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Öffnet die Optionen und die zugehörige Auswahl einer Shell-Datei.</summary>
+/// <summary>Opens the options and the related selection of a shell file.</summary>
 public sealed class OptionsDialogBehavior : Behavior<Window>
 {
     private IDisposable? _registration;

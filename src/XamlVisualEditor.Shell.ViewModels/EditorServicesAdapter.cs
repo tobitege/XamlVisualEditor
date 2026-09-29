@@ -127,8 +127,8 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             return await _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs);
         }
 
-        // Kein async-Lambda an die Action-Ueberladung geben (liefe als async void und kehrte
-        // beim ersten await zurueck); stattdessen die Task des VM-Aufrufs explizit abwarten.
+        // Do not pass an async lambda to the Action overload (it would run as async void and
+        // return at the first await); await the task of the view model call explicitly instead.
         Task<PreviewExportResult> inner = await Dispatcher.UIThread.InvokeAsync<Task<PreviewExportResult>>(
             () => _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs),
             DispatcherPriority.Background);

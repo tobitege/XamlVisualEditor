@@ -9,7 +9,7 @@ public static class DesignerThemePackageContributions
     public static IReadOnlyList<DesignerThemeProviderRegistration> Read(ExtensionPackageInfo package)
         => Read(package, "designerThemes");
 
-    /// <summary>Liest die getrennte Editor-Registrierung mit denselben Paketpfad-Prüfungen.</summary>
+    /// <summary>Reads the separate editor registration with the same package path checks.</summary>
     public static IReadOnlyList<EditorThemeProviderRegistration> ReadEditor(ExtensionPackageInfo package)
         => Read(package, "editorThemes").Select(provider => new EditorThemeProviderRegistration(
             provider.Id, provider.Name, provider.AssemblyPath, provider.TypeName)).ToArray();

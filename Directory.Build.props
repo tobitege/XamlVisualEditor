@@ -34,7 +34,7 @@
     <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
 
-  <!-- Desktop-Ausgaben für die Entwicklungsumgebung: ausschließlich Windows x64. -->
+  <!-- Desktop outputs for the development environment: Windows x64 only. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'XamlVisualEditor.App' Or '$(MSBuildProjectName)' == 'XamlVisualEditor.Designer.PreviewerHost'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PlatformTarget>x64</PlatformTarget>

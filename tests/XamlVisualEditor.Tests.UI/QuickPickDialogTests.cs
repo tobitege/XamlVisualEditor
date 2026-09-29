@@ -48,7 +48,7 @@ public sealed class QuickPickDialogTests
             dialog.MouseDown(center, MouseButton.Left);
             dialog.MouseUp(center, MouseButton.Left);
             dialog.MouseDown(center, MouseButton.Left);
-            // Der zweite Klick schließt den Dialog bereits beim Drücken.
+            // The second click closes the dialog on the press already.
             if (dialog.PlatformImpl is not null)
             {
                 dialog.MouseUp(center, MouseButton.Left);

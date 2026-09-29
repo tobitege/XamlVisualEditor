@@ -87,7 +87,7 @@ public sealed class RuntimeDesignRenderer
         return new RuntimeDesignRenderResult(root, baseUri, sourceTypes, recovery.Diagnostics.ToArray(), document, xaml);
     }
 
-    /// <summary>Aktualisiert reine Layout-Änderungen im bestehenden Baum; andere Änderungen erfordern Render.</summary>
+    /// <summary>Updates pure layout changes in the existing tree; other changes require Render.</summary>
     public bool TryUpdateLayout(RuntimeDesignRenderResult rendered, MutableAstDocument document, Control? surfaceRoot = null)
     {
         Dispatcher.UIThread.VerifyAccess();
@@ -102,7 +102,7 @@ public sealed class RuntimeDesignRenderer
         }
         catch
         {
-            // Ein nicht übernehmbarer Wert läuft durch den vollständigen Renderer samt Fehleranzeige.
+            // A value that cannot be applied goes through the full renderer, including its error display.
             return false;
         }
     }

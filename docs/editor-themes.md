@@ -1,19 +1,19 @@
-# Editor-Themes aus Extensions
+# Editor Themes from Extensions
 
-Unter **Werkzeuge > Optionen > XVE-Theme** stehen die aktivierten Editor-Theme-Provider
-und ihre Themes zur Auswahl. Ein Wechsel wird sofort auf der XVE-Oberfläche angezeigt.
-**Speichern** übernimmt die Auswahl dauerhaft und stellt sie beim nächsten Start wieder her.
-**Abbrechen**, **ESC** und das Schließen des Dialogs stellen das zuvor aktive Theme wieder her.
-Die Auswahl für Designer und Vorschau wird getrennt gespeichert und bleibt unverändert.
+**Tools > Options > XVE theme** lists the enabled editor theme providers and their
+themes. A change shows on the XVE interface immediately. **Save** keeps the selection
+and restores it at the next start. **Cancel**, **ESC** and closing the dialog restore the
+previously active theme. The selection for the designer and the preview is stored
+separately and stays unchanged.
 
-**XVE-Standard** bietet System, Hell und Dunkel. Ist eine gewählte Extension nicht
-mehr verfügbar oder liefert sie eine ungültige Palette, verwendet XVE das dunkle
-Standard-Theme und zeigt den Fehler an. Die gespeicherte Provider-Auswahl bleibt
-erhalten, sodass erneutes Aktivieren der Extension sie wiederherstellt.
+**XVE default** offers System, Light and Dark. When a selected extension is no longer
+available or returns an invalid palette, XVE uses the dark default theme and shows the
+error. The stored provider selection is kept, so enabling the extension again restores
+it.
 
-## Registrierung
+## Registration
 
-Eine Extension kann Editor-Themes, Vorschau-Themes oder beides bereitstellen:
+An extension can provide editor themes, preview themes or both:
 
 ```json
 {
@@ -33,34 +33,34 @@ Eine Extension kann Editor-Themes, Vorschau-Themes oder beides bereitstellen:
 }
 ```
 
-Der öffentliche Provider benötigt einen parameterlosen Konstruktor und implementiert
-`XamlVisualEditor.Core.IEditorThemeProvider`. `GetThemes()` liefert stabile IDs,
-Anzeigenamen und die jeweilige Hell/Dunkel-Variante. `GetPalette(themeId)` liefert
-ein `EditorThemePalette` mit gültigen ARGB-Farbwerten für sämtliche Rollen aus
-`EditorThemeColor`. Anzeigenamen dürfen sich ändern; gespeicherte IDs bleiben stabil.
+The public provider needs a parameterless constructor and implements
+`XamlVisualEditor.Core.IEditorThemeProvider`. `GetThemes()` returns stable IDs, display
+names and the light or dark variant of each theme. `GetPalette(themeId)` returns an
+`EditorThemePalette` with valid ARGB color values for every role of
+`EditorThemeColor`. Display names may change; stored IDs stay stable.
 
-Der Provider liefert Daten. Er verändert weder `Application.Current` noch globale
-Theme-Manager. XVE setzt die Farben für Fluent-Controls, Dock, DataGrid und seine
-eigene Oberfläche um. Die lokale Formularvorschau behält eigene Ressourcen und ihre
-Theme-Variante; externe Vorschauprozesse erhalten diese Editor-Palette nicht.
+The provider supplies data. It changes neither `Application.Current` nor global theme
+managers. XVE applies the colors to the Fluent controls, Dock, DataGrid and its own
+interface. The local form preview keeps its own resources and its theme variant;
+external preview processes do not receive this editor palette.
 
-Die Provider-DLL und ihre privaten Laufzeitabhängigkeiten müssen im Paket liegen.
-XVE lädt sie in einem eigenen Assembly-Kontext; Avalonia und der XVE-Core-Vertrag
-werden mit dem Host geteilt. Vor Deaktivierung, Austausch oder Deinstallation setzt
-XVE die Oberfläche zurück und gibt die Provider-Instanzen frei.
+The provider DLL and its private runtime dependencies must be part of the package.
+XVE loads them into an assembly context of their own; Avalonia and the XVE Core
+contract are shared with the host. Before disabling, replacing or uninstalling the
+extension, XVE resets the interface and releases the provider instances.
 
 ## Flowery.NET
 
-`XamlVisualEditor.FloweryThemeExtension` enthält ab Version 0.2.0 sowohl
-`editorThemes` als auch `designerThemes`. Der Editor-Provider liest die registrierten
-Flowery-Paletten über `DaisyThemeManager.GetPaletteFactory`, ohne ein globales Theme
-anzuwenden. Das Paket enthält auch die benötigte `Flowery.NET.dll`.
+From version 0.2.0 on, `XamlVisualEditor.FloweryThemeExtension` contains both
+`editorThemes` and `designerThemes`. The editor provider reads the registered Flowery
+palettes through `DaisyThemeManager.GetPaletteFactory` without applying a global theme.
+The package also contains the required `Flowery.NET.dll`.
 
-Nach dem dokumentierten Debug-Build wird das Paket mit diesem Aufruf erstellt:
+After the documented Debug build, this call creates the package:
 
 ```powershell
 dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.FloweryThemeExtension.csproj -c Debug --no-build -o artifacts/packages
 ```
 
-Das erzeugte Paket kann über die Erweiterungsverwaltung installiert und aktiviert
-werden. Beide Theme-Auswahlen verwenden dieselbe Extension und bleiben unabhängig.
+The created package can be installed and enabled through the extension manager. Both
+theme selections use the same extension and stay independent.

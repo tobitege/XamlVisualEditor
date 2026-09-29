@@ -22,7 +22,7 @@ public sealed class TypeMetadata
     /// <summary>Gets the assembly name.</summary>
     public required string AssemblyName { get; init; }
 
-    /// <summary>Version der tatsächlich gelesenen Assembly.</summary>
+    /// <summary>Version of the assembly that was actually read.</summary>
     public string? AssemblyVersion { get; init; }
 
     /// <summary>Gets whether this type derives from Control.</summary>
@@ -31,7 +31,7 @@ public sealed class TypeMetadata
     /// <summary>Gets whether this type provides a collection of Avalonia styles.</summary>
     public bool IsStyle { get; init; }
 
-    /// <summary>Gibt an, ob der Typ aus einer offiziellen Avalonia-Assembly stammt.</summary>
+    /// <summary>Gets whether the type comes from an official Avalonia assembly.</summary>
     public bool IsStandardControl { get; init; }
 
     /// <summary>Gets whether this type derives from Panel.</summary>

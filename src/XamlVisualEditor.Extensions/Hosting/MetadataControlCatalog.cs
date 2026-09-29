@@ -2,7 +2,7 @@
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
-/// <summary>Ermittelt Toolbox-Controls aus den Assemblies des aktuellen Projekts.</summary>
+/// <summary>Determines the toolbox controls from the assemblies of the current project.</summary>
 public sealed class MetadataControlCatalog : IControlCatalog, IControlCatalogUpdater
 {
     private const int MAX_CACHED_SCOPES = 16;
@@ -11,7 +11,7 @@ public sealed class MetadataControlCatalog : IControlCatalog, IControlCatalogUpd
     private readonly Dictionary<string, ControlCatalogSnapshot> _snapshots = new(StringComparer.Ordinal);
     private string[] _assemblyPaths = Array.Empty<string>();
 
-    /// <summary>Verbindet den Katalog mit der abbrechbaren Metadaten-Suche.</summary>
+    /// <summary>Connects the catalog with the cancellable metadata search.</summary>
     public MetadataControlCatalog(ControlTypeReader readTypes)
     {
         _readTypes = readTypes;
@@ -46,7 +46,7 @@ public sealed class MetadataControlCatalog : IControlCatalog, IControlCatalogUpd
         }
         return Task.Run(() =>
         {
-            // NuGet-Versionen haben eigene Pfade; Neubauten am selben Pfad erhalten einen neuen Fingerprint.
+            // NuGet versions have paths of their own; rebuilds at the same path get a new fingerprint.
             string key = includeProjectControls + "|" + string.Join("|", paths.Select(path =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

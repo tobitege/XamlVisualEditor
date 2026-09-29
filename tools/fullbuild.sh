@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut die XVE-Solution im Debug-Modus mit begrenzter Prozessorzahl.
+# Builds the XVE solution in Debug with a limited processor count.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

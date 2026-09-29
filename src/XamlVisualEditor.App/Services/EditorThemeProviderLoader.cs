@@ -5,7 +5,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.App.Services;
 
-/// <summary>Hält Provider und private Abhängigkeiten außerhalb des Assembly-Kontexts von Editor und Vorschau.</summary>
+/// <summary>Keeps providers and their private dependencies outside the assembly context of the editor and the preview.</summary>
 internal sealed class EditorThemeProviderLoader : AssemblyLoadContext, IDisposable
 {
     private readonly AssemblyDependencyResolver _resolver;

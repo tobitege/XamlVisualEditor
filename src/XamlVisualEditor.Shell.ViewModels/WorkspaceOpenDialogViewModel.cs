@@ -6,10 +6,10 @@ using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-/// <summary>Enthält die Auswahl für das Öffnen eines Projekts oder einer Solution.</summary>
+/// <summary>Holds the selection for opening a project or a solution.</summary>
 public sealed record WorkspaceOpenRequest(string FilePath);
 
-/// <summary>Erfasst Projektdatei und optionale Toolbox-Suche.</summary>
+/// <summary>Captures the project file and the optional toolbox search.</summary>
 public sealed partial class WorkspaceOpenDialogViewModel : ReactiveObject, IDisposable
 {
     [Reactive] public partial string FilePath { get; set; } = string.Empty;

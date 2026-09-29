@@ -150,7 +150,7 @@ internal sealed class WindowsPtyProcess : IPtyProcess
         _outputStream = new FileStream(_outputRead, FileAccess.Read, 4096, isAsync: false);
         _startupInfo = startupInfo;
         _processExited = new ManualResetEvent(false) { SafeWaitHandle = processHandle };
-        // ConPTY hält die Ausgabe-Pipe nach dem Prozessende offen; erst ClosePseudoConsole lässt den Leser EOF sehen.
+        // ConPTY keeps the output pipe open after the process ended; only ClosePseudoConsole lets the reader see EOF.
         _exitWait = ThreadPool.RegisterWaitForSingleObject(_processExited, OnProcessExited, null, Timeout.Infinite, executeOnlyOnce: true);
     }
 
@@ -174,7 +174,7 @@ internal sealed class WindowsPtyProcess : IPtyProcess
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _exitWait.Unregister(null);
-        // Der Leser bleibt aktiv, bis ConPTY seine letzte Ausgabe geschrieben hat.
+        // The reader stays active until ConPTY has written its last output.
         ClosePseudoConsoleOnce();
         _inputStream.Dispose();
         _outputStream.Dispose();
@@ -308,7 +308,7 @@ internal static class WindowsNative
     {
         STARTUPINFOEX info = new();
         info.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
-        // ConPTY erhält eigene Standardhandles statt umgeleiteter Editor-Ein-/Ausgabe.
+        // ConPTY gets its own standard handles instead of the redirected editor input and output.
         info.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
 
         IntPtr size = IntPtr.Zero;

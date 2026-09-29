@@ -245,7 +245,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             }
             catch (Exception) when (!IsCurrent(xamlFilePath, instance))
             {
-                // Das Schließen oder Ersetzen eines Hosts beendet ausstehende Transportaufträge.
+                // Closing or replacing a host ends pending transport requests.
             }
         }
         finally { instance.UpdateGate.Release(); }
@@ -319,7 +319,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         DisposeInstance(instance);
     }
 
-    /// <summary>Beendet den Previewer-Prozess einer Datei und entsorgt die Session.</summary>
+    /// <summary>Ends the previewer process of a file and disposes its session.</summary>
     public void StopPreviewer(string xamlFilePath, Process? expectedProcess = null)
     {
         PreviewerInstance? instance;
@@ -419,9 +419,9 @@ internal sealed class PreviewerLaunchService : IDisposable
         ProjectModel? project = ProjectSelection.FindProjectForFile(workspace, xamlFilePath);
         if (project is null)
         {
-            // Dateien ausserhalb aller Projektordner (z. B. generierte XAML in einem
-            // Scratch-Verzeichnis) gegen das geladene Workspace-Projekt rendern statt
-            // den Start zu verweigern.
+            // Render files outside all project folders (for example generated XAML in a
+            // scratch directory) against the loaded workspace project instead of refusing
+            // the start.
             project = workspace.Projects.FirstOrDefault(p =>
                 FileSystemPathComparison.Equals(p.ProjectPath, workspacePath))
                 ?? ProjectSelection.SelectPreferredProject(workspace.Projects);
@@ -669,10 +669,10 @@ internal sealed class PreviewerLaunchService : IDisposable
                 return xamlText;
             }
 
-            // Der Runtime-Compiler des Previewers muss die x:Class-Wurzel selbst instanziieren
-            // und verlangt dafuer einen parameterlosen Konstruktor; viele Formulare haben nur
-            // parametrisierte. Die Design-Kopie laedt deshalb ohne x:Class (Inhaltsbaum unter
-            // dem schlichten Wurzelelement) - fuer die Layout-Vorschau ohne Belang.
+            // The previewer's runtime compiler has to instantiate the x:Class root itself and
+            // needs a parameterless constructor for it; many forms only have parameterized
+            // ones. The design copy therefore loads without x:Class (the content tree under the
+            // plain root element), which does not matter for the layout preview.
             doc.Root.Attribute(XName.Get("Class", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Remove();
 
             foreach (XElement element in doc.Descendants())
@@ -778,8 +778,8 @@ internal readonly record struct PreviewerLaunchInfo(
     string MethodArguments,
     string? ProjectDirectory)
 {
-    // Klassenbibliotheken erzeugen keine eigene runtimeconfig.json; der Prozessstart nutzt
-    // dann die Runtime-Dateien des PreviewerHost (siehe ResolveHostRuntimeFiles).
+    // Class libraries produce no runtimeconfig.json of their own; the process start then uses
+    // the runtime files of the PreviewerHost (see ResolveHostRuntimeFiles).
     public bool HasRequiredAssets =>
         File.Exists(HostPath) &&
         File.Exists(TargetAssemblyPath) &&
@@ -800,7 +800,7 @@ internal readonly record struct PreviewerLaunchResult(bool Success, string? Erro
 public sealed record PreviewerErrorInfo(string Message, int? Line, int? Column, string? FilePath,
     IReadOnlyList<PreviewerElementPathSegment>? ElementPath = null);
 
-/// <summary>Ordnet ein Element der Vorschau seinem Element im Quelldokument zu.</summary>
+/// <summary>Maps an element of the preview to its element in the source document.</summary>
 public sealed record PreviewerElementPathSegment(string Namespace, string Name, int Index);
 
 internal sealed class PreviewerTelemetryStore

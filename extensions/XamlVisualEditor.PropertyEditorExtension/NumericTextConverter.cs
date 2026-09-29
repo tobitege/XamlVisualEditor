@@ -3,7 +3,7 @@ using Avalonia.Data.Converters;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
-/// <summary>Übersetzt Zahlentexte zwischen Anzeige- und XAML-Format und erhält ungültige Eingaben zur Validierung.</summary>
+/// <summary>Converts number texts between display and XAML format and keeps invalid input for validation.</summary>
 public sealed class NumericTextConverter : IValueConverter
 {
     /// <inheritdoc />

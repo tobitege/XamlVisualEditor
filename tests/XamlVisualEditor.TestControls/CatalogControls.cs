@@ -4,7 +4,7 @@ using Avalonia.Controls;
 
 namespace XamlVisualEditor.TestControls;
 
-// Eigenständige Bibliothek für echte Projekt-, Metadaten- und Designer-Integration.
+// Standalone library for real project, metadata and designer integration.
 [DisplayName("Library caption")]
 [Category("Library content")]
 public class CaptionControl : ContentControl

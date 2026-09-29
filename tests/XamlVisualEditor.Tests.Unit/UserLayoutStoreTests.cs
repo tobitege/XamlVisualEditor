@@ -51,8 +51,8 @@ public sealed class UserLayoutStoreTests : IDisposable
     {
         UserLayoutStore store = new(_directory);
 
-        Assert.True(store.IsValidName("Mein Layout 2"));
-        Assert.EndsWith(Path.Combine(_directory, "Mein Layout 2.json"), store.GetPath("Mein Layout 2"));
+        Assert.True(store.IsValidName("My Layout 2"));
+        Assert.EndsWith(Path.Combine(_directory, "My Layout 2.json"), store.GetPath("My Layout 2"));
     }
 
     [Fact]

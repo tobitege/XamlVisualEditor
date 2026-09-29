@@ -7,7 +7,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Hält Editor-Farben und dessen Hell/Dunkel-Auswahl aus der lokalen Formularvorschau heraus.</summary>
+/// <summary>Keeps the editor colors and the editor's light/dark choice out of the local form preview.</summary>
 public sealed class EditorThemeIsolationBehavior : Behavior<ThemeVariantScope>
 {
     public static readonly StyledProperty<IEditorThemeService?> ServiceProperty =

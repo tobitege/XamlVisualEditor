@@ -1098,7 +1098,7 @@ public sealed class PropertyRowViewModel : ReactiveObject
     }
 }
 
-/// <summary>Eine auswählbare Kategorie im Eigenschaftenfenster.</summary>
+/// <summary>A selectable category in the properties panel.</summary>
 public sealed class PropertyCategoryOption(string? value, string label)
 {
     public string? Value { get; } = value;
@@ -1247,10 +1247,10 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     public DataGridCollectionView GroupedPropertiesView { get; }
     public ReactiveCommand<Unit, Unit> CollapseAllCategoriesCommand { get; }
     public ReactiveCommand<Unit, Unit> ExpandAllCategoriesCommand { get; }
-    /// <summary>Die Kategorien des ausgewählten Controls.</summary>
+    /// <summary>The categories of the selected control.</summary>
     public ObservableCollection<PropertyCategoryOption> Categories { get; } = new();
 
-    /// <summary>Begrenzt die Eigenschaften auf eine Kategorie.</summary>
+    /// <summary>Limits the properties to one category.</summary>
     public PropertyCategoryOption? SelectedCategory
     {
         get => _selectedCategory;
@@ -1290,7 +1290,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         set => this.RaiseAndSetIfChanged(ref _showGroupedView, value);
     }
 
-    /// <summary>Legt fest, ob andere Kategorien bei einer neuen Auswahl zunächst geschlossen sind.</summary>
+    /// <summary>Determines whether other categories start collapsed for a new selection.</summary>
     public bool CollapseOtherCategoriesOnSelection
     {
         get => _collapseOtherCategoriesOnSelection;

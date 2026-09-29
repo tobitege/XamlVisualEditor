@@ -11,7 +11,7 @@ using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-/// <summary>Verwaltet die vollständige Dateihistorie, ohne die Dateien zu verändern.</summary>
+/// <summary>Manages the complete file history without changing the files.</summary>
 public sealed class RecentFilesDialogViewModel : ReactiveObject, IDisposable
 {
     private RecentFileEntry? _selectedEntry;

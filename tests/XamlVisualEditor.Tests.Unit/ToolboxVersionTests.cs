@@ -41,7 +41,7 @@ public sealed class ToolboxVersionTests
         Assert.Contains(baseline.Controls, item => item.FullName == typeof(Button).FullName && item.IsStandardControl);
         string basePath = typeof(AvaloniaObject).Assembly.Location;
         string hostControls = typeof(Control).Assembly.Location;
-        // Eine veraltete Kopie aus dem Ausgabeverzeichnis darf die aufgelöste Referenz nicht überschreiben.
+        // An outdated copy in the output directory must not override the resolved reference.
         catalog.SetWorkspaceAssemblies(new[] { oldPath, basePath, hostControls });
         ControlCatalogSnapshot old = await catalog.GetControlsAsync(CancellationToken.None, includeProjectControls: false);
         Assert.Contains(old.Controls, item => item.TypeName == "OldOnly" && item.AssemblyVersion == "11.9.0.0");

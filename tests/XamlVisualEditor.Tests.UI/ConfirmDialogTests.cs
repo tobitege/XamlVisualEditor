@@ -18,7 +18,7 @@ public sealed class ConfirmDialogTests
     [InlineData(false)]
     public async Task ConfirmReturnsTrueAndCancelReturnsFalse(bool confirm)
     {
-        ConfirmDialogViewModel viewModel = new(UiStrings.ConfirmDelete, "Layout 'X' löschen?", UiStrings.Delete);
+        ConfirmDialogViewModel viewModel = new(UiStrings.ConfirmDelete, "Delete layout 'X'?", UiStrings.Delete);
         Window owner = new();
         ConfirmDialog dialog = new() { DataContext = viewModel };
         try

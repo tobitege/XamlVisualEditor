@@ -6,7 +6,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Designer.Rendering;
 
-/// <summary>Übernimmt Layout-Werte ohne XAML-Kompilierung und ohne Austausch vorhandener Controls.</summary>
+/// <summary>Applies layout values without XAML compilation and without replacing existing controls.</summary>
 internal static class RuntimeLayoutUpdater
 {
     public static bool TryApply(IReadOnlyList<DesignerControlUpdate> updates, IReadOnlyDictionary<Control, Guid> identities)

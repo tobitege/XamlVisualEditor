@@ -8,7 +8,7 @@ public interface IControlCatalog
     /// <summary>Raised when the workspace assembly scope changes.</summary>
     event EventHandler? Changed;
 
-    /// <summary>Gibt an, ob Projekt-Assemblies zur Suche bereitstehen.</summary>
+    /// <summary>Gets whether project assemblies are available for the search.</summary>
     bool HasProjectAssemblies { get; }
 
     /// <summary>Reads a control snapshot without constructing the controls.</summary>
@@ -23,12 +23,12 @@ public interface IControlCatalogUpdater
     void SetWorkspaceAssemblies(IEnumerable<string> assemblyPaths);
 }
 
-/// <summary>Liest Control-Typen mit Fortschritt und kooperativem Abbruch.</summary>
+/// <summary>Reads control types with progress and cooperative cancellation.</summary>
 public delegate IReadOnlyList<TypeMetadata> ControlTypeReader(IReadOnlyList<string> assemblyPaths,
     Action<string> reportFailure, Action<int, int, string> reportProgress, CancellationToken cancellationToken,
     bool includeProjectControls);
 
-/// <summary>Beschreibt den Fortschritt der Assembly-Suche.</summary>
+/// <summary>Describes the progress of the assembly search.</summary>
 public sealed record ControlCatalogProgress(int CompletedAssemblies, int TotalAssemblies, string AssemblyName);
 
 /// <summary>Describes an insertable control and its actual assembly identity.</summary>
@@ -41,7 +41,7 @@ public sealed record ControlCatalogItem(
     string Category,
     bool IsStandardControl)
 {
-    /// <summary>Version der tatsächlich verwendeten Assembly.</summary>
+    /// <summary>Version of the assembly that is actually used.</summary>
     public string? AssemblyVersion { get; init; }
 }
 

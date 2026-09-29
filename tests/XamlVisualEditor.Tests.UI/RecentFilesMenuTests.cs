@@ -180,7 +180,7 @@ public sealed class RecentFilesMenuTests
             Assert.Equal(11, vm.RecentFiles.Count);
             Assert.DoesNotContain(vm.RecentFiles, entry => entry.FilePath == paths[0]);
             Assert.True(File.Exists(paths[0]));
-            // Nach dem Löschen ist der nachfolgende Eintrag ausgewählt.
+            // After the removal the next entry is selected.
             Assert.Same(vm.RecentFiles[0], dialogVm.SelectedEntry);
             Assert.Same(vm.RecentFiles[0], grid.SelectedItem);
             Button remove = dialog.FindControl<Button>("RemoveRecentEntry")!;
@@ -189,7 +189,7 @@ public sealed class RecentFilesMenuTests
             await Idle();
             Assert.Equal(10, vm.RecentFiles.Count);
             Assert.Same(vm.RecentFiles[0], dialogVm.SelectedEntry);
-            // Beim letzten Eintrag rückt der vorherige nach.
+            // For the last entry the previous one moves up.
             ClickRow(dialog, grid, vm.RecentFiles[9]);
             Assert.Same(vm.RecentFiles[9], dialogVm.SelectedEntry);
             RecentFileEntry previous = vm.RecentFiles[8];

@@ -6,7 +6,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Workspace;
 
-// Liest Typen und Vererbung aus PE-Metadaten, ohne Controls oder fremde Attribute zu instanziieren.
+// Reads types and inheritance from PE metadata without instantiating controls or foreign attributes.
 internal static class AssemblyTypeCatalog
 {
     internal readonly record struct TypeIdentity(string AssemblyName, string FullName);
@@ -37,7 +37,7 @@ internal static class AssemblyTypeCatalog
 
     private static AssemblyIdentity ReadAssemblyIdentity(MetadataReader metadata)
     {
-        if (!metadata.IsAssembly) throw new BadImageFormatException("Das Modul enthält keine Assembly-Identität.");
+        if (!metadata.IsAssembly) throw new BadImageFormatException("The module has no assembly identity.");
         AssemblyDefinition assembly = metadata.GetAssemblyDefinition();
         string name = metadata.GetString(assembly.Name);
         byte[] publicKey = metadata.GetBlobBytes(assembly.PublicKey);
@@ -74,7 +74,7 @@ internal static class AssemblyTypeCatalog
             }
             catch (BadImageFormatException)
             {
-                // Native oder für diese Metadaten-Suche ungeeignete Assemblies werden übersprungen.
+                // Native assemblies and assemblies unsuitable for this metadata search are skipped.
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {

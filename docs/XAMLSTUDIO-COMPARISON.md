@@ -1,206 +1,193 @@
-# XAMLStudio: Übernahmekandidaten und Verbesserungen für XVE
+# XAMLStudio: Adoption Candidates and Improvements for XVE
 
-Analyse vom 21.09.2026, dokumentiert am 22.09.2026.
+Analysis of 2026-09-21, documented on 2026-09-22.
 
-## Grundlage und Umfang
+## Basis and Scope
 
-Verglichen wurden das README und relevante Implementierungen aus
-[tobitege/XAMLStudio](https://github.com/tobitege/XAMLStudio) mit XamlVisualEditor.
+The README and relevant implementations of
+[tobitege/XAMLStudio](https://github.com/tobitege/XAMLStudio) were compared with XamlVisualEditor.
 
-- XAMLStudio: Branch `dev`, Commit `92267797838d8e619dd26a0b3e6af9ba7944e71c`.
-- XVE: Commit `62909f6`.
-- Die Bewertung beruht auf dem Quellcode. XAMLStudio wurde dafür weder gebaut
-  noch gestartet. Es wurden keine Funktionen portiert.
+- XAMLStudio: branch `dev`, commit `92267797838d8e619dd26a0b3e6af9ba7944e71c`.
+- XVE: commit `62909f6`.
+- The assessment is based on the source code. XAMLStudio was neither built nor
+  started for it. No features were ported.
 
-XAMLStudio ist UWP-basiert. Seine Bibliotheken sollten deshalb nicht direkt in
-XVE eingebunden werden. Die interessanten Funktionen lassen sich passend zur
-vorhandenen Avalonia-Architektur umsetzen.
+XAMLStudio is based on UWP. Its libraries should therefore not be included in XVE
+directly. The interesting features can be implemented in a way that fits the existing
+Avalonia architecture.
 
-Den größten zusätzlichen Nutzen bieten Entwurfswiederherstellung, Beispieldaten
-und Binding-Diagnostik. XVE besitzt bereits Autosave, Unterstützung für
-Design-DataContexts, Toolbox-Filter, visuelle und logische Baumansichten sowie
-Theme-Erweiterungen. Diese Funktionen sind keine pauschalen Lücken.
+Draft recovery, sample data and binding diagnostics offer the largest additional
+benefit. XVE already has autosave, support for design data contexts, toolbox filters,
+visual and logical tree views and theme extensions. These features are not general
+gaps.
 
-## Priorisierte Übernahmekandidaten
+## Prioritized Adoption Candidates
 
-| Priorität | Kandidat | Konkreter Nutzen für XVE |
+| Priority | Candidate | Concrete benefit for XVE |
 |---|---|---|
-| Hoch | Ungespeicherte Sitzungen wiederherstellen | Dokumentpuffer, Arbeitsbereiche und aktive Ansicht getrennt von den Originaldateien sichern. Nach Neustart oder Absturz können ungespeicherte Entwürfe wiederhergestellt werden. |
-| Hoch | Editor für Beispieldaten | JSON aus einem Editor oder einer Datei als Vorschau-Datenkontext verwenden. Damit lassen sich leere Listen, lange Texte, fehlende Werte und unterschiedliche Datensätze gezielt im Formular testen. HTTP-Datenquellen sind eine mögliche spätere Ergänzung. |
-| Hoch | Binding-Debugger | Binding-Pfad, Zielproperty, DataContext-Typ und Fehler mit Navigation zur AXAML-Stelle anzeigen. Diagnosedaten kommen aus dem vorhandenen Previewer-Prozess. Ein Verlauf muss begrenzt sein. |
-| Mittel | Breadcrumb-Navigation | Eine klickbare Elementhierarchie einschließlich `x:Name` und `x:Key` anzeigen, etwa `Window → Hauptbereich [Grid] → Speichern [Button]`. Dafür den vorhandenen AST und die Auswahl-Synchronisation verwenden. |
-| Mittel | Ressourcen-Vorschau | Tatsächlich aufgelöste Farben, Brushes, Styles und Ressourcen sichtbar machen. Das ergänzt den vorhandenen Ressourcen-/Struktureditor um Laufzeitinformationen. |
-| Mittel | Zustandsinspektor | Aktive Klassen und Pseudoklassen eines Avalonia-Controls und ihren Einfluss auf die Darstellung untersuchen. Dies ist das passende Gegenstück zum Visual-State-Explorer von XAMLStudio. |
-| Kleine Ergänzung | Dokumentation aus der Toolbox öffnen | Pro Controltyp einen Dokumentationslink anbieten. Bibliotheken oder Extensions können ihre eigenen Links bereitstellen. |
+| High | Restore unsaved sessions | Back up document buffers, workspaces and the active view separately from the original files. Unsaved drafts can be restored after a restart or crash. |
+| High | Sample data editor | Use JSON from an editor or a file as the preview data context. This makes it possible to test empty lists, long texts, missing values and different records in a form. HTTP data sources are a possible later addition. |
+| High | Binding debugger | Show the binding path, target property, DataContext type and errors with navigation to the AXAML location. The diagnostic data comes from the existing previewer process. A history must be bounded. |
+| Medium | Breadcrumb navigation | Show a clickable element hierarchy including `x:Name` and `x:Key`, for example `Window → MainArea [Grid] → Save [Button]`. Use the existing AST and the selection synchronization for it. |
+| Medium | Resource preview | Show the actually resolved colors, brushes, styles and resources. This adds runtime information to the existing resource and structure editor. |
+| Medium | State inspector | Examine the active classes and pseudo-classes of an Avalonia control and their effect on the rendering. This is the matching counterpart to the visual state explorer of XAMLStudio. |
+| Small addition | Open documentation from the toolbox | Offer a documentation link per control type. Libraries or extensions can provide their own links. |
 
-## 1. Entwurfs- und Sitzungswiederherstellung
+## 1. Draft and Session Recovery
 
-XAMLStudio serialisiert offene Dokumente einschließlich ihres Inhalts sowie
-Arbeitsbereiche und die aktive Ansicht. Vor einem Renderdurchlauf wird der
-Arbeitsstand ebenfalls gesichert. Beim Wiederherstellen werden die Dateizugriffe
-erneut hergestellt und die gespeicherten Dokumentobjekte wieder geöffnet.
+XAMLStudio serializes open documents including their content, as well as workspaces
+and the active view. The working state is also saved before a render pass. On
+restore, the file accesses are established again and the saved document objects are
+reopened.
 
-Quellen:
+Sources:
 
 - [SuspendAndResumeService](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Services/SuspendAndResumeService.cs)
 - [SuspensionState](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Services/SuspensionState.cs)
 - [FileBackedDocument](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Models/FileBackedDocument.cs)
 - [MainViewModel.RestoreWorkspaceAsync](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/ViewModels/MainViewModel.cs)
 
-In XVE ruft `AutoSaveAsync` den normalen `SaveCommand` auf. Das Speichern des
-Dock-Layouts nimmt die Laufzeitdokumente vor der Serialisierung aus dem Layout;
-die Dokument-ViewModels sind außerdem mit `IgnoreDataMember` markiert.
-Damit ersetzt dieser Ablauf keine Sicherung ungespeicherter Dokumentpuffer.
+In XVE, `AutoSaveAsync` calls the regular `SaveCommand`. Saving the dock layout
+removes the runtime documents from the layout before serialization; the document view
+models are also marked with `IgnoreDataMember`. This flow therefore does not replace a
+backup of unsaved document buffers.
 
-XVE-Bezug:
+XVE references:
 
 - [Autosave in ShellViewModels](../src/XamlVisualEditor.Shell.ViewModels/ShellViewModels.cs)
-- [Dokumente und Layout-Speicherung in XamlEditorDockFactory](../src/XamlVisualEditor.Shell.ViewModels/XamlEditorDockFactory.cs)
+- [Documents and layout saving in XamlEditorDockFactory](../src/XamlVisualEditor.Shell.ViewModels/XamlEditorDockFactory.cs)
 
-Empfehlung: eine eigene lokale Entwurfssicherung ergänzen. Dabei auch leere
-Dokumente und Konflikte mit zwischenzeitlich extern geänderten Dateien
-berücksichtigen. XAMLStudio lässt beim Wiederherstellen Dokumente ohne Inhalt
-aus; diese Einschränkung sollte XVE nicht übernehmen. Sicherungsdateien und
-persönliche Pfade gehören außerhalb des Repositorys.
+Recommendation: add a separate local draft backup. It should also handle empty
+documents and conflicts with files that changed externally in the meantime. XAMLStudio
+skips documents without content on restore; XVE should not adopt this limitation.
+Backup files and personal paths belong outside the repository.
 
-## 2. Editor für Beispieldaten
+## 2. Sample Data Editor
 
-XAMLStudio besitzt einen Datenquellen-Editor, lädt JSON-Dateien und kann JSON von
-einer HTTP-Quelle abrufen. Der resultierende Datenkontext wird an die Vorschau
-übergeben.
+XAMLStudio has a data source editor, loads JSON files and can fetch JSON from an HTTP
+source. The resulting data context is passed to the preview.
 
-Quellen:
+Sources:
 
 - [DataSources](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/DataSources.xaml.cs)
-- [ParseDataContext und RefreshLiveDataContext](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/ViewModels/DocumentViewModel.Methods.cs)
+- [ParseDataContext and RefreshLiveDataContext](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/ViewModels/DocumentViewModel.Methods.cs)
 
-XVE berücksichtigt bereits Design-DataContexts, unter anderem durch
+XVE already takes design data contexts into account, among others through
 `NormalizeDesignDataContext` in
 [PreviewerLaunchService](../src/XamlVisualEditor.Shell.ViewModels/PreviewerLaunchService.cs).
-Ein eigener Editor für wechselnde Beispieldatensätze wäre eine Ergänzung dieser
-Grundlage.
+A dedicated editor for changing sample records would extend this basis.
 
-Die JSON-Verarbeitung sollte XVE anders aufbauen: XAMLStudio probiert mehrere
-Deserialisierungen nacheinander und verschluckt deren Fehler. Bei uns sollten
-Parsingfehler sichtbar sein. Ein ausdrückliches Zurücksetzen, `null` und leere
-Sammlungen müssen eindeutig behandelt werden.
+XVE should build the JSON handling differently: XAMLStudio tries several
+deserializations in a row and swallows their errors. In XVE, parsing errors should be
+visible. An explicit reset, `null` and empty collections must be handled unambiguously.
 
-Für Compiled Bindings müssen die Beispieldaten zum deklarierten `x:DataType`
-passen. Ein `ExpandoObject` allein genügt dafür nicht. Typisierte
-Design-DataContexts müssen Teil des Konzepts bleiben; ein pauschaler Wechsel auf
-Reflection-Bindings passt nicht zu den XVE-Konventionen.
+For compiled bindings, the sample data must match the declared `x:DataType`. An
+`ExpandoObject` alone is not enough for that. Typed design data contexts must remain
+part of the concept; a general switch to reflection bindings does not fit the XVE
+conventions.
 
-Referenz: [Avalonia Compiled Bindings](https://docs.avaloniaui.net/docs/data-binding/compiled-bindings).
+Reference: [Avalonia Compiled Bindings](https://docs.avaloniaui.net/docs/data-binding/compiled-bindings).
 
-## 3. Binding-Diagnostik
+## 3. Binding Diagnostics
 
-XAMLStudio erfasst für Bindings die Zielproperty, Quellposition, Eingangs- und
-Converter-Ergebnisse, Fehler, Zeitpunkte und einen Verlauf. Die Oberfläche kann
-die letzten Werte und den Verlauf darstellen.
+For bindings, XAMLStudio records the target property, the source position, the input
+and converter results, errors, timestamps and a history. The interface can show the
+latest values and the history.
 
-Quellen:
+Sources:
 
 - [XamlBindingInfo](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Models/XamlBindingInfo.cs)
 - [ConversionRecord](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Models/ConversionRecord.cs)
-- [Binding-Ansicht](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/Binding.xaml)
+- [Binding view](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/Binding.xaml)
 
-Die technische Umsetzung ist kein unverändert übernehmbarer Baustein:
-XAMLStudio verändert Binding-Ausdrücke für die Vorschau und ersetzt Converter
-durch einen Wrapper. Bei Converter-Fehlern liefert der Wrapper `null`. Der
-Verlauf speichert Werte und Ergebnisse ohne Größenbegrenzung.
+The technical implementation is not a building block that can be adopted unchanged:
+XAMLStudio rewrites binding expressions for the preview and replaces converters with a
+wrapper. On converter errors, the wrapper returns `null`. The history stores values and
+results without a size limit.
 
-- [Binding-Umschreibung](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Services/XamlRenderService/XamlRenderService.ParseBinding.cs)
-- [Converter-Wrapper](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Converters/XamlBindingWrapperConverter.cs)
+- [Binding rewriting](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Services/XamlRenderService/XamlRenderService.ParseBinding.cs)
+- [Converter wrapper](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Converters/XamlBindingWrapperConverter.cs)
 
-Für XVE sollte die erste Ausbaustufe Avalonia-Bindingfehler erfassen, einem
-Control beziehungsweise einer Quellstelle zuordnen und im Editor zugänglich
-machen. Die vorhandenen Previewer-Nachrichten und Quellidentitäten bieten dafür
-Anknüpfungspunkte:
+For XVE, the first stage should capture Avalonia binding errors, map them to a control
+or a source location and make them accessible in the editor. The existing previewer
+messages and source identities offer starting points for this:
 
 - [PreviewerTcpSession](../src/XamlVisualEditor.Shell.ViewModels/PreviewerTcpSession.cs)
 - [DesignerHostSnapshot](../src/XamlVisualEditor.Shell.ViewModels/DesignerHostSnapshot.cs)
 
-Vollständige Converter-Wertverläufe benötigen eine gesonderte
-Machbarkeitsprüfung für Avalonia 12. Die Diagnose soll die Binding-Semantik
-erhalten und nur begrenzte, serialisierbare Daten zum Editor übertragen.
+Complete converter value histories need a separate feasibility check for Avalonia 12.
+The diagnostics should preserve the binding semantics and transfer only bounded,
+serializable data to the editor.
 
-Referenz: [Avalonia Binding Debugging](https://docs.avaloniaui.net/docs/data-binding/binding-debugging).
+Reference: [Avalonia Binding Debugging](https://docs.avaloniaui.net/docs/data-binding/binding-debugging).
 
-## 4. Breadcrumb-Navigation
+## 4. Breadcrumb Navigation
 
-XAMLStudio bildet aus der Cursorposition die Hierarchie der umgebenden
-XML-Elemente. `x:Name` oder `x:Key` ergänzt den Elementtyp. Ein Klick springt zur
-zugehörigen Position im Quelltext.
+XAMLStudio builds the hierarchy of the surrounding XML elements from the caret
+position. `x:Name` or `x:Key` complements the element type. A click jumps to the
+matching position in the source text.
 
-Quelle: [UpdateBreadcrumbs und BreadcrumbBar_ItemClicked](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/Document.xaml.cs).
+Source: [UpdateBreadcrumbs and BreadcrumbBar_ItemClicked](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/Document.xaml.cs).
 
-Die Bedienidee lässt sich gut übertragen. XVE sollte dabei den aktuellen AST
-und die vorhandene Auswahl-Synchronisation wiederverwenden. XAMLStudio berechnet
-die Navigation bei Cursoränderungen teilweise durch erneutes Parsen; im Code
-ist dieser Aufwand selbst als verbesserungsbedürftig markiert.
+The interaction idea transfers well. XVE should reuse the current AST and the existing
+selection synchronization for it. XAMLStudio computes the navigation on caret changes
+partly by parsing again; the code itself marks this effort as needing improvement.
 
-## 5. Ressourcen und Control-Zustände untersuchen
+## 5. Inspecting Resources and Control States
 
-Der ResourceViewer zeigt Ressourcenwerte und erzeugt Vorschauen für Styles.
-Der VisualStateWatcher beobachtet die Zustandsgruppen eines Controls und deren
-aktiven Zustand.
+The ResourceViewer shows resource values and creates previews for styles. The
+VisualStateWatcher observes the state groups of a control and their active state.
 
 - [ResourceViewer](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Controls/ResourceViewer/ResourceViewer.cs)
 - [VisualStateWatcher](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit/Helpers/VisualStateWatcher.cs)
 
-XVE besitzt bereits einen strukturellen Eigenschafteneditor und unterscheidet
-lokale Werte, Bindings, Ressourcen und Standardwerte. Ein Laufzeitinspektor
-könnte zusätzlich die tatsächlich aufgelösten Ressourcen und aktiven
-Control-Zustände zeigen.
+XVE already has a structural property editor and distinguishes local values, bindings,
+resources and default values. A runtime inspector could additionally show the actually
+resolved resources and the active control states.
 
-XVE-Bezug: [PropertyEditorPanelViewModel](../extensions/XamlVisualEditor.PropertyEditorExtension/PropertyEditorPanelViewModel.cs).
+XVE reference: [PropertyEditorPanelViewModel](../extensions/XamlVisualEditor.PropertyEditorExtension/PropertyEditorPanelViewModel.cs).
 
-UWP-VisualStateGroups lassen sich nicht direkt auf Avalonia übertragen. Für
-Avalonia ist zunächst eine Anzeige aktiver Klassen und Pseudoklassen sinnvoll.
-Ein erzwungenes Umschalten beliebiger Pseudoklassen ist gesondert zu prüfen;
-deren Schreibzugriff ist geschützt. Die reflektionsbasierte Erzeugung beliebiger
-Controls im ResourceViewer passt ebenfalls nicht unverändert zu XVE.
+UWP visual state groups do not transfer to Avalonia directly. For Avalonia, showing the
+active classes and pseudo-classes is a sensible first step. Forcing arbitrary
+pseudo-classes on needs a separate check; writing them is protected. The
+reflection-based creation of arbitrary controls in the ResourceViewer does not fit XVE
+unchanged either.
 
-Referenz: [Avalonia Classes](https://docs.avaloniaui.net/api/avalonia/controls/classes).
+Reference: [Avalonia Classes](https://docs.avaloniaui.net/api/avalonia/controls/classes).
 
-## 6. Dokumentationszugriff aus der Toolbox
+## 6. Documentation Access from the Toolbox
 
-XAMLStudio ermittelt pro Controltyp einen Dokumentationslink und öffnet ihn aus
-der Toolbox. XVE zeigt dort bisher hauptsächlich Typ, Assembly und Kategorie.
+XAMLStudio determines a documentation link per control type and opens it from the
+toolbox. XVE so far mainly shows the type, assembly and category there.
 
-- [Dokumentationsaktion in XAMLStudio](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/Toolbox.xaml.cs)
+- [Documentation action in XAMLStudio](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio/Views/Toolbox.xaml.cs)
 - [ToolboxPanelViewModel in XVE](../extensions/XamlVisualEditor.ToolboxExtension/ToolboxPanelViewModel.cs)
 
-Ein optionaler Dokumentationslink pro Bibliothek oder Extension wäre eine
-überschaubare Ergänzung. Die vorhandene Toolbox mit ihren Filtern und Favoriten
-bleibt die Grundlage.
+An optional documentation link per library or extension would be a manageable
+addition. The existing toolbox with its filters and favorites stays the basis.
 
-## Architektur und tatsächliche Codeübernahme
+## Architecture and Actual Code Adoption
 
-XVE sollte seinen vorhandenen Previewer, die Assembly-Snapshots, den AST,
-Undo/Redo und die Theme-Erweiterungen beibehalten. XAMLStudios In-Process-Renderer
-auf Basis von `XamlReader.Load` und seine Monaco-Anbindung liefern keinen
-erkennbaren Grund für einen Architekturwechsel.
+XVE should keep its existing previewer, the assembly snapshots, the AST, undo/redo and
+the theme extensions. XAMLStudio's in-process renderer based on `XamlReader.Load` and
+its Monaco integration give no apparent reason for an architecture change.
 
-Gut übertragbar sind Bedienabläufe, Diagnosemodelle und einzelne Testfälle.
-Beispielsweise enthält
+Interaction flows, diagnostic models and individual test cases transfer well. For
+example,
 [BindingParserTests](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/XamlStudio.Toolkit.UnitTests/BindingParserTests.cs)
-Fälle für Converter-Parameter, Anführungszeichen und verschachtelte Ausdrücke.
-Vor einer Übernahme ist abzugleichen, welche davon die vorhandenen XVE-Tests
-bereits abdecken.
+contains cases for converter parameters, quotes and nested expressions. Before adopting
+them, check which of them the existing XVE tests already cover.
 
-Das Repository steht unter der
-[MIT-Lizenz](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/LICENSE).
-Bei tatsächlicher Codeübernahme müssen die zugehörigen Copyright- und
-Lizenzhinweise erhalten bleiben. Drittanbieterabhängigkeiten werden dadurch
-nicht automatisch Teil von XVE.
+The repository is licensed under the
+[MIT License](https://github.com/tobitege/XAMLStudio/blob/92267797838d8e619dd26a0b3e6af9ba7944e71c/LICENSE).
+When code is actually adopted, the related copyright and license notices must be kept.
+Third-party dependencies do not automatically become part of XVE through this.
 
-## Empfohlene Reihenfolge
+## Recommended Order
 
-1. Lokale Entwurfs- und Sitzungswiederherstellung.
-2. Beispieldateneditor mit passenden typisierten Design-DataContexts.
-3. Binding-Diagnostik im vorhandenen Previewer-Prozess.
-4. Ressourcen- und Zustandsinspektion.
+1. Local draft and session recovery.
+2. Sample data editor with matching typed design data contexts.
+3. Binding diagnostics in the existing previewer process.
+4. Resource and state inspection.
 
-Breadcrumbs und Dokumentationslinks eignen sich als kleinere unabhängige
-Verbesserungen.
+Breadcrumbs and documentation links are suitable as smaller independent improvements.

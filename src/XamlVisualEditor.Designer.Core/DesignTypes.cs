@@ -395,7 +395,7 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     [Reactive]
     public partial bool IsRebuilding { get; set; }
 
-    /// <summary>Zeigt den Fortschritts-Screen nur für vollständige Neuaufbauten.</summary>
+    /// <summary>Shows the progress screen for full rebuilds only.</summary>
     [Reactive]
     public partial bool ShowRebuildProgress { get; set; }
 
@@ -451,7 +451,7 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     [Reactive]
     public partial ThemeVariant PreviewThemeVariant { get; set; } = ThemeVariant.Default;
 
-    /// <summary>Ermöglicht der View die Trennung ihrer Vorschau-Ressourcen vom Editor-Theme.</summary>
+    /// <summary>Lets the view separate its preview resources from the editor theme.</summary>
     public IEditorThemeService? EditorThemeService { get; set; }
 
     /// <summary>
@@ -705,7 +705,7 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     }
 
     /// <summary>
-    /// Aktualisiert die Designfläche; reine AST-Änderungen können vorhandene Layout-Controls weiterverwenden.
+    /// Updates the design surface; pure AST changes can reuse the existing layout controls.
     /// </summary>
     public void RequestRebuild(bool allowLayoutUpdate = false)
     {

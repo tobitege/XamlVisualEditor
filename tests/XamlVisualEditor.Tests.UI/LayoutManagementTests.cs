@@ -74,7 +74,7 @@ public sealed class LayoutManagementTests
         using IDisposable prompt = host.ViewModel.LayoutNameInteraction.RegisterHandler(interaction =>
         {
             promptedName = interaction.Input;
-            interaction.SetOutput("Mein Layout");
+            interaction.SetOutput("My Layout");
         });
 
         // Toggling hides only the frontmost tab; a covered toolbox would be brought to the front instead.
@@ -88,11 +88,11 @@ public sealed class LayoutManagementTests
         await host.FlushAsync();
 
         Assert.Equal(string.Empty, promptedName);
-        Assert.Equal("Mein Layout", host.ViewModel.CurrentLayoutName);
-        Assert.True(File.Exists(host.Store.GetPath("Mein Layout")));
+        Assert.Equal("My Layout", host.ViewModel.CurrentLayoutName);
+        Assert.True(File.Exists(host.Store.GetPath("My Layout")));
         Assert.True(host.ViewModel.HasSavedLayouts);
-        Assert.Equal("Mein Layout", Assert.Single(host.ViewModel.SavedLayoutMenuItems).Title);
-        Assert.Equal(string.Format(UiStrings.LayoutSaved, "Mein Layout"), host.ViewModel.StatusText);
+        Assert.Equal("My Layout", Assert.Single(host.ViewModel.SavedLayoutMenuItems).Title);
+        Assert.Equal(string.Format(UiStrings.LayoutSaved, "My Layout"), host.ViewModel.StatusText);
 
         await host.ViewModel.ResetLayoutCommand.Execute();
         await host.FlushAsync();
@@ -106,16 +106,16 @@ public sealed class LayoutManagementTests
 
         Assert.False(host.IsPanelVisible("toolbox.panel"));
         Assert.True(host.IsPanelVisible("propertyEditor.panel"));
-        Assert.Equal("Mein Layout", host.ViewModel.CurrentLayoutName);
-        Assert.Equal(string.Format(UiStrings.LayoutLoaded, "Mein Layout"), host.ViewModel.StatusText);
+        Assert.Equal("My Layout", host.ViewModel.CurrentLayoutName);
+        Assert.Equal(string.Format(UiStrings.LayoutLoaded, "My Layout"), host.ViewModel.StatusText);
 
-        // "Speichern" ohne Nachfrage überschreibt das aktuelle benannte Layout.
+        // "Save" overwrites the current named layout without asking.
         promptedName = "unset";
         host.ViewModel.ToggleExtensionView("propertyEditor.panel");
         await host.ViewModel.SaveLayoutCommand.Execute();
         await host.FlushAsync();
         Assert.Equal("unset", promptedName);
-        Assert.Equal("Mein Layout", host.ViewModel.CurrentLayoutName);
+        Assert.Equal("My Layout", host.ViewModel.CurrentLayoutName);
     }
 
     [AvaloniaFact]
@@ -238,7 +238,7 @@ public sealed class LayoutManagementTests
         using LayoutTestHost host = new();
         await host.FlushAsync();
         using IDisposable prompt = host.ViewModel.LayoutNameInteraction.RegisterHandler(interaction =>
-            interaction.SetOutput("Mein Layout"));
+            interaction.SetOutput("My Layout"));
         bool confirmDelete = false;
         string? confirmedName = null;
         using IDisposable confirm = host.ViewModel.ConfirmLayoutDeleteInteraction.RegisterHandler(interaction =>
@@ -258,27 +258,27 @@ public sealed class LayoutManagementTests
 
         await host.ViewModel.SaveLayoutAsCommand.Execute();
         await host.FlushAsync();
-        Assert.Equal(string.Format(UiStrings.StatusLayoutFormat, "Mein Layout"), host.ViewModel.LayoutStatusText);
-        Assert.Equal(string.Format(UiStrings.MenuLayoutDeleteNamed, "Mein Layout"), host.ViewModel.DeleteLayoutMenuHeader);
+        Assert.Equal(string.Format(UiStrings.StatusLayoutFormat, "My Layout"), host.ViewModel.LayoutStatusText);
+        Assert.Equal(string.Format(UiStrings.MenuLayoutDeleteNamed, "My Layout"), host.ViewModel.DeleteLayoutMenuHeader);
         Assert.True(await host.ViewModel.DeleteLayoutCommand.CanExecute.FirstAsync());
 
-        // Abgelehnte Bestätigung: nichts wird gelöscht.
+        // Declined confirmation: nothing is deleted.
         await host.ViewModel.DeleteLayoutCommand.Execute();
         await host.FlushAsync();
-        Assert.Equal("Mein Layout", confirmedName);
-        Assert.True(host.Store.Exists("Mein Layout"));
-        Assert.Equal("Mein Layout", host.ViewModel.CurrentLayoutName);
+        Assert.Equal("My Layout", confirmedName);
+        Assert.True(host.Store.Exists("My Layout"));
+        Assert.Equal("My Layout", host.ViewModel.CurrentLayoutName);
         Assert.Single(host.ViewModel.SavedLayoutMenuItems);
 
         confirmDelete = true;
         await host.ViewModel.DeleteLayoutCommand.Execute();
         await host.FlushAsync();
-        Assert.False(host.Store.Exists("Mein Layout"));
+        Assert.False(host.Store.Exists("My Layout"));
         Assert.Empty(host.ViewModel.SavedLayoutMenuItems);
         Assert.Null(host.ViewModel.CurrentLayoutName);
         Assert.Equal(string.Format(UiStrings.StatusLayoutFormat, UiStrings.LayoutUnnamed), host.ViewModel.LayoutStatusText);
         Assert.Equal(UiStrings.MenuLayoutDelete, host.ViewModel.DeleteLayoutMenuHeader);
-        Assert.Equal(string.Format(UiStrings.LayoutDeleted, "Mein Layout"), host.ViewModel.StatusText);
+        Assert.Equal(string.Format(UiStrings.LayoutDeleted, "My Layout"), host.ViewModel.StatusText);
         Assert.False(await host.ViewModel.DeleteLayoutCommand.CanExecute.FirstAsync());
 
         await host.ViewModel.ResetLayoutCommand.Execute();
@@ -381,13 +381,13 @@ public sealed class LayoutManagementTests
             Assert.False(statusSection.IsVisible);
 
             using IDisposable prompt = host.ViewModel.LayoutNameInteraction.RegisterHandler(interaction =>
-                interaction.SetOutput("Mein Layout"));
+                interaction.SetOutput("My Layout"));
             await host.ViewModel.SaveLayoutAsCommand.Execute();
             await host.FlushAsync();
 
             Assert.True(statusSection.IsVisible);
-            Assert.Equal(string.Format(UiStrings.StatusLayoutFormat, "Mein Layout"), window.FindControl<TextBlock>("LayoutStatusText")!.Text);
-            Assert.Equal(string.Format(UiStrings.MenuLayoutDeleteNamed, "Mein Layout"), entries[5].Header);
+            Assert.Equal(string.Format(UiStrings.StatusLayoutFormat, "My Layout"), window.FindControl<TextBlock>("LayoutStatusText")!.Text);
+            Assert.Equal(string.Format(UiStrings.MenuLayoutDeleteNamed, "My Layout"), entries[5].Header);
             Assert.True(entries[5].IsEffectivelyEnabled);
         }
         finally

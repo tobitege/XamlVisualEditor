@@ -8,7 +8,7 @@ using Avalonia.VisualTree;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Führt beim Doppelklick auf eine DataGrid-Zeile den angehängten Befehl aus.</summary>
+/// <summary>Executes the attached command on a double click on a DataGrid row.</summary>
 public sealed class DataGridDoubleClickCommandBehavior
 {
     public static readonly AttachedProperty<ICommand?> CommandProperty =

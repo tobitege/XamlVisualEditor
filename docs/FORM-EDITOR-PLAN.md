@@ -1,254 +1,254 @@
-# Ausbau zum praxistauglichen AXAML-Formulareditor
+# Toward a Practical AXAML Form Editor
 
-## Ziel
+## Goal
 
-Der visuelle Editor soll Formulare ohne ständigen Wechsel zur manuellen XAML-Bearbeitung erstellen und ändern können. Maßstab sind die Arbeitsabläufe eines vollständigen Desktop-Formulardesigners. Ein sichtbares Control oder ein exportiertes Vorschaubild allein erfüllt dieses Ziel nicht.
+The visual editor should create and change forms without constant switching to manual XAML editing. The benchmark is the workflows of a complete desktop form designer. A visible control or an exported preview image alone does not meet this goal.
 
-Canvas, Grid und StackPanel gehören von Anfang an zum gleichen Funktionsumfang. Adaptive Layouts werden nicht in absolute Koordinaten umgewandelt. Die Unterstützung muss auch für projektinterne und externe Controlbibliotheken funktionieren, ohne Bibliotheksnamen oder Sonderfälle im Editor fest einzubauen.
+Canvas, Grid and StackPanel belong to the same feature scope from the start. Adaptive layouts are not converted to absolute coordinates. The support must also work for project-internal and external control libraries without building library names or special cases into the editor.
 
-Die folgenden Abschnitte sind Anforderungen und Abnahmekriterien, keine Behauptung über bereits vorhandene Fähigkeiten.
+The following sections are requirements and acceptance criteria, not a claim about capabilities that already exist.
 
-## Verbindliche UX-Anforderungen
+## Mandatory UX Requirements
 
-- Controls direkt auswählen, auch in verschachtelten Containern. Auswahl im Designer, im Strukturbaum und im XAML-Editor synchron halten.
-- Mehrfachauswahl, Rechteckauswahl, Tastaturnavigation, Escape zum Abbrechen, Verschieben per Pfeiltaste und verständliche Kontextaktionen anbieten.
-- Controls aus einer durchsuchbaren, nach Bibliothek und Kategorie gegliederten Toolbox einfügen. Typen aus dem geladenen Projekt und dessen Referenzen automatisch anbieten.
-- Beim Einfügen den Zielcontainer, die Einfügeposition und das erwartete Ergebnis vor dem Loslassen anzeigen. Ungültige Ziele sichtbar ablehnen.
-- Verschieben, Größe ändern, Ausrichten, Verteilen, Kopieren, Einfügen, Duplizieren, Löschen und Containerwechsel als zusammenhängende Aktionen anbieten.
-- Jede abgeschlossene Benutzeraktion entspricht genau einem Undo-Schritt. Escape hinterlässt keine Teiländerung. Undo und Redo umfassen Eigenschaften, Hierarchie, Ressourcen und Namen.
-- Eigenschaften nach Typ bearbeiten, ungültige Eingaben am Feld erklären und Änderungen nicht stillschweigend verwerfen. Explizite Leerwerte, lokale Werte und auf Style oder Standard zurückgesetzte Werte unterscheiden.
-- Speichern und erneutes Öffnen müssen dieselbe Struktur, Werte und Darstellung ergeben. Unbekannte XAML-Strukturen und nicht bearbeitete Bereiche erhalten.
-- Lade-, Render- und Typfehler mit betroffener Datei, Control und Ursache anzeigen. Ein Ersatz-Control ist keine erfolgreich unterstützte Darstellung.
-- Bei großen Formularen bedienbar bleiben: Arbeit abbrechen können, UI-Thread nicht mit vollständigen Assembly-Scans blockieren und den betroffenen Teil statt des ganzen Dokuments aktualisieren.
+- Select controls directly, also in nested containers. Keep the selection in the designer, the structure tree and the XAML editor in sync.
+- Offer multi-selection, rectangle selection, keyboard navigation, Escape to cancel, moving with the arrow keys and understandable context actions.
+- Insert controls from a searchable toolbox organized by library and category. Offer the types of the loaded project and its references automatically.
+- While inserting, show the target container, the insertion position and the expected result before the drop. Reject invalid targets visibly.
+- Offer moving, resizing, aligning, distributing, copying, pasting, duplicating, deleting and changing the container as coherent actions.
+- Every completed user action corresponds to exactly one undo step. Escape leaves no partial change. Undo and redo cover properties, hierarchy, resources and names.
+- Edit properties by type, explain invalid input at the field and do not discard changes silently. Distinguish explicit empty values, local values and values reset to the style or default.
+- Saving and reopening must produce the same structure, values and rendering. Keep unknown XAML structures and regions that were not edited.
+- Show load, render and type errors with the affected file, control and cause. A placeholder control is not a successfully supported rendering.
+- Stay usable with large forms: allow canceling work, do not block the UI thread with full assembly scans and update the affected part instead of the whole document.
 
-## Layoutabhängige Bedienung
+## Layout-Dependent Interaction
 
-| Aktion | Canvas | Grid | StackPanel |
+| Action | Canvas | Grid | StackPanel |
 |---|---|---|---|
-| Einfügen | Position im Canvas, sinnvolle Ausgangsgröße | Sichtbare Zielzelle und passende Zeilen-/Spaltenzuordnung | Sichtbare Einfügelinie zwischen Geschwistern |
-| Verschieben | `Canvas.Left` und `Canvas.Top`, Raster und Hilfslinien | Zellwechsel oder bewusste Ausrichtung/Abstände | Reihenfolge ändern, keine wirkungslosen Canvas-Koordinaten |
-| Größe ändern | Explizite Größe unter Berücksichtigung von Min/Max | Größe, Alignment und Abstände; Auto- und Sternmaße erhalten | Gewünschte Größe quer zur Stapelrichtung und passende Abstände |
-| Container bearbeiten | Größe und Koordinatensystem | Zeilen, Spalten, Auto/Pixel/Stern, Spans und Splitter | Orientierung, Spacing und Reihenfolge |
-| Containerwechsel | Position sinnvoll auf neuen Parent übertragen | Row/Column/Span passend setzen | Reihenfolge passend einfügen |
+| Insert | Position in the canvas, sensible initial size | Visible target cell and matching row/column assignment | Visible insertion line between siblings |
+| Move | `Canvas.Left` and `Canvas.Top`, grid and guides | Cell change or deliberate alignment/margins | Change the order, no ineffective canvas coordinates |
+| Resize | Explicit size respecting min/max | Size, alignment and margins; keep auto and star sizes | Desired size across the stacking direction and matching margins |
+| Edit container | Size and coordinate system | Rows, columns, auto/pixel/star, spans and splitters | Orientation, spacing and order |
+| Change container | Transfer the position sensibly to the new parent | Set row/column/span appropriately | Insert at a matching position in the order |
 
-Beim Parent-Wechsel werden nicht mehr passende Layoutwerte in derselben Undo-Transaktion entfernt oder angepasst. Keine Kombination aus unsichtbaren Altwerten und neuen Platzierungsregeln hinterlassen. Border, ContentControl und vergleichbare Controls beachten ihre begrenzte Anzahl an Inhalten; bestehende Inhalte nicht ungefragt ersetzen.
+When the parent changes, layout values that no longer fit are removed or adjusted in the same undo transaction. Leave no combination of invisible old values and new placement rules. Border, ContentControl and comparable controls respect their limited number of children; do not replace existing content without asking.
 
-## Unterstützung externer Controls
+## Support for External Controls
 
-| Bereich | Erforderliches Verhalten |
+| Area | Required behavior |
 |---|---|
-| Entdeckung | Öffentliche instanziierbare Controls aus Projekt- und Paketabhängigkeiten erkennen; gleichnamige Typen nach Namespace und Assembly unterscheiden |
-| Toolbox | Tatsächlich verfügbare Typen, Suchbegriffe, Bibliothek, Kategorie und verständlicher Anzeigename; gültige XML-Namespaces beim Einfügen ergänzen |
-| Metadaten | Geerbte CLR-, Styled-, Direct- und Attached-Properties, Enum/Flags, Nullable, Events, Inhalts- und Collectioneigenschaften erfassen |
-| Darstellung | Die tatsächlichen Controls mit zugehörigen Styles, ControlThemes, Ressourcen und Templates darstellen |
-| Eigenschaften | Editor anhand von Metadaten und Werttyp wählen; keine feste Namensliste als Voraussetzung für Fremdcontrols |
-| Inhalte | Content-Eigenschaften, Tabs, Items, Header und verschachtelte Controls im Strukturbaum und visuell bearbeiten |
-| Designzeit | Für Controls mit Laufzeitabhängigkeiten einen dokumentierten allgemeinen Designzeit-Vertrag anbieten; Fehler und fehlende Voraussetzungen sichtbar lassen |
-| Persistenz | Namespaces, Bindings, Ressourcenverweise, Templates und lokale Werte beim Bearbeiten erhalten |
+| Discovery | Detect public instantiable controls from project and package dependencies; distinguish types with the same name by namespace and assembly |
+| Toolbox | Actually available types, search terms, library, category and an understandable display name; add valid XML namespaces on insert |
+| Metadata | Capture inherited CLR, styled, direct and attached properties, enum/flags, nullable, events, content and collection properties |
+| Rendering | Render the actual controls with their styles, control themes, resources and templates |
+| Properties | Choose the editor by metadata and value type; no fixed name list as a prerequisite for third-party controls |
+| Content | Edit content properties, tabs, items, headers and nested controls in the structure tree and visually |
+| Design time | Offer a documented general design-time contract for controls with runtime dependencies; keep errors and missing prerequisites visible |
+| Persistence | Keep namespaces, bindings, resource references, templates and local values while editing |
 
-Die Bibliotheksunterstützung wird mit einer separaten generischen Testbibliothek geprüft. Produktspezifische Bibliotheken dienen als zusätzlicher Integrationsnachweis außerhalb der öffentlichen Quellen und Tests. Ein bekannter Controlname darf nicht die Bedingung dafür sein, dass eine Eigenschaft oder ein Container funktioniert.
+The library support is verified with a separate generic test library. Product-specific libraries serve as additional integration evidence outside the public sources and tests. A known control name must not be the condition for a property or a container to work.
 
-Der [Designzeit-Vertrag fuer Controlbibliotheken](DESIGN-TIME-CONTROLS.md) beschreibt Vorschauwerte, Konstruktion und die Abgrenzung zum prozessweiten Designmodus.
+The [Design-Time Contract for Control Libraries](DESIGN-TIME-CONTROLS.md) describes preview values, construction and the distinction from the process-wide design mode.
 
-## Eigenschaften und Ressourcen
+## Properties and Resources
 
-Das Eigenschaftenfenster benötigt passende Editoren für Zahlen, boolesche und nullable Werte, Enum/Flags, Farben und Brushes, Thickness, CornerRadius, Point/Size/Rect und GridLength. Lokale Werte, Stylewerte und Defaults müssen erkennbar sein.
+The properties panel needs matching editors for numbers, Boolean and nullable values, enum/flags, colors and brushes, Thickness, CornerRadius, Point/Size/Rect and GridLength. Local values, style values and defaults must be recognizable.
 
-Collections und Templates brauchen strukturelle Editoren mit Hinzufügen, Entfernen, Reihenfolge und verschachtelter Bearbeitung. Ein Textfeld mit der Bezeichnung "Collection" oder "Template" ist dafür nicht ausreichend.
+Collections and templates need structural editors with adding, removing, ordering and nested editing. A text field labeled "Collection" or "Template" is not sufficient for that.
 
-Bindings, StaticResource, DynamicResource und komplexe Property-Elemente bleiben als Ausdrücke beziehungsweise Strukturen erhalten. Eine Änderung an einer benachbarten einfachen Eigenschaft darf sie nicht in Textwerte umwandeln. Das Entfernen eines lokalen Werts ist eine eigene Reset-Aktion; ein leerer String ist ein ausdrücklich gesetzter Wert.
+Bindings, StaticResource, DynamicResource and complex property elements stay expressions or structures. A change to a neighboring simple property must not turn them into text values. Removing a local value is a reset action of its own; an empty string is an explicitly set value.
 
-Eventhandler brauchen eine getrennte Semantik: Ein leeres Handlerfeld entfernt die Zuordnung. Namensänderungen und Navigation zur Handlerdefinition dürfen keine ungültigen Referenzen zurücklassen.
+Event handlers need separate semantics: an empty handler field removes the assignment. Renames and navigation to the handler definition must not leave invalid references behind.
 
-## Technische Grundlage
+## Technical Basis
 
-Das AST und der zugehörige AXAML-Text bilden gemeinsam die persistente Dokumentrepräsentation. Designer, Eigenschaftenfenster, Strukturbaum und Codeeditor müssen denselben Änderungs- und Transaktionspfad verwenden. Keine voneinander unabhängigen Wahrheiten in den einzelnen Ansichten aufbauen.
+The AST and the related AXAML text together form the persistent document representation. The designer, the properties panel, the structure tree and the code editor must use the same change and transaction path. Do not build independent truths in the individual views.
 
-Die Designansicht muss dieselben relevanten Eigenschaften, Ressourcen und Inhalte auflösen wie die maßgebliche Avalonia-Vorschau. Eine manuelle Teilmenge bekannter Standardcontrols reicht für beliebige Bibliotheken nicht aus. Vor einer Erweiterung des Renderpfads muss feststehen, wie Auswahl und AST-Zuordnung bei echten Controls und ihren Templates erhalten bleiben.
+The design view must resolve the same relevant properties, resources and content as the authoritative Avalonia preview. A manual subset of known standard controls is not enough for arbitrary libraries. Before extending the render path, it must be clear how selection and AST mapping are kept for real controls and their templates.
 
-Typentdeckung und Instanziierung trennen. Die Toolbox darf nicht zum Auflisten jedes Control konstruieren. Bereits vorhandene Metadaten und sichere Assembly-Analyse nutzen; keine unbeschränkte Reflection über sämtliche geladenen Typen einführen.
+Separate type discovery from instantiation. The toolbox must not construct every control to list it. Use existing metadata and safe assembly analysis; do not introduce unbounded reflection over all loaded types.
 
-## Belegte Ansatzpunkte im vorhandenen Code
+## Verified Starting Points in the Existing Code
 
-- `ToolboxPanelViewModel.ReloadAsync` verarbeitet den über `IControlCatalog` gelieferten Typbestand des aktiven Workspaces. Controls stehen in alphabetisch sortierten Assembly-Expandern mit Suche, Bibliotheks- und Kategoriefiltern. Explizite benutzerdefinierte Katalogeinträge können ihre Assembly angeben; nicht zugeordnete Einträge stehen getrennt unter "Custom entries".
-- `TypeMetadataService.GetAvailableTypes` liest einen Assembly-übergreifenden PE-Typkatalog einschließlich Vererbung, Konstruierbarkeit und Designzeit-Metadaten. XML-, CLR- und `using:`-Namespaces werden unterstützt. `MetadataControlCatalog` beschränkt Drittanbieter-Einträge auf die Projekt-Assemblies und wird beim Workspacewechsel aktualisiert.
-- `ControlFactory` berücksichtigt bei der Control-Erzeugung die tatsächliche Typidentität statt allein den kurzen Namen. Die einzelnen Property-/Attached-Property-Behandlungen bleiben gegen tatsächliches Avalonia-Rendering zu prüfen.
-- Die aktive Eigenschaftenansicht liegt in `XamlVisualEditor.PropertyEditorExtension`; die gleichnamige Bibliothekskomponente ist nicht alleiniger Maßstab für das Verhalten der Oberfläche.
-- Die aktive Eigenschaftenansicht öffnet strukturelle Collection- und Template-Editoren. Grid-Definitionen können mit Auto-, Pixel- und Sternmaßen bearbeitet werden; Zellzuordnungen und Spans werden beim Ändern der Definitionen gemeinsam angepasst. Die vollständige Abnahme aller Collection- und Template-Arten bleibt erforderlich.
+- `ToolboxPanelViewModel.ReloadAsync` processes the type inventory of the active workspace delivered through `IControlCatalog`. Controls sit in alphabetically sorted assembly expanders with search, library and category filters. Explicit custom catalog entries can name their assembly; entries without an assembly are listed separately under "Custom entries".
+- `TypeMetadataService.GetAvailableTypes` reads a PE type catalog across assemblies, including inheritance, constructibility and design-time metadata. XML, CLR and `using:` namespaces are supported. `MetadataControlCatalog` limits third-party entries to the project assemblies and is updated when the workspace changes.
+- `ControlFactory` uses the actual type identity instead of the short name alone when it creates controls. The individual property and attached-property handling still has to be checked against actual Avalonia rendering.
+- The active properties view lives in `XamlVisualEditor.PropertyEditorExtension`; the library component of the same name is not the only benchmark for the behavior of the interface.
+- The active properties view opens structural collection and template editors. Grid definitions can be edited with auto, pixel and star sizes; cell assignments and spans are adjusted together when the definitions change. The complete acceptance of all collection and template kinds is still required.
 
-Diese Befunde bestimmen die ersten Arbeitspakete. Sie ersetzen keine vollständige Bestandsaufnahme und keinen praktischen Bediennachweis.
+These findings determine the first work packages. They do not replace a complete inventory or a practical usability proof.
 
-`ToolboxCatalogWorkflowTests` prüft die Assembly-Gruppierung mit zwei echten externen Assemblies: gebundene Gruppen, alphabetische Sortierung, Suche, Auswahl, die Erzeugung eines gleichnamigen Fremdcontrols, Platzfreigabe und Zustandserhalt beim Einklappen sowie das Entfernen von Einträgen nach einem Scopewechsel. `ToolboxExtensionTests` prüft zusätzlich die Gruppierung benutzerdefinierter Katalogeinträge mit unveränderten Einfügeargumenten. Diese Headless- und Integrationstests ersetzen keine Desktop-Abnahme der folgenden Arbeitspakete.
+`ToolboxCatalogWorkflowTests` checks the assembly grouping with two real external assemblies: bound groups, alphabetical sorting, search, selection, creating a third-party control with the same name, freeing space and keeping the state when collapsing, and removing entries after a scope change. `ToolboxExtensionTests` additionally checks the grouping of custom catalog entries with unchanged insertion arguments. These headless and integration tests do not replace a desktop acceptance of the following work packages.
 
-## Arbeitspakete und Abnahme
+## Work Packages and Acceptance
 
-### 1. Dokument- und Eigenschaftstreue
+### 1. Document and Property Fidelity
 
-Leerwerte und Reset unterscheiden. Änderungen und Eventzuordnungen über einen gemeinsamen Transaktionspfad übernehmen. Bindings, Ressourcenverweise und verschachtelte Property-Elemente beim Bearbeiten benachbarter Werte erhalten. Änderungen speichern, erneut öffnen und Undo/Redo prüfen.
+Distinguish empty values and reset. Apply changes and event assignments through a shared transaction path. Keep bindings, resource references and nested property elements when neighboring values are edited. Save changes, reopen them and check undo/redo.
 
-Die Wiederherstellung erfolgt über vollständige Dokument-Checkpoints mit stabilen Knoten-IDs. Verschachtelte Edit-Transaktionen erzeugen einen Undo-Eintrag; Rollback verwirft ausschließlich die laufende Operation. Der Designer bindet Eigenschaften, Einfügen, Löschen, Umschließen und Gesten an diese Transaktionen. Escape und verlorener Pointer-Capture brechen laufende Verschiebe-/Resize-Gesten ab.
+Restoring uses complete document checkpoints with stable node IDs. Nested edit transactions create one undo entry; a rollback discards only the running operation. The designer binds properties, insert, delete, wrap and gestures to these transactions. Escape and a lost pointer capture cancel running move and resize gestures.
 
-`DesignerTransactionWorkflowTests` prüft für Canvas, Grid und StackPanel einen kombinierten Struktur-/Eigenschaftseingriff mit Löschen eines Teilbaums, Undo/Redo, Abbruch, Speicherung und erneutem Öffnen. Bindings, Ressourcen und Identitäten werden dabei verglichen. Ein zusätzlicher Ablauf erhält unvollständigen XAML-Code beim Speichern und verhindert dessen Überschreiben durch visuelle Eingriffe. Die nachfolgenden Quelltreueprüfungen und die Desktop-Abnahmen ergänzen diesen Ablauf.
+`DesignerTransactionWorkflowTests` checks, for Canvas, Grid and StackPanel, a combined structure and property edit with deleting a subtree, undo/redo, cancel, saving and reopening. Bindings, resources and identities are compared. An additional flow keeps incomplete XAML code on save and prevents visual edits from overwriting it. The source fidelity checks and desktop acceptance below complement this flow.
 
-Der Attributablauf in derselben Testsuite vergleicht den vollständigen Text vor und nach einer lokalen Änderung. Er umfasst Kommentare, Processing Instructions, Bindings, Ressourcenverweise, Templates, Anführungszeichen und LF-/CRLF-Zeilenumbrüche sowie Undo/Redo, Speicherung und erneutes Öffnen. Änderungen an `xml:space` werden zusätzlich gegen das erneut geparste Dokumentmodell geprüft. Die strukturelle Quellerhaltung übernimmt unveränderte Teilbäume und ihre Schreibweise aus dem Original. Die Workflowtests prüfen auch Umordnen, Löschen, Verschieben anonymer Teilbäume, Property-Elemente und neu eingefügte Blöcke mit unveränderten String-Literalen.
+The attribute flow in the same test suite compares the complete text before and after a local change. It covers comments, processing instructions, bindings, resource references, templates, quotes and LF/CRLF line breaks as well as undo/redo, saving and reopening. Changes to `xml:space` are additionally checked against the reparsed document model. Structural source preservation takes unchanged subtrees and their spelling from the original. The workflow tests also check reordering, deleting, moving anonymous subtrees, property elements and newly inserted blocks with unchanged string literals.
 
-### 2. Durchgängige Bedienung aller drei Layoutarten
+### 2. End-to-End Interaction for All Three Layout Kinds
 
-Je ein vollständiges Canvas-, Grid- und StackPanel-Formular visuell erstellen und bearbeiten. Einfügen, Auswahl, Verschieben, Größenänderung, Parent-Wechsel und Reihenfolge mit Maus und Tastatur umsetzen. Die drei Layoutarten werden gemeinsam abgenommen.
+Create and edit one complete Canvas, Grid and StackPanel form each visually. Implement inserting, selection, moving, resizing, changing the parent and ordering with mouse and keyboard. The three layout kinds are accepted together.
 
-`LayoutEditService` bündelt Kapazitäts-, Zyklus- und Platzierungsregeln für implizite Inhalte und explizite Property-Elemente. Toolbox-Einfügen, Umschließen, Löschen sowie Surface-/Tree-Drops verwenden diese Regeln. Umhängen entfernt nicht mehr gültige Canvas-, Grid- und Dock-Zuordnungen; andere Werte und Bindings bleiben erhalten. Grid-Zuordnungen und Spans werden auf vorhandene Definitionen begrenzt.
+`LayoutEditService` bundles the capacity, cycle and placement rules for implicit content and explicit property elements. Toolbox insertion, wrapping, deleting and surface or tree drops use these rules. Reparenting removes Canvas, Grid and Dock assignments that are no longer valid; other values and bindings are kept. Grid assignments and spans are limited to the existing definitions.
 
-Toolbox-Drags transportieren Typ und Namespace. Die Designfläche ermittelt das Ziel unter dem Zeiger und verwendet Canvas-Koordinaten, Grid-Zellen beziehungsweise die Einfügeposition eines StackPanels. `LayoutEditingWorkflowTests` prüft den Containerwechsel mit Undo, Speicherung, erneutem Öffnen, belegten Content-Slots und einem Container aus einer externen Bibliothek. Die vollständige Maus-/Tastatur-Abnahme bleibt gesondert erforderlich.
+Toolbox drags carry the type and namespace. The design surface determines the target under the pointer and uses Canvas coordinates, Grid cells or the insertion position of a StackPanel. `LayoutEditingWorkflowTests` checks the container change with undo, saving, reopening, occupied content slots and a container from an external library. The complete mouse and keyboard acceptance is still required separately.
 
-### 3. Projektbezogene Toolbox und Fremdcontrols
+### 3. Project-Related Toolbox and Third-Party Controls
 
-Controls aus dem aktiven Projekt und seinen Abhängigkeiten in der Toolbox anbieten. Typidentität, Namespace-Ergänzung, Vererbung, Themes und Inhaltsmodelle prüfen. Den kompletten Ablauf aus Arbeitspaket 2 mit Controls einer externen Bibliothek wiederholen.
+Offer controls of the active project and its dependencies in the toolbox. Check type identity, namespace addition, inheritance, themes and content models. Repeat the complete flow of work package 2 with controls of an external library.
 
-Bibliotheksspezifische Vorschau-Themes über Extensions:
+Library-specific preview themes through extensions:
 
-- [x] Eine allgemeine Theme-Provider-Schnittstelle im Extension-SDK bereitstellen. Der XVE-Kern enthält keine Abhängigkeit auf eine konkrete Control-Bibliothek oder deren Theme-Manager. Bibliotheks- und projektspezifische Adapter bleiben außerhalb des XVE-Kerns.
-- [x] Eine kompakte, XVE-eigene Theme-ComboBox in der Designer-/Previewer-Toolbar anbieten. Sie zeigt die vom Provider gelieferten Theme-Namen und verwendet ein Standard-Control, kein Theme-Auswahl-Control einer Fremdbibliothek. Die Auswahl bleibt bei schmaler Toolbar durch gemeinsames Umbrechen erreichbar; vollständige Namen bleiben erkennbar.
-- [x] Den Theme-Katalog aus dem initialisierten Zielkontext beziehen, einschließlich projektspezifisch registrierter Themes. Bei mehreren Providern Herkunft und gleichnamige Themes eindeutig darstellen. Stabile Provider- und Theme-IDs verwenden, nicht die Anzeigenamen als Schlüssel.
-- [x] Bibliotheksspezifische Theme-Anwendung im isolierten Previewer mit den Abhängigkeiten des geladenen Projekts ausführen. Der Wechsel verändert weder das XVE-Editor-Theme noch den AXAML-Quelltext. Die allgemeine Hell-/Dunkel-Variante und eine Bibliothekspalette in der Oberfläche klar unterscheiden.
-- [x] Die gewählte Provider-/Theme-Kombination pro Workspace persistieren und beim erneuten Öffnen wiederherstellen. Eine Auswahl für den Projektstandard anbieten; nicht mehr verfügbare Provider oder Themes verständlich melden, statt unbemerkt ein anderes Theme anzuwenden.
-- [x] Namensauswahl, Theme-Wechsel, Wiederherstellung und Dokument-/Workspace-Wechsel mit echten gerenderten Controls prüfen. Fensterlose UserControls und explizite Design.PreviewWith-Vorschauen einbeziehen; Auswahl und Zoom im Designer erhalten.
-- [x] **Transparenz und Theme-Hintergründe.** Das Zusammenspiel von lokalem Background, Zurücksetzen auf Style/Standard, explizitem null und Theme-Ressourcen verständlich darstellen. Einen einfachen Weg zu einer themeabhängigen Hintergrundfarbe vorsehen, ohne feste AXAML-Farbwerte ungefragt zu überschreiben.
+- [x] Provide a general theme provider interface in the extension SDK. The XVE core has no dependency on a concrete control library or its theme manager. Library- and project-specific adapters stay outside the XVE core.
+- [x] Offer a compact, XVE-owned theme ComboBox in the designer/previewer toolbar. It shows the theme names delivered by the provider and uses a standard control, not a theme selection control of a third-party library. The selection stays reachable in a narrow toolbar through shared wrapping; full names stay recognizable.
+- [x] Take the theme catalog from the initialized target context, including project-specific registered themes. With several providers, show the origin and themes of the same name unambiguously. Use stable provider and theme IDs, not the display names, as keys.
+- [x] Apply library-specific themes in the isolated previewer with the dependencies of the loaded project. The switch changes neither the XVE editor theme nor the AXAML source. Clearly distinguish the general light/dark variant from a library palette in the interface.
+- [x] Persist the selected provider/theme combination per workspace and restore it on reopening. Offer a selection for the project default; report providers or themes that are no longer available clearly instead of silently applying another theme.
+- [x] Check name selection, theme switch, restoring and document/workspace changes with real rendered controls. Include windowless UserControls and explicit Design.PreviewWith previews; keep the selection and zoom in the designer.
+- [x] **Transparency and theme backgrounds.** Show the interplay of a local Background, resetting to style/default, explicit null and theme resources understandably. Provide a simple way to a theme-dependent background color without overwriting fixed AXAML color values unasked.
 
-- [x] Toolbox-Controls nach Assembly in eigenen Expandern gruppieren, statt sämtliche Drittanbieter-Controls in einem gemeinsamen Block anzuzeigen. Gruppen und Controls jeweils alphabetisch sortieren. Die Gruppen erhalten verständliche Bibliotheksnamen, beispielsweise eine Sektion "Flowery.NET" für deren Controls.
+- [x] Group the toolbox controls by assembly in expanders of their own instead of showing all third-party controls in one shared block. Sort groups and controls alphabetically. The groups get understandable library names, for example a "Flowery.NET" section for its controls.
 
-`LibraryThemeWorkflowTests` führt den Anwendungstheme-Pfad mit echten Controls einer generischen Bibliothek aus. Der Ablauf prüft Inline-Ressourcen, konfigurierte Theme-Objekte, geerbte Controls, `Application.DataTemplates` und den Vorrang formularlokaler Styles und Templates. Deklarative Styles und Ressourcen werden pro Vorschau als gemeinsamer AXAML-Kontext erzeugt. Das ist kein Nachweis für beliebige programmatische Anwendungsinitialisierung oder prozessweite Designmodus-Abhängigkeiten.
+`LibraryThemeWorkflowTests` runs the application theme path with real controls of a generic library. The flow checks inline resources, configured theme objects, inherited controls, `Application.DataTemplates` and the precedence of form-local styles and templates. Declarative styles and resources are created per preview as one shared AXAML context. This is no proof for arbitrary programmatic application initialization or process-wide design mode dependencies.
 
-Am Desktop sind Projektstandard, Light und Business mit Standard- und Bibliotheks-Buttons in einem UserControl sowie einer Styles-Datei mit `Design.PreviewWith` geprüft. Quelltext, Auswahl und Zoom bleiben beim Theme-Wechsel erhalten; die Auswahl wird nach Neustart und bei der Rückkehr zum Workspace wiederhergestellt. Beim Workspace-Wechsel werden bestehende Hosts beendet und offene Vorschauen im neuen Kontext gestartet. Ein Testprojekt ohne die erforderliche Bibliotheks-DLL liefert einen Ladefehler; die Rückkehr zum vollständigen Snapshot stellt die Vorschau wieder her. Dieser Fehler belegt keine erfolgreiche Vorschau des unvollständigen Testprojekts.
+On the desktop, the project default, Light and Business were checked with standard and library buttons in a UserControl and in a styles file with `Design.PreviewWith`. The source, selection and zoom stay unchanged on a theme switch; the selection is restored after a restart and when returning to the workspace. On a workspace change, existing hosts end and open previews start in the new context. A test project without the required library DLL produces a load error; returning to the complete snapshot restores the preview. This error does not prove a successful preview of the incomplete test project.
 
-Die Eigenschaften-Hilfe unterscheidet lokale Werte, Transparenz, Ressourcenverweise, Style/Standard und explizites null. Brush-Felder erläutern die direkte Eingabe von `{DynamicResource resourceKey}`. Textfelder behalten beim Beginn eines Ausdrucks und beim ersten Setzen eines Werts ihren Fokus; Suche und Gruppierung verschieben keine noch unbestätigte Eingabe. Im nativen Previewer wechselt ein Hintergrund mit `DaisyBase200Brush` von `#1C1C1C` bei Business zu `#F2F2F2` bei Light. Der Ressourcenverweis und die Undo-Historie bleiben beim Theme-Wechsel unverändert. Die Texteingabe, null, Reset und vollständiges Undo sind zusätzlich mit und ohne ursprüngliche lokale Zuweisung geprüft.
+The property help distinguishes local values, transparency, resource references, style/default and explicit null. Brush fields explain the direct input of `{DynamicResource resourceKey}`. Text fields keep their focus when an expression starts and when a value is set for the first time; search and grouping do not move an input that is not confirmed yet. In the native previewer, a background with `DaisyBase200Brush` changes from `#1C1C1C` with Business to `#F2F2F2` with Light. The resource reference and the undo history stay unchanged on the theme switch. Text input, null, reset and complete undo were additionally checked with and without an original local assignment.
 
-### 4. Struktur-, Ressourcen- und Eventeditoren
+### 4. Structure, Resource and Event Editors
 
-Collections, Tabs, Menüs, Spalten, komplexe Werte, Templates und Ressourcen strukturell bearbeiten. Eventhandler und Benennung integrieren. Änderungen bleiben Teil derselben Undo-/Redo-Historie.
+Edit collections, tabs, menus, columns, complex values, templates and resources structurally. Integrate event handlers and naming. Changes stay part of the same undo/redo history.
 
-Im nativen Properties-Dock sind Ressourcen, Menu.Items, TabControl.Items, DataGrid.Columns, Button.Template und eine Children-Collection mit einem Bibliotheks-Button bearbeitet. Ungültige Farben und Spaltenbreiten bleiben als korrigierbare Entwürfe im Dialog. Gültige Eingriffe erzeugen jeweils einen Undo-Schritt; Undo und Redo vergleichen den vollständigen Dokumenttext. Cancel verwirft einen geänderten Entwurf. Die gemeinsam gespeicherten Werte und bestehende Binding-, TemplateBinding- und Ressourcenverweise sind nach dem Wiederöffnen erhalten; die Vorschau rendert ohne lokale Control-Instanzen.
+In the native properties dock, resources, Menu.Items, TabControl.Items, DataGrid.Columns, Button.Template and a Children collection with a library button were edited. Invalid colors and column widths stay in the dialog as correctable drafts. Valid edits create one undo step each; undo and redo compare the complete document text. Cancel discards a changed draft. The values saved together and existing Binding, TemplateBinding and resource references are kept after reopening; the preview renders without local control instances.
 
-### 5. Bedienbarkeit und Belastung
+### 5. Usability and Load
 
-Keyboard-Only-Abläufe, Fokus, Tab-Reihenfolge, Kontextmenüs, Fehlerkorrektur und große Dokumente in der tatsächlichen Anwendung prüfen. Fortschritt und Abbruch bei teuren Operationen anbieten. Festlegen und messen, welche Dokumentgrößen auf der Zielmaschine flüssig bearbeitbar sind.
+Check keyboard-only flows, focus, tab order, context menus, error correction and large documents in the actual application. Offer progress and cancellation for expensive operations. Define and measure which document sizes can be edited smoothly on the target machine.
 
-## Gemeinsamer Abnahmesatz
+## Shared Acceptance Set
 
-Für Canvas, Grid und StackPanel jeweils Standardcontrols sowie externe Controls verwenden. Mindestens diese Kombinationen abdecken:
+Use standard controls and external controls for Canvas, Grid and StackPanel each. Cover at least these combinations:
 
-- Verschachtelte Container und Wechsel des Parents.
-- Geerbte Eigenschaften und Attached-Properties eines externen Eigentümertyps.
-- Leere Texte, Nullable-Werte, Enum/Flags und ausdrückliches Reset.
-- Lokale und dynamische Ressourcen sowie Bindings und Templates.
-- Auswahl, Mehrfachauswahl, Tastaturbedienung und Abbruch einer laufenden Aktion.
-- Undo/Redo, Speichern und erneutes Öffnen mit unveränderter Semantik.
-- Ein fehlerhaftes Control neben weiterhin bedienbaren, gültigen Controls.
+- Nested containers and changing the parent.
+- Inherited properties and attached properties of an external owner type.
+- Empty texts, nullable values, enum/flags and explicit reset.
+- Local and dynamic resources as well as bindings and templates.
+- Selection, multi-selection, keyboard operation and canceling a running action.
+- Undo/redo, saving and reopening with unchanged semantics.
+- A failing control next to valid controls that stay usable.
 
-Tests auf konkrete Fehlerrisiken und vollständige Arbeitsabläufe begrenzen. Keine zusätzlichen Tests allein für Getter, Setter oder offensichtliche Eigenschaftszuweisungen anlegen. Vorrang haben nachgewiesene Fehler sowie Bearbeiten, Undo/Redo, Speichern und erneutes Öffnen mit tatsächlich erhaltenen Werten und Strukturen.
+Limit tests to concrete error risks and complete workflows. Do not add tests only for getters, setters or obvious property assignments. Proven errors as well as editing, undo/redo, saving and reopening with actually preserved values and structures come first.
 
-Gezielte Integrationstests belegen Modell und Persistenz. Headless-Tests verwenden, wenn sie einen relevanten UI-Vertrag prüfen. Bedienbarkeit und Darstellungsqualität brauchen zusätzlich einen sichtbaren Durchlauf in der Anwendung. Keine dieser Ebenen pauschal durch einen erfolgreichen Build ersetzen.
+Targeted integration tests prove the model and persistence. Use headless tests when they check a relevant UI contract. Usability and rendering quality additionally need a visible run in the application. Do not replace any of these levels with a successful build across the board.
 
-## Toolbox, Oberflächendichte und Diagnose
+## Toolbox, Interface Density and Diagnostics
 
-- [x] **Extensions-Verwaltung:** Das obere Extensions-Menü enthält einen festen Zugang zum Verwaltungsdialog, auch ohne Menübeiträge geladener Erweiterungen. Öffnen und Schließen über das Menü sind im UI-Test und am Desktop geprüft.
-- [x] **Standard-Tastenkürzel:** Die angezeigten Kürzel für Öffnen, Speichern, Alles speichern, Previewer und Command Palette tatsächlich registrieren. Ctrl+S ist mit einem bearbeiteten Dokument sowie im Canvas-Ablauf mit Speichern und erneutem Öffnen geprüft.
-- [x] **Assembly-Filter je Workspace:** Der Benutzer kann die angezeigten Assemblies über eine Mehrfachauswahl mit Checkboxen festlegen. Die Auswahl wird je Workspace gespeichert und beim erneuten Öffnen wiederhergestellt. Suche und Assembly-Filter wirken gemeinsam; neu verfügbare oder vorübergehend fehlende Assemblies dürfen gespeicherte Auswahlen nicht verlieren.
-- [x] **Favoriten für Drittanbieter-Assemblies:** Jede Drittanbieter-Sektion erhält eine direkt bedienbare Favoriten-Markierung, beispielsweise einen Stern. Favorisierte Assemblies stehen zusammen vor den übrigen Drittanbieter-Assemblies; innerhalb beider Gruppen bleibt die alphabetische Sortierung erhalten. Favoriten werden gespeichert und umgehen den Assembly-Filter nicht.
-- [x] **Kompakte Toolbox-Einträge:** Vertikales Padding, Zeilenhöhe und Zwischenräume reduzieren. Informationen, die bereits im Assembly-Gruppenkopf stehen, nicht in jeder Control-Zeile wiederholen; zusätzliche Metadaten bei Bedarf als Tooltip anbieten. Auswahl, Fokus und Einfügeaktion bleiben eindeutig erkennbar und per Tastatur bedienbar.
-- [x] **Zustand der unteren Docks wiederherstellen:** Alle unteren Docks, einschließlich Output, Breakpoints und LSP Settings, behalten ihren zuletzt gewählten angehefteten, automatisch ausgeblendeten beziehungsweise aufgeklappten Zustand über einen Neustart. Ein geschlossenes Dock mit inaktivem Pin bleibt als Reiter am unteren Rand und öffnet sich nicht selbstständig. Vorhandene Layout-Persistenz prüfen und ergänzen; insbesondere darf LSP Settings einen wiederhergestellten geschlossenen Zustand nicht beim Start überschreiben.
-- [x] **Lade- und Renderfehler im Problems-Dock:** Den bestehenden Diagnoseweg prüfen. Nicht gefundene Assemblies, nicht auflösbare Typen und vergleichbare Lade- oder Renderfehler mit Datei, betroffenem Element und Ursache im Problems-Dock anzeigen, statt den visuellen Designer mit Fehlermeldungen oder Fehler-Controls zu füllen. Soweit möglich zur betroffenen XAML-Stelle navigieren. Eine erhaltene letzte gültige Vorschau darf nur zum selben Dokument gehören und muss als veraltet erkennbar sein; nach der Fehlerbehebung verschwinden überholte Diagnosen.
-- [x] **Kompakte Editoroberfläche insgesamt:** Padding, Mindesthöhen und Abstände in den vorhandenen Docks, Listen, Baumansichten, Toolbars, Menüs und Dialogen nach gemeinsamen Regeln reduzieren. Ziel sind weniger unnötiges Scrollen und eine bessere Nutzung schmaler Docks, nicht eine allgemeine Verkleinerung der Schrift. Bedienbarkeit, Fokusdarstellung und Fehlermeldungen erhalten. Diese Dichteanpassung betrifft die Editoroberfläche, nicht die Layoutmaße, Styles oder Themes der bearbeiteten Formulare und ihrer gerenderten Vorschau.
+- [x] **Extension management:** The top Extensions menu contains a fixed entry to the management dialog, also without menu contributions of loaded extensions. Opening and closing through the menu were checked in the UI test and on the desktop.
+- [x] **Standard shortcuts:** Actually register the shown shortcuts for Open, Save, Save All, Previewer and Command Palette. Ctrl+S was checked with an edited document and in the Canvas flow with saving and reopening.
+- [x] **Assembly filter per workspace:** The user can choose the shown assemblies through a multi-selection with check boxes. The selection is stored per workspace and restored on reopening. Search and assembly filter work together; newly available or temporarily missing assemblies must not lose stored selections.
+- [x] **Favorites for third-party assemblies:** Every third-party section gets a directly usable favorite marker, for example a star. Favorite assemblies stand together before the other third-party assemblies; the alphabetical sorting is kept within both groups. Favorites are stored and do not bypass the assembly filter.
+- [x] **Compact toolbox entries:** Reduce vertical padding, row height and spacing. Do not repeat information that already stands in the assembly group header in every control row; offer additional metadata as a tooltip when needed. Selection, focus and the insert action stay clearly recognizable and usable by keyboard.
+- [x] **Restore the state of the bottom docks:** All bottom docks, including Output, Breakpoints and LSP Settings, keep their last chosen pinned, auto-hidden or expanded state across a restart. A closed dock with an inactive pin stays as a tab at the bottom edge and does not open on its own. Check and extend the existing layout persistence; in particular, LSP Settings must not overwrite a restored closed state at startup.
+- [x] **Load and render errors in the Problems dock:** Check the existing diagnostics path. Show assemblies that were not found, unresolvable types and comparable load or render errors with the file, the affected element and the cause in the Problems dock instead of filling the visual designer with error messages or error controls. Navigate to the affected XAML location where possible. A kept last valid preview may only belong to the same document and must be recognizable as outdated; after the fix, outdated diagnostics disappear.
+- [x] **Compact editor interface overall:** Reduce padding, minimum heights and spacing in the existing docks, lists, tree views, toolbars, menus and dialogs by shared rules. The goal is less unnecessary scrolling and better use of narrow docks, not a general reduction of the font size. Keep usability, focus rendering and error messages. This density adjustment concerns the editor interface, not the layout sizes, styles or themes of the edited forms and their rendered preview.
 
-Die Abnahme umfasst Workspace-Wechsel und Neustart für Filter, Favoriten und Dock-Zustände, schmale Dock-Breiten für die kompakte Darstellung sowie einen tatsächlich ausgelösten Assembly- oder Typauflösungsfehler für die Problems-Anzeige. Bereits vorhandene Implementierung gilt erst nach diesem Nachweis als erledigt.
+The acceptance covers workspace changes and restarts for filters, favorites and dock states, narrow dock widths for the compact display and an actually triggered assembly or type resolution error for the Problems display. An existing implementation counts as done only after this proof.
 
-Der externe Previewer liefert die eigentliche XAML-Ausnahme mit strukturierten Positionsangaben. Der Elementpfad ordnet sie auch nach der Vorschau-Serialisierung der Originalzeile zu. Im Desktop geprüft sind ein unbekanntes Fremdcontrol, Navigation mit Enter, Fehlerbehebung im selben Host und der Wechsel zu einem weiterhin fehlerfrei gerenderten zweiten Dokument. Die letzte gültige Vorschau bleibt als veraltet markiert. Ausgeklappte untere Docks erhalten eine nutzbare Anfangshöhe und behalten ihre Größe über Neustarts; die Höhe wird bereits beim ersten Aufklappen angewendet.
+The external previewer delivers the actual XAML exception with structured position information. The element path maps it to the original line also after the preview serialization. Checked on the desktop are an unknown third-party control, navigation with Enter, fixing the error in the same host and switching to a second document that keeps rendering without errors. The last valid preview stays marked as outdated. Expanded bottom docks get a usable initial height and keep their size across restarts; the height already applies on the first expansion.
 
-### Lesbarkeit auf Full-HD-Bildschirmen
+### Readability on Full HD Screens
 
-- [x] Das gesamte Editorfenster bleibt bei 1920 x 1080 Pixeln mit 100 % und 125 % Skalierung lesbar und bedienbar, unabhängig von der Auflösung des Entwicklungsmonitors.
-- [x] Die Schrift nicht verkleinern, um Platzprobleme zu verdecken. Toolbars umbrechen oder kompakte, beschriftete beziehungsweise mit Tooltip erklärte Aktionen verwenden; wesentliche Bedienelemente nicht abschneiden.
-- [x] Scrollbars belegen ihren eigenen Platz und überdecken weder Zellinhalte noch Aktionen. Schmale Docks, Suchfelder, Kontextmenüs, Dialoge und Statusanzeigen gehören zur Abnahme.
-- [x] Entwurf, XAML und Eigenschaften müssen auch auf Full HD praktisch gemeinsam nutzbar bleiben. Automatisch ausgeblendete Docks und Split-Anordnung dürfen Platz schaffen, aber keine Funktionen unzugänglich machen.
+- [x] The whole editor window stays readable and usable at 1920 x 1080 pixels with 100 % and 125 % scaling, independent of the resolution of the development monitor.
+- [x] Do not reduce the font size to hide space problems. Wrap toolbars or use compact, labeled actions or actions explained by a tooltip; do not cut off essential controls.
+- [x] Scroll bars occupy their own space and cover neither cell content nor actions. Narrow docks, search fields, context menus, dialogs and status displays are part of the acceptance.
+- [x] Design, XAML and properties must stay practically usable together on Full HD as well. Auto-hidden docks and the split arrangement may create space but must not make features inaccessible.
 
-Die Desktop-Prüfung verwendet 1920 × 1080 logische Pixel bei 100 % und 1536 × 864 bei tatsächlich gemessenen 125 %. Entwurf und XAML bleiben mit Properties beziehungsweise Visual Tree gemeinsam sichtbar. Die Toolbars umbrechen; Scrollbars und Eigenschaftsaktionen haben getrennten Platz. Der Extensions-Dialog ist bei 125 % vollständig bedienbar. Die gemeinsame Dichte gilt auch für direkt erzeugte Dialoge und Editor-Toolbars; die Schriftgrößen bleiben unverändert. Nach dem Monitorwechsel wurden die vorherige Fensterposition und Größe wiederhergestellt.
+The desktop check uses 1920 × 1080 logical pixels at 100 % and 1536 × 864 at an actually measured 125 %. Design and XAML stay visible together with Properties or Visual Tree. The toolbars wrap; scroll bars and property actions have separate space. The extensions dialog is fully usable at 125 %. The shared density also applies to directly created dialogs and editor toolbars; the font sizes stay unchanged. After the monitor change, the previous window position and size were restored.
 
-## Designer-Toolbar und Visual Tree
+## Designer Toolbar and Visual Tree
 
-- [x] Vorhandene Layoutbefehle zusätzlich als kompakte Toolbar anbieten: links, horizontal zentriert, rechts, oben, vertikal zentriert und unten ausrichten; horizontal und vertikal verteilen; gleiche Breite und gleiche Höhe.
-- [x] PathIcons mit Tooltips und zugänglichen Namen verwenden. Die Toolbar nutzt dieselben Befehle und Undo-Transaktionen wie das Kontextmenü und bricht bei wenig Platz um.
-- [x] Alle zehn Toolbaraktionen im laufenden Editor mit gemeinsamer Auswahl von Standard- und Fremdcontrols im Grid bedienen. Jede Aktion mit einem Undo quelltextgetreu zurücknehmen; Redo am Ausrichtungsbefehl prüfen.
-- [x] Alle Toolbaraktionen auch in Canvas und StackPanel am laufenden Editor prüfen, einschließlich Hauptauswahl, ungültiger Auswahl, Undo/Redo und Speichern.
-- [x] Toolbaränderungen nach Speichern und erneutem Öffnen des Dokuments prüfen.
-- [x] Spalten im Visual Tree manuell verstellbar machen und mit geringerem Einzug sowie kompakteren Abständen mehr Platz für Typ- und Controlnamen schaffen.
-- [x] Spaltengrenzen im laufenden Editor per Maus verschieben und die Änderung der tatsächlichen Spaltenbreiten prüfen.
-- [x] Doppelklick zur Größenanpassung und Lesbarkeit tiefer Hierarchien in einem schmalen Dock prüfen.
+- [x] Additionally offer the existing layout commands as a compact toolbar: align left, center horizontally, right, top, center vertically and bottom; distribute horizontally and vertically; same width and same height.
+- [x] Use PathIcons with tooltips and accessible names. The toolbar uses the same commands and undo transactions as the context menu and wraps when space is short.
+- [x] Use all ten toolbar actions in the running editor with a shared selection of standard and third-party controls in the Grid. Undo each action source-faithfully with one undo; check redo on the align command.
+- [x] Check all toolbar actions in Canvas and StackPanel in the running editor as well, including the primary selection, an invalid selection, undo/redo and saving.
+- [x] Check toolbar changes after saving and reopening the document.
+- [x] Make the columns in the Visual Tree resizable manually and create more space for type and control names with a smaller indent and more compact spacing.
+- [x] Move column borders with the mouse in the running editor and check the change of the actual column widths.
+- [x] Check double-click auto-sizing and the readability of deep hierarchies in a narrow dock.
 
-Im 337 Pixel breiten Visual-Tree-Dock sind acht Knoten über sechs Ebenen per Tastatur aufgeklappt und ausgewählt. Ein tatsächlicher Doppelklick verändert die erste Spaltenbreite von rund 142 auf 188 Pixel. Lange Typ- und Controlnamen erhalten Ellipsen und vollständige Tooltips; die Children-Spalte bemisst sich nach ihrem Inhalt und ihrer Überschrift.
+In the Visual Tree dock, 337 pixels wide, eight nodes across six levels were expanded and selected by keyboard. An actual double click changes the first column width from about 142 to 188 pixels. Long type and control names get ellipses and complete tooltips; the Children column is sized by its content and its header.
 
-## Automation-IDs und isolierter Design-Host
+## Automation IDs and Isolated Design Host
 
-- [x] In den Settings der Zeichenfläche eine standardmäßig ausgeschaltete Option für automatische `AutomationProperties.AutomationId` anbieten. Neue Controls und Kopien erhalten bei Bedarf dokumentweit eindeutige IDs; bestehende Controls bleiben unverändert.
-- [x] Standard- und Fremdcontrols, Duplizieren, Speichern/Wiederöffnen sowie gemeinsame Undo-Schritte für Einfügen und ID-Vergabe prüfen.
-- [x] Das Settings-Popup und das Eingabefeld für den Canvas-Abstand so bemessen, dass Zahlenwert und Pfeiltasten gleichzeitig sichtbar bleiben.
-- [x] Previewer-Prozess und Transport-Session gemeinsam verwalten; parallele Startanforderungen zusammenführen und Ersatz-Sessions vor veralteten Beendigungsereignissen schützen.
-- [x] Beim Schließen eines Dokuments dessen Previewer beenden. Prozessende und eine neue Transport-Session beim Wiederöffnen sind am Desktop geprüft.
-- [x] Projektassembly-Metadaten ohne Laden der Assembly in den Editorprozess lesen.
-- [x] Gemessene Controlpositionen aus dem isolierten Host mit stabilen AST-IDs und einer Kennung des gerenderten Dokumentstands übertragen und prüfen.
-- [x] Die Klickauswahl im Previewer mit dem Dokumentmodell verbinden; Laufzeitinstanzen unterscheiden und Skalierung, Clipping sowie veraltete Hostdaten berücksichtigen.
-- [x] Eigenschaften im Properties-Dock ohne lokale Control-Instanz über den Panel-Workflow bearbeiten; Nullable-/Flags-Werte, Zurücksetzen, Templates, Validierung, Undo/Redo und die Diagnoseanzeige beim Rendererwechsel prüfen.
-- [x] Unter Windows per CDP ein fensterloses UserControl mit Standard-Button und Flowery-Button im externen Host prüfen: Klickauswahl, Größenänderung, Grid-Zellwechsel, unveränderten Quelltext während des Ziehens und exaktes Undo/Redo. Der lokale Control-Cache bleibt dabei leer.
-- [x] Die native Abnahme auf weitere konkrete Formulare, direkte Eingaben im Properties-Dock, Canvas-/StackPanel-Gesten sowie komplexe Control- und Theme-Konfigurationen ausweiten.
-- [x] Diese Hostdaten für Auswahl, Adorner und Bearbeitung verwenden, ohne die fremden Controls zusätzlich im Editorprozess zu instanziieren.
-- [x] Beim Einfügen neuer XAML-Blöcke die vorhandene Zeilenendekonvention erhalten; keine CRLF-Blöcke in LF-Dokumente einsetzen.
+- [x] Offer an option, off by default, for automatic `AutomationProperties.AutomationId` in the settings of the drawing surface. New controls and copies get document-wide unique IDs when needed; existing controls stay unchanged.
+- [x] Check standard and third-party controls, duplicating, saving/reopening and shared undo steps for insertion and ID assignment.
+- [x] Size the settings popup and the input field for the canvas spacing so the number value and the spin buttons stay visible at the same time.
+- [x] Manage the previewer process and the transport session together; merge parallel start requests and protect replacement sessions against outdated exit events.
+- [x] End the previewer of a document when the document closes. The process end and a new transport session on reopening were checked on the desktop.
+- [x] Read project assembly metadata without loading the assembly into the editor process.
+- [x] Transfer and check measured control positions from the isolated host with stable AST IDs and an identifier of the rendered document state.
+- [x] Connect the click selection in the previewer with the document model; distinguish runtime instances and take scaling, clipping and outdated host data into account.
+- [x] Edit properties in the properties dock without a local control instance through the panel workflow; check nullable/flags values, reset, templates, validation, undo/redo and the diagnostics display when the renderer changes.
+- [x] On Windows, check through CDP a windowless UserControl with a standard button and a Flowery button in the external host: click selection, resizing, Grid cell change, unchanged source while dragging and exact undo/redo. The local control cache stays empty.
+- [x] Extend the native acceptance to further concrete forms, direct input in the properties dock, Canvas/StackPanel gestures and complex control and theme configurations.
+- [x] Use this host data for selection, adorners and editing without additionally instantiating the third-party controls in the editor process.
+- [x] Keep the existing line ending convention when inserting new XAML blocks; do not insert CRLF blocks into LF documents.
 
-Canvas und StackPanel sind zusätzlich mit Standard- und Bibliotheks-Buttons am Desktop geprüft. Belegt sind Auswahl, Tastaturänderungen, Umordnen beziehungsweise Verschieben per Maus, Canvas-Resize, unveränderter Quelltext während des Ziehens, Abbruch mit Escape und quelltextgetreues Undo/Redo. Gespeicherte Größen und Reihenfolgen bleiben beim Wiederöffnen erhalten. Die lokale Control-Map bleibt leer. Eine Dokumentänderung verwirft die bisherigen Host-Geometrien sofort; verspätete Geometrien des vorherigen Stands werden abgewiesen.
+Canvas and StackPanel were additionally checked on the desktop with standard and library buttons. Proven are selection, keyboard changes, reordering or moving by mouse, Canvas resizing, unchanged source while dragging, cancel with Escape and source-faithful undo/redo. Saved sizes and orders are kept on reopening. The local control map stays empty. A document change discards the previous host geometries immediately; late geometries of the previous state are rejected.
 
-Zahlenwerte werden als validierte Texteingaben bearbeitet. Der UI-Ablauf prüft deutsche und englische Dezimaltrennzeichen, einen ungültigen Entwurf mit Fehlermeldung, dessen Korrektur bei erhaltener Auswahl und Fokus sowie quelltextgetreues Undo. Der gleiche Ablauf ist im nativen Properties-Dock mit einem extern gerenderten Bibliotheks-Control geprüft. Eine aktive Eigenschaftssuche erzeugt bei unveränderter Treffermenge keine neuen Eingabefelder.
+Number values are edited as validated text input. The UI flow checks German and English decimal separators, an invalid draft with an error message, its correction with the selection and focus kept, and source-faithful undo. The same flow was checked in the native properties dock with an externally rendered library control. An active property search creates no new input fields while the set of matches stays unchanged.
 
-## Unabhängige Assembly-Snapshots
+## Independent Assembly Snapshots
 
-- [x] Projektquellen und Laufzeit-Assemblies über eine lokale Workspace-Konfiguration trennen. Metadaten, C#-Referenzen und Previewer verwenden den Snapshot. Fehlende Ausgaben dürfen weder eine Suche in Live-Buildordnern noch einen automatischen Projektbuild auslösen.
-- [x] Eine ausdrücklich ausgewählte Preview-Anwendung einschließlich ihrer Laufzeitdateien prüfen. Bei unvollständiger Auswahl eine verständliche Fehlermeldung liefern.
-- [x] Die Bibliotheksvorschau mit gesperrter Live-DLL und den konfigurierten Workspace mit einer echten externen Vorschau prüfen. Der Editor und sein Previewer laden dabei keine Module aus dem Live-Ausgabeordner.
+- [x] Separate project sources and runtime assemblies through a local workspace configuration. Metadata, C# references and the previewer use the snapshot. Missing outputs must trigger neither a search in live build folders nor an automatic project build.
+- [x] Check an explicitly selected preview application including its runtime files. Report an understandable error message for an incomplete selection.
+- [x] Check the library preview with a locked live DLL and the configured workspace with a real external preview. The editor and its previewer load no modules from the live output folder.
 
-Die Einrichtung und das manuelle Aktualisieren beschreibt [ASSEMBLY-SNAPSHOTS.md](ASSEMBLY-SNAPSHOTS.md).
+[ASSEMBLY-SNAPSHOTS.md](ASSEMBLY-SNAPSHOTS.md) describes the setup and the manual update.
 
-## Abgeschlossene Abnahme
+## Completed Acceptance
 
-Diese Liste hält die Abnahme der obigen Anforderungen fest; sie ersetzt oder verkleinert den Abnahmesatz nicht.
+This list records the acceptance of the requirements above; it neither replaces nor reduces the acceptance set.
 
-- [x] Unberührte Quellbereiche auch bei strukturellen Änderungen erhalten und mit Bearbeiten, Undo/Redo, Speichern und Wiederöffnen prüfen.
-- [x] Den isolierten Designzeit-Host durchgängig mit der visuellen Bearbeitung verbinden, soweit Controls einen prozessweiten Designmodus oder eine eigene Anwendungsinitialisierung benötigen.
-- [x] Die vollständigen Maus- und Tastaturabläufe für Canvas, Grid und StackPanel mit Standard- und Fremdcontrols in der Desktop-Anwendung abnehmen.
+- [x] Keep untouched source regions also on structural changes and check them with editing, undo/redo, saving and reopening.
+- [x] Connect the isolated design-time host end to end with visual editing, as far as controls need a process-wide design mode or an application initialization of their own.
+- [x] Accept the complete mouse and keyboard flows for Canvas, Grid and StackPanel with standard and third-party controls in the desktop application.
 
-Zusätzlich zu den Gesten ist der Containerwechsel per Ausschneiden und Einfügen für Standard- und Bibliotheks-Buttons durch alle drei Layoutarten geprüft. Unpassende Canvas- und Grid-Zuordnungen werden entfernt. Duplizieren, Löschen und Mehrfachauswahl funktionieren auch mit fokussierter externer Vorschau. Über die Toolbox sind beide Controlarten in jeden Container eingefügt, gemeinsam gespeichert und erneut extern gerendert. Neue Namensräume werden kollisionsfrei am Wurzelelement deklariert; vorhandene Präfixe und Kommentare bleiben erhalten.
-- [x] Collections, Tabs, Menüs, Spalten, Templates und Ressourcen einschließlich Fehlerkorrektur im tatsächlichen Eigenschaften-Dock vollständig abnehmen.
-- [x] Die neue Problems-Anzeige einschließlich Navigation, Fehlerbehebung und Session-Wechsel im Desktop prüfen.
-- [x] Die gemeinsame Oberflächendichte in schmalen Docks, Menüs und Dialogen sowie beim Monitor- und DPI-Wechsel prüfen.
-- [x] Bedienbarkeit, Fortschritt, Abbruch und nutzbare Dokumentgrößen auf der Zielmaschine messen und die belegten Grenzen festhalten.
-- [x] Lokale Eigenschaftsänderungen im externen Host auf die betroffenen Controls begrenzen. Der Host übernimmt geänderte Attribute in bestehende Instanzen. Hinzufügen und Zurücksetzen registrierter Avalonia-Properties einschließlich Attached Properties sind unterstützt. Zurücksetzen entfernt den lokalen Wert und macht Styles oder geerbte Werte wieder wirksam. Alle Instanzen eines Quellknotens werden gemeinsam geändert; fehlgeschlagene Änderungen werden zurückgenommen. Struktur-, Binding-, Namens- und Theme-Änderungen verwenden weiterhin den vollständigen Runtime-Lader, damit deren Dokumentkontext neu aufgebaut wird.
-- [x] Die Thread-Zuordnung der vollständigen Typkatalog-Erfassung belegen. Beim Öffnen und nach einem Workspace-Build laufen sowohl `LoadAssemblies` als auch das initiale `GetAvailableTypes` auf einem Worker. `WorkspaceResponsivenessTests` prüft beide Thread-IDs gegenüber dem UI-Thread. Der Control-Katalog der Extensions und die Typauswahl des Struktureditors lesen ihren Katalog ebenfalls auf einem Worker.
+In addition to the gestures, the container change through cut and paste was checked for standard and library buttons through all three layout kinds. Unsuitable Canvas and Grid assignments are removed. Duplicating, deleting and multi-selection also work with a focused external preview. Through the toolbox, both kinds of controls were inserted into every container, saved together and rendered externally again. New namespaces are declared at the root element without collisions; existing prefixes and comments are kept.
+- [x] Fully accept collections, tabs, menus, columns, templates and resources including error correction in the actual properties dock.
+- [x] Check the new Problems display including navigation, error fixing and session changes on the desktop.
+- [x] Check the shared interface density in narrow docks, menus and dialogs as well as on monitor and DPI changes.
+- [x] Measure usability, progress, cancellation and usable document sizes on the target machine and record the proven limits.
+- [x] Limit local property changes in the external host to the affected controls. The host applies changed attributes to existing instances. Adding and resetting registered Avalonia properties, including attached properties, is supported. Reset removes the local value and makes styles or inherited values effective again. All instances of a source node change together; failed changes are rolled back. Structure, binding, name and theme changes keep using the full runtime loader so their document context is rebuilt.
+- [x] Prove the thread assignment of the complete type catalog capture. On opening and after a workspace build, both `LoadAssemblies` and the initial `GetAvailableTypes` run on a worker. `WorkspaceResponsivenessTests` checks both thread IDs against the UI thread. The control catalog of the extensions and the type selection of the structure editor read their catalog on a worker as well.
 
-`DesignerUpdateProtocolTests` prüft Änderungsumfang, Rücknahme und veraltete Revisionen. `RuntimeControlPatchTests` prüft erhaltene Instanzen, Ressourcen, Namensbindungen sowie das Setzen und Zurücksetzen an einem Fremdcontrol. `PreviewerLaunchServiceTests` führt die Aktualisierung und Rücknahme zusätzlich im echten Bibliotheks-Host mit und ohne Assembly-Snapshot aus und prüft die gemeldete Geometrie. Nicht unterstützte Änderungen bleiben über den vollständigen Lader bearbeitbar.
+`DesignerUpdateProtocolTests` checks the change scope, rollback and outdated revisions. `RuntimeControlPatchTests` checks kept instances, resources, name bindings and setting and resetting on a third-party control. `PreviewerLaunchServiceTests` additionally runs the update and rollback in the real library host with and without an assembly snapshot and checks the reported geometry. Unsupported changes stay editable through the full loader.
 
-### Gemessene Dokumentgrößen und Ladeabbruch
+### Measured Document Sizes and Load Cancellation
 
-Messung vom 21.09.2026 im Debug-Desktop auf einem Intel Core i7-13700K mit 24 logischen Prozessoren und rund 64 GiB RAM. Der Workspace war bereits geladen. Die Canvas-Testdateien enthalten zu gleichen Teilen Standard-Buttons und Bibliotheks-Buttons bei einer festen Zeichenfläche von 1000 × 800; bei großen Fällen liegen Controls außerhalb des sichtbaren Ausschnitts. Pro Messung war genau ein Previewer aktiv. Die lokale Control-Map blieb leer. Die folgende Ausgangsmessung verwendet bei jeder Änderung einen vollständigen Neuaufbau:
+Measurement of 2026-09-21 in the Debug desktop build on an Intel Core i7-13700K with 24 logical processors and about 64 GiB RAM. The workspace was already loaded. The Canvas test files contain standard buttons and library buttons in equal parts on a fixed drawing surface of 1000 × 800; in the large cases, controls lie outside the visible area. Exactly one previewer was active per measurement. The local control map stayed empty. The following baseline measurement uses a full rebuild for every change:
 
-| Controls | AXAML-Bytes | Öffnen bis Hostgeometrie | Verschieben bis neue Hostgeometrie | Längste UI-Antwort beim Öffnen / Verschieben | Host-Arbeitssatz nach Öffnen / Verschieben |
+| Controls | AXAML bytes | Open until host geometry | Move until new host geometry | Longest UI response on open / move | Host working set after open / move |
 |---:|---:|---:|---:|---:|---:|
-| 100 | 11.553 | 2,81 s | 1,80 s | 328 / 901 ms | 262 / 293 MiB |
-| 1.000 | 115.138 | 6,63 s | 3,03 s | 359 / 925 ms | 611 / 619 MiB |
-| 5.000 | 582.538 | 11,26 s | 10,89 s | 711 / 1.390 ms | 1.197 / 2.122 MiB |
+| 100 | 11,553 | 2.81 s | 1.80 s | 328 / 901 ms | 262 / 293 MiB |
+| 1,000 | 115,138 | 6.63 s | 3.03 s | 359 / 925 ms | 611 / 619 MiB |
+| 5,000 | 582,538 | 11.26 s | 10.89 s | 711 / 1,390 ms | 1,197 / 2,122 MiB |
 
-Mit der gezielten Aktualisierung derselben Verschiebeaktion ergeben sich folgende Werte:
+With the targeted update of the same move action, the values are:
 
-| Controls | Verschieben bis neue Hostgeometrie | Median / längste UI-Antwort | Host-Arbeitssatz nach Verschieben |
+| Controls | Move until new host geometry | Median / longest UI response | Host working set after move |
 |---:|---:|---:|---:|
-| 100 | 0,54 s | 2,8 / 398 ms | 242 MiB |
-| 1.000 | 0,84 s | 4,0 / 608 ms | 651 MiB |
-| 5.000 | 1,60 s | 10,8 / 981 ms | 1.247 MiB |
+| 100 | 0.54 s | 2.8 / 398 ms | 242 MiB |
+| 1,000 | 0.84 s | 4.0 / 608 ms | 651 MiB |
+| 5,000 | 1.60 s | 10.8 / 981 ms | 1,247 MiB |
 
-Dies sind einzelne gemessene Läufe, keine statistischen Grenzwerte oder allgemeine Leistungszusage. Der Arbeitssatz ist eine Momentaufnahme, kein Peak. Die Aktualisierung vorhandener Controls verkürzt die Vorschauwartezeit; Lesen, Parsen und Geometrieübertragung bleiben von der Dokumentgröße abhängig. 5.000 Controls sind als Belastungsfall geladen und bearbeitet, aber nicht als flüssiger Arbeitsbereich abgenommen. Auch bei 1.000 Controls bleibt eine messbare Verzögerung. Ein weiterer Öffnungslauf mit 1.000 Controls benötigte 8,53 s; die Änderung verkürzt nicht den initialen Aufbau.
+These are individual measured runs, not statistical limits or a general performance promise. The working set is a snapshot, not a peak. Updating existing controls shortens the preview wait time; reading, parsing and geometry transfer still depend on the document size. 5,000 controls were loaded and edited as a load case but not accepted as a smooth working range. A measurable delay remains at 1,000 controls as well. Another opening run with 1,000 controls took 8.53 s; the change does not shorten the initial build-up.
 
-Das Lesen und Parsen erfolgt abbrechbar mit sichtbaren Ladephasen und einer Cancel-Aktion. Während des Ladens sind Inhalt und Speichern gesperrt. Ein eigener Abbruchlauf mit 20.000 einfachen Controls hat die sichtbare Fortschrittsanzeige und den fokussierten Cancel-Button während des Parsens geprüft. Danach blieb kein Dokument geöffnet und kein Previewer-Prozess aktiv. Der Abbruchtest des Sync-Engines erhält das zuvor geladene Dokument und dessen Undo-Historie.
+Reading and parsing can be canceled, with visible load phases and a Cancel action. While loading, the content and saving are locked. A dedicated cancel run with 20,000 simple controls checked the visible progress display and the focused Cancel button during parsing. Afterwards no document stayed open and no previewer process was active. The cancel test of the sync engine keeps the previously loaded document and its undo history.

@@ -395,7 +395,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 // After any sync, commit pending changes as an undo batch
                 SyncEngine.CommitUndoBatch("Sync");
 
-                // Layout-Änderungen können die bestehenden Control-Instanzen behalten.
+                // Layout changes can keep the existing control instances.
                 DesignSurface.RequestRebuild(allowLayoutUpdate: true);
             });
         _disposables.Add(syncEventsSubscription);
@@ -2204,7 +2204,7 @@ public sealed partial class RecentFileEntry
     };
 }
 
-/// <summary>Bestimmt die Öffnungsart eines Eintrags in der Historie.</summary>
+/// <summary>Determines how an entry of the history opens.</summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<RecentEntryKind>))]
 public enum RecentEntryKind { File, Workspace, Folder }
 
@@ -2406,7 +2406,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>Gets the extension-provided items of the text and code editor context menu.</summary>
     public ObservableCollection<ExtensionMenuItemViewModel> EditorContextMenuItems { get; } = new();
 
-    /// <summary>Enthält die Einträge unter Ansicht → Server.</summary>
+    /// <summary>Holds the entries under View → Server.</summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ServerMenuItems { get; } = new();
 
     /// <summary>Gets the ready-made layouts offered under View → Layout → Load.</summary>
@@ -2696,7 +2696,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     public ObservableCollection<RecentFileEntry> RecentFiles { get; } = new();
 
-    /// <summary>Die jeweils zehn neuesten Einträge je Öffnungsart.</summary>
+    /// <summary>The ten most recent entries of each open kind.</summary>
     public IEnumerable<RecentFileEntry> RecentWorkspaces => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.Workspace).Take(RecentFilesLimit);
     public IEnumerable<RecentFileEntry> RecentDocuments => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.File).Take(RecentFilesLimit);
     public IEnumerable<RecentFileEntry> RecentFolders => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.Folder).Take(RecentFilesLimit);
@@ -2734,7 +2734,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
 
     /// <summary>
-    /// Wählt eine Projekt- oder Solution-Datei als Workspace aus.
+    /// Selects a project or solution file as the workspace.
     /// </summary>
     public Interaction<Unit, WorkspaceOpenRequest?> OpenWorkspaceInteraction { get; } = new();
 
@@ -2845,11 +2845,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // File Commands
     public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenDocumentCommand { get; }
-    /// <summary>Öffnet den Dialog zur Workspace-Auswahl.</summary>
+    /// <summary>Opens the workspace selection dialog.</summary>
     public ReactiveCommand<Unit, Unit> OpenWorkspaceCommand { get; }
-    /// <summary>Schließt die aktive Datei.</summary>
+    /// <summary>Closes the active file.</summary>
     public ReactiveCommand<Unit, Unit> CloseActiveDocumentCommand { get; }
-    /// <summary>Schließt alle Dateien und entlädt den Workspace.</summary>
+    /// <summary>Closes all files and unloads the workspace.</summary>
     public ReactiveCommand<Unit, Unit> CloseWorkspaceCommand { get; }
     public ReactiveCommand<string, Unit> OpenPathCommand { get; }
     public ReactiveCommand<IReadOnlyList<string>, Unit> OpenPathsCommand { get; }
@@ -6147,7 +6147,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (DockLayout is not null && AttachTerminalTool(terminalVm) is not null)
         {
             Guid terminalId = terminalVm.Id;
-            // Exited kommt vom Lesethread der PTY-Sitzung.
+            // Exited arrives on the reader thread of the PTY session.
             terminalVm.Exited += _ => Dispatcher.UIThread.Post(() => CloseTerminalSession(terminalId));
         }
 
@@ -8057,7 +8057,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 RecentFileEntry? entry;
                 if (element.ValueKind == JsonValueKind.String)
                 {
-                    // Die vorhandene Historie enthält nur Pfade, daher einmalig anhand des Ziels zuordnen.
+                    // An older history holds paths only, so classify the entry once by its target.
                     string? filePath = element.GetString();
                     if (string.IsNullOrWhiteSpace(filePath)) continue;
                     string extension = System.IO.Path.GetExtension(filePath);
@@ -8724,8 +8724,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task<bool> EnsurePreviewerTrustAsync(string xamlFilePath)
     {
-        // Kopflose Bridge-Laeufe koennen den Trust-Dialog nicht bedienen; der Schalter gewaehrt
-        // den Start analog zu XVE_IDEBRIDGE_AUTOCONSENT.
+        // Headless bridge runs cannot answer the trust dialog; the switch grants the start,
+        // like XVE_IDEBRIDGE_AUTOCONSENT does for the bridge.
         string? autoTrust = System.Environment.GetEnvironmentVariable("XVE_PREVIEWER_AUTOTRUST");
         if (string.Equals(autoTrust, "1", StringComparison.Ordinal)
             || string.Equals(autoTrust, "true", StringComparison.OrdinalIgnoreCase))
@@ -8756,9 +8756,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     /// <summary>
-    /// Startet den Previewer fuer eine geoeffnete XAML-Datei, wartet auf einen stabilen Frame
-    /// und speichert ihn als PNG. Der Previewer-Prozess wird danach beendet, damit sich bei
-    /// Serienlaeufen keine Host-Prozesse ansammeln.
+    /// Starts the previewer for an open XAML file, waits for a stable frame and saves it as
+    /// PNG. The previewer process ends afterwards, so batch runs do not accumulate host
+    /// processes.
     /// </summary>
     public async System.Threading.Tasks.Task<XamlVisualEditor.Extensions.PreviewExportResult> ExportPreviewAsync(
         string filePath,
@@ -8825,8 +8825,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
-    // Frames treffen waehrend des Aufbaus mehrfach ein (Viewport-Verhandlung); als stabil gilt
-    // der letzte Frame, wenn 1,5 s lang weder Groessenwechsel noch Resize-Anforderung kamen.
+    // Frames arrive several times while the preview builds up (viewport negotiation); the last
+    // frame counts as stable once 1.5 s passed without a size change or resize request.
     internal static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
         PreviewerTcpSession session,
         int timeoutMs)

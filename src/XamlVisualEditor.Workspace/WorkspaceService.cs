@@ -1086,7 +1086,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 /// </summary>
 public sealed class TypeMetadataService : ITypeMetadataService
 {
-    /// <summary>Liest ausschließlich die gewählten Assemblies und Avalonia-Grundtypen für die Toolbox.</summary>
+    /// <summary>Reads only the selected assemblies and the Avalonia base types for the toolbox.</summary>
     public static IReadOnlyList<TypeMetadata> ReadControlTypes(IReadOnlyList<string> assemblyPaths,
         Action<string> reportFailure, Action<int, int, string> reportProgress, CancellationToken cancellationToken,
         bool includeProjectControls = true)
@@ -1107,17 +1107,17 @@ public sealed class TypeMetadataService : ITypeMetadataService
             }
         }
 
-        // Projekt-Assemblies ersetzen den Basiskatalog; alte und neue Typen werden nicht vereinigt.
+        // Project assemblies replace the base catalog; old and new types are not merged.
         string[] standardPaths = { typeof(AvaloniaObject).Assembly.Location, typeof(Control).Assembly.Location };
         bool hasProjectFramework = standardPaths.Any(path => selected.ContainsKey(Path.GetFileNameWithoutExtension(path)));
         foreach (string path in standardPaths)
         {
             AssemblyTypeCatalog.AssemblyIdentity identity = AssemblyTypeCatalog.ReadAssemblyIdentity(path)
-                ?? throw new BadImageFormatException($"XVE-Grundassembly enthält keine .NET-Metadaten: {path}");
+                ?? throw new BadImageFormatException($"XVE base assembly contains no .NET metadata: {path}");
             if (!hasProjectFramework)
                 selected.TryAdd(identity.Name, (path, identity.IsStandardAssembly));
             else if (!selected.ContainsKey(identity.Name))
-                reportFailure($"Die Projektabhängigkeit '{identity.Name}' fehlt. Bitte die Projektreferenzen wiederherstellen.");
+                reportFailure($"The project dependency '{identity.Name}' is missing. Restore the project references.");
         }
         string[] paths = selected.Values.Where(assembly => includeProjectControls || assembly.IsStandard)
             .Select(assembly => assembly.Path).ToArray();

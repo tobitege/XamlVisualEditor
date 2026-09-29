@@ -2,7 +2,7 @@
 
 namespace XamlVisualEditor.Designer.PreviewerHost;
 
-/// <summary>Übernimmt kompatible Eigenschaftsänderungen in die bereits gerenderten Instanzen.</summary>
+/// <summary>Applies compatible property changes to the instances that are already rendered.</summary>
 internal sealed class IncrementalPreviewUpdater
 {
     private string? _xaml;

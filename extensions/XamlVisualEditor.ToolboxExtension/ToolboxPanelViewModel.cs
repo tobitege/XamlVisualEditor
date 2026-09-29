@@ -60,7 +60,7 @@ public sealed class ToolboxPanelItem : IToolboxDragItem
     /// <summary>Gets the assembly that supplies the control.</summary>
     public string AssemblyName { get; }
 
-    /// <summary>Version der Assembly, aus der dieses Control gelesen wurde.</summary>
+    /// <summary>Version of the assembly this control was read from.</summary>
     public string? AssemblyVersion { get; }
 
     /// <summary>Gets the library-defined toolbox category.</summary>
@@ -97,9 +97,9 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
     public IReadOnlyList<ToolboxPanelItem> Items => _items;
     public string CatalogHeader => $"{DisplayName} ({_catalogCount})";
     public bool CanFavorite => _canFavorite;
-    /// <summary>Gibt an, ob die Bibliothek ausschließlich offizielle Avalonia-Controls enthält.</summary>
+    /// <summary>Gets whether the library contains official Avalonia controls only.</summary>
     public bool IsStandardAssembly { get; private set; }
-    /// <summary>Version des aktuellen Bibliothekskatalogs.</summary>
+    /// <summary>Version of the current library catalog.</summary>
     public string? AssemblyVersion { get; private set; }
     public string Description => AssemblyVersion is null ? DisplayName : DisplayName + " · " + AssemblyVersion;
     public bool CanEditPreferences => _owner.CanEditAssemblyPreferences;
@@ -345,14 +345,14 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         }
     }
 
-    /// <summary>Gibt an, ob die laufende Suche ihren Abbruch noch bestätigt.</summary>
+    /// <summary>Gets whether the running search has yet to confirm its cancellation.</summary>
     public bool IsCancelling
     {
         get => _isCancelling;
         private set => this.RaiseAndSetIfChanged(ref _isCancelling, value);
     }
 
-    /// <summary>Gibt an, ob Wiederholen oder Abbrechen angeboten werden muss.</summary>
+    /// <summary>Gets whether retry or cancel has to be offered.</summary>
     public bool HasLoadError
     {
         get => _hasLoadError;
@@ -365,14 +365,14 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     public bool HasLoadTask => IsLoading || HasLoadError;
 
-    /// <summary>Zeigt die laufende Aufgabe oder ihr kurzzeitig sichtbares Ergebnis.</summary>
+    /// <summary>Shows the running task or its briefly visible result.</summary>
     public bool IsLoadStatusVisible
     {
         get => _isLoadStatusVisible;
         private set => this.RaiseAndSetIfChanged(ref _isLoadStatusVisible, value);
     }
 
-    /// <summary>Enthält die vollständige Fehlermeldung für den Tooltip.</summary>
+    /// <summary>Holds the full error message for the tooltip.</summary>
     public string? LoadErrorDetails
     {
         get => _loadErrorDetails;
@@ -436,10 +436,10 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     /// <summary>Reloads controls from the active project.</summary>
 
-    /// <summary>Wiederholt die zuletzt fehlgeschlagene Suche.</summary>
+    /// <summary>Repeats the most recently failed search.</summary>
     public ReactiveCommand<Unit, Unit> RetryLoadCommand { get; }
 
-    /// <summary>Blendet das Ergebnis einer abgeschlossenen Aufgabe aus.</summary>
+    /// <summary>Hides the result of a finished task.</summary>
     public ReactiveCommand<Unit, Unit> DismissLoadStatusCommand { get; }
 
     /// <summary>Cancels the active catalog request.</summary>
@@ -464,7 +464,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         if (changed) SaveCollapsedAssemblies();
     }
 
-    /// <summary>Einfügen und Ziehen benötigen einen Workspace und ein aktives Designer-Dokument.</summary>
+    /// <summary>Inserting and dragging need a workspace and an active designer document.</summary>
     public bool HasInsertTarget => !string.IsNullOrWhiteSpace(_workspaceInfo?.WorkspacePath)
         && !string.IsNullOrWhiteSpace(_designer?.ActiveDocumentPath);
 

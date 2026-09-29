@@ -133,7 +133,7 @@
         <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
     </Style>
 
-    <!-- Nur Dialogbuttons; Designer-Controls und Dock-Toolbars behalten ihre Styles. -->
+    <!-- Dialog buttons only; designer controls and dock toolbars keep their styles. -->
     <Style Selector="Window.editor-chrome Button">
         <Setter Property="Background" Value="{DynamicResource EditorDialogButtonBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />

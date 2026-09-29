@@ -53,7 +53,7 @@
         <Setter Property="MinHeight" Value="24" />
     </Style>
 
-    <!-- Kompakte Zeilen ausschließlich für Datei- und Solution-Explorer. -->
+    <!-- Compact rows for the File Explorer and the Solution Explorer only. -->
     <Style Selector="DataGrid.explorer-compact">
         <Setter Property="RowHeight" Value="24" />
         <Setter Property="ColumnHeaderHeight" Value="24" />

@@ -8,7 +8,7 @@ namespace XamlVisualEditor.Shell.ViewModels;
 public enum TerminalLocation { Internal, External }
 public enum TerminalShell { CommandPrompt, WindowsPowerShell, PowerShell7 }
 
-/// <summary>Gespeicherte Sprachwahl und Windows-Terminalprofile.</summary>
+/// <summary>Stored language choice and Windows terminal profiles.</summary>
 public sealed record EditorOptions
 {
     public EditorThemeSelection EditorTheme { get; init; } = EditorThemeSelection.Default;
@@ -81,7 +81,7 @@ public sealed record DesignerViewportOptions
     }
 }
 
-/// <summary>Ohne Dateipfad bleiben Optionen im Speicher, insbesondere in Tests.</summary>
+/// <summary>Without a file path the options stay in memory, in particular in tests.</summary>
 public sealed class EditorOptionsStore
 {
     private readonly string? _path;

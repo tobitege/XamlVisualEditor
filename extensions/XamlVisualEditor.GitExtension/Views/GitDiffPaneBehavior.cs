@@ -4,13 +4,13 @@ using Avalonia.VisualTree;
 
 namespace XamlVisualEditor.GitExtension.Views;
 
-/// <summary>Blendet den Diff-Bereich aus und stellt die per Splitter gewählte Breite wieder her.</summary>
+/// <summary>Hides the diff pane and restores the width chosen with the splitter.</summary>
 public sealed class GitDiffPaneBehavior
 {
     private const double MIN_DIFF_WIDTH = 180;
     private const double SPLITTER_WIDTH = 4;
 
-    /// <summary>Gibt an, ob der Diff-Bereich geöffnet ist.</summary>
+    /// <summary>Gets or sets whether the diff pane is open.</summary>
     public static readonly AttachedProperty<bool> IsOpenProperty =
         AvaloniaProperty.RegisterAttached<GitDiffPaneBehavior, Grid, bool>("IsOpen", true);
 
@@ -27,10 +27,10 @@ public sealed class GitDiffPaneBehavior
         IsOpenProperty.Changed.AddClassHandler<Grid>(OnIsOpenChanged);
     }
 
-    /// <summary>Liest den Zustand des Diff-Bereichs.</summary>
+    /// <summary>Gets the state of the diff pane.</summary>
     public static bool GetIsOpen(Grid grid) => grid.GetValue(IsOpenProperty);
 
-    /// <summary>Setzt den Zustand des Diff-Bereichs.</summary>
+    /// <summary>Sets the state of the diff pane.</summary>
     public static void SetIsOpen(Grid grid, bool value) => grid.SetValue(IsOpenProperty, value);
 
     private static void OnIsOpenChanged(Grid grid, AvaloniaPropertyChangedEventArgs args)

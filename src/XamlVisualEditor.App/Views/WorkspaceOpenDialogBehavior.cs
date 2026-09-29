@@ -7,7 +7,7 @@ using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Verbindet die Projektauswahl samt Toolbox-Option mit dem Hauptfenster.</summary>
+/// <summary>Connects the project selection, including its toolbox option, with the main window.</summary>
 public sealed class WorkspaceOpenDialogBehavior : Behavior<Window>
 {
     private IDisposable? _registration;

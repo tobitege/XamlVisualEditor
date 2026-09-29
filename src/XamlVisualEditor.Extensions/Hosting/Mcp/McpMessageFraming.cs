@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;
 
-/// <summary>Liest und schreibt die zeilenweise UTF-8-Kodierung des MCP-stdio-Transports.</summary>
+/// <summary>Reads and writes the line-based UTF-8 encoding of the MCP stdio transport.</summary>
 public static class McpMessageFraming
 {
     /// <summary>Serializer options for JSON-RPC payloads.</summary>

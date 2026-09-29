@@ -6,7 +6,7 @@ using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Verbindet die Dialoganforderung mit dem besitzenden Fenster.</summary>
+/// <summary>Connects the dialog request with the owning window.</summary>
 public sealed class RecentFilesDialogBehavior : Behavior<Window>
 {
     private IDisposable? _registration;

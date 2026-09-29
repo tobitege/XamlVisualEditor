@@ -1,6 +1,6 @@
 ﻿namespace XamlVisualEditor.Core;
 
-/// <summary>Semantische Farben der Editor-Oberfläche, unabhängig von einer Control-Bibliothek.</summary>
+/// <summary>Semantic colors of the editor interface, independent of a control library.</summary>
 public enum EditorThemeColor
 {
     Background, Surface, SurfaceAlt, Foreground, MutedForeground, Border,
@@ -8,32 +8,32 @@ public enum EditorThemeColor
     Error, ErrorForeground, Warning, WarningForeground, Success, SuccessForeground
 }
 
-/// <summary>Beschreibt ein Editor-Theme mit stabiler ID.</summary>
+/// <summary>Describes an editor theme with a stable ID.</summary>
 public sealed record EditorTheme(string Id, string Name, bool IsDark);
 
-/// <summary>Enthält ARGB-Farben für alle semantischen Rollen des Editors.</summary>
+/// <summary>Holds ARGB colors for all semantic roles of the editor.</summary>
 public sealed record EditorThemePalette(bool IsDark, IReadOnlyDictionary<EditorThemeColor, string> Colors);
 
-/// <summary>Liefert Themes, ohne Anwendungsressourcen oder den Zustand der Vorschau zu verändern.</summary>
+/// <summary>Provides themes without changing application resources or the state of the preview.</summary>
 public interface IEditorThemeProvider
 {
     IReadOnlyList<EditorTheme> GetThemes();
     EditorThemePalette GetPalette(string themeId);
 }
 
-/// <summary>Registriert den Provider einer installierten Editor-Theme-Extension.</summary>
+/// <summary>Registers the provider of an installed editor theme extension.</summary>
 public sealed record EditorThemeProviderRegistration(string Id, string Name, string AssemblyPath, string TypeName);
 
-/// <summary>Speichert die Editor-Auswahl getrennt von Designer-Themes.</summary>
+/// <summary>Stores the editor selection separately from the designer themes.</summary>
 public sealed record EditorThemeSelection(string ProviderId, string ThemeId)
 {
     public static EditorThemeSelection Default { get; } = new("builtin", "dark");
 }
 
-/// <summary>Enthält verfügbare Editor-Themes oder einen Ladefehler des Providers.</summary>
+/// <summary>Holds the available editor themes or a load error of the provider.</summary>
 public sealed record EditorThemeProviderCatalog(string Id, string Name, IReadOnlyList<EditorTheme> Themes, string? Error = null);
 
-/// <summary>Verbindet die Editor-Optionen mit der Theme-Verwaltung der Oberfläche.</summary>
+/// <summary>Connects the editor options with the theme management of the interface.</summary>
 public interface IEditorThemeService
 {
     event EventHandler? Changed;
@@ -41,6 +41,6 @@ public interface IEditorThemeService
     EditorThemeSelection Selection { get; }
     string? Error { get; }
     void Apply(EditorThemeSelection selection);
-    /// <summary>Stellt eine Auswahl wieder her; ein fehlender Provider verwendet das Standard-Theme und meldet den Fehler.</summary>
+    /// <summary>Restores a selection; a missing provider falls back to the default theme and reports the error.</summary>
     void Restore(EditorThemeSelection selection);
 }

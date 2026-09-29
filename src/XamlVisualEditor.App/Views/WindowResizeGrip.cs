@@ -8,7 +8,7 @@ using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Ändert die Fenstergröße relativ zum angeklickten Punkt, ohne einen Sprung zur Fensterecke.</summary>
+/// <summary>Resizes the window relative to the clicked point, without jumping to the window corner.</summary>
 public sealed class WindowResizeGrip : Control
 {
     public static readonly StyledProperty<IBrush?> GripBrushProperty =

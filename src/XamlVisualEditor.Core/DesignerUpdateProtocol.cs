@@ -7,7 +7,7 @@ public sealed record DesignerUpdateResult(Guid RequestId, bool Applied, string? 
 public sealed record DesignerControlUpdate(Guid NodeId, string Xaml, string PreviousXaml,
     IReadOnlyList<string> ClearedProperties, IReadOnlyList<string> PreviouslyUnsetProperties);
 
-/// <summary>Beschreibt Änderungen an bestehenden Eigenschaften ohne Austausch des Controlbaums.</summary>
+/// <summary>Describes changes to existing properties without replacing the control tree.</summary>
 public static class DesignerUpdateProtocol
 {
     public const string ResultPrefix = "XVE-UPDATE-RESULT ";
@@ -15,7 +15,7 @@ public static class DesignerUpdateProtocol
     private static readonly XName NodeIdName = XName.Get("DesignNodeIdentity.NodeId", IdentityNamespace);
     private static readonly XName RenderIdName = XName.Get("DesignNodeIdentity.RenderId", IdentityNamespace);
 
-    /// <summary>Liest ausschließlich literale Layout-Werte; Ressourcen, Bindings und andere Eigenschaften bleiben beim XAML-Lader.</summary>
+    /// <summary>Reads literal layout values only; resources, bindings and other properties stay with the XAML loader.</summary>
     public static bool TryGetLayoutValues(string fragment, IReadOnlyList<string> clearedProperties,
         out IReadOnlyDictionary<string, string?> values)
     {

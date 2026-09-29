@@ -4,7 +4,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Designer.PreviewerHost;
 
-/// <summary>Leitet lokale Aktualisierungsanforderungen über stdin an den UI-Thread des Hosts.</summary>
+/// <summary>Forwards local update requests from stdin to the UI thread of the host.</summary>
 internal static class IncrementalPreviewInput
 {
     public static void Register(object builder)

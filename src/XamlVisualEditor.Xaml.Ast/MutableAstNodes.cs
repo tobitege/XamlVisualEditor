@@ -514,7 +514,7 @@ public sealed class MutableAstDirectiveNode : MutableAstNode
     }
 }
 
-// Clear muss die normalen Entfernen-Meldungen liefern, damit Parent und Ereignisabonnements gelöst werden.
+// Clear has to raise the regular remove notifications so parents and event subscriptions are released.
 internal sealed class AstNodeCollection<T> : ObservableCollection<T>
 {
     protected override void ClearItems()

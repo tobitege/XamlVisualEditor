@@ -1,25 +1,25 @@
-# Designzeit-Vertrag fuer Controlbibliotheken
+# Design-Time Contract for Control Libraries
 
-Der Designer entdeckt Typen ueber Metadaten. Erst beim Rendern werden die tatsaechlichen Controls erzeugt. Eine Bibliothek muss weder ihren Namen im Editor registrieren noch von einer editorspezifischen Basisklasse ableiten.
+The designer discovers types through metadata. The actual controls are created only when the document renders. A library needs neither to register its name in the editor nor to derive from an editor-specific base class.
 
-## Konstruktion und Abhaengigkeiten
+## Construction and Dependencies
 
-- Toolbox-Controls benoetigen einen oeffentlichen, parameterlosen Konstruktor. Abstrakte Typen und offene generische Typen sind keine einfuegbaren Controls.
-- Die Vorschau fuehrt Bibliothekscode aus. Sie ist keine Sicherheitsisolierung fuer unbekannte Assemblies.
-- Fehlende Assemblies, fehlerhafte Konstruktoren und nicht aufloesbare Ressourcen bleiben Fehler. Ein transparenter Platzhalter erhaelt nur den Layoutplatz und gilt nicht als erfolgreiche Control-Unterstuetzung.
-- Ausfuehrliche Meldungen gehoeren in das Problems-Dock. Im Designer bleibt nur ein kurzer Status zur unvollstaendigen oder veralteten Vorschau.
+- Toolbox controls need a public parameterless constructor. Abstract types and open generic types are not insertable controls.
+- The preview runs library code. It is no security isolation for unknown assemblies.
+- Missing assemblies, failing constructors and unresolvable resources remain errors. A transparent placeholder only keeps the layout space and does not count as successful control support.
+- Detailed messages belong in the Problems dock. The designer only shows a short status for an incomplete or outdated preview.
 
-## Designwerte in AXAML
+## Design Values in AXAML
 
-Der Runtime-XAML-Loader verarbeitet das Dokument mit aktiviertem Compiler-Designmodus. Am Wurzel-Control uebernimmt der Editor folgende Avalonia-Designwerte in die Vorschau:
+The runtime XAML loader processes the document with the compiler design mode enabled. On the root control, the editor applies the following Avalonia design values to the preview:
 
-| Designwert | Wirkung |
+| Design value | Effect |
 |---|---|
-| `Design.Width`, `Design.Height` | Vorschaugroesse, auch ueber Design-Bindings |
-| `Design.DataContext` | Beispieldaten; Kind-Controls erben den Datenkontext nach den normalen Avalonia-Regeln |
-| `Design.DesignStyle` | Zusaetzlicher Style fuer die Vorschau |
+| `Design.Width`, `Design.Height` | Preview size, also through design bindings |
+| `Design.DataContext` | Sample data; child controls inherit the data context according to the regular Avalonia rules |
+| `Design.DesignStyle` | Additional style for the preview |
 
-Die Uebernahme aendert nicht die Laufzeitwerte im AXAML-Dokument. Die normalen Control-Eigenschaften, Styles, Resources und Templates bleiben Bestandteil des Dokuments.
+Applying these values does not change the runtime values in the AXAML document. The regular control properties, styles, resources and templates stay part of the document.
 
 ```xml
 <UserControl xmlns="https://github.com/avaloniaui"
@@ -32,12 +32,12 @@ Die Uebernahme aendert nicht die Laufzeitwerte im AXAML-Dokument. Die normalen C
 </UserControl>
 ```
 
-`PreviewData` ist eine von der Bibliothek bereitgestellte Beispielklasse. Sie sollte ohne Anmeldung, Datenbankzugriff oder Netzwerkverbindung konstruierbar sein. Styles und Ressourcen koennen mit den normalen Avalonia-Mitteln im Dokument oder in referenzierten Bibliotheken bereitgestellt werden.
+`PreviewData` is a sample class provided by the library. It should be constructible without a sign-in, database access or network connection. Styles and resources can be provided with the regular Avalonia means in the document or in referenced libraries.
 
-Fenster behalten im Renderpfad ihren wirklichen Controltyp. Der Editor aktiviert dafuer keinen zusaetzlichen Plattformmodus. Namescopes, Vorfahrenbeziehungen und Ressourcenbindungen bleiben dadurch Teil derselben Controlhierarchie.
+Windows keep their real control type in the render path. The editor does not enable an additional platform mode for them. Name scopes, ancestor relationships and resource bindings therefore stay part of the same control hierarchy.
 
-## Prozessweiter Designmodus
+## Process-Wide Design Mode
 
-Der Compiler-Designmodus ist nicht dasselbe wie `Design.IsDesignMode`. Der eingebettete Designer setzt diese prozessweite Eigenschaft nicht. Ein globaler Schalter wuerde auch die Controls und Dienste des Editors selbst betreffen.
+The compiler design mode is not the same as `Design.IsDesignMode`. The embedded designer does not set this process-wide property. A global switch would also affect the controls and services of the editor itself.
 
-Eine Bibliothek, deren Konstruktoren oder spaetere Lebenszyklusmethoden ausschliesslich ueber `Design.IsDesignMode` ihre Laufzeitabhaengigkeiten abschalten, braucht einen isolierten Designzeit-Host. Die durchgaengige Integration eines solchen Hosts in die visuelle Bearbeitung ist noch offen. Diese Bibliotheken gelten deshalb nicht bereits durch eine erfolgreiche Typentdeckung als vollstaendig unterstuetzt.
+A library whose constructors or later lifecycle methods switch off their runtime dependencies only through `Design.IsDesignMode` needs an isolated design-time host. The end-to-end integration of such a host into visual editing is still open. These libraries therefore do not count as fully supported merely because their types were discovered.

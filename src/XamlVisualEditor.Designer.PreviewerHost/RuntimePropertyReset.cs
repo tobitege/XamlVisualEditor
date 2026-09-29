@@ -6,7 +6,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Designer.PreviewerHost;
 
-/// <summary>Entfernt lokale Avalonia-Werte, damit Styles und geerbte Werte wieder gelten.</summary>
+/// <summary>Removes local Avalonia values so styles and inherited values apply again.</summary>
 internal static class RuntimePropertyReset
 {
     public static bool TryPrepareLayout(object control, string fragment, IReadOnlyList<string> cleared, out Action apply)

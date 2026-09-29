@@ -70,7 +70,7 @@ public sealed record ExtensionViewContribution(
     string? ContainerId = null,
     bool PersistDockState = true)
 {
-    /// <summary>Legt neue Panels standardmäßig in der eingeklappten Seitenleiste ab.</summary>
+    /// <summary>Places new panels in the collapsed side bar by default.</summary>
     public bool AutoHideByDefault { get; init; }
 }
 
@@ -115,10 +115,10 @@ public interface IExtensionContributionRegistry
     /// <summary>Gets theme providers to load in the isolated preview application.</summary>
     IReadOnlyList<DesignerThemeProviderRegistration> DesignerThemeProviders { get; }
 
-    /// <summary>Stellt Theme-Provider für die Editor-Oberfläche bereit.</summary>
+    /// <summary>Provides theme providers for the editor interface.</summary>
     IReadOnlyList<EditorThemeProviderRegistration> EditorThemeProviders { get; }
 
-    /// <summary>Registriert Editor-Themes unabhängig von den Vorschau-Themes.</summary>
+    /// <summary>Registers editor themes independently of the preview themes.</summary>
     IDisposable RegisterEditorThemeProviders(string extensionId, IReadOnlyList<EditorThemeProviderRegistration> providers);
 
     /// <summary>Registers globally unique provider IDs without loading their assemblies in the editor.</summary>

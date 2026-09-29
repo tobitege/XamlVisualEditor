@@ -8,7 +8,7 @@ namespace XamlVisualEditor.Shell.ViewModels;
 
 internal static class WorkspaceAssemblyDiscovery
 {
-    // Aufgelöste Projektreferenzen bestimmen die Version; Ausgabe-DLLs ergänzen eigene Controls.
+    // Resolved project references determine the version; output DLLs add the project's own controls.
     public static IReadOnlyList<string> FindCatalogAssemblies(ProjectModel project)
     {
         IReadOnlyList<string> outputs = FindProjectOutputs(project);

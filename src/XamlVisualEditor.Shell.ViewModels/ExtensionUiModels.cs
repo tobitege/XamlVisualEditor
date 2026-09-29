@@ -495,7 +495,7 @@ public abstract partial class ExtensionViewModel : ReactiveObject
 
     public bool PersistDockState { get; }
 
-    /// <summary>Gibt an, ob ein neues Panel standardmäßig eingeklappt bleibt.</summary>
+    /// <summary>Gets whether a new panel stays collapsed by default.</summary>
     public bool AutoHideByDefault { get; }
 }
 
@@ -524,7 +524,7 @@ public sealed partial class ExtensionCustomViewModel : ExtensionViewModel
 
 public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 {
-    /// <summary>Begrenzt die kompakte Explorer-Darstellung auf den Datei-Explorer.</summary>
+    /// <summary>Limits the compact explorer display to the File Explorer.</summary>
     public bool IsFileExplorer => ViewId == "fileExplorer.panel";
 
     private const string FilterPropertyPath = "Item.Label";

@@ -14,7 +14,7 @@ using XamlVisualEditor.Shell;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Behält die Breiten der äußeren Docks bei Fenstergrößenänderungen bei.</summary>
+/// <summary>Keeps the widths of the outer docks when the window size changes.</summary>
 public sealed class FixedSideDockWidthsBehavior : Behavior<DockControl>
 {
     private const double MINIMUM_EDITOR_WIDTH = 240;

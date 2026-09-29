@@ -12,7 +12,7 @@ using ReactiveUI;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Übernimmt die gespeicherte Panelgröße nach dem Wechsel des ausgeklappten Docks.</summary>
+/// <summary>Applies the stored panel size after the expanded dock changed.</summary>
 public sealed class PinnedDockLayoutBehavior : Behavior<DockControl>
 {
     private IDisposable? _subscription;

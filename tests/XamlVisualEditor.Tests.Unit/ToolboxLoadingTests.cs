@@ -65,7 +65,7 @@ public sealed class ToolboxLoadingTests
     public async Task FailurePreservesControlsAndOffersWorkingRetryAndCancelButtons()
     {
         bool fail = false;
-        string errorMessage = "Die Datei Controls.dll ist nicht lesbar." + Environment.NewLine + new string('x', 900);
+        string errorMessage = "The file Controls.dll cannot be read." + Environment.NewLine + new string('x', 900);
         MetadataControlCatalog catalog = new((paths, reportFailure, progress, token, includeProjectControls) =>
         {
             if (fail) throw new IOException(errorMessage);

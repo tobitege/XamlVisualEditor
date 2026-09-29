@@ -6,7 +6,7 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.App.Services;
 
-/// <summary>Übersetzt bibliotheksneutrale Paletten in die Ressourcen der vorhandenen Editor-Controls.</summary>
+/// <summary>Translates library-neutral palettes into the resources of the existing editor controls.</summary>
 internal static class EditorThemeResources
 {
     private static readonly (EditorThemeColor Role, string[] Keys)[] BrushGroups =
@@ -21,7 +21,7 @@ internal static class EditorThemeResources
         (EditorThemeColor.AccentForeground, new[] { "SystemControlForegroundChromeWhiteBrush", "DockApplicationAccentForegroundBrush", "DockDocumentTabCloseSelectedForegroundBrush", "EditorStatusBarForegroundBrush" }),
         (EditorThemeColor.Selection, new[] { "SystemControlHighlightListLowBrush", "SystemControlHighlightListMediumBrush", "DockTabActiveBackgroundBrush", "DockSurfaceHeaderActiveBrush", "DataGridRowSelectedBackgroundBrush", "DataGridRowSelectedHoveredBackgroundBrush", "DataGridCellSelectedBackgroundBrush", "DataGridCellSelectedHoveredBackgroundBrush", "DataGridRowSelectedUnfocusedBackgroundBrush", "DataGridCellSelectedUnfocusedBackgroundBrush", "DataGridRowSelectedUnfocusedHoveredBackgroundBrush", "DataGridCellSelectedUnfocusedHoveredBackgroundBrush" }),
         (EditorThemeColor.SelectionForeground, new[] { "SystemControlHighlightAltBaseHighBrush", "DockTabActiveForegroundBrush", "DataGridRowSelectedForegroundBrush", "DataGridCellSelectedForegroundBrush" }),
-        // Ausgewählte, nicht aktive Dock-Tabs stehen auf der Panel-/Headerfläche.
+        // Selected but inactive dock tabs sit on the panel/header surface.
         (EditorThemeColor.Foreground, new[] { "DockTabSelectedForegroundBrush", "DockDocumentTabSelectedForegroundBrush" }),
         (EditorThemeColor.Error, new[] { "DockChromeButtonDangerHoverBrush", "DockDocumentTabClosePointerOverForegroundBrush", "DataGridCellInvalidBrush", "EditorErrorBrush" }),
         (EditorThemeColor.Warning, new[] { "DataGridCellWarningBrush", "EditorWarningBrush" }),

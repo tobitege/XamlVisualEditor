@@ -37,7 +37,7 @@ public sealed class DialogPresentationTests
             shortDialog.Close(true);
             await warning;
 
-            Task error = service.ShowErrorMessageAsync(string.Join(" ", Enumerable.Repeat("Ausführliche Fehlermeldung.", 300)), CancellationToken.None);
+            Task error = service.ShowErrorMessageAsync(string.Join(" ", Enumerable.Repeat("Detailed error message.", 300)), CancellationToken.None);
             Flush(owner);
             MessageDialog longDialog = Assert.IsType<MessageDialog>(Assert.Single(owner.OwnedWindows));
             Assert.Equal("Fehler", longDialog.Title);

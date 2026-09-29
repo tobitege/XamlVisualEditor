@@ -12,7 +12,7 @@ using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Services;
 
-/// <summary>Verwaltet Editor-Themes, Paketwechsel und die unabhängigen Ressourcen der lokalen Vorschau.</summary>
+/// <summary>Manages editor themes, package switches and the independent resources of the local preview.</summary>
 public sealed class EditorThemeService : IEditorThemeService, IDisposable
 {
     private sealed record Provider(EditorThemeProviderRegistration Registration, EditorThemeProviderLoader Loader);

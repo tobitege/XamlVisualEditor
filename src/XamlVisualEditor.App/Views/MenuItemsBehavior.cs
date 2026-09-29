@@ -6,7 +6,7 @@ using Avalonia.Xaml.Interactivity;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Fügt dynamische Einträge über das XAML-Template neben feste Menüaktionen ein.</summary>
+/// <summary>Inserts dynamic entries through the XAML template next to fixed menu actions.</summary>
 public sealed class MenuItemsBehavior : Behavior<MenuItem>
 {
     public static readonly StyledProperty<IEnumerable?> ItemsProperty =

@@ -1,11 +1,15 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using XamlVisualEditor.App.Services;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Speichert und übernimmt Größe und Position eines Fensters vor dem Anzeigen.</summary>
+/// <summary>
+/// Persists the size, position and maximized state of an Avalonia window and restores
+/// them before the window is shown.
+/// </summary>
 public sealed class WindowLayoutBehavior
 {
     /// <summary>Identifies the attached property that enables window layout persistence.</summary>
@@ -68,30 +72,60 @@ public sealed class WindowLayoutBehavior
         UiLayoutState state = UiLayoutStateStore.Load();
         window.Width = state.WindowWidth;
         window.Height = state.WindowHeight;
-        if (state.WindowX is { } x && state.WindowY is { } y
-            && window.Screens.ScreenFromPoint(new PixelPoint(x, y)) is not null)
+        if (state.WindowX is { } x && state.WindowY is { } y && IsOnAnyScreen(window, new PixelPoint(x, y)))
         {
             window.WindowStartupLocation = WindowStartupLocation.Manual;
             window.Position = new PixelPoint(x, y);
+        }
+
+        if (state.WindowMaximized)
+        {
+            // Maximize only after the restored normal bounds reached the platform window,
+            // so leaving the maximized state returns to them instead of the XAML defaults.
+            Dispatcher.UIThread.Post(
+                () => window.WindowState = WindowState.Maximized,
+                DispatcherPriority.Background);
         }
     }
 
     private static void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime
-            || sender is not Window window || window.WindowState != WindowState.Normal)
+            || sender is not Window window || window.WindowState == WindowState.Minimized)
         {
+            return;
+        }
+
+        if (window.WindowState != WindowState.Normal)
+        {
+            UiLayoutStateStore.Update(state => state.WindowMaximized = true);
             return;
         }
 
         double width = window.ClientSize.Width;
         double height = window.ClientSize.Height;
+        PixelPoint position = window.Position;
         UiLayoutStateStore.Update(state =>
         {
             state.WindowWidth = width;
             state.WindowHeight = height;
-            state.WindowX = window.Position.X;
-            state.WindowY = window.Position.Y;
+            state.WindowX = position.X;
+            state.WindowY = position.Y;
+            state.WindowMaximized = false;
         });
+    }
+
+    private static bool IsOnAnyScreen(Window window, PixelPoint position)
+    {
+        Screens? screens = window.Screens;
+        if (screens is null || screens.ScreenCount == 0)
+        {
+            return true;
+        }
+
+        // Accept a position when its title bar area still touches a screen, so a
+        // window near a monitor edge is restored while one on a detached monitor is not.
+        return screens.ScreenFromPoint(position) is not null
+            || screens.ScreenFromPoint(new PixelPoint(position.X + 100, position.Y + 20)) is not null;
     }
 }

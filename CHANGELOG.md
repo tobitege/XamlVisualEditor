@@ -14,12 +14,6 @@ uses Semantic Versioning.
 - Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
 - Added the option to reopen the last workspace or folder at startup.
 - Added the option to list folders before files in the File Explorer (Options, File Explorer; on by default). It also holds when the File Explorer sorts by its column header, in both directions; the setting is stored as `FileExplorerFoldersBeforeFiles`.
-- Added `--mcp` to start the local HTTP MCP server from the command line.
-- Added MCP command-line options for the transport, HTTP port, and HTTP path.
-- Added per-user persistence for the main-window size and designer/code splitter ratios.
-- Added automatic preview-host selection for library workspaces that use a separate application assembly.
-- Added preview frame export through the IDE bridge.
-- Added visible progress status for workspace loading and design-surface rebuilds.
 - Added the TFVC extension with a source control explorer, a pending changes panel, and automatic check-out of versioned files on their first edit. It uses tf.exe and the TFVC REST API with the current Windows credentials; the only required setting is the collection URL.
 - Added changeset details to the TFVC extension: the history context menu shows the changed files of a changeset in the TFVC Changes panel, where the author can revise and save the check-in comment. The history can be filtered by user and is sorted by changeset, newest first.
 - Added the text editing extension: a context menu for the text and code editors with clipboard, find and replace, go to line and matching bracket, a Format submenu (toggle comment, upper and lower case, indentation, line sorting, enclosing in brackets), an Outlining submenu and a Display submenu with check-marked view toggles and zoom. The Editor Options dialog sets font, display, editing, link and color options with a live preview. The options and the caret position of each file persist across sessions.
@@ -28,9 +22,6 @@ uses Semantic Versioning.
 - Added an offline mode to the TFVC extension: when the server is unreachable at startup, XVE offers to work offline, removes the read-only attribute of an edited versioned file only after confirmation, and proposes the local changes for pending once when going online again. The Extensions menu has a TFVC submenu for going offline and online.
 - Added "Add Items to Folder..." to the TFVC source control explorer, which adds unversioned files and folders below a mapped folder.
 - Read-only files show a banner and a title marker in the editor.
-- Extensions can refine the rendered design preview through `IDesignPreviewHook` and `DesignPreviewHookRegistry`.
-- Enabled installed extension packages whose manifest names a `main` assembly are loaded into the default load context and activated.
-- `XVE_DESIGN_APP_XAML` names the App.axaml whose themes and resources the design surface applies, for library workspaces without an application of their own.
 - The status bar shows startup work, extension activation, TFVC initialization and the language-service warmup of a loaded workspace while they run, and shows "Ready" only after the last of them ended. Extensions announce their own background work through `ExtensionContext.BackgroundActivities`.
 - Extensions can redirect a file the user opens to another file through `ExtensionContext.DocumentOpenInterceptors`, for example to open a generated file in place of its source; navigation into a file is not redirected. `ConfirmationDialogRequest.CancelText` labels the declining button.
 - The XAML code editor marks the element selected in the designer with an arrow at its first line and a bar along its lines in the gutter, and a selection in the designer scrolls the element start away from the viewport edge. The "Follow" toggle in the code editor toolbar turns this off.
@@ -45,10 +36,7 @@ uses Semantic Versioning.
 - A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
 - The first start and the reset layout command use the Debugging preset instead of a layout with every panel. A layout preset contains only the panels it lists, instead of hiding the others.
 - The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
-- The C# language workspace now warms in the background after the initial workspace load.
 - The messages of the TFVC output channel and the tf.exe timeout message follow the editor language; a unit test keeps the German TFVC resources complete and their placeholders aligned.
-- Selecting a control with a large property set no longer stalls the UI: the property panel replaces its entry, event and grouped row collections with a single reset instead of per-item inserts, creates the entry commands on first use, sets initial entry values without change notifications, and notifies value changes through direct callbacks instead of per-entry subscriptions.
-- The design surface clamps Grid.Row and Grid.Column to zero before writing them, so a negative target index no longer throws from an input handler.
 - Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
 - Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
 - Fixed the external previewer reporting "Design tree unavailable: Ambiguous match found" for controls that hide an inherited property with `new`, such as a Padding of their own type: the design tree reader walks the type hierarchy and takes the Avalonia Thickness declaration of Padding.
@@ -59,10 +47,11 @@ uses Semantic Versioning.
 - Opening a problem from the Problems panel in a XAML code editor marks its location like a designer selection, but in the error color: a red bar and arrow in the gutter along the start tag that contains the diagnostic (or along its line outside a start tag), scrolled into the middle of the editor with the caret at the diagnostic. The marker disappears with the next edit. Extensions open a diagnostic location this way through `IEditorServices.OpenDiagnosticLocationAsync`.
 - Fixed the external previewer failing with "Could not load file or assembly 'System.Xaml'" when the previewed project references a .NET Framework library: the previewer host no longer preloads project references whose assembly-level attributes come from an assembly the runtime cannot load, because the XAML compiler reads those attributes of every loaded assembly.
 - `DesignPreviewHookRegistry.Register` ignores a hook that is already registered: the hook runs once per preview, the repeated registration's disposal does nothing, and the first registration keeps owning the hook.
-- XVE now reads assemblies from a shared build output instead of unrelated output trees.
-- Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
-- The dock layout now saves before view teardown and loads during the next start.
-- The designer now applies explicit `Grid.RowDefinitions` and `Grid.ColumnDefinitions` elements.
+- Breaking: `IDesignPreviewHook` no longer takes part in control instantiation. The design surface loads the document with the Avalonia runtime XAML loader and calls `PostProcess(Control root, MutableAstObjectNode rootNode)` once for the rendered root; `TryCreateControl` and the per-node post-processing in `ControlFactory` are gone. `DesignPreviewHookRegistry.Apply` runs the hooks and reports a failing hook without stopping the others.
+- Installed extension packages are activated from the installation directory the package store extracts them to. `InstalledExtensionPackages.ResolveMainAssemblyPath` takes the package info, and `ExtractContent` is gone.
+- The design artboard sizes a document without an explicit size from a measurement of the rendered root, bounded by `DesignCanvasSizing.MeasureConstraint`, and has no padding around the document; `DesignCanvasSizing.ArtboardPadding` is gone.
+- The dock factory no longer keeps a list of closed tools (`IsToolClosed`, `MarkToolClosed`, `MarkToolReopened`, `ClearClosedTools`, `ReopenBuiltInTool`): a loaded layout keeps closed panels closed on its own.
+- Tests isolate every persisted shell settings file through `ShellSettingsPaths.RootOverride`, which replaces `XamlEditorDockFactory.SettingsRootOverride`.
 
 ### Fixed
 
@@ -72,7 +61,6 @@ uses Semantic Versioning.
 - Fixed the Solution Explorer missing the XAML files of an SDK-style project that lists other items, such as a `None Update` of a text file: the default XAML files of the project folder are always part of the tree unless `EnableDefaultItems` or `EnableDefaultAvaloniaItems` is false, and `AvaloniaXaml Remove` patterns still exclude files. The tree search and "Open in Solution Explorer" find these files now.
 - Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.
 - Fixed `IEditorServices.OpenLocationAsync` failing with "Call from invalid thread" when the file was not open yet: after opening the document, the caret and selection are set on the UI thread.
-- Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
 - Fixed the line and column in the status bar, which stayed at 1, 1 for XAML documents.
 - Fixed property edits with several selected controls, which changed only the first control. The property editor now shows the properties shared by all selected controls, shows differing values as not set, and applies an edit to every selected control as one undo step. Names, collections, templates and events stay single-selection edits.
@@ -82,12 +70,6 @@ uses Semantic Versioning.
 - Fixed Solution Explorer entries such as `Y:` or `..` for files outside the project folder; these files no longer appear in the tree.
 - Fixed the pointer cursor over the selection: resize handles show the resize direction, and the selection border shows the move cursor and moves the selection.
 - Opening files, folders and workspaces rejects paths that are not fully qualified in the canonical syntax of the operating system; on Windows only drive paths and UNC paths with backslashes are accepted. Recent entries with such paths are dropped and removed from the stored history.
-- Fixed workspace access errors caused by changes to the process-wide current directory.
-- Fixed preview startup for library projects that do not contain an application entry point.
-- Fixed preview sessions that displayed an endless wait after the preview host stopped.
-- Fixed missing preview-host errors in the preview surface.
-- Fixed concurrent access to `recent-files.json` during application startup.
-- Fixed incorrect workspace selection for generated AXAML outside a source project.
 - Fixed binding errors of the tool chrome when the last tool of a dock closes, gets pinned or leaves the auto-hide preview.
 - Fixed the view menu not reopening a debugger tool that was closed in its dock.
 - Fixed the name of the active window layout getting lost at restart, which also made Save ask for a name again.
@@ -103,12 +85,59 @@ uses Semantic Versioning.
 - Fixed the TFVC panels forgetting whether their connection settings were shown; each panel keeps its own choice.
 - Fixed the C# language service writing documents to disk, which crashed the application for read-only files.
 - Fixed save, delete and rename errors showing system text; they report read-only, access-denied and in-use files in the current language.
-- Fixed the design artboard clipping documents without an explicit size at 800 x 600; it grows from the declared minimum size to the rendered content.
-- Fixed tests reading and overwriting the user's persisted layout files.
 - Fixed expanding a folder in the TFVC explorer scrolling the tree back to its root; only the rows of the expanded folder are replaced.
 - Fixed missing satellite resource assemblies being reported as unresolved workspace assemblies.
 - Fixed closing the editor logging a binding error for every tab, pin button and document: the dock views let go of their dockables before the layout is saved.
 - Fixed the references panel and the extension manager keeping their subscriptions after the shell was disposed; the throttled references filter still reached the UI dispatcher afterwards.
+
+## [0.2.0] - 2026-09-01
+
+### Added
+
+- Added design-surface theming from the workspace application's `App.axaml`; `XVE_DESIGN_APP_XAML` names the application for library workspaces without one.
+- Added the `IDesignPreviewHook` extension point: extensions can take over control instantiation for the design preview or post-process finished nodes.
+- Added activation of enabled installed extension packages: the archive is extracted, the manifest's main assembly is loaded, and its extension entry types are activated.
+- Added `--mcp` to start the local HTTP MCP server from the command line.
+- Added MCP command-line options for the transport, HTTP port, and HTTP path.
+- Added per-user persistence for the main-window size and designer/code splitter ratios.
+- Added automatic preview-host selection for library workspaces that use a separate application assembly.
+- Added preview frame export through the IDE bridge.
+- Added visible progress status for workspace loading and design-surface rebuilds.
+
+### Changed
+
+- The design preview now materializes property elements that carry control content and applies attributes outside its built-in list through registered Avalonia or writable CLR properties.
+- The design artboard now sizes to the document: an explicit size wins, otherwise the artboard follows the rendered document bounds above the declared minimum instead of clipping at the default size.
+- The C# language workspace now warms in the background after the initial workspace load.
+- XVE now reads assemblies from a shared build output instead of unrelated output trees.
+- Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
+- The dock layout now saves before view teardown and loads during the next start.
+- The bottom tool dock starts closed and opens only after a user action.
+- The designer now applies explicit `Grid.RowDefinitions` and `Grid.ColumnDefinitions` elements.
+
+### Fixed
+
+- Fixed the test suites reading and overwriting the user's persisted layout files: the dock factory settings root is now overridable, and every test bootstrap points it at an isolated temporary directory.
+- Fixed `diagnostics.get` on the IDE bridge returning nothing for designer documents: the diagnostics service now resolves any open document by path (not just the active text document) and maps designer XAML diagnostics into the language diagnostics it reports, publishes, and snapshots.
+- Fixed the collapsed bottom dock expanding on every start: loading treated the persisted zero proportion as damage and reset it, and extension views registering after startup added and activated their tool over the restored layout. Zero now stays collapsed, and late extension tools go to the pin strip instead of activating.
+- Fixed closed tool panels reappearing on every start: the shell recreates missing default and extension tools, so closed tools are now remembered in a persisted list, removed from loaded layouts, skipped by the recreation paths, and revived only through the view menu (a layout reset clears the list).
+- Fixed designer selection picking a container instead of the clicked child: hit-testing now walks the real visual tree in z-order (templated controls included) and maps the hit to the nearest design item, instead of probing the logical structure only.
+- Fixed a crash when nudging a selected control with arrow keys inside a grid without explicit row or column definitions: the target index underflowed to -1 and Grid.SetRow/SetColumn rejected it, terminating the application.
+- Fixed the design surface stealing arrow keys from the code editor: its window-level key handler now acts only while focus is inside the surface.
+- Fixed a UI freeze of 30+ seconds when selecting a control with a large property set: the property panel now replaces its entry collections with a single reset instead of per-item inserts, creates entry commands lazily, and notifies entry changes through direct callbacks instead of per-entry subscriptions.
+- Fixed the design artboard clipping the document: it froze an early measurement taken before templates and deferred content finished loading, and border strokes on the document edge ended on the clip boundary. The document now sits at the artboard origin and sizes itself, and the artboard follows the rendered bounds plus a small padding.
+- Fixed the saved dock layout never loading back: it was serialized polymorphically but deserialized against the concrete root type, and persisted open documents and the pinned dock made the file unreadable, so every start silently deleted it and rebuilt the default layout.
+- Fixed a restored layout rendering as empty: the serializer materializes Active-/Default-/FocusedDockable references as duplicate subtrees, so the shell rendered an unwired copy while panels were added to the visible tree; loading now repoints these references into the visible tree by id.
+- Fixed pinned tools multiplying across restarts: the layout search helpers now cover the pinned and hidden dockable lists, and loading prunes duplicates that earlier versions accumulated.
+- Fixed the main window forgetting its screen position and maximized state; both are now persisted and restored, and a stored position on a disconnected monitor falls back to the default placement.
+- Fixed attribute-form `RowDefinitions`/`ColumnDefinitions` being cleared instead of parsed, which collapsed every grid child into one implicit cell.
+- Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
+- Fixed workspace access errors caused by changes to the process-wide current directory.
+- Fixed preview startup for library projects that do not contain an application entry point.
+- Fixed preview sessions that displayed an endless wait after the preview host stopped.
+- Fixed missing preview-host errors in the preview surface.
+- Fixed concurrent access to `recent-files.json` during application startup.
+- Fixed incorrect workspace selection for generated AXAML outside a source project.
 
 ## [0.1.0] - 2026-08-20
 

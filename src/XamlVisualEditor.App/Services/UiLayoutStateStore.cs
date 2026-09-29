@@ -17,6 +17,8 @@ internal sealed class UiLayoutState
 
     public int? WindowY { get; set; }
 
+    public bool WindowMaximized { get; set; }
+
     public Dictionary<string, SplitterLayoutState> Splitters { get; set; } = new(StringComparer.Ordinal);
 }
 
@@ -115,6 +117,13 @@ internal static class UiLayoutStateStore
         if (!double.IsFinite(state.WindowHeight) || state.WindowHeight < MinimumWindowHeight)
         {
             state.WindowHeight = 900;
+        }
+
+        // A stored position is only usable as a complete pair.
+        if (state.WindowX is null || state.WindowY is null)
+        {
+            state.WindowX = null;
+            state.WindowY = null;
         }
 
         foreach (SplitterLayoutState splitter in state.Splitters.Values)

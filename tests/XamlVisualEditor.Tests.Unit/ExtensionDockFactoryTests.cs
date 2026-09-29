@@ -200,6 +200,30 @@ public sealed class ExtensionDockFactoryTests
     }
 
     [Fact]
+    public void CollapseBottomToolDock_ClosesPanelWithoutRemovingTools()
+    {
+        using MainWindowViewModel viewModel = new();
+        IRootDock layout = viewModel.DockFactory.CreateDefaultLayout();
+        viewModel.DockFactory.InitLayout(layout);
+        ToolDock? bottomDock = XamlEditorDockFactory.FindDockable<ToolDock>(
+            layout,
+            "BottomToolDock");
+        Assert.NotNull(bottomDock);
+        Assert.NotEmpty(bottomDock!.VisibleDockables!);
+        bottomDock.ActiveDockable = bottomDock.VisibleDockables![0];
+        bottomDock.IsExpanded = true;
+
+        viewModel.DockFactory.CollapseBottomToolDock(layout);
+
+        Assert.Null(bottomDock.ActiveDockable);
+        Assert.False(bottomDock.IsExpanded);
+        Assert.Equal(0, bottomDock.Proportion);
+        Assert.Equal(0.25, bottomDock.CollapsedProportion);
+        Assert.Empty(bottomDock.VisibleDockables!);
+        Assert.NotEmpty(layout.BottomPinnedDockables!);
+    }
+
+    [Fact]
     public void AddExtensionTool_WiresOwnerAndFactory_WhenInsertedIntoLeftDock()
     {
         using MainWindowViewModel viewModel = new();

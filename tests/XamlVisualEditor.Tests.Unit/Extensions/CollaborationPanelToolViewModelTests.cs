@@ -1,4 +1,4 @@
-﻿using System.Reactive.Threading.Tasks;
+using System.Reactive.Threading.Tasks;
 using XamlVisualEditor.CollaborationExtension;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;

@@ -1,4 +1,4 @@
-﻿using System.Reactive.Disposables;
+using System.Reactive.Disposables;
 using System.Threading;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.FileExplorerExtension.ViewModels;

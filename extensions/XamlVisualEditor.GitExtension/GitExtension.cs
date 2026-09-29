@@ -1,4 +1,4 @@
-﻿using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
 
 using XamlVisualEditor.Core.Localization;

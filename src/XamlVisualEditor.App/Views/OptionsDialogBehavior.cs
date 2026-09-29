@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Avalonia.Xaml.Interactivity;
 using ReactiveUI;

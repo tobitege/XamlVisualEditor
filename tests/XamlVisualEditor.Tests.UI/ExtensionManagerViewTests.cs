@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading.Tasks;

@@ -1,4 +1,4 @@
-﻿namespace XamlVisualEditor.Core.Localization;
+namespace XamlVisualEditor.Core.Localization;
 
 public static class UiLabels
 {

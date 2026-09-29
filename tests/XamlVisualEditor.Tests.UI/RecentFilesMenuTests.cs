@@ -1,4 +1,4 @@
-﻿using System.Reactive.Linq;
+using System.Reactive.Linq;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;

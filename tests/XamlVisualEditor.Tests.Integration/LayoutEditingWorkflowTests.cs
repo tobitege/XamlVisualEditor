@@ -1,4 +1,4 @@
-﻿using XamlVisualEditor.Core;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Sync;

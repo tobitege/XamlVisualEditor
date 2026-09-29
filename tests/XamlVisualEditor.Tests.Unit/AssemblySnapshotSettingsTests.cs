@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;

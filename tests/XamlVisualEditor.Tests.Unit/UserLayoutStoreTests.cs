@@ -1,4 +1,4 @@
-﻿using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit;

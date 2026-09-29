@@ -1,4 +1,4 @@
-﻿using XamlVisualEditor.Acp;
+using XamlVisualEditor.Acp;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit;

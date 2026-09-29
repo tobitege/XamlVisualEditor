@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;

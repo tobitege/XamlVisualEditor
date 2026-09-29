@@ -1,4 +1,4 @@
-﻿using System.Xml.Linq;
+using System.Xml.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.PreviewerHost;
 using Xunit;

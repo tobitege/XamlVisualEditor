@@ -1,4 +1,4 @@
-﻿namespace XamlVisualEditor.Shell.ViewModels;
+namespace XamlVisualEditor.Shell.ViewModels;
 
 /// <summary>
 /// Fluent System Icons (20, regular) used by the animation editor toolbar and inspector.

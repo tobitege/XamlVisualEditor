@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia.Controls;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;

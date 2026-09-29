@@ -1,4 +1,4 @@
-﻿using XamlVisualEditor.Core;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Designer.PreviewerHost;
 

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using XamlVisualEditor.Extensions;
 
 using XamlVisualEditor.Core.Localization;

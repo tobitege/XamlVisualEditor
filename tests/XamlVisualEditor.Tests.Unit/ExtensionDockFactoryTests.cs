@@ -1,4 +1,4 @@
-﻿using Avalonia.Headless.XUnit;
+using Avalonia.Headless.XUnit;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.ReactiveUI.Controls;

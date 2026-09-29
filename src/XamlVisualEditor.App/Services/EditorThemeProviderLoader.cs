@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.Loader;
 using Avalonia.Platform;
 using XamlVisualEditor.Core;

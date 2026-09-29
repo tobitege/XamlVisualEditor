@@ -1,4 +1,4 @@
-﻿namespace XamlVisualEditor.Extensions;
+namespace XamlVisualEditor.Extensions;
 
 /// <summary>Hosts modal dialogs for extensions.</summary>
 public interface IDialogHost

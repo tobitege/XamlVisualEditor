@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.App;

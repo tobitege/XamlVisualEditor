@@ -1,4 +1,4 @@
-﻿using XamlVisualEditor.Core;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
 

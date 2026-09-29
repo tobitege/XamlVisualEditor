@@ -1,4 +1,4 @@
-﻿<Styles xmlns="https://github.com/avaloniaui"
+<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- The class belongs only to editor chrome, never to a rendered document. -->
     <Style Selector=".editor-chrome .editor-toolbar > :is(Control)">

@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Headless.XUnit;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;

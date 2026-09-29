@@ -1,4 +1,4 @@
-﻿using System.Reactive;
+using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Xaml.Interactivity;
 using ReactiveUI;

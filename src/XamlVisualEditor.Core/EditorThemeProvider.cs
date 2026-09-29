@@ -1,4 +1,4 @@
-﻿namespace XamlVisualEditor.Core;
+namespace XamlVisualEditor.Core;
 
 /// <summary>Semantic colors of the editor interface, independent of a control library.</summary>
 public enum EditorThemeColor

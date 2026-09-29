@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Reactive.Concurrency;
 using Avalonia;
 using Avalonia.Controls;

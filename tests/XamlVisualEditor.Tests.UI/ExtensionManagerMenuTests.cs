@@ -55,6 +55,12 @@ public sealed class ExtensionManagerMenuTests
                 Assert.Same(layout, viewModel.DockLayout);
                 dialog.Close();
                 await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+                // The command runs until the modal dialog closes and disables its menu item meanwhile;
+                // its completion can take more than one dispatcher round, and a disabled item cannot take focus.
+                await viewModel.OpenExtensionManagerCommand.IsExecuting
+                    .FirstAsync(executing => !executing)
+                    .Timeout(TimeSpan.FromSeconds(10));
             }
         }
         finally

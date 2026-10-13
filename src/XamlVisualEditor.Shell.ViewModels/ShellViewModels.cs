@@ -7417,6 +7417,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (isVisible)
         {
             DockFactory.RestoreDockable(dockable);
+            XamlEditorDockFactory.RestoreSideDockWidth(dockable);
             DockFactory.SetActiveDockable(dockable);
             if (dockable.Owner is IDock owner && owner is not IRootDock)
                 DockFactory.SetFocusedDockable(owner, dockable);

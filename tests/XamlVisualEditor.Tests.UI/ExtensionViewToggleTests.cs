@@ -133,6 +133,43 @@ public sealed class ExtensionViewToggleTests
     }
 
     [AvaloniaFact]
+    public async Task Toggle_gives_an_emptied_side_dock_its_width_back()
+    {
+        CommandRegistry commands = new();
+        ExtensionContributionRegistry contributions = new();
+        ExtensionViewRegistry views = new();
+        using MainWindowViewModel viewModel = new(
+            extensionCommands: commands,
+            extensionContributionRegistry: contributions,
+            extensionViewRegistry: views);
+        using IDisposable firstProvider = views.RegisterCustomViewProvider("first.panel", new PanelProvider());
+        using IDisposable registeredViews = contributions.RegisterViews("test.toggle", new[]
+        {
+            new ExtensionViewContribution("first.panel", "First", ExtensionViewType.Custom, ExtensionViewLocation.Right, 70)
+        });
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        viewModel.ActivateExtensionView("first.panel");
+        IRootDock root = viewModel.DockLayout!;
+        IToolDock rightDock = XamlEditorDockFactory.FindDockable<IToolDock>(root, "RightToolDock")!;
+        ExtensionTool first = XamlEditorDockFactory.FindDockable<ExtensionTool>(root, ExtensionTool.BuildId("first.panel"))!;
+        // The state a saved layout restores after its last right-side panel was hidden: the panel below the
+        // root and the right dock left without width.
+        rightDock.VisibleDockables!.Remove(first);
+        first.Owner = root;
+        root.HiddenDockables!.Add(first);
+        rightDock.IsEmpty = true;
+        rightDock.Proportion = 0;
+
+        viewModel.ToggleExtensionView("first.panel");
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+        Assert.True(viewModel.IsExtensionViewVisible("first.panel"));
+        Assert.Contains(first, rightDock.VisibleDockables!);
+        Assert.False(rightDock.IsEmpty);
+        Assert.True(rightDock.Proportion > 0, $"Right dock proportion is {rightDock.Proportion}.");
+    }
+
+    [AvaloniaFact]
     public async Task Toggle_breakpoints_shows_them_after_a_restored_layout_kept_them_hidden_below_the_root()
     {
         using MainWindowViewModel viewModel = new();

@@ -65,7 +65,7 @@ public sealed partial class DesignerDocumentViewModel
                 _interactionDiagnostics = Array.Empty<LanguageDiagnostic>();
             if (change.Diagnostics is { } syntaxDiagnostics)
                 _syntaxDiagnostics = syntaxDiagnostics.Select(diagnostic => CreateDesignerDiagnostic(
-                    diagnostic.Message, diagnostic.Severity, "XAML", "XVE_XAML",
+                    PositionSuffix.Replace(diagnostic.Message, string.Empty), diagnostic.Severity, "XAML", "XVE_XAML",
                     diagnostic.Line, diagnostic.Column, diagnostic.Length)).ToArray();
             if (_renderDiagnosticsText != change.UpdatedText)
                 _renderDiagnostics = Array.Empty<LanguageDiagnostic>();
@@ -103,6 +103,10 @@ public sealed partial class DesignerDocumentViewModel
                 if (error.TextContent is { } text && parent is XElement owner
                     && owner.Nodes().OfType<XText>().FirstOrDefault(node => node.Value.Trim() == text) is { } textNode)
                     return GetTextStart(textNode);
+                if (error.AttributeName is { } attributeName && parent is XElement attributeOwner
+                    && attributeOwner.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == attributeName)
+                        is IXmlLineInfo attributeLocation)
+                    return (attributeLocation.LineNumber, attributeLocation.LinePosition);
                 IXmlLineInfo location = (IXmlLineInfo)parent;
                 return (location.LineNumber, location.LinePosition);
             }
@@ -110,6 +114,9 @@ public sealed partial class DesignerDocumentViewModel
         }
         return (error?.Line ?? 1, error?.Column ?? 1);
     }
+
+    // XML parser messages end with the position that the diagnostic already carries.
+    private static readonly System.Text.RegularExpressions.Regex PositionSuffix = new(@"\s*Line \d+, position \d+\.$");
 
     // A text node starts with the whitespace before its first character; the position names that character.
     private static (int Line, int Column) GetTextStart(XText node)
@@ -177,8 +184,11 @@ public sealed partial class DesignerDocumentViewModel
         };
     }
 
+    // The previewer repeats an XML syntax error that the XAML parser already reports at the same place.
     private void PublishDesignerDiagnostics() =>
         Diagnostics = _syntaxDiagnostics
             .Concat(UseExternalPreviewer ? Array.Empty<LanguageDiagnostic>() : _renderDiagnostics)
-            .Concat(_previewerLaunchDiagnostics).Concat(_previewerDiagnostics).Concat(_previewThemeDiagnostics).Concat(_interactionDiagnostics).ToArray();
+            .Concat(_previewerLaunchDiagnostics)
+            .Concat(_previewerDiagnostics.Where(previewer => !_syntaxDiagnostics.Any(syntax => syntax.Range.Start == previewer.Range.Start)))
+            .Concat(_previewThemeDiagnostics).Concat(_interactionDiagnostics).ToArray();
 }

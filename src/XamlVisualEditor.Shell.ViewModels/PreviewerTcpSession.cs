@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
@@ -493,12 +494,13 @@ public sealed class PreviewerTcpSession : IDisposable
         int? line = result.Exception?.LineNumber is > 0 ? result.Exception.LineNumber : null;
         int? column = result.Exception?.LinePosition is > 0 ? result.Exception.LinePosition : null;
         PreviewerElementPathSegment[]? path = null;
+        XElement? element = null;
         if (line is not null && xaml is not null)
         {
             try
             {
                 XDocument document = XDocument.Parse(xaml, LoadOptions.SetLineInfo);
-                XElement? element = document.Descendants().LastOrDefault(candidate =>
+                element = document.Descendants().LastOrDefault(candidate =>
                 {
                     IXmlLineInfo location = candidate;
                     return location.LineNumber < line || location.LineNumber == line
@@ -512,16 +514,95 @@ public sealed class PreviewerTcpSession : IDisposable
         if (line is null && xaml is not null && IsTextCastToControl(result.Exception) && FindStrayText(xaml) is { } stray)
         {
             string text = stray.Value.Trim();
-            string shown = text.Length > 40 ? text[..40] + "…" : text;
-            return new PreviewerErrorInfo(string.Format(UiStrings.PreviewerTextNotAllowed, shown, stray.Parent!.Name.LocalName),
+            return new PreviewerErrorInfo(string.Format(UiStrings.PreviewerTextNotAllowed, Shorten(text), stray.Parent!.Name.LocalName),
                 null, null, filePath, CreateElementPath(stray.Parent), text);
         }
         string message = result.Exception?.Message ?? result.Error;
         string positionSuffix = $" Line {line}, position {column}.";
         if (line is not null && column is not null && message.EndsWith(positionSuffix, StringComparison.Ordinal))
             message = message[..^positionSuffix.Length];
+        if (element is not null && DescribeValueError(element, message) is { } described)
+            return new PreviewerErrorInfo(described.Message, line, column, filePath, path, described.TextContent, described.AttributeName);
         return new PreviewerErrorInfo(message, line, column, filePath, path);
     }
+
+    private static readonly Regex InvalidNumberMessage = new(@"^The input string '(?<value>.*)' was not in a correct format\.?$");
+    private static readonly Regex NoSetterMessage = new(
+        @"^Unable to find suitable setter or adder for property (?<property>[\w.]+) of type (?<owner>[\w.]+):\S+ for argument \S*System\.String, available setter parameter lists are:\s*(?<types>.*)$",
+        RegexOptions.Singleline);
+    private static readonly Regex SingleChildMessage = new(@"^Unable to find a setter that allows multiple assignments to the property (?<property>[\w.]+) of type ");
+    private static readonly Regex UnknownPropertyMessage = new(@"^Unable to resolve suitable regular or attached property (?<property>[\w.]+) on type ");
+    private static readonly Regex UnknownTypeMessage = new(@"^Unable to resolve type (?<type>[\w.]+) from namespace ");
+
+    // The XAML loader describes value and structure errors in terms of setters and types, and a failed number
+    // conversion names only the value. These messages are restated for the element at the error position.
+    private static (string Message, string? TextContent, string? AttributeName)? DescribeValueError(XElement element, string message)
+    {
+        if (InvalidNumberMessage.Match(message) is { Success: true } number)
+        {
+            XAttribute? numberAttribute = element.Attributes()
+                .FirstOrDefault(attribute => !attribute.IsNamespaceDeclaration && attribute.Value == number.Groups["value"].Value);
+            return numberAttribute is null ? null
+                : (string.Format(UiStrings.PreviewerInvalidNumber, numberAttribute.Value, numberAttribute.Name.LocalName),
+                    null, numberAttribute.Name.LocalName);
+        }
+
+        if (NoSetterMessage.Match(message) is { Success: true } noSetter)
+        {
+            if (FindAttribute(element, noSetter.Groups["property"].Value) is { } attribute)
+            {
+                string[] types = noSetter.Groups["types"].Value
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                string owner = noSetter.Groups["owner"].Value;
+                string allowed = types.Select(type => GetEnumNames(type, owner)).FirstOrDefault(names => names.Length > 0) ?? string.Empty;
+                string valueType = types.Length == 0 ? noSetter.Groups["property"].Value : types[^1][(types[^1].LastIndexOf('.') + 1)..];
+                return (allowed.Length == 0
+                        ? string.Format(UiStrings.PreviewerInvalidValue, attribute.Value, attribute.Name.LocalName, valueType)
+                        : string.Format(UiStrings.PreviewerInvalidEnumValue, attribute.Value, attribute.Name.LocalName, allowed),
+                    null, attribute.Name.LocalName);
+            }
+
+            if (element.Nodes().OfType<XText>().FirstOrDefault(node => !string.IsNullOrWhiteSpace(node.Value)) is { } text)
+            {
+                string content = text.Value.Trim();
+                return (string.Format(UiStrings.PreviewerTextNotAllowed, Shorten(content), element.Name.LocalName), content, null);
+            }
+
+            return null;
+        }
+
+        if (SingleChildMessage.Match(message) is { Success: true } singleChild)
+            return (string.Format(UiStrings.PreviewerSingleChild, element.Name.LocalName, singleChild.Groups["property"].Value), null, null);
+
+        if (UnknownPropertyMessage.Match(message) is { Success: true } unknownProperty)
+        {
+            string property = unknownProperty.Groups["property"].Value;
+            return (string.Format(UiStrings.PreviewerUnknownProperty, element.Name.LocalName, property), null,
+                FindAttribute(element, property)?.Name.LocalName);
+        }
+
+        if (UnknownTypeMessage.Match(message) is { Success: true } unknownType)
+            return (string.Format(UiStrings.PreviewerUnknownElement, unknownType.Groups["type"].Value), null, null);
+
+        return null;
+    }
+
+    private static XAttribute? FindAttribute(XElement element, string property) =>
+        element.Attributes().FirstOrDefault(attribute => !attribute.IsNamespaceDeclaration
+            && (attribute.Name.LocalName == property || attribute.Name.LocalName.EndsWith("." + property, StringComparison.Ordinal)));
+
+    // The listed types carry no assembly name; the property owner's assembly is the likeliest home of the enum
+    // when no loaded assembly defines it.
+    private static string GetEnumNames(string fullTypeName, string ownerAssembly)
+    {
+        Type? enumType = AppDomain.CurrentDomain.GetAssemblies()
+            .Select(assembly => assembly.GetType(fullTypeName, throwOnError: false))
+            .FirstOrDefault(candidate => candidate is { IsEnum: true })
+            ?? Type.GetType(fullTypeName + ", " + ownerAssembly, throwOnError: false);
+        return enumType is { IsEnum: true } ? string.Join(", ", Enum.GetNames(enumType)) : string.Empty;
+    }
+
+    private static string Shorten(string text) => text.Length > 40 ? text[..40] + "…" : text;
 
     private static readonly HashSet<string> TextElementNames = new(StringComparer.Ordinal)
     {

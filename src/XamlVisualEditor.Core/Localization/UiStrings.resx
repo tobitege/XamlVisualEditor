@@ -948,6 +948,7 @@
   <data name="BindingResourceExpression" xml:space="preserve"><value>Binding or resource expression</value></data>
   <data name="Input" xml:space="preserve"><value>Input</value></data>
   <data name="PreviewerTransportError" xml:space="preserve"><value>Previewer transport error: {0}</value></data>
+  <data name="PreviewerTextNotAllowed" xml:space="preserve"><value>Text "{0}" cannot be placed directly in &lt;{1}&gt;, which accepts only controls. Put the text in a TextBlock or remove it.</value></data>
   <data name="WorkspaceThemeLoadFailed" xml:space="preserve"><value>Cannot load the workspace preview theme: {0}</value></data>
   <data name="WorkspaceThemeSaveFailed" xml:space="preserve"><value>Cannot save the workspace preview theme: {0}</value></data>
   <data name="ControlReferencesRenamed" xml:space="preserve"><value>Control and C# references renamed.</value></data>

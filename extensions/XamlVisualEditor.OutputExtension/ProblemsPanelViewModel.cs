@@ -112,7 +112,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     private readonly CompositeDisposable _groupDisposables = new();
     private readonly ObservableCollection<DiagnosticsChannelViewModel> _channels = new();
     private readonly ObservableCollection<DiagnosticEntryViewModel> _entries = new();
-    private readonly ObservableCollection<object> _rootItems = new();
+    private ObservableCollection<object> _rootItems = new();
     private readonly HashSet<string> _collapsedGroups = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<DiagnosticsDocumentSnapshot> _latestSnapshots = Array.Empty<DiagnosticsDocumentSnapshot>();
     private DiagnosticsChannelViewModel? _selectedChannel;
@@ -491,8 +491,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         _latestSnapshots = Array.Empty<DiagnosticsDocumentSnapshot>();
         _groupDisposables.Clear();
         _entries.Clear();
-        _rootItems.Clear();
-        Model.Refresh();
+        ReplaceRoots(new ObservableCollection<object>());
         SelectedDiagnostic = null;
         SelectedRow = null;
     }
@@ -501,12 +500,13 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     {
         DiagnosticIdentity? selectedKey = SelectedDiagnostic?.Identity;
         _groupDisposables.Clear();
-        _rootItems.Clear();
+        // The new roots are filled while the model still shows the old ones and then replace them in one step.
+        _rootItems = new ObservableCollection<object>();
 
         List<DiagnosticEntryViewModel> filtered = GetFilteredEntries();
         if (filtered.Count == 0)
         {
-            Model.Refresh();
+            ReplaceRoots(_rootItems);
             SelectedDiagnostic = null;
             SelectedRow = null;
             return;
@@ -528,7 +528,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
                 break;
         }
 
-        Model.Refresh();
+        ReplaceRoots(_rootItems);
 
         SelectedRow = null;
         if (selectedKey is DiagnosticIdentity identity)
@@ -539,6 +539,14 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
                 SelectEntry(found);
             }
         }
+    }
+
+    // Replacing the roots rebuilds the flattened rows. Clearing the attached roots removed rows one range at a time,
+    // which threw once the panel had been pinned from the auto-hide bar while it showed a problem.
+    private void ReplaceRoots(ObservableCollection<object> roots)
+    {
+        _rootItems = roots;
+        Model.SetRoots(roots);
     }
 
     private bool SelectEntry(DiagnosticEntryViewModel entry)

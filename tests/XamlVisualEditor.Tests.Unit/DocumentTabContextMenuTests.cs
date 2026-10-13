@@ -121,6 +121,11 @@ public sealed class DocumentTabContextMenuTests : IDisposable
     {
         System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
+        // The tree is shown in a window: with the inline scheduler of the other unit tests, its throttled filter
+        // would refresh the model on a timer thread while the window lays out the same rows.
+        ReactiveUI.Primitives.Concurrency.ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
+        using IDisposable scheduler = System.Reactive.Disposables.Disposable.Create(() => ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler);
+        ReactiveUI.RxSchedulers.MainThreadScheduler = ReactiveUI.Primitives.Concurrency.AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
         string first = Path.Combine(_directory, "Aaa", "First.axaml");
         string second = Path.Combine(_directory, "Zzz", "Second.axaml");
         // The files of the first folder push the second folder below the visible rows.

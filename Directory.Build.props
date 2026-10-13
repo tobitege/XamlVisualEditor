@@ -34,6 +34,12 @@
     <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
 
+  <!-- Source trees without git metadata (for example a copy kept in another version control system) cannot feed SourceLink. -->
+  <PropertyGroup Condition="!Exists('$(MSBuildThisFileDirectory).git')">
+    <EnableSourceLink>false</EnableSourceLink>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+  </PropertyGroup>
+
   <!-- Desktop outputs for the development environment: Windows x64 only. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'XamlVisualEditor.App' Or '$(MSBuildProjectName)' == 'XamlVisualEditor.Designer.PreviewerHost'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

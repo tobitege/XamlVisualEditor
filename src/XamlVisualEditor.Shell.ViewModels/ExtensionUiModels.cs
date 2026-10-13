@@ -1,3 +1,7 @@
+using System.Reactive.Threading.Tasks;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -413,7 +417,7 @@ public sealed partial class CommandPaletteDialogViewModel : ReactiveObject, IDis
 
         _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilter);
     }
 
@@ -432,11 +436,11 @@ public sealed partial class CommandPaletteDialogViewModel : ReactiveObject, IDis
     [Reactive]
     public partial string? FilterText { get; set; }
 
-    public Interaction<ExtensionCommandPaletteItemViewModel?, Unit> CloseInteraction { get; } = new();
+    public Interaction<ExtensionCommandPaletteItemViewModel?, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ApplyCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     private void ApplyFilter(string? text)
     {
@@ -575,7 +579,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
 
         _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
         RefreshCommand = ReactiveCommand.CreateFromTask(ct => ReloadAsync(ct));
@@ -629,21 +633,21 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
 
     public SearchModel SearchModel { get; }
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CollapseAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CollapseAllCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenWorkspaceSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenWorkspaceSelectedCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> NewFileCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NewFileCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> NewFolderCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NewFolderCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RenameSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RenameSelectedCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> DeleteSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DeleteSelectedCommand { get; }
 
     [Reactive]
     public partial object? SelectedRow { get; set; }
@@ -946,16 +950,16 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         await target.OpenAsync(cancellationToken);
     }
 
-    private async Task InvokeSelectedAsync(Func<ExtensionTreeNodeViewModel, ReactiveCommand<Unit, Unit>?> selector)
+    private async Task InvokeSelectedAsync(Func<ExtensionTreeNodeViewModel, ReactiveCommand<RxVoid, RxVoid>?> selector)
     {
         ExtensionTreeNodeViewModel? target = SelectedNode ?? RootItems.FirstOrDefault();
-        ReactiveCommand<Unit, Unit>? command = target is null ? null : selector(target);
+        ReactiveCommand<RxVoid, RxVoid>? command = target is null ? null : selector(target);
         if (command is null)
         {
             return;
         }
 
-        await command.Execute().FirstAsync();
+        await command.Execute().FirstAsync().ToTask();
     }
 
     private static void CollapseNode(ExtensionTreeNodeViewModel node)
@@ -1153,17 +1157,17 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
 
     public bool CanDelete { get; }
 
-    public ReactiveCommand<Unit, Unit>? OpenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? OpenCommand { get; }
 
-    public ReactiveCommand<Unit, Unit>? NewFileCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? NewFileCommand { get; }
 
-    public ReactiveCommand<Unit, Unit>? NewFolderCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? NewFolderCommand { get; }
 
-    public ReactiveCommand<Unit, Unit>? RenameCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? RenameCommand { get; }
 
-    public ReactiveCommand<Unit, Unit>? DeleteCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? DeleteCommand { get; }
 
-    public ReactiveCommand<Unit, Unit>? OpenWorkspaceCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? OpenWorkspaceCommand { get; }
 
     public bool CanOpenWorkspace { get; }
 
@@ -1253,7 +1257,7 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
     {
     }
 
-    private static ReactiveCommand<Unit, Unit> CreateCommand(bool canExecute, Func<CancellationToken, Task> execute)
+    private static ReactiveCommand<RxVoid, RxVoid> CreateCommand(bool canExecute, Func<CancellationToken, Task> execute)
     {
         IObservable<bool> canRun = Observable.Return(canExecute);
         return ReactiveCommand.CreateFromTask(execute, canRun);

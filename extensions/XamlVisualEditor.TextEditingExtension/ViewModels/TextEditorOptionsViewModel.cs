@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
@@ -28,7 +31,7 @@ public sealed partial class TextEditorOptionsViewModel : ReactiveObject, IDispos
         TextEditorViewOptions current,
         IReadOnlyList<string> fontFamilies,
         Action<TextEditorViewOptions> preview,
-        IScheduler? previewScheduler = null,
+        ISequencer? previewScheduler = null,
         TimeSpan? previewDelay = null)
     {
         ArgumentNullException.ThrowIfNull(current);
@@ -65,7 +68,7 @@ public sealed partial class TextEditorOptionsViewModel : ReactiveObject, IDispos
 
         _previewSubscription.Disposable = Changed
             .Where(_ => !_loading)
-            .Throttle(previewDelay ?? DefaultPreviewDelay, previewScheduler ?? RxSchedulers.MainThreadScheduler)
+            .EmitIfQuiet(previewDelay ?? DefaultPreviewDelay, previewScheduler ?? RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => _preview(BuildOptions()));
     }
 
@@ -85,16 +88,16 @@ public sealed partial class TextEditorOptionsViewModel : ReactiveObject, IDispos
     public TextEditorViewOptions? Result { get; private set; }
 
     /// <summary>Saves the options and closes the dialog.</summary>
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
 
     /// <summary>Restores the previous options and closes the dialog.</summary>
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     /// <summary>Loads the default options into the dialog.</summary>
-    public ReactiveCommand<Unit, Unit> ResetCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ResetCommand { get; }
 
     /// <summary>Asks the view to close with the saved state.</summary>
-    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
     [Reactive]
     public partial string FontFamily { get; set; } = string.Empty;

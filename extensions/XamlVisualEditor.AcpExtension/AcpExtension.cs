@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Threading.Tasks;
 using System.Reactive.Linq;
@@ -78,8 +80,8 @@ public sealed class AcpExtension : IXveExtension
                 return Task.FromResult(AcpPermissionOutcome.Cancelled());
             }
 
-            return _viewModel.PermissionInteraction.Handle(request)
-                .SubscribeOn(RxSchedulers.MainThreadScheduler).ToTask(ct);
+            return Signal.FromTask(_ => _viewModel.PermissionInteraction.Handle(request),
+                RxSchedulers.MainThreadScheduler).ToTask(ct);
         });
         context.Subscriptions.Add(Disposable.Create(() => _acpService.SetPermissionHandler(null)));
 

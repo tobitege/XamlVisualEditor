@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -110,17 +111,17 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
 
     public DataGridCollectionView MessagesView { get; }
 
-    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ClearChannelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearChannelCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearAllChannelsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearAllChannelsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopySelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopySelectedCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopyAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyAllCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearFiltersCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearFiltersCommand { get; }
 
     public OutputChannelViewModel? SelectedChannel
     {
@@ -215,7 +216,7 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await CopyToClipboardInteraction.Handle(FormatMessage(SelectedMessage)).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(FormatMessage(SelectedMessage)).ConfigureAwait(false);
     }
 
     private async Task CopyAllAsync()
@@ -234,7 +235,7 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
             }
         }
 
-        await CopyToClipboardInteraction.Handle(builder.ToString()).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(builder.ToString()).ConfigureAwait(false);
     }
 
     private void AddChannel(OutputChannelInfo channel)

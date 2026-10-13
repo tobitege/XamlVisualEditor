@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -62,17 +63,17 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     public ObservableCollection<StructureAttributeViewModel> Attributes { get; } = new();
     public IEnumerable<DesignerStructureType> AvailableTypes => _original.AvailableTypes
         .Where(type => string.IsNullOrWhiteSpace(TypeFilter) || type.DisplayName.Contains(TypeFilter, StringComparison.OrdinalIgnoreCase));
-    public ReactiveCommand<Unit, Unit> AddChildCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddSiblingCommand { get; }
-    public ReactiveCommand<Unit, Unit> RemoveCommand { get; }
-    public ReactiveCommand<Unit, Unit> MoveUpCommand { get; }
-    public ReactiveCommand<Unit, Unit> MoveDownCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddPropertyCommand { get; }
-    public ReactiveCommand<Unit, Unit> SetAttributeCommand { get; }
-    public ReactiveCommand<Unit, Unit> RemoveAttributeCommand { get; }
-    public ReactiveCommand<Unit, Unit> ClearContentCommand { get; }
-    public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddChildCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddSiblingCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RemoveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> MoveUpCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> MoveDownCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddPropertyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetAttributeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RemoveAttributeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearContentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ApplyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public StructureNodeViewModel? SelectedNode
     {
@@ -246,8 +247,8 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     }
 
     private Dictionary<XElement, int>? _gridDefinitionIndices;
-    private ReactiveCommand<Unit, Unit>? _addGridDefinitionCommand;
-    private ReactiveCommand<Unit, Unit>? _setGridDefinitionSizeCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _addGridDefinitionCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _setGridDefinitionSizeCommand;
     private string _gridDefinitionSize = string.Empty;
 
     public bool IsGridEditor => _original.GridAxis != DesignerGridAxis.None;
@@ -260,10 +261,10 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
         set => this.RaiseAndSetIfChanged(ref _gridDefinitionSize, value);
     }
 
-    public ReactiveCommand<Unit, Unit> AddGridDefinitionCommand => _addGridDefinitionCommand ??=
+    public ReactiveCommand<RxVoid, RxVoid> AddGridDefinitionCommand => _addGridDefinitionCommand ??=
         ReactiveCommand.Create(() => Edit(AddGridDefinition), this.WhenAnyValue(vm => vm.IsBusy).Select(busy => !busy));
 
-    public ReactiveCommand<Unit, Unit> SetGridDefinitionSizeCommand => _setGridDefinitionSizeCommand ??=
+    public ReactiveCommand<RxVoid, RxVoid> SetGridDefinitionSizeCommand => _setGridDefinitionSizeCommand ??=
         ReactiveCommand.Create(() => Edit(SetGridDefinitionSize), this.WhenAnyValue(vm => vm.IsBusy).Select(busy => !busy));
 
     private XElement? SelectedGridDefinition

@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -47,7 +49,7 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
     private readonly ObservableCollection<McpPermissionEntryViewModel> _permissionEntries = new();
     private int _lastConnectionCount;
 
-    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
 
     [Reactive]
     public partial bool IsEnabled { get; set; }
@@ -88,19 +90,19 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<string> ActivityLog { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ApplySettingsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ApplySettingsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RestartCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RestartCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RefreshPermissionsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshPermissionsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RevokePermissionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RevokePermissionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearPermissionsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearPermissionsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopyTokenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyTokenCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopyHttpEndpointCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyHttpEndpointCommand { get; }
 
     public McpPanelViewModel(
         McpRuntimeController controller,
@@ -199,14 +201,14 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await CopyToClipboardInteraction.Handle(SessionToken).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(SessionToken).ConfigureAwait(false);
         AppendLog(UiStrings.SessionTokenCopied);
     }
 
     private async Task CopyHttpEndpointAsync()
     {
         string endpoint = BuildHttpEndpoint(BuildSettings());
-        await CopyToClipboardInteraction.Handle(endpoint).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(endpoint).ConfigureAwait(false);
         AppendLog(UiStrings.HttpEndpointCopied);
     }
 

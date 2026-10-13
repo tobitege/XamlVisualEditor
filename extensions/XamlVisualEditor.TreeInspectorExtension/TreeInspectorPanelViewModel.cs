@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -171,14 +174,14 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
                 RunBackground(SelectNodeAsync(node.NodeId));
             }));
 
-        _disposables.Add(Observable.Interval(PollInterval, RxSchedulers.TaskpoolScheduler)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+        _disposables.Add(Signal.Every(PollInterval, RxSchedulers.TaskpoolScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => { RunBackground(PollDesignerAsync()); }));
     }
 
     public TreeInspectorGridViewModel TreeModel { get; }
-    public ReactiveCommand<Unit, Unit> CollapseAllCommand { get; }
-    public ReactiveCommand<Unit, Unit> ExpandAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CollapseAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExpandAllCommand { get; }
     public string PanelTitle => _kind == TreeKind.Visual ? UiStrings.VisualTree : UiStrings.LogicalTree;
 
     public string? StatusText

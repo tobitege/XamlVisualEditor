@@ -8,6 +8,7 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
+using System.Reactive.Threading.Tasks;
 
 namespace XamlVisualEditor.Tests.Unit;
 
@@ -22,27 +23,31 @@ public sealed class DocumentWriteProtectionTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task SavingReadOnlyFile_ReportsFailureAndKeepsChanges()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string codePath = CreateReadOnlyFile("Code.cs");
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
-        await main.OpenFileAsync(codePath);
+        await main.OpenFileAsync(codePath).WaitAsync(cancellationToken);
         TextDocumentViewModel document = Assert.IsType<TextDocumentViewModel>(Assert.Single(main.Documents));
         document.Document.Text = "class Example { int _value; }";
 
-        await main.SaveDocumentCommand.Execute().FirstAsync();
-        await main.SaveAllCommand.Execute().FirstAsync();
+        await main.SaveDocumentCommand.Execute().FirstAsync().ToTask(cancellationToken);
+        await main.SaveAllCommand.Execute().FirstAsync().ToTask(cancellationToken);
 
         Assert.True(document.IsModified);
         Assert.Equal(string.Format(UiStrings.DocumentSaveReadOnly, "Code.cs"), main.StatusText);
-        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath));
+        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath).WaitAsync(cancellationToken));
         Assert.True(File.GetAttributes(codePath).HasFlag(FileAttributes.ReadOnly));
     }
 
     [AvaloniaFact(Timeout = 30000)]
     public async Task OpenReadOnlyFile_ShowsMarkerUntilWriteProtectionIsRemoved()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string codePath = CreateReadOnlyFile("Marked.cs");
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
-        await main.OpenFileAsync(codePath);
+        await main.OpenFileAsync(codePath).WaitAsync(cancellationToken);
         TextDocumentViewModel document = Assert.IsType<TextDocumentViewModel>(Assert.Single(main.Documents));
 
         Assert.True(document.IsReadOnlyFile);
@@ -60,7 +65,7 @@ public sealed class DocumentWriteProtectionTests : IDisposable
         File.SetAttributes(codePath, FileAttributes.Normal);
         for (int attempt = 0; attempt < 100 && document.IsReadOnlyFile; attempt++)
         {
-            await Task.Delay(50);
+            await Task.Delay(50, cancellationToken);
             Dispatcher.UIThread.RunJobs();
         }
 
@@ -70,6 +75,8 @@ public sealed class DocumentWriteProtectionTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task WorkspaceEditForClosedFile_OpensDocumentInsteadOfWritingFile()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string codePath = CreateReadOnlyFile("Closed.cs");
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
         LanguageWorkspaceEdit edit = new()
@@ -89,7 +96,7 @@ public sealed class DocumentWriteProtectionTests : IDisposable
         TextDocumentViewModel document = Assert.IsType<TextDocumentViewModel>(Assert.Single(main.Documents));
         Assert.Equal("class Renamed { }", document.Document.Text);
         Assert.True(document.IsModified);
-        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath));
+        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath).WaitAsync(cancellationToken));
         Assert.True(File.GetAttributes(codePath).HasFlag(FileAttributes.ReadOnly));
     }
 

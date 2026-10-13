@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -88,36 +91,36 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     [Reactive]
     public partial bool IsWebAuthBusy { get; private set; }
 
-    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
 
-    public Interaction<string, Unit> OpenUrlInteraction { get; } = new();
+    public Interaction<string, RxVoid> OpenUrlInteraction { get; } = new();
 
     public Interaction<AcpPermissionRequest, AcpPermissionOutcome> PermissionInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ConnectMockCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConnectMockCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ConnectProfileCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConnectProfileCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> DisconnectCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DisconnectCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> NewSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NewSessionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CancelPromptCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelPromptCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> SendPromptCommand { get; }
-    public ReactiveCommand<Unit, Unit> AuthenticateCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SendPromptCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AuthenticateCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> SaveApiKeyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveApiKeyCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearApiKeyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearApiKeyCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> StartWebAuthCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StartWebAuthCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearWebAuthCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearWebAuthCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopyUserCodeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyUserCodeCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenVerificationUrlCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenVerificationUrlCommand { get; }
 
     public AcpToolViewModel(
         IAcpService? service = null,
@@ -210,7 +213,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         _service.ConnectionChanged += OnConnectionChanged;
         _service.StderrReceived += OnStderrReceived;
         _disposables.Add(Observable.Interval(TimeSpan.FromSeconds(1))
-            .ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(_ =>
+            .WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(_ =>
             {
                 if (!IsConnected) return;
                 foreach (AcpTranscriptToolEntry entry in Transcript.OfType<AcpTranscriptToolEntry>().ToArray())
@@ -221,7 +224,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
         _disposables.Add(_saveRequests
             .Throttle(TimeSpan.FromMilliseconds(400))
-            .ObserveOn(RxSchedulers.TaskpoolScheduler)
+            .WitnessOn(RxSchedulers.TaskpoolScheduler)
             .SelectMany(_ => Observable.FromAsync(SaveProfilesAsync))
             .Subscribe());
 
@@ -822,7 +825,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
         try
         {
-            await CopyToClipboardInteraction.Handle(WebAuthUserCode).ToTask().ConfigureAwait(false);
+            await CopyToClipboardInteraction.Handle(WebAuthUserCode).ConfigureAwait(false);
             AddActivity(UiStrings.VerificationCodeCopied, "info");
         }
         catch
@@ -845,7 +848,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     {
         try
         {
-            await OpenUrlInteraction.Handle(url).ToTask().ConfigureAwait(false);
+            await OpenUrlInteraction.Handle(url).ConfigureAwait(false);
         }
         catch
         {

@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -165,15 +168,15 @@ public sealed class PropertyEntryViewModel : ReactiveObject
 
     // The commands are created on first use: the panel builds one entry per property of the
     // selected control, and creating every command up front dominates selection time.
-    private ReactiveCommand<Unit, Unit>? _setNullCommand;
-    private ReactiveCommand<string?, Unit>? _applyPresetCommand;
-    private ReactiveCommand<Unit, Unit>? _resetCommand;
-    private ReactiveCommand<Unit, Unit>? _commitCommand;
-    private ReactiveCommand<Unit, Unit>? _cancelEditCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _setNullCommand;
+    private ReactiveCommand<string?, RxVoid>? _applyPresetCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _resetCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _commitCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _cancelEditCommand;
 
     public string NodeId { get; }
     public bool CanAssignNull { get; }
-    public ReactiveCommand<Unit, Unit> SetNullCommand => _setNullCommand ??= ReactiveCommand.Create(
+    public ReactiveCommand<RxVoid, RxVoid> SetNullCommand => _setNullCommand ??= ReactiveCommand.Create(
         () => { NullRequested?.Invoke(); CommitRequested?.Invoke(); },
         Observable.Return(CanAssignNull));
     public event Action? NullRequested;
@@ -197,16 +200,16 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public string FlagSummary => Value ?? DefaultValue ?? "Default";
     public IReadOnlyList<string>? EnumOptions { get; }
     public IReadOnlyList<string>? BrushPresets { get; }
-    public ReactiveCommand<string?, Unit> ApplyPresetCommand => _applyPresetCommand ??= ReactiveCommand.Create<string?>(preset =>
+    public ReactiveCommand<string?, RxVoid> ApplyPresetCommand => _applyPresetCommand ??= ReactiveCommand.Create<string?>(preset =>
     {
         Value = preset;
         CommitRequested?.Invoke();
     });
-    public ReactiveCommand<Unit, Unit> ResetCommand => _resetCommand ??= ReactiveCommand.Create(
+    public ReactiveCommand<RxVoid, RxVoid> ResetCommand => _resetCommand ??= ReactiveCommand.Create(
         () => { Value = null; ResetRequested?.Invoke(); CommitRequested?.Invoke(); },
         this.WhenAnyValue(x => x.IsSet));
-    public ReactiveCommand<Unit, Unit> CommitCommand => _commitCommand ??= ReactiveCommand.Create(() => CommitRequested?.Invoke());
-    public ReactiveCommand<Unit, Unit> CancelEditCommand => _cancelEditCommand ??= ReactiveCommand.Create(() =>
+    public ReactiveCommand<RxVoid, RxVoid> CommitCommand => _commitCommand ??= ReactiveCommand.Create(() => CommitRequested?.Invoke());
+    public ReactiveCommand<RxVoid, RxVoid> CancelEditCommand => _cancelEditCommand ??= ReactiveCommand.Create(() =>
     {
         Value = _committedValue;
         IsSet = _committedHasLocalValue;
@@ -228,7 +231,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public event Action? CommitRequested;
     public event Action? ResetRequested;
     public event Action? EditCanceled;
-    public ReactiveCommand<Unit, Unit>? EditStructureCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? EditStructureCommand { get; set; }
     public bool HasStructureEditor => EditStructureCommand is not null;
 
     public string? ValidationError
@@ -971,10 +974,10 @@ public sealed class EventEntryViewModel : ReactiveObject
     }
 
     // Created on first use; see PropertyEntryViewModel for the rationale.
-    private ReactiveCommand<Unit, Unit>? _commitCommand;
-    private ReactiveCommand<Unit, Unit>? _cancelEditCommand;
-    private ReactiveCommand<Unit, Unit>? _resetCommand;
-    private ReactiveCommand<Unit, Unit>? _navigateCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _commitCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _cancelEditCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _resetCommand;
+    private ReactiveCommand<RxVoid, RxVoid>? _navigateCommand;
 
     public string NodeId { get; }
     public string Name { get; }
@@ -1017,20 +1020,20 @@ public sealed class EventEntryViewModel : ReactiveObject
     }
 
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationError);
-    public ReactiveCommand<Unit, Unit> CommitCommand => _commitCommand ??=
+    public ReactiveCommand<RxVoid, RxVoid> CommitCommand => _commitCommand ??=
         ReactiveCommand.Create(() => CommitRequested?.Invoke(), CanEdit());
-    public ReactiveCommand<Unit, Unit> CancelEditCommand => _cancelEditCommand ??= ReactiveCommand.Create(() =>
+    public ReactiveCommand<RxVoid, RxVoid> CancelEditCommand => _cancelEditCommand ??= ReactiveCommand.Create(() =>
     {
         RestoreCommitted();
         ValidationError = null;
         EditCanceled?.Invoke();
     }, CanEdit());
-    public ReactiveCommand<Unit, Unit> ResetCommand => _resetCommand ??= ReactiveCommand.Create(() =>
+    public ReactiveCommand<RxVoid, RxVoid> ResetCommand => _resetCommand ??= ReactiveCommand.Create(() =>
     {
         HandlerName = null;
         CommitRequested?.Invoke();
     }, CanEdit());
-    public ReactiveCommand<Unit, Unit> NavigateCommand => _navigateCommand ??= ReactiveCommand.Create(
+    public ReactiveCommand<RxVoid, RxVoid> NavigateCommand => _navigateCommand ??= ReactiveCommand.Create(
         () => NavigateRequested?.Invoke(),
         this.WhenAnyValue(entry => entry.HandlerName, entry => entry.IsApplying,
             (handler, applying) => !applying && !string.IsNullOrWhiteSpace(handler)));
@@ -1225,11 +1228,11 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 }
             }));
 
-        _disposables.Add(Observable.Interval(SelectionPollInterval, RxSchedulers.TaskpoolScheduler)
+        _disposables.Add(Signal.Every(SelectionPollInterval, RxSchedulers.TaskpoolScheduler)
             .Where(_ => !string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
             .Where(_ => DateTime.UtcNow - _lastSelectionUpdateUtc >= SelectionPollInterval)
             .SelectMany(_ => Observable.FromAsync(PollSelectedNodesAsync))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(nodes =>
             {
                 string activeDocumentPath = _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;
@@ -1245,8 +1248,8 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
 
     public DataGridCollectionView PropertiesView { get; }
     public DataGridCollectionView GroupedPropertiesView { get; }
-    public ReactiveCommand<Unit, Unit> CollapseAllCategoriesCommand { get; }
-    public ReactiveCommand<Unit, Unit> ExpandAllCategoriesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CollapseAllCategoriesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExpandAllCategoriesCommand { get; }
     /// <summary>The categories of the selected control.</summary>
     public ObservableCollection<PropertyCategoryOption> Categories { get; } = new();
 
@@ -1257,7 +1260,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         set => this.RaiseAndSetIfChanged(ref _selectedCategory, value);
     }
     public DataGridCollectionView EventsView { get; }
-    public Interaction<PropertyStructureEditorViewModel, Unit> EditStructureInteraction { get; } = new();
+    public Interaction<PropertyStructureEditorViewModel, RxVoid> EditStructureInteraction { get; } = new();
     public string? StatusText { get => _statusText; private set => this.RaiseAndSetIfChanged(ref _statusText, value); }
 
     public string? SelectedTypeName

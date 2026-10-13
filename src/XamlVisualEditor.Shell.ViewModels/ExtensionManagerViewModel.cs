@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
@@ -34,7 +37,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync);
         InstallCommand = ReactiveCommand.CreateFromTask(InstallAsync);
         CheckUpdatesCommand = ReactiveCommand.CreateFromTask(CheckUpdatesAsync);
-        CloseCommand = ReactiveCommand.CreateFromObservable(() => CloseInteraction.Handle(Unit.Default));
+        CloseCommand = ReactiveCommand.CreateFromTask(() => CloseInteraction.Handle(RxVoid.Default));
 
         IObservable<bool> hasSelection = this.WhenAnyValue(x => x.SelectedPackage)
             .Select(item => item is not null);
@@ -78,17 +81,17 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
 
     public bool HasSelection => SelectedPackage is not null;
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> InstallCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> InstallCommand { get; }
 
-    public Interaction<Unit, Unit> CloseInteraction { get; } = new();
+    public Interaction<RxVoid, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CloseCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> UninstallCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UninstallCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CheckUpdatesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CheckUpdatesCommand { get; }
 
     public void Dispose()
     {
@@ -225,7 +228,7 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         }
     }
 
-    private Task UpdateUiAsync(Action action) => Observable.Start(() =>
+    private Task UpdateUiAsync(Action action) => Signal.Start(() =>
     {
         if (!_disposed) action();
     }, RxSchedulers.MainThreadScheduler).ToTask();

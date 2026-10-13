@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -36,9 +37,9 @@ public sealed class EditorThemeTests
     public async Task OptionsPreviewFloweryImmediatelyAndOnlySaveKeepsChanges(string completion)
     {
         // Window commands need the UI scheduler; the other unit tests use inline scheduling.
-        System.Reactive.Concurrency.IScheduler previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
+        ReactiveUI.Primitives.Concurrency.ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
         using IDisposable scheduler = System.Reactive.Disposables.Disposable.Create(() => ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler);
-        ReactiveUI.RxSchedulers.MainThreadScheduler = ReactiveUI.Avalonia.AvaloniaScheduler.Instance;
+        ReactiveUI.RxSchedulers.MainThreadScheduler = AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
         using ThemeHost host = new();
         string providerPath = CopyProvider(typeof(FloweryEditorThemeProvider).Assembly.Location);
         File.Copy(typeof(DaisyThemeManager).Assembly.Location, Path.Combine(Path.GetDirectoryName(providerPath)!, "Flowery.NET.dll"));

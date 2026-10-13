@@ -25,6 +25,8 @@ public sealed class LayoutActionsWorkflowTests
     [InlineData("StackPanel")]
     public async Task Distribution_uses_native_layout_and_undo_restores_source(string layout)
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string attributes = layout switch
         {
             "Grid" => "ColumnDefinitions=\"Auto,2*,*\"",
@@ -37,12 +39,12 @@ public sealed class LayoutActionsWorkflowTests
         string xaml = $"<UserControl xmlns=\"https://github.com/avaloniaui\" Width=\"600\" Height=\"300\"><{layout} {attributes}>{children}</{layout}></UserControl>";
         string path = Path.Combine(Path.GetTempPath(), "xve-layout-" + Guid.NewGuid().ToString("N") + ".axaml");
         Assert.False(File.Exists(path));
-        await File.WriteAllTextAsync(path, xaml);
+        await File.WriteAllTextAsync(path, xaml).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         XamlSerializationService serializer = new();
         string original = serializer.Serialize(document.SyncEngine.CurrentDocument!);
         DesignSurfaceView view = new() { DataContext = document.DesignSurface };
@@ -50,14 +52,14 @@ public sealed class LayoutActionsWorkflowTests
         try
         {
             host.Show();
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             Guid[] selected = document.DesignSurface.ItemMap.Values.Where(item => item.AstNode.TypeName == "Button")
                 .Select(item => item.AstNodeId).ToArray();
             Assert.Equal(3, selected.Length);
             Control[] originalControls = selected.Select(id => document.DesignSurface.ItemMap[id].VisualElement!).ToArray();
             document.DesignSurface.SelectNodesFromSync(selected);
             new DesignerLayoutEditor(document).Apply(DesignerLayoutOperation.DistributeHorizontally);
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             for (int index = 0; index < selected.Length; index++)
                 Assert.Same(originalControls[index], document.DesignSurface.ItemMap[selected[index]].VisualElement);
             MutableAstObjectNode parent = Assert.Single(document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>());
@@ -72,7 +74,7 @@ public sealed class LayoutActionsWorkflowTests
             if (layout != "Canvas") Assert.All(nodes, node => Assert.Null(node.GetPropertyValue("Canvas.Left")));
 
             document.SyncEngine.Undo();
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             Assert.Equal(original, serializer.Serialize(document.SyncEngine.CurrentDocument!));
             Assert.All(selected, id => Assert.Contains(id, document.DesignSurface.ItemMap.Keys));
         }
@@ -82,24 +84,26 @@ public sealed class LayoutActionsWorkflowTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task Align_left_in_grid_moves_edges_to_the_primary_control_via_margins()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string xaml = "<UserControl xmlns=\"https://github.com/avaloniaui\" Width=\"600\" Height=\"300\"><Grid ColumnDefinitions=\"300,*\">"
             + "<Button Width=\"50\" Height=\"30\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Top\" Margin=\"20,10,0,0\" />"
             + "<Button Grid.Column=\"1\" Width=\"50\" Height=\"30\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Top\" Margin=\"40,60,0,0\" />"
             + "<Button Width=\"50\" Height=\"30\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Top\" Margin=\"0,110,30,0\" />"
             + "</Grid></UserControl>";
         string path = Path.Combine(Path.GetTempPath(), "xve-layout-" + Guid.NewGuid().ToString("N") + ".axaml");
-        await File.WriteAllTextAsync(path, xaml);
+        await File.WriteAllTextAsync(path, xaml).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         DesignSurfaceView view = new() { DataContext = document.DesignSurface };
         Window host = new() { Content = new Border { DataContext = document, Child = view }, Width = 800, Height = 600 };
         try
         {
             host.Show();
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             MutableAstObjectNode grid = Assert.Single(document.SyncEngine.CurrentDocument!.Root!.Children.OfType<MutableAstObjectNode>());
             Guid[] selected = grid.Children.OfType<MutableAstObjectNode>().Select(node => node.Id).ToArray();
             document.DesignSurface.SelectNodesFromSync(selected);
@@ -118,7 +122,7 @@ public sealed class LayoutActionsWorkflowTests
             };
 
             new DesignerLayoutEditor(document).Apply(DesignerLayoutOperation.AlignLeft);
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             Assert.Single(codeEditOffsets);
             Assert.True(codeEditOffsets[0] > 0, "Designer edits should update only the changed XAML span.");
             Assert.Equal(0, selectionChanges);
@@ -139,7 +143,7 @@ public sealed class LayoutActionsWorkflowTests
             Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
             document.DesignSurface.RequestRebuild();
             Assert.True(progress.IsVisible);
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             Assert.False(progress.IsVisible);
             int beforeNewSelection = selectionChanges;
             document.DesignSurface.SelectNodesFromSync(new[] { selected[1] });

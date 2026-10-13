@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -217,23 +220,23 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     public int DiffLineCount => _diffLineCount.Value;
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ToggleMonitoringCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleMonitoringCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ToggleDiffCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleDiffCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> StageCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StageCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> UnstageCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UnstageCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> DiscardCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DiscardCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> StageAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StageAllCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> UnstageAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UnstageAllCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CommitCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CommitCommand { get; }
 
     public GitPanelViewModel(
         IGitService? gitService = null,
@@ -335,7 +338,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         _disposables.Add(unstagedSelection);
 
         IDisposable selectionClear = this.WhenAnyValue(x => x.SelectedStagedChange, x => x.SelectedUnstagedChange)
-            .Where(selection => selection.Item1 is null && selection.Item2 is null)
+            .Where(selection => selection.Property1 is null && selection.Property2 is null)
             .Subscribe(_ =>
             {
                 DiffText = string.Empty;
@@ -345,13 +348,13 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
         IDisposable searchSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyFilter());
         _disposables.Add(searchSubscription);
 
         IDisposable refreshSubscription = _refreshRequests
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(request => _ = RefreshFromWatcherAsync());
         _disposables.Add(refreshSubscription);
 

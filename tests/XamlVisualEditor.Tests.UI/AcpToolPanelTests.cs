@@ -145,7 +145,7 @@ public sealed class AcpToolPanelTests
         {
             AcpPermissionRequest request = new("s1", new[] { new AcpPermissionOption("allow", "Allow", "allow_once") },
                 "tool", "Write file", "edit", null, cancellation.Token);
-            Task<AcpPermissionOutcome> result = vm.PermissionInteraction.Handle(request).ToTask();
+            Task<AcpPermissionOutcome> result = vm.PermissionInteraction.Handle(request);
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             Assert.Single(owner.OwnedWindows.OfType<AcpPermissionDialog>());
             cancellation.Cancel();

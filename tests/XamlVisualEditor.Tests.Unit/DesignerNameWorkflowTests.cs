@@ -25,6 +25,8 @@ public sealed class DesignerNameWorkflowTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task RenameUpdatesStyleNameSelectorsWithoutChangingTagLiterals()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string source = """
             <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
               <Window.Styles>
@@ -37,17 +39,17 @@ public sealed class DesignerNameWorkflowTests
             """;
         string path = Path.Combine(Path.GetTempPath(), "xve-selector-name-" + Guid.NewGuid().ToString("N") + ".axaml");
         Assert.False(File.Exists(path));
-        await File.WriteAllTextAsync(path, source);
+        await File.WriteAllTextAsync(path, source).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         using MainWindowViewModel main = new(metadataService: metadata);
         main.Documents.Add(document);
         main.ActiveDocument = document;
         using ShellDesignerHost host = new(main);
         MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
         Guid sourceId = Assert.Single(root.Children).Id;
-        Assert.True(await host.SetPropertyAsync(sourceId.ToString("D"), "Name", "RenamedSource", CancellationToken.None));
+        Assert.True(await host.SetPropertyAsync(sourceId.ToString("D"), "Name", "RenamedSource", cancellationToken));
         string text = new XamlSerializationService().Serialize(document.SyncEngine.CurrentDocument);
         Assert.Contains("TextBlock#RenamedSource", text);
         Assert.Contains("TextBlock[Name=RenamedSource]", text);
@@ -70,6 +72,8 @@ public sealed class DesignerNameWorkflowTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task InspectorNameRenameUpdatesBindingsAtomicallyAndPreservesTemplateNamesAndLiterals()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string source = """
             <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
               <StackPanel>
@@ -88,10 +92,10 @@ public sealed class DesignerNameWorkflowTests
             """;
         string path = Path.Combine(Path.GetTempPath(), "xve-name-workflow-" + Guid.NewGuid().ToString("N") + ".axaml");
         Assert.False(File.Exists(path));
-        await File.WriteAllTextAsync(path, source);
+        await File.WriteAllTextAsync(path, source).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         using MainWindowViewModel main = new(metadataService: metadata);
         main.Documents.Add(document);
         main.ActiveDocument = document;
@@ -100,13 +104,13 @@ public sealed class DesignerNameWorkflowTests
         document.SetSelectedNode(sourceId, SyncSource.TreeView);
         using ShellDesignerHost host = new(main);
         using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry());
-        await inspector.InitializeAsync(CancellationToken.None);
+        await inspector.InitializeAsync(cancellationToken);
         PropertyEntryViewModel name = Assert.Single(inspector.PropertiesView.Cast<PropertyEntryViewModel>(), entry => entry.Name == "Name");
         Assert.Equal("Source", name.Value);
         Assert.DoesNotContain(inspector.PropertiesView.Cast<PropertyEntryViewModel>(), entry => entry.Name == "x:Name");
         XamlSerializationService serializer = new();
         string before = serializer.Serialize(document.SyncEngine.CurrentDocument);
-        Assert.True(await host.SetPropertyAsync(sourceId.ToString("D"), "Name", "RenamedSource", CancellationToken.None));
+        Assert.True(await host.SetPropertyAsync(sourceId.ToString("D"), "Name", "RenamedSource", cancellationToken));
         string after = serializer.Serialize(document.SyncEngine.CurrentDocument);
         XDocument saved = XDocument.Parse(after);
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -126,10 +130,10 @@ public sealed class DesignerNameWorkflowTests
         Assert.Equal(after, serializer.Serialize(document.SyncEngine.CurrentDocument!));
         foreach (string invalid in new[] { "Taken", "1invalid", "invalid name" })
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => host.SetPropertyAsync(sourceId.ToString("D"), "Name", invalid, CancellationToken.None));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => host.SetPropertyAsync(sourceId.ToString("D"), "Name", invalid, cancellationToken));
             Assert.Equal(after, serializer.Serialize(document.SyncEngine.CurrentDocument!));
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() => host.SetPropertyAsync(sourceId.ToString("D"), "Name", null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.SetPropertyAsync(sourceId.ToString("D"), "Name", null, cancellationToken));
         Assert.Equal(after, serializer.Serialize(document.SyncEngine.CurrentDocument!));
 
         RuntimeDesignRenderResult rendered = new RuntimeDesignRenderer(metadata).Render(document.SyncEngine.CurrentDocument!, new Uri(path));

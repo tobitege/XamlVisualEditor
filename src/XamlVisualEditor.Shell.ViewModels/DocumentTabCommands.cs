@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.IO;
 using System.Reactive;
 using ReactiveUI;
@@ -27,14 +28,14 @@ public sealed class DocumentTabCommands
     }
 
     /// <summary>Gets the command that shows the File Explorer panel with the file selected.</summary>
-    public ReactiveCommand<string?, Unit> RevealInFileExplorerCommand { get; }
+    public ReactiveCommand<string?, RxVoid> RevealInFileExplorerCommand { get; }
 
     /// <summary>Gets the command that shows the Solution Explorer with the file selected.</summary>
-    public ReactiveCommand<string?, Unit> RevealInSolutionExplorerCommand { get; }
+    public ReactiveCommand<string?, RxVoid> RevealInSolutionExplorerCommand { get; }
 
     /// <summary>Gets the command that copies the full path of the file.</summary>
-    public ReactiveCommand<string?, Unit> CopyPathCommand { get; }
+    public ReactiveCommand<string?, RxVoid> CopyPathCommand { get; }
 
     /// <summary>Gets the command that copies the file name with its extension.</summary>
-    public ReactiveCommand<string?, Unit> CopyFileNameCommand { get; }
+    public ReactiveCommand<string?, RxVoid> CopyFileNameCommand { get; }
 }

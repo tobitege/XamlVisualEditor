@@ -102,7 +102,7 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
         Application.Current.Styles.Add(dockTheme);
         using MainWindowViewModel vm = new(terminalService: service);
         MainWindow window = new(vm) { Width = 1000, Height = 800 };
-        window.DataTemplates.Add(new ViewLocator());
+        window.DataTemplates.Add(new XamlVisualEditor.App.ViewLocator());
         try
         {
             window.Show();
@@ -148,7 +148,7 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
         Application.Current.Styles.Add(dockTheme);
         using MainWindowViewModel vm = new(terminalService: service);
         MainWindow window = new(vm) { Width = 1000, Height = 800 };
-        window.DataTemplates.Add(new ViewLocator());
+        window.DataTemplates.Add(new XamlVisualEditor.App.ViewLocator());
         vm.DockFactory.CollapseBottomToolDock(vm.DockLayout);
         try
         {

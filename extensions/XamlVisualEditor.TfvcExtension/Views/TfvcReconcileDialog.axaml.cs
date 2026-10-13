@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia.Controls;
@@ -26,7 +27,7 @@ public sealed partial class TfvcReconcileDialog : Window
             _closeHandler = viewModel.CloseInteraction.RegisterHandler(context =>
             {
                 Close(context.Input);
-                context.SetOutput(Unit.Default);
+                context.SetOutput(RxVoid.Default);
             });
         }
     }

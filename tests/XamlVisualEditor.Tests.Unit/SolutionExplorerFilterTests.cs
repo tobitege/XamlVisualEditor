@@ -14,6 +14,8 @@ public sealed class SolutionExplorerFilterTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task Filter_Opens_The_Folders_Above_Partial_Matches_And_Clearing_Restores_Them()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         SolutionExplorerViewModel explorer = new();
         explorer.LoadWorkspace(new WorkspaceModel
         {

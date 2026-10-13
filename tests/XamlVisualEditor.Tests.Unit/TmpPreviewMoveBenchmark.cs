@@ -22,6 +22,8 @@ public sealed class TmpPreviewMoveBenchmark
     [AvaloniaFact(Timeout = 120000)]
     public async Task PreviewMove_with_30_controls()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         StringBuilder xaml = new();
         xaml.Append("<UserControl xmlns=\"https://github.com/avaloniaui\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" Width=\"800\" Height=\"600\"><Canvas>");
         for (int i = 0; i < 30; i++)
@@ -36,7 +38,7 @@ public sealed class TmpPreviewMoveBenchmark
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         metadata.LoadAssembly(typeof(Avalonia.Themes.Fluent.FluentTheme).Assembly.Location);
         using DesignerDocumentViewModel document = new("Bench.axaml", metadata);
-        await document.SyncEngine.LoadAsync(xaml.ToString());
+        await document.SyncEngine.LoadAsync(xaml.ToString()).WaitAsync(cancellationToken);
         MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
         MutableAstObjectNode canvas = root.Children.OfType<MutableAstObjectNode>().First();
         MutableAstObjectNode[] buttons = canvas.Children.OfType<MutableAstObjectNode>().ToArray();

@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
@@ -24,7 +25,7 @@ public sealed partial class TextEditorOptionsDialog : Window
             _closeHandler = vm.CloseInteraction.RegisterHandler(context =>
             {
                 Close(context.Input);
-                context.SetOutput(Unit.Default);
+                context.SetOutput(RxVoid.Default);
             });
         }
     }

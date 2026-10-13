@@ -119,6 +119,8 @@ public sealed class DocumentTabContextMenuTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task File_Explorer_View_Selects_A_Revealed_File_After_Another()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string first = Path.Combine(_directory, "Aaa", "First.axaml");
         string second = Path.Combine(_directory, "Zzz", "Second.axaml");
         // The files of the first folder push the second folder below the visible rows.
@@ -142,9 +144,9 @@ public sealed class DocumentTabContextMenuTests : IDisposable
         window.Show();
         try
         {
-            Assert.True(await explorer.RevealPathAsync(first, CancellationToken.None));
+            Assert.True(await explorer.RevealPathAsync(first, cancellationToken));
             Settle(window);
-            Assert.True(await explorer.RevealPathAsync(second, CancellationToken.None));
+            Assert.True(await explorer.RevealPathAsync(second, cancellationToken));
             Settle(window);
 
             DataGrid grid = view.GetVisualDescendants().OfType<DataGrid>().Single();
@@ -160,6 +162,8 @@ public sealed class DocumentTabContextMenuTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task File_Explorer_Expands_The_Folders_To_And_Selects_A_File()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string file = Path.Combine(_directory, "Views", "Forms", "Main.axaml");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         File.WriteAllText(file, "<UserControl />");
@@ -168,12 +172,12 @@ public sealed class DocumentTabContextMenuTests : IDisposable
             new ExtensionViewContribution("files.panel", "Files", ExtensionViewType.Tree, ExtensionViewLocation.Left, 0),
             new PathTreeProvider(_directory));
 
-        Assert.True(await explorer.RevealPathAsync(file, CancellationToken.None));
+        Assert.True(await explorer.RevealPathAsync(file, cancellationToken));
         Assert.Equal(file, Assert.IsType<PathEntry>(explorer.SelectedNode?.Element).FullPath);
         Assert.Contains(explorer.Model.Flattened, row => ReferenceEquals(row, explorer.SelectedRow));
 
-        Assert.False(await explorer.RevealPathAsync(Path.Combine(_directory, "Views", "Missing.axaml"), CancellationToken.None));
-        Assert.False(await explorer.RevealPathAsync(Path.Combine(Path.GetTempPath(), "Elsewhere.axaml"), CancellationToken.None));
+        Assert.False(await explorer.RevealPathAsync(Path.Combine(_directory, "Views", "Missing.axaml"), cancellationToken));
+        Assert.False(await explorer.RevealPathAsync(Path.Combine(Path.GetTempPath(), "Elsewhere.axaml"), cancellationToken));
     }
 
     [AvaloniaFact]

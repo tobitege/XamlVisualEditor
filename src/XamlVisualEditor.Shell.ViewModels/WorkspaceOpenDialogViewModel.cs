@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
@@ -15,11 +16,11 @@ public sealed partial class WorkspaceOpenDialogViewModel : ReactiveObject, IDisp
     [Reactive] public partial string FilePath { get; set; } = string.Empty;
     [Reactive] public partial string? Error { get; private set; }
 
-    public Interaction<Unit, string?> BrowseInteraction { get; } = new();
+    public Interaction<RxVoid, string?> BrowseInteraction { get; } = new();
     public event Action<WorkspaceOpenRequest?>? CloseRequested;
-    public ReactiveCommand<Unit, Unit> BrowseCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> BrowseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public WorkspaceOpenDialogViewModel()
     {
@@ -27,7 +28,7 @@ public sealed partial class WorkspaceOpenDialogViewModel : ReactiveObject, IDisp
         {
             try
             {
-                string? path = await BrowseInteraction.Handle(Unit.Default);
+                string? path = await BrowseInteraction.Handle(RxVoid.Default);
                 if (path is not null) FilePath = path;
                 Error = null;
             }

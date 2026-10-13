@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,7 +52,7 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
     public event Action<int?>? Exited;
     public event Action<int, int>? DimensionsChanged;
 
-    public ReactiveCommand<Unit, Unit> ClearSelectionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearSelectionCommand { get; }
 
     public TerminalViewModel(ITerminalSession session, string? title = null)
     {

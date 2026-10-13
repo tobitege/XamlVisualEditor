@@ -62,7 +62,7 @@ public sealed class TfvcAddItemsTests : IDisposable
             dialog.CloseInteraction.RegisterHandler(context =>
             {
                 result = context.Input;
-                context.SetOutput(System.Reactive.Unit.Default);
+                context.SetOutput(ReactiveUI.Primitives.RxVoid.Default);
             });
 
             await dialog.ShowFolderAsync(_root, CancellationToken.None);

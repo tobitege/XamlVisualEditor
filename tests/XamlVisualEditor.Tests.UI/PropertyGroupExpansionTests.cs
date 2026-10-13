@@ -21,6 +21,8 @@ public sealed class PropertyGroupExpansionTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task CategoriesStartCollapsedAndThePreferenceExpandsThem()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         FluentTheme theme = new();
         StyleInclude gridTheme = new((Uri?)null)
         {
@@ -33,11 +35,11 @@ public sealed class PropertyGroupExpansionTests
         {
             string path = Path.Combine(Path.GetTempPath(), "xve-group-expansion-" + Guid.NewGuid().ToString("N") + ".axaml");
             await File.WriteAllTextAsync(path,
-                "<Button xmlns=\"https://github.com/avaloniaui\" Width=\"160\" Height=\"40\" />");
+                "<Button xmlns=\"https://github.com/avaloniaui\" Width=\"160\" Height=\"40\" />").WaitAsync(cancellationToken);
             TypeMetadataService metadata = new();
             metadata.LoadAssembly(typeof(Button).Assembly.Location);
             using DesignerDocumentViewModel document = new(path, metadata) { UseExternalPreviewer = true };
-            await document.LoadAsync();
+            await document.LoadAsync().WaitAsync(cancellationToken);
             using MainWindowViewModel main = new(metadataService: metadata);
             main.Documents.Add(document);
             main.ActiveDocument = document;
@@ -48,7 +50,7 @@ public sealed class PropertyGroupExpansionTests
             document.SetSelectedNode(root.Id, SyncSource.TreeView);
             using ShellDesignerHost host = new(main);
             using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry());
-            await inspector.InitializeAsync(CancellationToken.None);
+            await inspector.InitializeAsync(cancellationToken);
             Assert.True(inspector.CollapseOtherCategoriesOnSelection);
             PropertyRowViewModel[] rows = inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>().ToArray();
             Assert.Contains(rows, row => row.IsHeader && row.IsPinned && row.IsExpanded);
@@ -59,21 +61,21 @@ public sealed class PropertyGroupExpansionTests
             PropertyEditorPanelView view = new() { DataContext = inspector };
             window = new Window { Content = view, Width = 520, Height = 660 };
             window.Show();
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.Single(view.GetVisualDescendants().OfType<DataGrid>(), grid => grid.IsVisible);
 
             category.IsExpanded = true;
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             rows = inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>().ToArray();
             Assert.Contains(rows, row => row.Property is not null && row.GroupName == category.GroupName);
 
             inspector.CollapseOtherCategoriesOnSelection = false;
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             rows = inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>().ToArray();
             Assert.All(rows.Where(row => row.IsHeader && row.CanCollapse), row => Assert.True(row.IsExpanded));
 
             inspector.CollapseOtherCategoriesOnSelection = true;
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             rows = inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>().ToArray();
             Assert.All(rows.Where(row => row.IsHeader && row.CanCollapse), row => Assert.False(row.IsExpanded));
         }

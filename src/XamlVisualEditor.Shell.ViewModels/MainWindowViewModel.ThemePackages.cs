@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
@@ -35,7 +38,7 @@ public sealed partial class MainWindowViewModel
             || request.Selection?.ProviderId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true);
     }
 
-    private Task BeforeThemePackageChangeAsync(string extensionId, CancellationToken ct) => Observable.Start(() =>
+    private Task BeforeThemePackageChangeAsync(string extensionId, CancellationToken ct) => Signal.Start(() =>
     {
         if (_themePackagesDisposed) return;
         _changingThemePackages.Add(extensionId);
@@ -51,7 +54,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task AfterThemePackageChangeAsync(string extensionId, CancellationToken ct)
     {
-        List<DesignerDocumentViewModel> documents = await Observable.Start(() =>
+        List<DesignerDocumentViewModel> documents = await Signal.Start(() =>
         {
             _changingThemePackages.Remove(extensionId);
             _themePackageRestarts.Remove(extensionId, out List<DesignerDocumentViewModel>? pending);
@@ -61,12 +64,13 @@ public sealed partial class MainWindowViewModel
         }, RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
         foreach (DesignerDocumentViewModel document in documents)
         {
-            await Observable.FromAsync(async () =>
+            await Signal.FromTask(async _ =>
             {
-                if (_themePackagesDisposed || document.IsDisposed || !document.UseExternalPreviewer || !Documents.Contains(document)) return;
+                if (_themePackagesDisposed || document.IsDisposed || !document.UseExternalPreviewer || !Documents.Contains(document)) return RxVoid.Default;
                 try { await StartPreviewerForDocumentAsync(document); }
                 catch (Exception error) { if (!document.IsDisposed) document.SetPreviewerLaunchError(error.Message); }
-            }).SubscribeOn(RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
+                return RxVoid.Default;
+            }, RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
         }
     }
 }

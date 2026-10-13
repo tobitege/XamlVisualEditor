@@ -102,9 +102,9 @@ public sealed class ToolboxExtension : IXveExtension
         context.Subscriptions.Add(viewModel.WhenAnyValue(x => x.HasLoadTask, x => x.HasLoadError, x => x.StatusText)
             .Subscribe(state =>
             {
-                loadStatus.Text = UiStrings.Toolbox + ": " + (state.Item2 ? UiStrings.RetryControlDiscovery : UiStrings.LoadProjectControls);
-                loadStatus.Tooltip = state.Item3;
-                if (state.Item1) loadStatus.Show();
+                loadStatus.Text = UiStrings.Toolbox + ": " + (state.Property2 ? UiStrings.RetryControlDiscovery : UiStrings.LoadProjectControls);
+                loadStatus.Tooltip = state.Property3;
+                if (state.Property1) loadStatus.Show();
                 else loadStatus.Hide();
             }));
 

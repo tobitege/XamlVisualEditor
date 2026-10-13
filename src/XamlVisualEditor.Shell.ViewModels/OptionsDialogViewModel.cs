@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Globalization;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -125,9 +126,9 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
     public string WindowsPowerShellPath { get => _windowsPowerShellPath; set => this.RaiseAndSetIfChanged(ref _windowsPowerShellPath, value); }
     public string PowerShell7Path { get => _powerShell7Path; set => this.RaiseAndSetIfChanged(ref _powerShell7Path, value); }
     public string? Error { get => _error; private set => this.RaiseAndSetIfChanged(ref _error, value); }
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
-    public ReactiveCommand<TerminalShell, Unit> BrowseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
+    public ReactiveCommand<TerminalShell, RxVoid> BrowseCommand { get; }
     public Interaction<TerminalShell, string?> BrowseExecutableInteraction { get; } = new();
     public event Action<bool>? CloseRequested;
 

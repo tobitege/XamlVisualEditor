@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
+using System.Reactive.Threading.Tasks;
 
 namespace XamlVisualEditor.Tests.Unit;
 
@@ -22,6 +23,8 @@ public sealed class CloseConfirmationTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task Closing_a_modified_document_asks_and_follows_the_answer()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string codePath = CreateFile("Code.cs");
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
         List<IReadOnlyList<string>> prompts = new();
@@ -32,24 +35,24 @@ public sealed class CloseConfirmationTests : IDisposable
             interaction.SetOutput(answer);
         });
 
-        TextDocumentViewModel document = await OpenAndChangeAsync(main, codePath);
-        await main.CloseDocumentCommand.Execute(document).FirstAsync();
+        TextDocumentViewModel document = await OpenAndChangeAsync(main, codePath).WaitAsync(cancellationToken);
+        await main.CloseDocumentCommand.Execute(document).FirstAsync().ToTask(cancellationToken);
         Assert.Equal(["Code.cs"], Assert.Single(prompts));
         Assert.Contains(document, main.Documents);
 
         answer = SaveChangesChoice.Discard;
-        await main.CloseActiveDocumentCommand.Execute().FirstAsync();
+        await main.CloseActiveDocumentCommand.Execute().FirstAsync().ToTask(cancellationToken);
         Assert.Empty(main.Documents);
-        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath));
+        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath).WaitAsync(cancellationToken));
 
         answer = SaveChangesChoice.Save;
-        document = await OpenAndChangeAsync(main, codePath);
-        await main.CloseDocumentCommand.Execute(document).FirstAsync();
+        document = await OpenAndChangeAsync(main, codePath).WaitAsync(cancellationToken);
+        await main.CloseDocumentCommand.Execute(document).FirstAsync().ToTask(cancellationToken);
         Assert.Empty(main.Documents);
-        Assert.Equal(ChangedText, await File.ReadAllTextAsync(codePath));
+        Assert.Equal(ChangedText, await File.ReadAllTextAsync(codePath).WaitAsync(cancellationToken));
         Assert.Equal(3, prompts.Count);
 
-        await OpenAndChangeAsync(main, codePath, OriginalText);
+        await OpenAndChangeAsync(main, codePath, OriginalText).WaitAsync(cancellationToken);
         answer = SaveChangesChoice.Cancel;
         Assert.False(await main.ConfirmShutdownAsync());
         Assert.False(main.IsShutdownConfirmed);
@@ -62,6 +65,8 @@ public sealed class CloseConfirmationTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task Restoring_the_last_workspace_opens_the_most_recent_folder()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string folder = Path.Combine(_root, "Project");
         Directory.CreateDirectory(folder);
         string recentPath = Path.Combine(_root, "recent.json");
@@ -71,7 +76,7 @@ public sealed class CloseConfirmationTests : IDisposable
         }
 
         await File.WriteAllTextAsync(recentPath,
-            "[{\"FilePath\":" + System.Text.Json.JsonSerializer.Serialize(folder) + ",\"Kind\":\"Folder\"}]");
+            "[{\"FilePath\":" + System.Text.Json.JsonSerializer.Serialize(folder) + ",\"Kind\":\"Folder\"}]").WaitAsync(cancellationToken);
         using MainWindowViewModel main = new(recentFilesPath: recentPath);
         Assert.True(await main.RestoreLastWorkspaceAsync());
         Assert.Equal(folder, main.RecentFiles.First().FilePath);

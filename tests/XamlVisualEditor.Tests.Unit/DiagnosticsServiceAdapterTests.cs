@@ -20,16 +20,18 @@ public sealed class DiagnosticsServiceAdapterTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task GetDiagnosticsAsync_MapsDesignerDocumentDiagnostics()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         using DesignerDocumentViewModel designer = new("AdapterDesigner.axaml");
-        await designer.SyncEngine.LoadAsync(EmptyUserControl);
-        await FlushAsync();
+        await designer.SyncEngine.LoadAsync(EmptyUserControl).WaitAsync(cancellationToken);
+        await FlushAsync().WaitAsync(cancellationToken);
         designer.SetRuntimeRenderFailure(new InvalidOperationException("Broken element"));
         using MainWindowViewModel viewModel = new();
         viewModel.Documents.Add(designer);
         using DiagnosticsServiceAdapter adapter = new(viewModel);
 
         IReadOnlyList<LanguageDiagnostic> diagnostics =
-            await adapter.GetDiagnosticsAsync(designer.FilePath, CancellationToken.None);
+            await adapter.GetDiagnosticsAsync(designer.FilePath, cancellationToken).WaitAsync(cancellationToken);
 
         LanguageDiagnostic diagnostic = Assert.Single(diagnostics, item => item.Source == "Designer");
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
@@ -44,9 +46,11 @@ public sealed class DiagnosticsServiceAdapterTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task DesignerDiagnosticsChange_PublishesSnapshot()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         using DesignerDocumentViewModel designer = new("AdapterSnapshot.axaml");
-        await designer.SyncEngine.LoadAsync(EmptyUserControl);
-        await FlushAsync();
+        await designer.SyncEngine.LoadAsync(EmptyUserControl).WaitAsync(cancellationToken);
+        await FlushAsync().WaitAsync(cancellationToken);
         using MainWindowViewModel viewModel = new();
         viewModel.Documents.Add(designer);
         using DiagnosticsServiceAdapter adapter = new(viewModel);
@@ -63,6 +67,8 @@ public sealed class DiagnosticsServiceAdapterTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task GetDiagnosticsAsync_FindsOpenTextDocumentByPath()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string filePath = "AdapterText.xml";
         using TextDocumentViewModel text = new(filePath);
         text.Diagnostics.Add(new LanguageDiagnostic
@@ -77,7 +83,7 @@ public sealed class DiagnosticsServiceAdapterTests
         using DiagnosticsServiceAdapter adapter = new(viewModel);
 
         IReadOnlyList<LanguageDiagnostic> diagnostics =
-            await adapter.GetDiagnosticsAsync(filePath, CancellationToken.None);
+            await adapter.GetDiagnosticsAsync(filePath, cancellationToken).WaitAsync(cancellationToken);
 
         LanguageDiagnostic diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
@@ -87,11 +93,13 @@ public sealed class DiagnosticsServiceAdapterTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task GetDiagnosticsAsync_ReturnsNothingForUnknownPath()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         using MainWindowViewModel viewModel = new();
         using DiagnosticsServiceAdapter adapter = new(viewModel);
 
         IReadOnlyList<LanguageDiagnostic> diagnostics =
-            await adapter.GetDiagnosticsAsync("NotOpen.axaml", CancellationToken.None);
+            await adapter.GetDiagnosticsAsync("NotOpen.axaml", cancellationToken).WaitAsync(cancellationToken);
 
         Assert.Empty(diagnostics);
     }

@@ -204,7 +204,7 @@ public sealed class LayoutManagementTests
             await dialog.DeleteCommand.Execute();
             Assert.Equal(new[] { "Gamma" }, dialog.Names);
             Assert.Equal("Gamma", dialog.SelectedName);
-            interaction.SetOutput(System.Reactive.Unit.Default);
+            interaction.SetOutput(ReactiveUI.Primitives.RxVoid.Default);
         });
 
         await host.ViewModel.ManageLayoutsCommand.Execute();

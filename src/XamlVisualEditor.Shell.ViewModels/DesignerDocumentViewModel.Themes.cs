@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
@@ -52,7 +54,7 @@ public sealed partial class DesignerDocumentViewModel
             PreviewThemeRequest = current with { RequestId = Guid.NewGuid(), Selection = choice.Selection };
             if (choice.Selection is not null) UseExternalPreviewer = true;
         }));
-        _disposables.Add(this.WhenAnyValue(document => document.PreviewerSession)
+        _disposables.Add(Observable.Switch(this.WhenAnyValue(document => document.PreviewerSession)
             .Select(session => session is null ? Observable.Return<DesignerThemeCatalog?>(null)
                 : Observable.Create<DesignerThemeCatalog?>(observer =>
                 {
@@ -61,7 +63,7 @@ public sealed partial class DesignerDocumentViewModel
                     observer.OnNext(session.LastThemeCatalog);
                     return Disposable.Create(() => session.ThemeCatalogChanged -= OnCatalog);
                 }))
-            .Switch().ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(ApplyThemeCatalog));
+            ).WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(ApplyThemeCatalog));
     }
 
     private void ApplyThemeCatalog(DesignerThemeCatalog? catalog)

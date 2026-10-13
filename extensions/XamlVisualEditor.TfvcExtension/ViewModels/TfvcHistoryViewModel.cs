@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -167,22 +168,22 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     public ObservableCollection<TfvcChangeRowViewModel> Changes { get; } = new();
 
     /// <summary>Reloads the history.</summary>
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
     /// <summary>Loads the next page of changesets.</summary>
-    public ReactiveCommand<Unit, Unit> LoadMoreCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> LoadMoreCommand { get; }
 
     /// <summary>Searches the check-in comments.</summary>
-    public ReactiveCommand<Unit, Unit> SearchCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SearchCommand { get; }
 
     /// <summary>Clears the search and shows the complete history again.</summary>
-    public ReactiveCommand<Unit, Unit> ClearSearchCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearSearchCommand { get; }
 
     /// <summary>Shows the history of the entered location.</summary>
-    public ReactiveCommand<Unit, Unit> NavigateCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NavigateCommand { get; }
 
     /// <summary>Shows the changed items and the comment of the selected changeset in the changes panel.</summary>
-    public ReactiveCommand<Unit, Unit> ShowChangesetDetailsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShowChangesetDetailsCommand { get; }
 
     /// <summary>Gets the server path of the item.</summary>
     [Reactive]

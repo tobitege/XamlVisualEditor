@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -303,7 +304,7 @@ public sealed partial class MainWindow : Window
             if (_extensionManagerDialog is not null)
             {
                 _extensionManagerDialog.Activate();
-                interaction.SetOutput(Unit.Default);
+                interaction.SetOutput(RxVoid.Default);
                 return;
             }
 
@@ -317,7 +318,7 @@ public sealed partial class MainWindow : Window
             {
                 _extensionManagerDialog = null;
             }
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
 
         _extensionPackageOpenHandler = vm.ExtensionPackageOpenInteraction.RegisterHandler(async interaction =>

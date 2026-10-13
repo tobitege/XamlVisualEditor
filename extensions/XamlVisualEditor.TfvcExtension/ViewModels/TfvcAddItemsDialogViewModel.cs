@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -81,19 +82,19 @@ public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
     public ObservableCollection<TfvcAddItemViewModel> Items { get; } = new();
 
     /// <summary>Closes the dialog with the selected items, or null when it is cancelled.</summary>
-    public Interaction<IReadOnlyList<TfvcAddEntry>?, Unit> CloseInteraction { get; } = new();
+    public Interaction<IReadOnlyList<TfvcAddEntry>?, RxVoid> CloseInteraction { get; } = new();
 
     /// <summary>Shows the parent folder.</summary>
-    public ReactiveCommand<Unit, Unit> UpCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UpCommand { get; }
 
     /// <summary>Opens the highlighted folder or toggles the highlighted file.</summary>
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
     /// <summary>Adds the selected items.</summary>
-    public ReactiveCommand<Unit, Unit> FinishCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> FinishCommand { get; }
 
     /// <summary>Closes the dialog without adding.</summary>
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     /// <summary>Shows a folder inside the scanned folder.</summary>
     public async Task ShowFolderAsync(string folder, CancellationToken cancellationToken)

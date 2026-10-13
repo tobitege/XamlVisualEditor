@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -106,25 +109,25 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
     [Reactive]
     public partial AnimationResourceScopeEntry SelectedScope { get; set; }
 
-    public ReactiveCommand<Unit, Unit> AddTimelineCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddTrackCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddKeyframeCommand { get; }
-    public ReactiveCommand<Unit, Unit> DeleteSelectionCommand { get; }
-    public ReactiveCommand<Unit, Unit> CreateResourceCommand { get; }
-    public ReactiveCommand<double, Unit> SetCurrentTimeCommand { get; }
-    public ReactiveCommand<AnimationTrackViewModel, Unit> SelectTrackCommand { get; }
-    public ReactiveCommand<KeyframeSelectionRequest, Unit> SelectKeyframeCommand { get; }
-    public ReactiveCommand<Unit, Unit> CopyKeyframesCommand { get; }
-    public ReactiveCommand<Unit, Unit> PasteKeyframesCommand { get; }
-    public ReactiveCommand<Unit, Unit> PlayPreviewCommand { get; }
-    public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
-    public ReactiveCommand<Unit, Unit> RefreshResourcesCommand { get; }
-    public ReactiveCommand<AnimationResourceEntryViewModel?, Unit> LoadResourceCommand { get; }
-    public ReactiveCommand<Unit, Unit> UpdateResourceCommand { get; }
-    public ReactiveCommand<Unit, Unit> DeleteResourceCommand { get; }
-    public ReactiveCommand<Unit, Unit> UndoCommand { get; }
-    public ReactiveCommand<Unit, Unit> RedoCommand { get; }
-    public ReactiveCommand<KeyframeMoveCommit, Unit> CommitMoveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddTimelineCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddTrackCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddKeyframeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DeleteSelectionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CreateResourceCommand { get; }
+    public ReactiveCommand<double, RxVoid> SetCurrentTimeCommand { get; }
+    public ReactiveCommand<AnimationTrackViewModel, RxVoid> SelectTrackCommand { get; }
+    public ReactiveCommand<KeyframeSelectionRequest, RxVoid> SelectKeyframeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyKeyframesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> PasteKeyframesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> PlayPreviewCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StopPreviewCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshResourcesCommand { get; }
+    public ReactiveCommand<AnimationResourceEntryViewModel?, RxVoid> LoadResourceCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UpdateResourceCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DeleteResourceCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UndoCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RedoCommand { get; }
+    public ReactiveCommand<KeyframeMoveCommit, RxVoid> CommitMoveCommand { get; }
 
     public AnimationEditorViewModel(MainWindowViewModel mainVm, IAnimationPreviewService? previewService)
     {
@@ -153,7 +156,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         CommitMoveCommand = ReactiveCommand.Create<KeyframeMoveCommit>(CommitMove);
 
         IDisposable activeDocSubscription = _mainVm.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(UpdateActiveDocument);
         _disposables.Add(activeDocSubscription);
         _disposables.Add(_keyframeSubscription);
@@ -177,11 +180,11 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             });
         _disposables.Add(timelineSubscription);
 
-        IDisposable durationSubscription = this.WhenAnyValue(x => x.SelectedTimeline)
+        IDisposable durationSubscription = Observable.Switch(this.WhenAnyValue(x => x.SelectedTimeline)
             .Select(timeline => timeline is null
                 ? Observable.Return(0.0)
                 : timeline.WhenAnyValue(t => t.DurationSeconds))
-            .Switch()
+            )
             .Subscribe(_ =>
             {
                 this.RaisePropertyChanged(nameof(TimelineWidth));
@@ -190,11 +193,11 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             });
         _disposables.Add(durationSubscription);
 
-        IDisposable frameRateSubscription = this.WhenAnyValue(x => x.SelectedTimeline)
+        IDisposable frameRateSubscription = Observable.Switch(this.WhenAnyValue(x => x.SelectedTimeline)
             .Select(timeline => timeline is null
                 ? Observable.Return(0.0)
                 : timeline.WhenAnyValue(t => t.FrameRate))
-            .Switch()
+            )
             .Subscribe(_ => this.RaisePropertyChanged(nameof(SnapIntervalSeconds)));
         _disposables.Add(frameRateSubscription);
 
@@ -223,11 +226,11 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             });
         _disposables.Add(selectedTrackSubscription);
 
-        IDisposable selectedTimelineValidationSubscription = this.WhenAnyValue(x => x.SelectedTimeline)
+        IDisposable selectedTimelineValidationSubscription = Observable.Switch(this.WhenAnyValue(x => x.SelectedTimeline)
             .Select(timeline => timeline is null
                 ? Observable.Return(0.0)
                 : timeline.WhenAnyValue(t => t.DurationSeconds))
-            .Switch()
+            )
             .Subscribe(_ => UpdateKeyframeValidation());
         _disposables.Add(selectedTimelineValidationSubscription);
 
@@ -250,7 +253,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         }
 
         IDisposable selectionSubscription = document.WhenAnyValue(x => x.SelectedNodeId)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(id => UpdateTargetFromSelection(document, id));
         _selectionSubscription.Disposable = selectionSubscription;
 

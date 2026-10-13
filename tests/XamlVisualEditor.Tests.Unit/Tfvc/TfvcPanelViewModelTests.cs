@@ -328,6 +328,8 @@ public sealed class TfvcPanelViewModelTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task SourceControlExplorer_ExpandingAFolderKeepsTheScrollPosition()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
         server.Children["$/"] = [new TfvcServerItem("$/Product", true, 200, null)];
         server.Children["$/Product"] = Enumerable.Range(0, 40)
@@ -337,9 +339,9 @@ public sealed class TfvcPanelViewModelTests
         using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
         {
             // The user works in a focused folder.
-            await viewModel.NavigateToAsync("$/Product", CancellationToken.None);
-            await viewModel.FocusSelectedCommand.Execute().ToTask();
-            await viewModel.NavigateToAsync("$/Product/Folder39", CancellationToken.None);
+            await viewModel.NavigateToAsync("$/Product", cancellationToken);
+            await viewModel.FocusSelectedCommand.Execute().ToTask(cancellationToken);
+            await viewModel.NavigateToAsync("$/Product/Folder39", cancellationToken);
             SourceControlExplorerView view = new() { DataContext = viewModel };
             Window window = new() { Width = 320, Height = 420, Content = view };
             window.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
@@ -377,7 +379,7 @@ public sealed class TfvcPanelViewModelTests
                 server.ChildrenGate.SetResult();
                 for (int attempt = 0; attempt < 50 && folder.Children.Count != 2; attempt++)
                 {
-                    await Task.Delay(10);
+                    await Task.Delay(10, cancellationToken);
                 }
 
                 await FlushLayoutAsync(window);

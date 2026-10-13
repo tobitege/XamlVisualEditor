@@ -79,7 +79,7 @@ public sealed class ToolboxVersionTests
         catalog.SetWorkspaceAssemblies(new[] { thirdPartyPath });
         SynchronizationContext context = Assert.IsAssignableFrom<SynchronizationContext>(SynchronizationContext.Current);
         using ToolboxPanelViewModel model = new(new CommandRegistry(), new InMemorySettingsStore(), catalog,
-            new SynchronizationContextScheduler(context));
+            new ReactiveUI.Primitives.Concurrency.SynchronizationContextSequencer(context));
         await model.ReloadAsync();
 
         ToolboxAssemblyGroup official = model.AssemblyGroups[0];

@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -45,8 +46,8 @@ public sealed class RecentFilesDialogViewModel : ReactiveObject, IDisposable
     public SortingModel SortingModel { get; } = new();
     public FilteringModel FilteringModel { get; } = new();
     public SearchModel SearchModel { get; } = new();
-    public ReactiveCommand<Unit, Unit> RemoveCommand { get; }
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RemoveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CloseCommand { get; }
     public event Action? CloseRequested;
 
     public RecentFileEntry? SelectedEntry

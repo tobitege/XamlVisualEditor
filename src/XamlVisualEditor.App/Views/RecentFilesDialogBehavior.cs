@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Xaml.Interactivity;
@@ -40,7 +41,7 @@ public sealed class RecentFilesDialogBehavior : Behavior<Window>
             interaction.Input.CloseRequested += Close;
             try { await dialog.ShowDialog(owner); }
             finally { interaction.Input.CloseRequested -= Close; }
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
     }
 }

@@ -11,6 +11,7 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using ReactiveUI;
 using XamlVisualEditor.Shell;
+using ToolDock = Dock.Model.ReactiveUI.Controls.ToolDock;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -56,7 +57,7 @@ public sealed class FixedSideDockWidthsBehavior : Behavior<DockControl>
         _center = root is null ? null : XamlEditorDockFactory.FindDockable<IDockable>(root, "CenterAndBottom");
         _width = AssociatedObject?.Bounds.Width ?? 0;
         CaptureWidths();
-        if (_left is { } left && _right is { } right)
+        if (_left is ToolDock left && _right is ToolDock right)
         {
             _proportionSubscription = Observable.Merge(
                     left.WhenAnyValue(dock => dock.Proportion).Skip(1),

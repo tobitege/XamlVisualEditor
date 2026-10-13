@@ -9,6 +9,8 @@ using Dock.Avalonia.Controls;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using ReactiveUI;
+using RootDock = Dock.Model.ReactiveUI.Controls.RootDock;
+using ToolDock = Dock.Model.ReactiveUI.Controls.ToolDock;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -21,14 +23,14 @@ public sealed class PinnedDockLayoutBehavior : Behavior<DockControl>
     {
         base.OnAttached();
         DockControl control = AssociatedObject!;
-        _subscription = control.GetObservable(DockControl.LayoutProperty)
-            .Select(layout => layout is IRootDock root
-                ? root.WhenAnyValue(model => model.PinnedDock)
-                    .Select(dock => dock is null ? Observable.Return<IDockable?>(null)
-                        : dock.WhenAnyValue(model => model.ActiveDockable))
-                    .Switch()
-                : Observable.Return<IDockable?>(null))
-            .Switch().DistinctUntilChanged()
+        _subscription = Observable.Switch(control.GetObservable(DockControl.LayoutProperty)
+            .Select(layout => layout is RootDock root
+                ? Observable.Switch(root.WhenAnyValue(model => model.PinnedDock)
+                    .Select(dock => dock is ToolDock tool
+                        ? tool.WhenAnyValue(model => model.ActiveDockable)
+                        : Observable.Return<IDockable?>(null)))
+                : Observable.Return<IDockable?>(null)))
+            .DistinctUntilChanged()
             .Subscribe(_ => Dispatcher.UIThread.Post(() =>
             {
                 if (AssociatedObject == control)

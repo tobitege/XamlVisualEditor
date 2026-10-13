@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Collections.ObjectModel;
 using System.Reactive;
 using ReactiveUI;
@@ -29,8 +30,8 @@ public sealed partial class ToolboxPanelViewModel
         private set => this.RaiseAndSetIfChanged(ref _preferenceError, value);
     }
 
-    public ReactiveCommand<Unit, Unit> ShowAllAssembliesCommand { get; }
-    public ReactiveCommand<Unit, Unit> HideAllAssembliesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShowAllAssembliesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> HideAllAssembliesCommand { get; }
 
     public Task InitializePreferencesAsync(CancellationToken cancellationToken = default) =>
         LoadAssemblyPreferencesAsync(_workspaceInfo?.WorkspacePath, cancellationToken);

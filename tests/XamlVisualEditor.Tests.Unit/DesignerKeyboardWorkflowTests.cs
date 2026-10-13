@@ -24,6 +24,8 @@ public sealed class DesignerKeyboardWorkflowTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task Keyboard_selection_cancel_and_preview_input_stay_in_their_own_context()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string xaml = """
             <UserControl xmlns="https://github.com/avaloniaui"
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Width="400" Height="200">
@@ -36,13 +38,13 @@ public sealed class DesignerKeyboardWorkflowTests
             """;
         string path = Path.Combine(Path.GetTempPath(), "xve-keyboard-" + Guid.NewGuid().ToString("N") + ".axaml");
         Assert.False(File.Exists(path));
-        await File.WriteAllTextAsync(path, xaml);
+        await File.WriteAllTextAsync(path, xaml).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         metadata.LoadAssembly(typeof(XamlVisualEditor.TestControls.CaptionControl).Assembly.Location);
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         XamlSerializationService serializer = new();
         string original = serializer.Serialize(document.SyncEngine.CurrentDocument!);
         DesignSurfaceView view = new() { DataContext = document.DesignSurface };
@@ -56,7 +58,7 @@ public sealed class DesignerKeyboardWorkflowTests
         try
         {
             host.Show();
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             var first = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "First");
             var second = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "Second");
             var canvas = document.DesignSurface.ControlMap.Single(pair => pair.Value.AstNode.TypeName == "Canvas");
@@ -95,7 +97,7 @@ public sealed class DesignerKeyboardWorkflowTests
             Assert.Equal(first.Value.AstNodeId, Assert.Single(document.DesignSurface.Selection.SelectedItems).AstNodeId);
 
             document.DesignSurface.IsEditMode = false;
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             TextBox input = Assert.IsType<TextBox>(document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "Input").Key);
             Point inputPoint = input.TranslatePoint(new Point(10, 10), host)!.Value;
             host.MouseDown(inputPoint, MouseButton.Left, RawInputModifiers.None);
@@ -132,12 +134,12 @@ public sealed class DesignerKeyboardWorkflowTests
                       </Canvas>
                     </UserControl>
                     """;
-                await document.SyncEngine.LoadAsync(nestedXaml);
+                await document.SyncEngine.LoadAsync(nestedXaml).WaitAsync(cancellationToken);
                 document.DesignSurface.SnapToGrid = true;
                 document.DesignSurface.SnapLinesEnabled = true;
                 document.DesignSurface.SnapToGuides = false;
                 document.DesignSurface.RequestRebuild();
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 var moving = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "Moving");
                 var partner = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "Partner");
                 var anchor = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "Anchor");
@@ -157,7 +159,7 @@ public sealed class DesignerKeyboardWorkflowTests
                 Assert.Contains(document.DesignSurface.Selection.SelectedItems, item => item.AstNodeId == partner.Value.AstNodeId);
                 host.MouseMove(dragEnd, RawInputModifiers.LeftMouseButton);
                 host.MouseUp(dragEnd, MouseButton.Left, RawInputModifiers.None);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 MutableAstObjectNode moved = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(moving.Value.AstNodeId));
                 MutableAstObjectNode movedPartner = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(partner.Value.AstNodeId));
                 Assert.Equal("205", moved.GetPropertyValue("Canvas.Left"));
@@ -172,17 +174,17 @@ public sealed class DesignerKeyboardWorkflowTests
                 document.SyncEngine.Redo();
                 Assert.Equal(movedText, document.SyncEngine.GetCurrentText());
                 document.SyncEngine.Undo();
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
 
                 var resizeItem = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == "Moving");
                 document.DesignSurface.SelectByAstNodeId(resizeItem.Value.AstNodeId);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 Point resizeStart = resizeItem.Key.TranslatePoint(default, host)!.Value;
                 Point resizeEnd = resizeItem.Key.TranslatePoint(new Point(-16, -8), host)!.Value;
                 host.MouseDown(resizeStart, MouseButton.Left, RawInputModifiers.None);
                 host.MouseMove(resizeEnd, RawInputModifiers.LeftMouseButton);
                 host.MouseUp(resizeEnd, MouseButton.Left, RawInputModifiers.None);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 MutableAstObjectNode resized = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(resizeItem.Value.AstNodeId));
                 Assert.Equal("136", resized.GetPropertyValue("Width"));
                 Assert.Equal("40", resized.GetPropertyValue("Height"));
@@ -191,7 +193,7 @@ public sealed class DesignerKeyboardWorkflowTests
                 Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
                 document.SyncEngine.Undo();
                 Assert.Equal(nestedXaml, document.SyncEngine.GetCurrentText());
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             }
 
             foreach (string orientation in new[] { "Vertical", "Horizontal" })
@@ -212,9 +214,9 @@ public sealed class DesignerKeyboardWorkflowTests
                       </StackPanel>
                     </UserControl>
                     """;
-                await document.SyncEngine.LoadAsync(stackXaml);
+                await document.SyncEngine.LoadAsync(stackXaml).WaitAsync(cancellationToken);
                 document.DesignSurface.RequestRebuild();
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 bool horizontal = orientation == "Horizontal";
                 Control Item(string name) => document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == name).Key;
                 Point Center(Control control) => control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), host)!.Value;
@@ -234,14 +236,14 @@ public sealed class DesignerKeyboardWorkflowTests
                 Click(Item("PartnerStack"), RawInputModifiers.None);
                 Click(Item("MovingStack"), RawInputModifiers.Control);
                 Assert.Equal(2, document.DesignSurface.Selection.SelectedItems.Count);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 Point dragStart = Center(Item("PartnerStack"));
                 Point dragEnd = Edge(Item("LastStack"), after: true);
                 host.MouseDown(dragStart, MouseButton.Left, RawInputModifiers.None);
                 host.MouseMove(dragEnd, RawInputModifiers.LeftMouseButton);
                 Assert.Equal(stackXaml, document.SyncEngine.GetCurrentText());
                 host.MouseUp(dragEnd, MouseButton.Left, RawInputModifiers.None);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 Assert.True(new[] { "AnchorStack", "LastStack", "MovingStack", "PartnerStack" }.SequenceEqual(Order()),
                     $"{orientation}/{scale}: order={string.Join(",", Order())}, undo={document.SyncEngine.UndoRedo.UndoCount}; {pointerRoute}");
                 Assert.Equal(2, document.DesignSurface.Selection.SelectedItems.Count);
@@ -251,7 +253,7 @@ public sealed class DesignerKeyboardWorkflowTests
                 Assert.Equal(stackXaml, document.SyncEngine.GetCurrentText());
                 document.SyncEngine.Redo();
                 Assert.Equal(reordered, document.SyncEngine.GetCurrentText());
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
 
                 dragStart = Center(Item("MovingStack"));
                 dragEnd = Edge(Item("AnchorStack"), after: false);
@@ -259,7 +261,7 @@ public sealed class DesignerKeyboardWorkflowTests
                 host.MouseMove(dragEnd, RawInputModifiers.LeftMouseButton);
                 Press(host, Key.Escape, PhysicalKey.Escape);
                 host.MouseUp(dragEnd, MouseButton.Left, RawInputModifiers.None);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 Assert.Equal(reordered, document.SyncEngine.GetCurrentText());
                 Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
 
@@ -268,34 +270,34 @@ public sealed class DesignerKeyboardWorkflowTests
                 host.MouseDown(dragStart, MouseButton.Left, RawInputModifiers.None);
                 host.MouseMove(dragEnd, RawInputModifiers.LeftMouseButton);
                 host.MouseUp(dragEnd, MouseButton.Left, RawInputModifiers.None);
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 Assert.Equal(new[] { "MovingStack", "PartnerStack", "AnchorStack", "LastStack" }, Order());
                 Assert.Equal(2, document.SyncEngine.UndoRedo.UndoCount);
                 document.SyncEngine.Undo();
                 Assert.Equal(reordered, document.SyncEngine.GetCurrentText());
                 document.SyncEngine.Undo();
                 Assert.Equal(stackXaml, document.SyncEngine.GetCurrentText());
-                await FinishLayoutAsync(host);
+                await FinishLayoutAsync(host).WaitAsync(cancellationToken);
 
                 foreach (string name in new[] { "MovingStack", "PartnerStack" })
                 {
                     var resizeItem = document.DesignSurface.ControlMap.Single(pair => pair.Key.Name == name);
                     document.DesignSurface.SelectByAstNodeId(resizeItem.Value.AstNodeId);
-                    await FinishLayoutAsync(host);
+                    await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                     Size size = resizeItem.Key.Bounds.Size;
                     Point resizeStart = resizeItem.Key.TranslatePoint(new Point(size.Width, size.Height), host)!.Value;
                     Point resizeEnd = resizeItem.Key.TranslatePoint(new Point(size.Width + 24, size.Height + 16), host)!.Value;
                     host.MouseDown(resizeStart, MouseButton.Left, RawInputModifiers.None);
                     host.MouseMove(resizeEnd, RawInputModifiers.LeftMouseButton);
                     host.MouseUp(resizeEnd, MouseButton.Left, RawInputModifiers.None);
-                    await FinishLayoutAsync(host);
+                    await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                     MutableAstObjectNode resized = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(resizeItem.Value.AstNodeId));
                     Assert.Equal("104", resized.GetPropertyValue("Width"));
                     Assert.Equal("48", resized.GetPropertyValue("Height"));
                     Assert.Equal(1, document.SyncEngine.UndoRedo.UndoCount);
                     document.SyncEngine.Undo();
                     Assert.Equal(stackXaml, document.SyncEngine.GetCurrentText());
-                    await FinishLayoutAsync(host);
+                    await FinishLayoutAsync(host).WaitAsync(cancellationToken);
                 }
             }
         }

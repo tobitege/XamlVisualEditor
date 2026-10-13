@@ -39,7 +39,7 @@ public sealed class ToolboxCatalogWorkflowTests
         catalog.SetWorkspaceAssemblies(new[] { libraryPath, secondLibraryPath });
         SynchronizationContext context = Assert.IsAssignableFrom<SynchronizationContext>(SynchronizationContext.Current);
         using ToolboxPanelViewModel model = new(new CommandRegistry(), new InMemorySettingsStore(), catalog,
-            new SynchronizationContextScheduler(context));
+            new ReactiveUI.Primitives.Concurrency.SynchronizationContextSequencer(context));
         Application application = Assert.IsAssignableFrom<Application>(Application.Current);
         FluentTheme theme = new();
         // Register the theme before controls attach to a logical root and resolve their implicit themes.
@@ -191,7 +191,7 @@ public sealed class ToolboxCatalogWorkflowTests
         MetadataControlCatalog catalog = new((_, _, _, _, _) => controls);
         SynchronizationContext context = Assert.IsAssignableFrom<SynchronizationContext>(SynchronizationContext.Current);
         using ToolboxPanelViewModel model = new(new CommandRegistry(), new InMemorySettingsStore(), catalog,
-            new SynchronizationContextScheduler(context));
+            new ReactiveUI.Primitives.Concurrency.SynchronizationContextSequencer(context));
         ToolboxPanelView view = new() { DataContext = model };
         FluentTheme theme = new();
         Application.Current!.Styles.Add(theme);

@@ -18,6 +18,8 @@ public sealed class SideDockWidthTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task ResizingWindowKeepsSideDockWidthsAndChangesTheEditorWidth()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         Avalonia.Themes.Fluent.FluentTheme fluent = new();
         DockFluentTheme dockTheme = new();
         Application.Current!.Styles.Add(fluent);
@@ -45,7 +47,7 @@ public sealed class SideDockWidthTests
         try
         {
             window.Show();
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.Equal(1200, dockControl.Bounds.Width);
             double leftWidth = left.Proportion * dockControl.Bounds.Width;
             double rightWidth = right.Proportion * dockControl.Bounds.Width;
@@ -55,14 +57,14 @@ public sealed class SideDockWidthTests
 
             window.Width = 1600;
             dockControl.Width = 1600;
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.InRange(left.Proportion * dockControl.Bounds.Width, leftWidth - 2, leftWidth + 2);
             Assert.InRange(right.Proportion * dockControl.Bounds.Width, rightWidth - 2, rightWidth + 2);
             Assert.InRange(editor.Proportion * dockControl.Bounds.Width, editorWidth + 398, editorWidth + 402);
 
             window.Width = 1000;
             dockControl.Width = 1000;
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.InRange(left.Proportion * dockControl.Bounds.Width, leftWidth - 2, leftWidth + 2);
             Assert.InRange(right.Proportion * dockControl.Bounds.Width, rightWidth - 2, rightWidth + 2);
         }

@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive;
 using Avalonia;
 using Avalonia.Controls;
@@ -38,7 +39,7 @@ public sealed class DialogEscapeTests
         await AssertCancel(new OpenFolderDialog { DataContext = folder }, folder.CloseInteraction, null);
     }
 
-    private static async Task AssertCancel<T>(Window dialog, Interaction<T, Unit> interaction, T expected)
+    private static async Task AssertCancel<T>(Window dialog, Interaction<T, RxVoid> interaction, T expected)
     {
         Avalonia.Themes.Fluent.FluentTheme theme = new();
         Application.Current!.Styles.Add(theme);
@@ -46,7 +47,7 @@ public sealed class DialogEscapeTests
         using IDisposable handler = interaction.RegisterHandler(context =>
         {
             dialog.Close(context.Input);
-            context.SetOutput(Unit.Default);
+            context.SetOutput(RxVoid.Default);
         });
         try
         {

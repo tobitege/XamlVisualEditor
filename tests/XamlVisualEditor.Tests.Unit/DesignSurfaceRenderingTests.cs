@@ -25,6 +25,8 @@ public sealed class DesignSurfaceRenderingTests
     public async Task Artboard_grows_to_rendered_content_unless_the_document_has_an_explicit_size(
         string rootSize, double expectedWidth, double expectedHeight)
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string xaml = $"""
             <UserControl xmlns="https://github.com/avaloniaui" {rootSize}>
               <Border Width="1200" Height="700" Background="Tomato" />
@@ -41,6 +43,8 @@ public sealed class DesignSurfaceRenderingTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task Preview_hooks_receive_the_rendered_window_and_its_source_root()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string className = "Sample.HookProbe" + Guid.NewGuid().ToString("N");
         string xaml = $"""
             <Window xmlns="https://github.com/avaloniaui"

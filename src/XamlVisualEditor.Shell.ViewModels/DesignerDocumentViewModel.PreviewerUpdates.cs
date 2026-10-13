@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
@@ -25,10 +28,15 @@ public sealed partial class DesignerDocumentViewModel
             .Select(_ =>
             {
                 int scheduledRevision = Volatile.Read(ref revision);
-                return Observable.FromAsync(() => IsDisposed || scheduledRevision != Volatile.Read(ref revision)
-                        ? Task.CompletedTask : updatePreviewerAsync(this))
-                    .SubscribeOn(RxSchedulers.MainThreadScheduler)
-                    .Catch<Unit, Exception>(error => Observable.Start(() =>
+                return Signal.FromTask(async _ =>
+                    {
+                        if (!IsDisposed && scheduledRevision == Volatile.Read(ref revision))
+                        {
+                            await updatePreviewerAsync(this);
+                        }
+                        return RxVoid.Default;
+                    }, RxSchedulers.MainThreadScheduler)
+                    .Catch<RxVoid, Exception>(error => Signal.Start(() =>
                     {
                         if (!IsDisposed) SetPreviewerLaunchError(error.Message);
                     }, RxSchedulers.MainThreadScheduler));

@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -23,10 +24,10 @@ public sealed partial class InputBoxDialogViewModel : ReactiveObject
     [Reactive]
     public partial string Value { get; set; }
 
-    public Interaction<string?, Unit> CloseInteraction { get; } = new();
+    public Interaction<string?, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public InputBoxDialogViewModel(InputBoxOptions options)
     {
@@ -53,10 +54,10 @@ public sealed partial class QuickPickDialogViewModel : ReactiveObject
     [Reactive]
     public partial QuickPickItemViewModel? SelectedItem { get; set; }
 
-    public Interaction<QuickPickItem?, Unit> CloseInteraction { get; } = new();
+    public Interaction<QuickPickItem?, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public QuickPickDialogViewModel(string? title, IReadOnlyList<QuickPickItem> items)
     {
@@ -110,10 +111,10 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
     public string Title { get; }
     public string Message { get; }
 
-    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public MessageDialogViewModel(string title, string message)
     {
@@ -136,9 +137,9 @@ public sealed class ProgressDialogViewModel : ReactiveObject
     public string Message { get; }
     public string CancelText { get; }
 
-    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public ProgressDialogViewModel(string title, string message, string? cancelText = null)
     {
@@ -163,10 +164,10 @@ public sealed partial class ConfirmDialogViewModel : ReactiveObject
     public bool IsDestructive { get; }
     public bool IsConfirmDefault => !IsDestructive;
 
-    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public ConfirmDialogViewModel(string title, string message, string? confirmText = null, bool isDestructive = false,
         string? cancelText = null)

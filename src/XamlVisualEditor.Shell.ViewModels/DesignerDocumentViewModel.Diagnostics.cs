@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
@@ -30,10 +32,10 @@ public sealed partial class DesignerDocumentViewModel
     private void InitializeDesignerDiagnostics()
     {
         _disposables.Add(this.WhenAnyValue(document => document.UseExternalPreviewer)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => { if (!IsDisposed) PublishDesignerDiagnostics(); }));
 
-        _disposables.Add(this.WhenAnyValue(document => document.PreviewerSession)
+        _disposables.Add(Observable.Switch(this.WhenAnyValue(document => document.PreviewerSession)
             .Select(session => session is null
                 ? Observable.Return<PreviewerErrorInfo?>(null)
                 : Observable.Create<PreviewerErrorInfo?>(observer =>
@@ -43,8 +45,8 @@ public sealed partial class DesignerDocumentViewModel
                     observer.OnNext(session.LastErrorInfo);
                     return Disposable.Create(() => session.ErrorChanged -= OnErrorChanged);
                 }))
-            .Switch()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(error =>
             {
                 if (IsDisposed || !Equals(PreviewerSession?.LastErrorInfo, error)) return;
@@ -56,7 +58,7 @@ public sealed partial class DesignerDocumentViewModel
                 PublishDesignerDiagnostics();
             }));
 
-        _disposables.Add(SyncEngine.SyncEvents.ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(change =>
+        _disposables.Add(SyncEngine.SyncEvents.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(change =>
         {
             if (IsDisposed || change.UpdatedText != SyncEngine.CurrentText) return;
             if (_interactionDiagnosticsText != change.UpdatedText)

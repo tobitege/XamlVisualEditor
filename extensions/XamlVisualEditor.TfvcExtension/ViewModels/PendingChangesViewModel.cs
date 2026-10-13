@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -131,61 +133,61 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
     public ObservableCollection<TfvcDiffLine> DiffLines { get; } = new();
 
     /// <summary>Reloads the pending changes.</summary>
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
     /// <summary>Checks in the included changes.</summary>
-    public ReactiveCommand<Unit, Unit> CheckInCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CheckInCommand { get; }
 
     /// <summary>Shelves the included changes.</summary>
-    public ReactiveCommand<Unit, Unit> ShelveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShelveCommand { get; }
 
     /// <summary>Undoes the selected changes.</summary>
-    public ReactiveCommand<Unit, Unit> UndoSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UndoSelectedCommand { get; }
 
     /// <summary>Undoes all pending changes.</summary>
-    public ReactiveCommand<Unit, Unit> UndoAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UndoAllCommand { get; }
 
     /// <summary>Moves the selected changes to the excluded list.</summary>
-    public ReactiveCommand<Unit, Unit> ExcludeSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExcludeSelectedCommand { get; }
 
     /// <summary>Moves the selected changes to the included list.</summary>
-    public ReactiveCommand<Unit, Unit> IncludeSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> IncludeSelectedCommand { get; }
 
     /// <summary>Excludes all changes.</summary>
-    public ReactiveCommand<Unit, Unit> ExcludeAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExcludeAllCommand { get; }
 
     /// <summary>Includes all changes.</summary>
-    public ReactiveCommand<Unit, Unit> IncludeAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> IncludeAllCommand { get; }
 
     /// <summary>Opens the selected file in the editor.</summary>
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
     /// <summary>Compares the selected file with its workspace version.</summary>
-    public ReactiveCommand<Unit, Unit> CompareSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CompareSelectedCommand { get; }
 
     /// <summary>Hides the difference view.</summary>
-    public ReactiveCommand<Unit, Unit> CloseDiffCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CloseDiffCommand { get; }
 
     /// <summary>Adds the entered work item.</summary>
-    public ReactiveCommand<Unit, Unit> AddWorkItemCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddWorkItemCommand { get; }
 
     /// <summary>Removes a related work item.</summary>
-    public ReactiveCommand<TfvcWorkItemViewModel, Unit> RemoveWorkItemCommand { get; }
+    public ReactiveCommand<TfvcWorkItemViewModel, RxVoid> RemoveWorkItemCommand { get; }
 
     /// <summary>Adds the active editor document to version control.</summary>
-    public ReactiveCommand<Unit, Unit> AddActiveDocumentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddActiveDocumentCommand { get; }
 
     /// <summary>Shows the history of the selected item.</summary>
-    public ReactiveCommand<Unit, Unit> ShowHistoryCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShowHistoryCommand { get; }
 
     /// <summary>Copies the name of the selected item to the clipboard.</summary>
-    public ReactiveCommand<Unit, Unit> CopyNameCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyNameCommand { get; }
 
     /// <summary>Copies the local path of the selected item, or its server path when it is not mapped, to the clipboard.</summary>
-    public ReactiveCommand<Unit, Unit> CopyPathCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyPathCommand { get; }
 
     /// <summary>Asks the view to place text on the clipboard.</summary>
-    public Interaction<string, Unit> CopyToClipboard { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboard { get; } = new();
 
     /// <summary>Gets or sets the check-in comment.</summary>
     [Reactive]

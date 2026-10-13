@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia;
@@ -11,8 +12,8 @@ namespace XamlVisualEditor.TfvcExtension.Views;
 public sealed class ClipboardInteractionBehavior
 {
     /// <summary>Interaction whose input text is copied to the clipboard.</summary>
-    public static readonly AttachedProperty<Interaction<string, Unit>?> InteractionProperty =
-        AvaloniaProperty.RegisterAttached<ClipboardInteractionBehavior, Control, Interaction<string, Unit>?>("Interaction");
+    public static readonly AttachedProperty<Interaction<string, RxVoid>?> InteractionProperty =
+        AvaloniaProperty.RegisterAttached<ClipboardInteractionBehavior, Control, Interaction<string, RxVoid>?>("Interaction");
 
     private static readonly AttachedProperty<IDisposable?> RegistrationProperty =
         AvaloniaProperty.RegisterAttached<ClipboardInteractionBehavior, Control, IDisposable?>("Registration");
@@ -23,16 +24,16 @@ public sealed class ClipboardInteractionBehavior
     }
 
     /// <summary>Gets the interaction of a control.</summary>
-    public static Interaction<string, Unit>? GetInteraction(Control control) => control.GetValue(InteractionProperty);
+    public static Interaction<string, RxVoid>? GetInteraction(Control control) => control.GetValue(InteractionProperty);
 
     /// <summary>Sets the interaction of a control.</summary>
-    public static void SetInteraction(Control control, Interaction<string, Unit>? value) => control.SetValue(InteractionProperty, value);
+    public static void SetInteraction(Control control, Interaction<string, RxVoid>? value) => control.SetValue(InteractionProperty, value);
 
     private static void OnInteractionChanged(Control control, AvaloniaPropertyChangedEventArgs e)
     {
         control.GetValue(RegistrationProperty)?.Dispose();
         control.SetValue(RegistrationProperty, null);
-        if (e.NewValue is not Interaction<string, Unit> interaction)
+        if (e.NewValue is not Interaction<string, RxVoid> interaction)
         {
             return;
         }
@@ -45,7 +46,7 @@ public sealed class ClipboardInteractionBehavior
                 await clipboard.SetTextAsync(context.Input);
             }
 
-            context.SetOutput(Unit.Default);
+            context.SetOutput(RxVoid.Default);
         });
         control.SetValue(RegistrationProperty, registration);
     }

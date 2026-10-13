@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -42,11 +43,11 @@ public sealed class ManageLayoutsDialogViewModel : ReactiveObject, IDisposable
 
     public bool HasNames => Names.Count > 0;
 
-    public ReactiveCommand<Unit, Unit> RenameCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RenameCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DeleteCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CloseCommand { get; }
 
     /// <summary>Asks the user to confirm deleting the named layout; the output is true when confirmed.</summary>
     public Interaction<string, bool> ConfirmDeleteInteraction { get; } = new();

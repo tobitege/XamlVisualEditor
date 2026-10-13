@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
@@ -118,7 +119,7 @@ public sealed class ToolboxExtensionTests
         StubWorkspaceInfo workspace = new();
         StubDesignerHost designer = new();
         designer.SetActiveDocument(null);
-        using ToolboxPanelViewModel model = new(commands, settings, uiScheduler: ImmediateScheduler.Instance,
+        using ToolboxPanelViewModel model = new(commands, settings, uiScheduler: ImmediateSequencer.Instance,
             workspaceInfo: workspace, designer: designer);
         model.SelectedItem = Assert.Single(model.Items);
         Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());

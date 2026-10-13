@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -109,9 +112,9 @@ public sealed class ReferencesPanelViewModel : ReactiveObject, IDisposable
 
     public SearchModel SearchModel { get; }
 
-    public ReactiveCommand<ReferenceLocationItemViewModel, Unit> OpenLocationCommand { get; }
+    public ReactiveCommand<ReferenceLocationItemViewModel, RxVoid> OpenLocationCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
     public ReferencesPanelViewModel(
         ILanguageNavigationService navigation,
@@ -158,7 +161,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject, IDisposable
 
         _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
     }
 

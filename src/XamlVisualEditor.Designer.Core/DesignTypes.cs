@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -14,7 +15,7 @@ using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.Designer.Core;
 
-public sealed record DesignerLayoutAction(string Title, string Description, ReactiveCommand<Unit, Unit> Command)
+public sealed record DesignerLayoutAction(string Title, string Description, ReactiveCommand<RxVoid, RxVoid> Command)
 {
     public Avalonia.Media.Geometry? Icon { get; init; }
 }
@@ -361,7 +362,7 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public IClipboardService? ClipboardService { get; set; }
 
     /// <summary>Copies a value of the coordinate strip to the clipboard.</summary>
-    public ReactiveCommand<string?, Unit> CopyReadoutCommand { get; }
+    public ReactiveCommand<string?, RxVoid> CopyReadoutCommand { get; }
 
     public static double StepZoom(double zoom, int direction)
     {
@@ -531,30 +532,30 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// <summary>
     /// Command to zoom in.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ZoomInCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ZoomInCommand { get; }
 
     /// <summary>
     /// Command to zoom out.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ZoomOutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ZoomOutCommand { get; }
 
     /// <summary>
     /// Command to reset zoom.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ResetZoomCommand { get; }
-    public ReactiveCommand<Unit, Unit> SelectNextControlCommand { get; }
-    public ReactiveCommand<Unit, Unit> SelectPreviousControlCommand { get; }
-    public ReactiveCommand<Unit, Unit> SelectParentControlCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ResetZoomCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectNextControlCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectPreviousControlCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectParentControlCommand { get; }
 
     /// <summary>
     /// Document commands supplied by the shell's transactional editing path.
     /// </summary>
-    public ReactiveCommand<Unit, Unit>? DeleteSelectedCommand { get; set; }
-    public ReactiveCommand<Unit, Unit>? CutCommand { get; set; }
-    public ReactiveCommand<Unit, Unit>? CopyCommand { get; set; }
-    public ReactiveCommand<Unit, Unit>? PasteCommand { get; set; }
-    public ReactiveCommand<Unit, Unit>? DuplicateCommand { get; set; }
-    public ReactiveCommand<Unit, Unit>? SelectAllCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? DeleteSelectedCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? CutCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? CopyCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? PasteCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? DuplicateCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? SelectAllCommand { get; set; }
     public ObservableCollection<DesignerLayoutAction> LayoutActions { get; } = new();
 
     private IReadOnlyList<Guid>? _requestedSelection;

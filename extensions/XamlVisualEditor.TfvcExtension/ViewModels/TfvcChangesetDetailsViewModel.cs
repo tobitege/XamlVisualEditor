@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -41,10 +42,10 @@ public sealed partial class TfvcChangesetDetailsViewModel : ReactiveObject
     public ObservableCollection<TfvcChangeRowViewModel> Changes { get; } = new();
 
     /// <summary>Saves the revised comment.</summary>
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
 
     /// <summary>Hides the changeset details.</summary>
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CloseCommand { get; }
 
     /// <summary>Gets the displayed changeset.</summary>
     [Reactive]

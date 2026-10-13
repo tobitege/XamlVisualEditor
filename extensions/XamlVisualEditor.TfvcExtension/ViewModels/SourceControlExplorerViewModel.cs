@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -93,7 +96,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
 
         _searchSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplySearch);
 
         IObservable<SourceControlItemViewModel?> selected = this.WhenAnyValue(x => x.SelectedItem);
@@ -153,46 +156,46 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
     public SearchModel SearchModel { get; }
 
     /// <summary>Reloads the tree.</summary>
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
     /// <summary>Navigates to the entered server path.</summary>
-    public ReactiveCommand<Unit, Unit> NavigateCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NavigateCommand { get; }
 
     /// <summary>Opens the selected file.</summary>
-    public ReactiveCommand<Unit, Unit> OpenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenCommand { get; }
 
     /// <summary>Gets the latest version of the selected item.</summary>
-    public ReactiveCommand<Unit, Unit> GetLatestCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> GetLatestCommand { get; }
 
     /// <summary>Checks out the selected file, or every item of the selected folder and its subfolders.</summary>
-    public ReactiveCommand<Unit, Unit> CheckOutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CheckOutCommand { get; }
 
     /// <summary>Undoes the pending changes of the selected item.</summary>
-    public ReactiveCommand<Unit, Unit> UndoCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UndoCommand { get; }
 
     /// <summary>Adds unversioned items of the selected mapped folder to version control.</summary>
-    public ReactiveCommand<Unit, Unit> AddItemsToFolderCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddItemsToFolderCommand { get; }
 
     /// <summary>Selects the active editor document in the tree.</summary>
-    public ReactiveCommand<Unit, Unit> LocateActiveDocumentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> LocateActiveDocumentCommand { get; }
 
     /// <summary>Shows the history of the selected item.</summary>
-    public ReactiveCommand<Unit, Unit> ShowHistoryCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShowHistoryCommand { get; }
 
     /// <summary>Copies the name of the selected item to the clipboard.</summary>
-    public ReactiveCommand<Unit, Unit> CopyNameCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyNameCommand { get; }
 
     /// <summary>Copies the local path of the selected item, or its server path when it is not mapped, to the clipboard.</summary>
-    public ReactiveCommand<Unit, Unit> CopyPathCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyPathCommand { get; }
 
     /// <summary>Asks the view to place text on the clipboard.</summary>
-    public Interaction<string, Unit> CopyToClipboard { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboard { get; } = new();
 
     /// <summary>Shows only the selected folder and its descendants.</summary>
-    public ReactiveCommand<Unit, Unit> FocusSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> FocusSelectedCommand { get; }
 
     /// <summary>Shows the whole collection again.</summary>
-    public ReactiveCommand<Unit, Unit> ClearFocusCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearFocusCommand { get; }
 
     /// <summary>Gets the server path of the focused folder, or null when the whole collection is shown.</summary>
     [Reactive]

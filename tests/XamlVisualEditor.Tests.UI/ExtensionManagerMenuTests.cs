@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -83,7 +84,7 @@ public sealed class ExtensionManagerMenuTests
             opened++;
             Assert.Same(layout, vm.DockLayout);
             Assert.Same(active, layout.ActiveDockable);
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
 
         await vm.OpenExtensionManagerCommand.Execute().FirstAsync();

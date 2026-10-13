@@ -57,8 +57,7 @@ public sealed class ExtensionDockFactoryTests
             ["Id"] = "ExtensionsManager",
             ["Title"] = "Extensions"
         };
-        json[collection] ??= new System.Text.Json.Nodes.JsonArray();
-        json[collection]!.AsArray().Add(obsolete);
+        json[collection]!["$values"]!.AsArray().Add(obsolete);
         json[nameof(IRootDock.ActiveDockable)] = obsolete.DeepClone();
         json[nameof(IRootDock.DefaultDockable)] = obsolete.DeepClone();
         System.IO.File.WriteAllText(path, json.ToJsonString());

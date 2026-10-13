@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Reactive;
@@ -32,7 +33,7 @@ public sealed class AcpOAuthFlowIntegrationTests
 
         vm.OpenUrlInteraction.RegisterHandler(ctx =>
         {
-            ctx.SetOutput(Unit.Default);
+            ctx.SetOutput(RxVoid.Default);
             return Task.CompletedTask;
         });
 

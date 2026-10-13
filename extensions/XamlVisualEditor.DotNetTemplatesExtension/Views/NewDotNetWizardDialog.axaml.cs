@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia.Controls;
@@ -36,7 +37,7 @@ public sealed partial class NewDotNetWizardDialog : Window
             _closeHandler = vm.CloseInteraction.RegisterHandler(ctx =>
             {
                 Close(ctx.Input);
-                ctx.SetOutput(Unit.Default);
+                ctx.SetOutput(RxVoid.Default);
             });
 
             _folderHandler = vm.SelectFolderInteraction.RegisterHandler(async ctx =>

@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Collections.Generic;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -23,8 +24,8 @@ public sealed class SaveChangesDialogViewModel : ReactiveObject
     public string DiscardText => UiStrings.DontSave;
     public string CancelText => UiStrings.Cancel;
 
-    public Interaction<SaveChangesChoice, Unit> CloseInteraction { get; } = new();
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
-    public ReactiveCommand<Unit, Unit> DiscardCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public Interaction<SaveChangesChoice, RxVoid> CloseInteraction { get; } = new();
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DiscardCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 }

@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using System;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;

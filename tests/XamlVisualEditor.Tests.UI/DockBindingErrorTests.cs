@@ -21,6 +21,8 @@ public sealed class DockBindingErrorTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task ClosingPinningAndPreviewingToolsLogsNoBindingErrors()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         Uri baseUri = new("avares://XamlVisualEditor.App/");
         IStyle[] styles =
         [
@@ -44,63 +46,63 @@ public sealed class DockBindingErrorTests
         try
         {
             window.Show();
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
 
             log.Phase = "close the last tool of a dock";
             OutputTool closed = AddTool(viewModel, right, "BindingTestClosed");
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             factory.CloseDockable(closed);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
 
             log.Phase = "close one of two tools";
             OutputTool first = AddTool(viewModel, left, "BindingTestFirst");
             OutputTool second = AddTool(viewModel, left, "BindingTestSecond");
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             factory.CloseDockable(second);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.Same(first, left.ActiveDockable);
             Assert.Equal("BindingTestFirst", ChromeTitle(window, left));
 
             log.Phase = "hide the last tool of a dock";
             factory.HideDockable(first);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
 
             OutputTool output = XamlEditorDockFactory.FindDockable<OutputTool>(layout, "Output")!;
             if (!factory.IsDockablePinned(output, layout))
             {
                 factory.PinDockable(output);
-                await FlushAsync(window);
+                await FlushAsync(window).WaitAsync(cancellationToken);
             }
 
             log.Phase = "preview a pinned tool and hide the preview";
             factory.PreviewPinnedDockable(output);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             factory.HidePreviewingDockables(layout);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
 
             log.Phase = "preview a pinned tool and close it";
             factory.PreviewPinnedDockable(output);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             factory.CloseDockable(output);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
 
             BreakpointsTool breakpoints = XamlEditorDockFactory.FindDockable<BreakpointsTool>(layout, "Breakpoints")!;
             if (factory.IsDockablePinned(breakpoints, layout))
             {
                 factory.UnpinDockable(breakpoints);
-                await FlushAsync(window);
+                await FlushAsync(window).WaitAsync(cancellationToken);
             }
 
             factory.SetActiveDockable(breakpoints);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.Equal(breakpoints.Title, ChromeTitle(window, bottom));
             log.Phase = "collapse the bottom dock";
             factory.CollapseBottomToolDock(layout);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
 
             log.Phase = "show a tool of the collapsed bottom dock again";
             factory.UnpinDockable(breakpoints);
-            await FlushAsync(window);
+            await FlushAsync(window).WaitAsync(cancellationToken);
             Assert.Same(breakpoints, bottom.ActiveDockable);
             Assert.Equal(breakpoints.Title, ChromeTitle(window, bottom));
 

@@ -161,6 +161,8 @@ public sealed class PreviewerSurfaceSelectionTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task ExternalViewportRulersAndGuideSnappingUseDocumentCoordinates()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string xaml = "<Canvas xmlns=\"https://github.com/avaloniaui\" Width=\"600\" Height=\"400\"><Button Canvas.Left=\"100\" Canvas.Top=\"100\" Width=\"80\" Height=\"40\" /></Canvas>";
         using DesignerDocumentViewModel document = new("ExternalViewport.axaml")
         {
@@ -172,7 +174,7 @@ public sealed class PreviewerSurfaceSelectionTests
         document.DesignSurface.SnapLinesEnabled = false;
         document.DesignSurface.ShowAlignmentGuides = false;
         document.DesignSurface.SnapToGuides = true;
-        await document.SyncEngine.LoadAsync(xaml);
+        await document.SyncEngine.LoadAsync(xaml).WaitAsync(cancellationToken);
         MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
         MutableAstObjectNode button = root.Children.OfType<MutableAstObjectNode>().Single();
         Guid revision = Guid.NewGuid();
@@ -330,6 +332,8 @@ public sealed class PreviewerSurfaceSelectionTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task PreviewSelectionUsesInstanceGeometryClippingAndTheCurrentDocumentRevision()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string xaml = "<Canvas xmlns=\"https://github.com/avaloniaui\"><Button Name=\"Repeated\" Content=\"Initial\" /><TextBox Name=\"Other\" /></Canvas>";
         using DesignerDocumentViewModel document = new("PreviewSelection.axaml") { UseExternalPreviewer = true };
         int publishedSelectionCount = -1;
@@ -338,7 +342,7 @@ public sealed class PreviewerSurfaceSelectionTests
         document.DesignSurface.SnapLinesEnabled = false;
         document.DesignSurface.Zoom = 2;
         document.DesignSurface.CanvasGap = 0;
-        await document.SyncEngine.LoadAsync(xaml);
+        await document.SyncEngine.LoadAsync(xaml).WaitAsync(cancellationToken);
         MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
         MutableAstObjectNode button = root.Children.OfType<MutableAstObjectNode>().Single(node => node.TypeName == "Button");
         MutableAstObjectNode other = root.Children.OfType<MutableAstObjectNode>().Single(node => node.TypeName == "TextBox");
@@ -397,7 +401,7 @@ public sealed class PreviewerSurfaceSelectionTests
             Assert.True(session.TryReceiveDesignTree(PreviewerTcpSession.DesignTreeMessagePrefix + JsonSerializer.Serialize(tree)));
             Dispatcher.UIThread.RunJobs();
             window.UpdateLayout();
-            await Task.Delay(30);
+            await Task.Delay(30, cancellationToken);
             Dispatcher.UIThread.RunJobs();
 
             void Click(double x, double y)

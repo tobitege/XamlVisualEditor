@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -45,13 +46,13 @@ public sealed partial class TfvcReconcileDialogViewModel : ReactiveObject
     public ObservableCollection<TfvcReconcileItemViewModel> Items { get; } = new();
 
     /// <summary>Closes the dialog with the selected changes, or null when it is cancelled.</summary>
-    public Interaction<IReadOnlyList<TfvcOfflineChange>?, Unit> CloseInteraction { get; } = new();
+    public Interaction<IReadOnlyList<TfvcOfflineChange>?, RxVoid> CloseInteraction { get; } = new();
 
     /// <summary>Pends the selected changes.</summary>
-    public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ApplyCommand { get; }
 
     /// <summary>Closes the dialog without changes.</summary>
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 }
 
 /// <summary>One local change in the reconcile dialog.</summary>

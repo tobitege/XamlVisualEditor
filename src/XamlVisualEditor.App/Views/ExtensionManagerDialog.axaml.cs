@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia.Controls;
@@ -26,7 +27,7 @@ public sealed partial class ExtensionManagerDialog : Window
             _closeHandler = viewModel.CloseInteraction.RegisterHandler(interaction =>
             {
                 Close();
-                interaction.SetOutput(Unit.Default);
+                interaction.SetOutput(RxVoid.Default);
             });
         }
     }

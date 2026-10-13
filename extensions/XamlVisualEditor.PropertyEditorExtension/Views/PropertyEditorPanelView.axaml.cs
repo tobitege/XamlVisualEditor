@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -77,7 +78,7 @@ public sealed partial class PropertyEditorPanelView : UserControl
             };
             try { await dialog.ShowDialog(owner); }
             finally { editor.CloseRequested -= Close; }
-            context.SetOutput(Unit.Default);
+            context.SetOutput(RxVoid.Default);
         });
     }
 }

@@ -1,3 +1,6 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
@@ -202,7 +205,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private readonly ISettings _settings;
     private readonly IControlCatalog? _catalog;
     private readonly IDesignerHost? _designer;
-    private readonly IScheduler _uiScheduler;
+    private readonly ISequencer _uiScheduler;
     private readonly ToolboxFilterOption _allLibraries = new(null, UiStrings.AllLibraries);
     private readonly ToolboxFilterOption _allCategories = new(null, UiStrings.AllCategories);
     private ToolboxPanelItem? _selectedItem;
@@ -229,7 +232,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private const string DefaultInsertCommandId = "toolbox.insertSelected";
 
     public ToolboxPanelViewModel(ICommands commands, ISettings settings,
-        IControlCatalog? catalog = null, IScheduler? uiScheduler = null,
+        IControlCatalog? catalog = null, ISequencer? uiScheduler = null,
         IWorkspaceInfo? workspaceInfo = null, IExtensionStorage? storage = null, IDesignerHost? designer = null)
     {
         _commands = commands;
@@ -432,25 +435,25 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         }
     }
 
-    public ReactiveCommand<Unit, Unit> InsertSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> InsertSelectedCommand { get; }
 
     /// <summary>Reloads controls from the active project.</summary>
 
     /// <summary>Repeats the most recently failed search.</summary>
-    public ReactiveCommand<Unit, Unit> RetryLoadCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RetryLoadCommand { get; }
 
     /// <summary>Hides the result of a finished task.</summary>
-    public ReactiveCommand<Unit, Unit> DismissLoadStatusCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DismissLoadStatusCommand { get; }
 
     /// <summary>Cancels the active catalog request.</summary>
-    public ReactiveCommand<Unit, Unit> CancelLoadCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelLoadCommand { get; }
 
     /// <summary>Restores the unfiltered catalog.</summary>
-    public ReactiveCommand<Unit, Unit> ClearFiltersCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearFiltersCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CollapseAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CollapseAllCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ExpandAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExpandAllCommand { get; }
 
     private void SetAllGroupsExpanded(bool expanded)
     {
@@ -574,7 +577,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     private bool IsCurrent(int version) => !_disposed && version == Volatile.Read(ref _reloadVersion);
 
-    private Task UpdateUiAsync(Action action) => Observable.Start(action, _uiScheduler).ToTask();
+    private Task UpdateUiAsync(Action action) => Signal.Start(action, _uiScheduler).ToTask();
 
     private void OnCatalogChanged(object? sender, EventArgs args) =>
         _ = ReloadAsync(includeProjectControls: _catalog?.HasProjectAssemblies ?? false, forceRefresh: false);

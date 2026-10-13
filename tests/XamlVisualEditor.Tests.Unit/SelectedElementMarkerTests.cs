@@ -158,6 +158,8 @@ public sealed class SelectedElementMarkerTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task Editor_Services_Mark_A_Diagnostic_Location_But_Only_Select_A_Plain_Location()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string path = Path.Combine(_root, "View.axaml");
         File.WriteAllText(path, Xaml);
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
@@ -168,12 +170,12 @@ public sealed class SelectedElementMarkerTests : IDisposable
             Range = new LanguageTextRange(new LanguageTextPosition(6, 13), new LanguageTextPosition(6, 19))
         };
 
-        Assert.True(await editor.OpenLocationAsync(location, CancellationToken.None));
+        Assert.True(await editor.OpenLocationAsync(location, cancellationToken));
         DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(Assert.Single(main.Documents));
         Assert.Null(document.CodeEditor.DiagnosticLines);
         Assert.Equal(6, document.CodeEditor.SelectionLength);
 
-        Assert.True(await editor.OpenDiagnosticLocationAsync(location, CancellationToken.None));
+        Assert.True(await editor.OpenDiagnosticLocationAsync(location, cancellationToken));
         Assert.Equal(new SourceLineRange(5, 7), document.CodeEditor.DiagnosticLines);
         Assert.Equal(0, document.CodeEditor.SelectionLength);
         Assert.Equal(document.CodeEditor.GetOffsetForLineColumn(6, 13), document.CodeEditor.CaretOffset);

@@ -31,7 +31,7 @@ public sealed class ConfirmDialogViewModelTests
         using IDisposable handler = dialog.CloseInteraction.RegisterHandler(context =>
         {
             closedWith = context.Input;
-            context.SetOutput(System.Reactive.Unit.Default);
+            context.SetOutput(ReactiveUI.Primitives.RxVoid.Default);
         });
 
         await dialog.CancelCommand.Execute().ToTask();

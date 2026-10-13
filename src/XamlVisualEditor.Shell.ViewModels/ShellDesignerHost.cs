@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
 using System.Globalization;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -34,11 +36,11 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
                 ResolveCurrentDocument)
             .DistinctUntilChanged();
         _disposables.Add(activeDocuments.Subscribe(PublishActiveDocument));
-        _disposables.Add(activeDocuments.Select(document => document is null
+        _disposables.Add(Observable.Switch(activeDocuments.Select(document => document is null
                 ? Observable.Empty<DesignerDocumentChangedEventArgs>()
                 : document.SyncEngine.SyncEvents.Select(_ => new DesignerDocumentChangedEventArgs(document.FilePath)))
-            .Switch()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(args => DocumentChanged?.Invoke(this, args)));
 
         _disposables.Add(_selectionSubscription);
@@ -486,12 +488,12 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
         if (document is not null && !document.IsDisposed)
         {
             IDisposable selectedNodeSubscription = document.WhenAnyValue(x => x.SelectedNodeId)
-                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(selectedNodeSubscription);
 
             IDisposable syncSubscription = document.SyncEngine.SyncEvents
-                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(syncSubscription);
 

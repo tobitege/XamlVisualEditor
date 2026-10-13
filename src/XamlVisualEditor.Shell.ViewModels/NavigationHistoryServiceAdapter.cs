@@ -22,7 +22,7 @@ public sealed class NavigationHistoryServiceAdapter : INavigationHistoryService,
                 vm => vm.CanNavigateForward)
             .Subscribe(values =>
             {
-                HistoryChanged?.Invoke(this, new NavigationHistoryChangedEventArgs(values.Item1, values.Item2));
+                HistoryChanged?.Invoke(this, new NavigationHistoryChangedEventArgs(values.Property1, values.Property2));
             });
         _disposables.Add(subscription);
     }

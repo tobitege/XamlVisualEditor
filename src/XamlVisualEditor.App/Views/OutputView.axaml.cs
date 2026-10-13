@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia.Controls;
@@ -34,7 +35,7 @@ public sealed partial class OutputView : UserControl
                 {
                     await clipboard.SetTextAsync(ctx.Input);
                 }
-                ctx.SetOutput(Unit.Default);
+                ctx.SetOutput(RxVoid.Default);
             });
         }
     }

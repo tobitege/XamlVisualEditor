@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -49,13 +51,13 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
 
     public bool IsAvailable => true;
 
-    public ReactiveCommand<Unit, Unit> AddServerCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddServerCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RemoveServerCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RemoveServerCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ReloadCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ReloadCommand { get; }
 
     public LspSettingsPanelViewModel(ILspSettingsHost host)
     {

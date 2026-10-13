@@ -28,12 +28,14 @@ public sealed class DesignerThemePreferencesTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task ThemeSelectionIsSharedByDocumentsAndRestoredFromWorkspaceScopedFiles()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string storageRoot = Path.Combine(Path.GetTempPath(), "XamlVisualEditor-theme-preference-tests");
         string workspaceA = Path.Combine(storageRoot, "WorkspaceA.slnx");
         string workspaceB = Path.Combine(storageRoot, "WorkspaceB.slnx");
         FileExtensionStorage storage = new("xve.designerThemes", storageRoot);
-        await storage.SetAsync(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA), Harbor, CancellationToken.None);
-        await storage.SetAsync<DesignerThemeSelection?>(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceB), null, CancellationToken.None);
+        await storage.SetAsync(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA), Harbor, cancellationToken);
+        await storage.SetAsync<DesignerThemeSelection?>(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceB), null, cancellationToken);
         WorkspaceInfoService workspace = new();
         workspace.UpdateWorkspacePath(workspaceA);
         using MainWindowViewModel main = new(extensionContributionRegistry: Providers(), themeWorkspaceInfo: workspace,
@@ -47,8 +49,8 @@ public sealed class DesignerThemePreferencesTests
         }
         using DesignerDocumentViewModel first = new("First.axaml", updatePreviewerAsync: UpdatePreviewer);
         using DesignerDocumentViewModel second = new("Second.axaml", updatePreviewerAsync: UpdatePreviewer);
-        await first.SyncEngine.LoadAsync(Source);
-        await second.SyncEngine.LoadAsync(Source);
+        await first.SyncEngine.LoadAsync(Source).WaitAsync(cancellationToken);
+        await second.SyncEngine.LoadAsync(Source).WaitAsync(cancellationToken);
         main.Documents.Add(first);
         main.Documents.Add(second);
         main.ActiveDocument = second;
@@ -92,18 +94,20 @@ public sealed class DesignerThemePreferencesTests
         Assert.Equal(Harbor, third.PreviewThemeRequest?.Selection);
         third.DesignSurface.SelectedPreviewTheme = DesignerThemeChoice.ProjectDefault;
         await reopened.ThemePreferencesSaved;
-        Assert.Null(await reopenedStorage.GetAsync<DesignerThemeSelection>(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceB), CancellationToken.None));
-        Assert.Equal(Clay, await reopenedStorage.GetAsync<DesignerThemeSelection>(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA), CancellationToken.None));
+        Assert.Null(await reopenedStorage.GetAsync<DesignerThemeSelection>(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceB), cancellationToken));
+        Assert.Equal(Clay, await reopenedStorage.GetAsync<DesignerThemeSelection>(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA), cancellationToken));
     }
 
     [AvaloniaFact(Timeout = 30000)]
     public async Task LateWorkspacePreferenceReadCannotReplaceTheCurrentWorkspaceSelection()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string workspaceA = Path.Combine(Path.GetTempPath(), "ThemeWorkspaceA.slnx");
         string workspaceB = Path.Combine(Path.GetTempPath(), "ThemeWorkspaceB.slnx");
         DelayedStorage storage = new(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA));
-        await storage.SetAsync(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA), Clay, CancellationToken.None);
-        await storage.SetAsync(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceB), Harbor, CancellationToken.None);
+        await storage.SetAsync(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceA), Clay, cancellationToken);
+        await storage.SetAsync(MainWindowViewModel.GetPreviewThemePreferenceKey(workspaceB), Harbor, cancellationToken);
         WorkspaceInfoService workspace = new();
         workspace.UpdateWorkspacePath(workspaceA);
         using MainWindowViewModel main = new(extensionContributionRegistry: Providers(), themeWorkspaceInfo: workspace,

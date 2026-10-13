@@ -24,6 +24,8 @@ public sealed class TmpDragBenchmark
     [AvaloniaFact(Timeout = 120000)]
     public async Task Drag_with_30_controls()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         StringBuilder xaml = new();
         xaml.AppendLine("<UserControl xmlns=\"https://github.com/avaloniaui\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" Width=\"800\" Height=\"600\">");
         xaml.AppendLine("  <Canvas>");
@@ -36,12 +38,12 @@ public sealed class TmpDragBenchmark
         xaml.AppendLine("  </Canvas>");
         xaml.AppendLine("</UserControl>");
         string path = Path.Combine(Path.GetTempPath(), "xve-drag-" + Guid.NewGuid().ToString("N") + ".axaml");
-        await File.WriteAllTextAsync(path, xaml.ToString());
+        await File.WriteAllTextAsync(path, xaml.ToString()).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         DesignSurfaceView view = new() { DataContext = document.DesignSurface };
         Border documentHost = new() { DataContext = document, Child = view };
         Window host = new() { Content = documentHost, Width = 1200, Height = 900 };
@@ -49,13 +51,13 @@ public sealed class TmpDragBenchmark
         try
         {
             host.Show();
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             Assert.Equal(32, document.DesignSurface.ItemMap.Count);
             DesignItem target = document.DesignSurface.ItemMap.Values.First(item => item.AstNode.GetPropertyValue("Content") == "B0");
             Control visual = target.VisualElement!;
             Point start = visual.TranslatePoint(new Point(10, 10), host)!.Value;
             host.MouseDown(start, MouseButton.Left);
-            await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             Assert.Contains(target, document.DesignSurface.Selection.SelectedItems);
 
             int moves = 200;
@@ -75,8 +77,8 @@ public sealed class TmpDragBenchmark
             Stopwatch drop = Stopwatch.StartNew();
             host.MouseUp(start + new Vector(moves * 1.5, moves * 0.7), MouseButton.Left);
             double afterRelease = drop.Elapsed.TotalMilliseconds;
-            await FinishLayoutAsync(host);
-            for (int i = 0; i < 20 && document.DesignSurface.IsRebuilding; i++) await FinishLayoutAsync(host);
+            await FinishLayoutAsync(host).WaitAsync(cancellationToken);
+            for (int i = 0; i < 20 && document.DesignSurface.IsRebuilding; i++) await FinishLayoutAsync(host).WaitAsync(cancellationToken);
             drop.Stop();
             bool sameVisual = ReferenceEquals(visual, document.DesignSurface.ItemMap.Values.First(item => item.AstNode.GetPropertyValue("Content") == "B0").VisualElement);
             Stopwatch rebuild = Stopwatch.StartNew();

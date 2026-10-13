@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Diagnostics;
 using System.Reactive;
@@ -50,14 +51,14 @@ public sealed class AcpToolViewBehavior : Behavior<AcpToolView>
         {
             var clipboard = TopLevel.GetTopLevel(AssociatedObject)?.Clipboard;
             if (clipboard is not null) await clipboard.SetTextAsync(interaction.Input);
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
         _openUrlHandler = vm.OpenUrlInteraction.RegisterHandler(interaction =>
         {
             if (Uri.TryCreate(interaction.Input, UriKind.Absolute, out Uri? uri)
                 && uri.Scheme is "http" or "https")
                 Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
         _permissionHandler = vm.PermissionInteraction.RegisterHandler(async interaction =>
         {

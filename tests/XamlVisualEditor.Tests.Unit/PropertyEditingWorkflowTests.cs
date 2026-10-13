@@ -41,6 +41,8 @@ public sealed class PropertyEditingWorkflowTests
     [InlineData("CheckBox", true)]
     public async Task Inspector_edits_empty_reset_nullable_flags_and_invalid_drafts_and_tracks_undo(string propertyOwner, bool externalPreviewer)
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string xaml = """
             <library:PropertyFixtureControl xmlns="https://github.com/avaloniaui"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -56,13 +58,13 @@ public sealed class PropertyEditingWorkflowTests
         string ownerName = propertyOwner[(propertyOwner.IndexOf(':') + 1)..];
         string path = Path.Combine(Path.GetTempPath(), "xve-properties-" + Guid.NewGuid().ToString("N") + ".axaml");
         Assert.False(File.Exists(path));
-        await File.WriteAllTextAsync(path, xaml);
+        await File.WriteAllTextAsync(path, xaml).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         metadata.LoadAssembly(typeof(Brush).Assembly.Location);
         metadata.LoadAssembly(typeof(PropertyFixtureControl).Assembly.Location);
         using DesignerDocumentViewModel document = new(path, metadata) { UseExternalPreviewer = externalPreviewer };
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         using MainWindowViewModel main = new(metadataService: metadata);
         main.Documents.Add(document);
         main.ActiveDocument = document;
@@ -78,7 +80,7 @@ public sealed class PropertyEditingWorkflowTests
         using ShellDesignerHost host = new(main);
         InMemorySettingsStore settings = new();
         using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry(), settings);
-        await inspector.InitializeAsync(CancellationToken.None);
+        await inspector.InitializeAsync(cancellationToken);
         Assert.True(inspector.CollapseOtherCategoriesOnSelection);
         inspector.CollapseOtherCategoriesOnSelection = false;
         Assert.False(settings.Get<bool>("propertyEditor.collapseOtherCategories"));
@@ -105,12 +107,12 @@ public sealed class PropertyEditingWorkflowTests
             .First(row => row.IsHeader && row.GroupName == categoryHeader.GroupName));
         Assert.DoesNotContain(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>(),
             row => row.Property is not null && row.GroupName == categoryHeader.GroupName);
-        await inspector.ExpandAllCategoriesCommand.Execute().ToTask();
+        await inspector.ExpandAllCategoriesCommand.Execute().ToTask(cancellationToken);
         Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
             .Where(row => row.IsHeader && row.CanCollapse), row => Assert.True(row.IsExpanded));
         Assert.Same(categoryHeader, inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
             .First(row => row.IsHeader && row.GroupName == categoryHeader.GroupName));
-        await inspector.CollapseAllCategoriesCommand.Execute().ToTask();
+        await inspector.CollapseAllCategoriesCommand.Execute().ToTask(cancellationToken);
         Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
             .Where(row => row.IsHeader && row.CanCollapse), row => Assert.False(row.IsExpanded));
         Assert.All(inspector.GroupedPropertiesView.Cast<PropertyRowViewModel>()
@@ -160,61 +162,61 @@ public sealed class PropertyEditingWorkflowTests
         Assert.Equal("seed", content.Value);
         Assert.DoesNotContain(inspector.PropertiesView.Cast<PropertyEntryViewModel>(), entry => entry.Name == ownerName + ".Content");
         content.Value = string.Empty;
-        await content.CommitCommand.Execute().ToTask();
+        await content.CommitCommand.Execute().ToTask(cancellationToken);
         Assert.Equal(string.Empty, document.SyncEngine.CurrentDocument!.Root!.GetPropertyValue(ownerName + ".Content"));
         Assert.True(content.IsSet);
-        await content.ResetCommand.Execute().ToTask();
+        await content.ResetCommand.Execute().ToTask(cancellationToken);
         Assert.Null(document.SyncEngine.CurrentDocument.Root.FindProperty(ownerName + ".Content"));
         Assert.False(content.IsSet);
 
         PropertyEntryViewModel nullable = Entry("IsChecked");
         Assert.Equal("{x:Null}", nullable.Value);
         nullable.BoolValue = true;
-        await FlushAsync();
+        await FlushAsync().WaitAsync(cancellationToken);
         Assert.Equal("True", document.SyncEngine.CurrentDocument.Root.GetPropertyValue("IsChecked"));
         PropertyEntryViewModel flags = Entry("Features");
         Assert.True(flags.IsFlagsEnum);
         Assert.Single(flags.FlagOptions, option => option.Name == "High").IsChecked = true;
-        await FlushAsync();
+        await FlushAsync().WaitAsync(cancellationToken);
         Assert.Equal(EditorFeatures.High | EditorFeatures.Alpha,
             Enum.Parse<EditorFeatures>(document.SyncEngine.CurrentDocument.Root.GetPropertyValue("Features")!));
 
         PropertyEntryViewModel padding = Entry("Padding");
         padding.Value = "invalid thickness";
-        await padding.CommitCommand.Execute().ToTask();
+        await padding.CommitCommand.Execute().ToTask(cancellationToken);
         Assert.True(padding.HasValidationError);
         Assert.Equal("invalid thickness", padding.Value);
         Assert.Equal("1,2,3,4", document.SyncEngine.CurrentDocument.Root.GetPropertyValue("Padding"));
         padding.Value = "8,9";
-        await padding.CommitCommand.Execute().ToTask();
+        await padding.CommitCommand.Execute().ToTask(cancellationToken);
         Assert.False(padding.HasValidationError);
         Assert.Null(inspector.StatusText);
         Assert.Equal("8,9", document.SyncEngine.CurrentDocument.Root.GetPropertyValue("Padding"));
 
         document.SyncEngine.Undo();
-        await FlushAsync();
+        await FlushAsync().WaitAsync(cancellationToken);
         Assert.Equal("1,2,3,4", document.SyncEngine.CurrentDocument.Root.GetPropertyValue("Padding"));
         Assert.Equal("1,2,3,4", Entry("Padding").Value);
         document.SyncEngine.Redo();
-        await FlushAsync();
+        await FlushAsync().WaitAsync(cancellationToken);
         Assert.Equal("8,9", Entry("Padding").Value);
         PropertyEntryViewModel tag = Entry("Tag");
         Assert.True(tag.IsSet);
-        await tag.ResetCommand.Execute().ToTask();
+        await tag.ResetCommand.Execute().ToTask(cancellationToken);
         Assert.Null(document.SyncEngine.CurrentDocument.Root.FindProperty(ownerName + ".Tag"));
         document.SyncEngine.Undo();
-        await FlushAsync();
+        await FlushAsync().WaitAsync(cancellationToken);
         Assert.True(Entry("Tag").IsSet);
         Assert.Equal(PropertyEditorKind.Template, Entry("Template").EditorKind);
         Assert.True(Entry("Template").HasStructureEditor);
         DesignerPropertyStructure snapshot = await host.OpenPropertyStructureAsync(
-            document.SyncEngine.CurrentDocument.Root.Id.ToString("D"), "Template", CancellationToken.None);
+            document.SyncEngine.CurrentDocument.Root.Id.ToString("D"), "Template", cancellationToken);
         using PropertyStructureEditorViewModel structure = new(host, snapshot);
         structure.SelectedNode = Assert.Single(structure.Roots.SelectMany(node => node.DescendantsAndSelf()), node => node.Label == "Border");
         structure.AttributeName = "Background";
         structure.AttributeValue = "CornflowerBlue";
-        await structure.SetAttributeCommand.Execute().ToTask();
-        await structure.ApplyCommand.Execute().ToTask();
+        await structure.SetAttributeCommand.Execute().ToTask(cancellationToken);
+        await structure.ApplyCommand.Execute().ToTask(cancellationToken);
         Assert.Null(structure.Error);
         XDocument saved = XDocument.Parse(new XamlSerializationService().Serialize(document.SyncEngine.CurrentDocument));
         Assert.Equal("Caption", (string?)Assert.Single(saved.Descendants(), element => element.Name.LocalName == "Binding").Attribute("Path"));
@@ -227,11 +229,11 @@ public sealed class PropertyEditingWorkflowTests
             Assert.Equal("CornflowerBlue", (string?)Assert.Single(saved.Descendants(), element => element.Name.LocalName == "Border").Attribute("Background"));
             document.DesignSurface.AutoGenerateAutomationIds = true;
             string parentId = document.SyncEngine.CurrentDocument.Root.Id.ToString("D");
-            string? insertedId = await host.InsertElementAsync("Button", "https://github.com/avaloniaui", parentId, CancellationToken.None);
+            string? insertedId = await host.InsertElementAsync("Button", "https://github.com/avaloniaui", parentId, cancellationToken);
             Assert.NotNull(insertedId);
             MutableAstObjectNode inserted = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(Guid.Parse(insertedId)));
             Assert.Equal("Button_1", inserted.GetPropertyValue("AutomationProperties.AutomationId"));
-            string? wrapperId = await host.WrapNodeAsync(insertedId, "Grid", "https://github.com/avaloniaui", CancellationToken.None);
+            string? wrapperId = await host.WrapNodeAsync(insertedId, "Grid", "https://github.com/avaloniaui", cancellationToken);
             Assert.NotNull(wrapperId);
             MutableAstObjectNode wrapper = Assert.IsType<MutableAstObjectNode>(document.NodeMap.FindById(Guid.Parse(wrapperId)));
             Assert.Equal("Grid_1", wrapper.GetPropertyValue("AutomationProperties.AutomationId"));
@@ -254,6 +256,8 @@ public sealed class PropertyEditingWorkflowTests
     [AvaloniaFact(Timeout = 30000)]
     public async Task Inspector_applies_an_edit_to_every_selected_node_in_one_undo_step()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string xaml = """
             <StackPanel xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
               <Label x:Name="caption" VerticalAlignment="Center" Width="10" />
@@ -262,11 +266,11 @@ public sealed class PropertyEditingWorkflowTests
             """;
         string path = Path.Combine(Path.GetTempPath(), "xve-multi-properties-" + Guid.NewGuid().ToString("N") + ".axaml");
         Assert.False(File.Exists(path));
-        await File.WriteAllTextAsync(path, xaml);
+        await File.WriteAllTextAsync(path, xaml).WaitAsync(cancellationToken);
         TypeMetadataService metadata = new();
         metadata.LoadAssembly(typeof(Control).Assembly.Location);
         using DesignerDocumentViewModel document = new(path, metadata);
-        await document.LoadAsync();
+        await document.LoadAsync().WaitAsync(cancellationToken);
         using MainWindowViewModel main = new(metadataService: metadata);
         main.Documents.Add(document);
         main.ActiveDocument = document;
@@ -285,7 +289,7 @@ public sealed class PropertyEditingWorkflowTests
         document.DesignSurface.Selection.SetSelection([labelItem, textBoxItem]);
         using ShellDesignerHost host = new(main);
         using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry(), new InMemorySettingsStore());
-        await inspector.InitializeAsync(CancellationToken.None);
+        await inspector.InitializeAsync(cancellationToken);
         PropertyEntryViewModel[] entries = inspector.PropertiesView.Cast<PropertyEntryViewModel>().ToArray();
         PropertyEntryViewModel Entry(string name) => Assert.Single(entries, entry => entry.Name == name);
 
@@ -297,7 +301,7 @@ public sealed class PropertyEditingWorkflowTests
         Assert.Equal("Center", alignment.Value);
 
         alignment.Value = "Top";
-        await alignment.CommitCommand.Execute().ToTask();
+        await alignment.CommitCommand.Execute().ToTask(cancellationToken);
         Assert.Null(inspector.StatusText);
         Assert.Equal("Top", label.GetPropertyValue("VerticalAlignment"));
         Assert.Equal("Top", textBox.GetPropertyValue("VerticalAlignment"));

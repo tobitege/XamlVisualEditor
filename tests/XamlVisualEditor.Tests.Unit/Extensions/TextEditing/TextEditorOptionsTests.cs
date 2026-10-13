@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using XamlVisualEditor.Extensions;
@@ -61,7 +62,7 @@ public sealed class TextEditorOptionsTests
     {
         List<TextEditorViewOptions> previews = new();
         TextEditorViewOptions current = new() { FontSize = 12, BackgroundColor = "#123456" };
-        using TextEditorOptionsViewModel viewModel = new(current, ["Consolas"], previews.Add, ImmediateScheduler.Instance, TimeSpan.Zero);
+        using TextEditorOptionsViewModel viewModel = new(current, ["Consolas"], previews.Add, ImmediateSequencer.Instance, TimeSpan.Zero);
 
         viewModel.ShowTabs = true;
         viewModel.BackgroundColor = viewModel.BackgroundColors[0];
@@ -79,12 +80,12 @@ public sealed class TextEditorOptionsTests
     {
         List<TextEditorViewOptions> previews = new();
         TextEditorViewOptions current = new() { WordWrap = true };
-        using TextEditorOptionsViewModel viewModel = new(current, Array.Empty<string>(), previews.Add, ImmediateScheduler.Instance, TimeSpan.Zero);
+        using TextEditorOptionsViewModel viewModel = new(current, Array.Empty<string>(), previews.Add, ImmediateSequencer.Instance, TimeSpan.Zero);
         List<bool> closes = new();
         using IDisposable handler = viewModel.CloseInteraction.RegisterHandler(context =>
         {
             closes.Add(context.Input);
-            context.SetOutput(System.Reactive.Unit.Default);
+            context.SetOutput(ReactiveUI.Primitives.RxVoid.Default);
         });
 
         viewModel.WordWrap = false;
@@ -103,7 +104,7 @@ public sealed class TextEditorOptionsTests
     {
         List<TextEditorViewOptions> previews = new();
         using TextEditorOptionsViewModel viewModel = new(new TextEditorViewOptions { FontSize = 30, ShowColumnRuler = true },
-            Array.Empty<string>(), previews.Add, ImmediateScheduler.Instance, TimeSpan.Zero);
+            Array.Empty<string>(), previews.Add, ImmediateSequencer.Instance, TimeSpan.Zero);
 
         await viewModel.ResetCommand.Execute();
 
@@ -114,12 +115,12 @@ public sealed class TextEditorOptionsTests
     [Fact]
     public async Task TypingPreviewsOnceAfterAPauseAndCancelDropsThePendingPreview()
     {
-        HistoricalScheduler scheduler = new();
+        VirtualClock scheduler = new();
         List<TextEditorViewOptions> previews = new();
         TextEditorViewOptions current = new();
         using TextEditorOptionsViewModel viewModel = new(current, Array.Empty<string>(), previews.Add, scheduler,
             TimeSpan.FromMilliseconds(150));
-        using IDisposable handler = viewModel.CloseInteraction.RegisterHandler(context => context.SetOutput(System.Reactive.Unit.Default));
+        using IDisposable handler = viewModel.CloseInteraction.RegisterHandler(context => context.SetOutput(ReactiveUI.Primitives.RxVoid.Default));
 
         viewModel.FontFamily = "C";
         viewModel.FontFamily = "Co";

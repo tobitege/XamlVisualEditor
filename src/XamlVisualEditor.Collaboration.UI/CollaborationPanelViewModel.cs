@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.ObjectModel;
 using System.Reactive;
@@ -102,22 +103,22 @@ public sealed partial class CollaborationPanelViewModel : ReactiveObject, IDispo
     /// <summary>
     /// Command to start a new collaboration session (host).
     /// </summary>
-    public ReactiveCommand<Unit, Unit> StartSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StartSessionCommand { get; }
 
     /// <summary>
     /// Command to join an existing session.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> JoinSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> JoinSessionCommand { get; }
 
     /// <summary>
     /// Command to leave the current session.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> LeaveSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> LeaveSessionCommand { get; }
 
     /// <summary>
     /// Command to copy the session URL to clipboard.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> CopySessionLinkCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopySessionLinkCommand { get; }
 
     private readonly XamlCollabBridge? _bridge;
 

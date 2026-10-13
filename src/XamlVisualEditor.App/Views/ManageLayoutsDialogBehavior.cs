@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia.Controls;
@@ -65,7 +66,7 @@ public sealed class ManageLayoutsDialogBehavior : Behavior<Window>
                 dialogViewModel.CloseRequested -= Close;
             }
 
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
     }
 }

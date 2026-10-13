@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.ObjectModel;
 using System.Reactive;
@@ -61,10 +63,10 @@ public sealed partial class TfvcConnectionViewModel : ReactiveObject, IDisposabl
     public ObservableCollection<TfvcWorkspace> Workspaces { get; } = new();
 
     /// <summary>Connects with the entered settings.</summary>
-    public ReactiveCommand<Unit, Unit> ConnectCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConnectCommand { get; }
 
     /// <summary>Shows or hides the connection settings.</summary>
-    public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleSettingsCommand { get; }
 
     /// <summary>Gets or sets the entered collection URL.</summary>
     [Reactive]

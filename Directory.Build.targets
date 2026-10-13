@@ -1,16 +1,13 @@
 <Project>
-  <Import Project="Directory.Build.local.props" Condition="Exists('Directory.Build.local.props')" />
-
-  <ItemGroup Condition="'$(ProDataGridProject)' != '' and '@(PackageReference->WithMetadataValue('Identity', 'ProDataGrid'))' != ''">
-    <PackageReference Remove="ProDataGrid" />
-    <ProjectReference Include="$(ProDataGridProject)" />
-  </ItemGroup>
-
   <Target Name="SetPackageReleaseNotes" BeforeTargets="GenerateNuspec">
     <PropertyGroup>
       <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v$(PackageVersion)</PackageReleaseNotes>
     </PropertyGroup>
   </Target>
+
+  <ItemGroup Condition="'@(PackageReference->WithMetadataValue('Identity', 'Microsoft.Build.Framework'))' != ''">
+    <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(IsXveExtension)' == 'true'">
     <XveExtensionName Condition="'$(XveExtensionName)' == ''">$(MSBuildProjectName)</XveExtensionName>

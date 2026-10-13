@@ -1,3 +1,5 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
 using System.Collections.Specialized;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
@@ -160,5 +162,5 @@ public sealed partial class MainWindowViewModel
     }
 
     private static Task OnThemePreferenceUiAsync(Action action) =>
-        Observable.Start(action, RxSchedulers.MainThreadScheduler).ToTask();
+        Signal.Start(action, RxSchedulers.MainThreadScheduler).ToTask();
 }

@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -235,19 +236,19 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
     /// <summary>Gets the diagnostics grid columns; the cell templates are resources of the problems view.</summary>
     public IReadOnlyList<DataGridColumnDefinition> Columns { get; }
 
-    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenLocationCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenLocationCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopySelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopySelectedCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopyAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyAllCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearFiltersCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearFiltersCommand { get; }
 
     public IReadOnlyList<string> SeverityOptions { get; } = new[] { "All", "Error", "Warning", "Info" };
 
@@ -666,7 +667,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await CopyToClipboardInteraction.Handle(FormatEntry(SelectedDiagnostic)).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(FormatEntry(SelectedDiagnostic)).ConfigureAwait(false);
     }
 
     private async Task CopyAllAsync()
@@ -683,7 +684,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
             builder.AppendLine(FormatEntry(entry));
         }
 
-        await CopyToClipboardInteraction.Handle(builder.ToString()).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(builder.ToString()).ConfigureAwait(false);
     }
 
     private static bool IsSeverityMatch(DiagnosticSeverity severity, string filter)

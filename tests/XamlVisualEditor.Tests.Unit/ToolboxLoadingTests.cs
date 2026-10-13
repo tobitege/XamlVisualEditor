@@ -254,7 +254,7 @@ public sealed class ToolboxLoadingTests
 
     private static ToolboxPanelViewModel CreateModel(IControlCatalog catalog) => new(
         new CommandRegistry(), new InMemorySettingsStore(), catalog,
-        new SynchronizationContextScheduler(SynchronizationContext.Current!));
+        new ReactiveUI.Primitives.Concurrency.SynchronizationContextSequencer(SynchronizationContext.Current!));
 
     private static void Flush(Window window)
     {

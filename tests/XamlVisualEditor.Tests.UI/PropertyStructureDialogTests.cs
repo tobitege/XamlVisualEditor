@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.IO;
 using System.Linq;
@@ -222,7 +223,7 @@ public sealed class PropertyStructureDialogTests
                 Button button = view.GetVisualDescendants().OfType<Button>()
                     .Single(control => Equals(control.Content, label));
                 PropertyStructureEditorViewModel current = Assert.IsType<PropertyStructureEditorViewModel>(view.DataContext);
-                ReactiveCommand<Unit, Unit> command = Assert.IsType<ReactiveCommand<Unit, Unit>>(button.Command);
+                ReactiveCommand<RxVoid, RxVoid> command = Assert.IsType<ReactiveCommand<RxVoid, RxVoid>>(button.Command);
                 await button.GetObservable(InputElement.IsEffectivelyEnabledProperty)
                     .FirstAsync(enabled => enabled).Timeout(TimeSpan.FromSeconds(5));
                 Assert.True(button.Focus(), $"{label}: visible={window.IsVisible}, active={window.IsActive}, " +

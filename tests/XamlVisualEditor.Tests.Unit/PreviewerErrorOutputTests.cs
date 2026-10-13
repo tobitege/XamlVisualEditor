@@ -34,10 +34,12 @@ public sealed class PreviewerErrorOutputTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task Output_Names_The_Source_Position_Of_A_Previewer_Error()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string path = Path.Combine(_root, "View.axaml");
         File.WriteAllText(path, Source);
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
-        await main.OpenFileAsync(path);
+        await main.OpenFileAsync(path).WaitAsync(cancellationToken);
         int position = Preview.LastIndexOf("<Button", StringComparison.Ordinal) + 1;
         PreviewerErrorInfo error = PreviewerTcpSession.CreateXamlError(new UpdateXamlResultMessage
         {

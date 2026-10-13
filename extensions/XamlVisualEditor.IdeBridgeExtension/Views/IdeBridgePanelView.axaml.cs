@@ -1,3 +1,4 @@
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Reactive;
 using Avalonia.Controls;
@@ -37,7 +38,7 @@ public sealed partial class IdeBridgePanelView : UserControl
                 await clipboard.SetTextAsync(interaction.Input);
             }
 
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
     }
 

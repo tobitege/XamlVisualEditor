@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using System.Runtime.CompilerServices;
 using ReactiveUI;
 using ReactiveUI.Avalonia;
@@ -22,9 +23,6 @@ internal static class ReactiveUiBootstrap
             .WithPlatformServices()
             .WithCoreServices()
             .BuildApp();
-
-        // UI-bound command notifications must return to the Avalonia dispatcher.
-        RxSchedulers.MainThreadScheduler = AvaloniaScheduler.Instance;
 
         // Tests build real shell view models; without an isolated settings folder they
         // read and overwrite the user's persisted layout files.

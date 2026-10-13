@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Concurrency;
 using System.Threading.Tasks;
 using ReactiveUI;

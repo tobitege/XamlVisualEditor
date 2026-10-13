@@ -20,6 +20,8 @@ public sealed class InvalidPathRejectionTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public void Recent_Entries_With_Invalid_Paths_Are_Dropped_And_Removed_From_The_Store()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string validPath = Path.Combine(_root, "Valid.cs");
         string invalidPath = "relative" + Path.DirectorySeparatorChar + "Invalid.cs";
         string recentFilesPath = Path.Combine(_root, "recent.json");
@@ -38,10 +40,12 @@ public sealed class InvalidPathRejectionTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task OpenFileAsync_Rejects_An_Invalid_Path()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string invalidPath = "relative" + Path.DirectorySeparatorChar + "Invalid.cs";
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
 
-        await main.OpenFileAsync(invalidPath);
+        await main.OpenFileAsync(invalidPath).WaitAsync(cancellationToken);
 
         Assert.Empty(main.Documents);
         Assert.Empty(main.RecentFiles);
@@ -51,6 +55,8 @@ public sealed class InvalidPathRejectionTests : IDisposable
     [AvaloniaFact(Timeout = 30000)]
     public async Task OpenFolderAsync_Rejects_An_Invalid_Path()
     {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string invalidPath = "relative" + Path.DirectorySeparatorChar + "Folder";
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
 

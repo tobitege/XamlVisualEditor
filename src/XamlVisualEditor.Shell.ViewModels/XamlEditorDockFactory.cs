@@ -1000,10 +1000,34 @@ public sealed partial class XamlEditorDockFactory : Factory
         && entry["$type"]?.GetValue<string>() is { } type
         && (type == typeof(TextDocument).FullName || type == typeof(DesignerDocument).FullName);
 
+    /// <summary>
+    /// Gives a side tool dock without width its last width, or the default width, when it shows a tool again.
+    /// A side dock keeps a zero proportion after its last tool was hidden, which would leave the tool invisible.
+    /// </summary>
+    public static void RestoreSideDockWidth(IDockable dockable)
+    {
+        if (dockable.Owner is not ToolDock dock) return;
+        double defaultWidth = dock.Id switch
+        {
+            "LeftToolDock" => DefaultLeftToolDockWidth,
+            "RightToolDock" => DefaultRightToolDockWidth,
+            _ => 0
+        };
+        if (defaultWidth <= 0 || (double.IsFinite(dock.Proportion) && dock.Proportion > 0)) return;
+
+        dock.Proportion = double.IsFinite(dock.CollapsedProportion) && dock.CollapsedProportion > 0
+            ? dock.CollapsedProportion
+            : defaultWidth;
+        dock.IsEmpty = false;
+    }
+
+    private const double DefaultLeftToolDockWidth = 0.2;
+    private const double DefaultRightToolDockWidth = 0.25;
+
     public static void EnsureLayoutDefaults(IRootDock rootDock)
     {
-        const double leftWidth = 0.2;
-        const double rightWidth = 0.25;
+        const double leftWidth = DefaultLeftToolDockWidth;
+        const double rightWidth = DefaultRightToolDockWidth;
         const double bottomHeight = 0.25;
         const double documentWidth = 0.75;
 

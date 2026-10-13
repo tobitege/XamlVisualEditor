@@ -409,6 +409,3 @@ FodyWeavers.xsd
 
 # Lokale Projektreferenzen
 /Directory.Build.local.props
-
-# Lokale CDP-Pakete aus dem Fork-Build, solange Directory.Packages.props darauf verweist
-!/local-packages/*.nupkg

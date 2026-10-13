@@ -68,14 +68,18 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
         AdapterPath = _getAdapterPath();
         AutoDownloadTools = _getAutoDownload();
 
+        // Deliveries are queued on the main thread scheduler. A delivered value can be stale by then,
+        // and writing it back through AdapterPath would bounce between two values forever, so the
+        // current source value is taken instead.
         adapterPathChanges
             .DistinctUntilChanged()
             .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(path =>
+            .Subscribe(_ =>
             {
-                if (!string.Equals(AdapterPath, path, StringComparison.Ordinal))
+                string current = _getAdapterPath();
+                if (!string.Equals(AdapterPath, current, StringComparison.Ordinal))
                 {
-                    AdapterPath = path;
+                    AdapterPath = current;
                 }
             });
 

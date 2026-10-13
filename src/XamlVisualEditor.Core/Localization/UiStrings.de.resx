@@ -948,6 +948,12 @@
   <data name="BindingResourceExpression" xml:space="preserve"><value>Binding- oder Ressourcenausdruck</value></data>
   <data name="Input" xml:space="preserve"><value>Eingabe</value></data>
   <data name="PreviewerTransportError" xml:space="preserve"><value>Transportfehler der Vorschau: {0}</value></data>
+  <data name="PreviewerInvalidNumber" xml:space="preserve"><value>„{0}“ ist keine gültige Zahl für {1}.</value></data>
+  <data name="PreviewerInvalidValue" xml:space="preserve"><value>„{0}“ ist kein gültiger {2}-Wert für {1}.</value></data>
+  <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>„{0}“ ist kein gültiger Wert für {1}. Erlaubt: {2}.</value></data>
+  <data name="PreviewerSingleChild" xml:space="preserve"><value>&lt;{0}&gt; kann in {1} nur ein Element aufnehmen.</value></data>
+  <data name="PreviewerUnknownProperty" xml:space="preserve"><value>&lt;{0}&gt; hat keine Eigenschaft „{1}“.</value></data>
+  <data name="PreviewerUnknownElement" xml:space="preserve"><value>Unbekanntes Element &lt;{0}&gt;; Name und xmlns-Namespace prüfen.</value></data>
   <data name="PreviewerTextNotAllowed" xml:space="preserve"><value>Text „{0}“ kann nicht direkt in &lt;{1}&gt; stehen, dort sind nur Controls erlaubt. Den Text in einen TextBlock setzen oder entfernen.</value></data>
   <data name="WorkspaceThemeLoadFailed" xml:space="preserve"><value>Das Vorschau-Theme des Arbeitsbereichs konnte nicht geladen werden: {0}</value></data>
   <data name="WorkspaceThemeSaveFailed" xml:space="preserve"><value>Das Vorschau-Theme des Arbeitsbereichs konnte nicht gespeichert werden: {0}</value></data>

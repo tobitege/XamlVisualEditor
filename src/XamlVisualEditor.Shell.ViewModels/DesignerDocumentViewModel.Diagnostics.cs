@@ -100,12 +100,37 @@ public sealed partial class DesignerDocumentViewModel
                     if (element is null) return (1, 1);
                     parent = element;
                 }
+                if (error.TextContent is { } text && parent is XElement owner
+                    && owner.Nodes().OfType<XText>().FirstOrDefault(node => node.Value.Trim() == text) is { } textNode)
+                    return GetTextStart(textNode);
                 IXmlLineInfo location = (IXmlLineInfo)parent;
                 return (location.LineNumber, location.LinePosition);
             }
             catch (XmlException) { }
         }
         return (error?.Line ?? 1, error?.Column ?? 1);
+    }
+
+    // A text node starts with the whitespace before its first character; the position names that character.
+    private static (int Line, int Column) GetTextStart(XText node)
+    {
+        IXmlLineInfo location = node;
+        int line = location.LineNumber;
+        int column = location.LinePosition;
+        foreach (char character in node.Value)
+        {
+            if (!char.IsWhiteSpace(character)) break;
+            if (character == '\n')
+            {
+                line++;
+                column = 1;
+            }
+            else
+            {
+                column++;
+            }
+        }
+        return (line, column);
     }
 
     public void SetRuntimeRenderFailure(Exception exception)

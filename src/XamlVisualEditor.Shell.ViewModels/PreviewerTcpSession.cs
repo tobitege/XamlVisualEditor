@@ -504,17 +504,55 @@ public sealed class PreviewerTcpSession : IDisposable
                     return location.LineNumber < line || location.LineNumber == line
                         && (column is null || location.LinePosition <= (long)column + 1);
                 });
-                path = element?.AncestorsAndSelf().Reverse().Select(candidate =>
-                    new PreviewerElementPathSegment(candidate.Name.NamespaceName, candidate.Name.LocalName,
-                        candidate.ElementsBeforeSelf(candidate.Name).Count())).ToArray();
+                path = element is null ? null : CreateElementPath(element);
             }
             catch (XmlException) { }
+        }
+        // The runtime loader reports text that it tried to add as a control only as a cast without a position.
+        if (line is null && xaml is not null && IsTextCastToControl(result.Exception) && FindStrayText(xaml) is { } stray)
+        {
+            string text = stray.Value.Trim();
+            string shown = text.Length > 40 ? text[..40] + "…" : text;
+            return new PreviewerErrorInfo(string.Format(UiStrings.PreviewerTextNotAllowed, shown, stray.Parent!.Name.LocalName),
+                null, null, filePath, CreateElementPath(stray.Parent), text);
         }
         string message = result.Exception?.Message ?? result.Error;
         string positionSuffix = $" Line {line}, position {column}.";
         if (line is not null && column is not null && message.EndsWith(positionSuffix, StringComparison.Ordinal))
             message = message[..^positionSuffix.Length];
         return new PreviewerErrorInfo(message, line, column, filePath, path);
+    }
+
+    private static readonly HashSet<string> TextElementNames = new(StringComparer.Ordinal)
+    {
+        "TextBlock", "SelectableTextBlock", "Run", "Span", "Bold", "Italic", "Underline", "Hyperlink", "InlineUIContainer"
+    };
+
+    private static PreviewerElementPathSegment[] CreateElementPath(XElement element) =>
+        element.AncestorsAndSelf().Reverse().Select(candidate =>
+            new PreviewerElementPathSegment(candidate.Name.NamespaceName, candidate.Name.LocalName,
+                candidate.ElementsBeforeSelf(candidate.Name).Count())).ToArray();
+
+    private static bool IsTextCastToControl(ExceptionDetails? exception) =>
+        exception?.ExceptionType?.EndsWith("InvalidCastException", StringComparison.Ordinal) == true
+        && exception.Message?.Contains("System.String", StringComparison.Ordinal) == true;
+
+    // Text in an element that is neither a text element nor a property element; text beside child elements comes
+    // first because a panel such as a Grid holds its children that way.
+    private static XText? FindStrayText(string xaml)
+    {
+        try
+        {
+            List<XText> candidates = XDocument.Parse(xaml, LoadOptions.SetLineInfo).DescendantNodes().OfType<XText>()
+                .Where(text => !string.IsNullOrWhiteSpace(text.Value) && text.Parent is { } parent
+                    && !parent.Name.LocalName.Contains('.') && !TextElementNames.Contains(parent.Name.LocalName))
+                .ToList();
+            return candidates.FirstOrDefault(text => text.Parent!.Elements().Any()) ?? candidates.FirstOrDefault();
+        }
+        catch (XmlException)
+        {
+            return null;
+        }
     }
 
     private static void SendViewportMessage(

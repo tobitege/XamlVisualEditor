@@ -798,7 +798,7 @@ internal readonly record struct PreviewerLaunchResult(bool Success, string? Erro
 }
 
 public sealed record PreviewerErrorInfo(string Message, int? Line, int? Column, string? FilePath,
-    IReadOnlyList<PreviewerElementPathSegment>? ElementPath = null);
+    IReadOnlyList<PreviewerElementPathSegment>? ElementPath = null, string? TextContent = null);
 
 /// <summary>Maps an element of the preview to its element in the source document.</summary>
 public sealed record PreviewerElementPathSegment(string Namespace, string Name, int Index);

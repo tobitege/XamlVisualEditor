@@ -55,6 +55,36 @@ public sealed class PreviewerErrorOutputTests : IDisposable
         Assert.Equal(path, message.FilePath);
     }
 
+    [Fact]
+    public void Text_Added_As_A_Control_Is_Named_With_Its_Source_Position()
+    {
+        const string source = """
+            <UserControl xmlns="https://github.com/avaloniaui">
+                <Grid>
+                    <TextBlock Text="Contact" />l
+                    <TextBox />
+                </Grid>
+            </UserControl>
+            """;
+        const string preview = "<UserControl xmlns='https://github.com/avaloniaui'><Grid>"
+            + "<TextBlock Text='Contact' />l<TextBox /></Grid></UserControl>";
+
+        PreviewerErrorInfo error = PreviewerTcpSession.CreateXamlError(new UpdateXamlResultMessage
+        {
+            Error = "Full exception stack",
+            Exception = new ExceptionDetails
+            {
+                ExceptionType = "InvalidCastException",
+                Message = "Unable to cast object of type 'System.String' to type 'Avalonia.Controls.Control'."
+            }
+        }, preview, "View.axaml");
+
+        Assert.Equal(string.Format(XamlVisualEditor.Core.Localization.UiStrings.PreviewerTextNotAllowed, "l", "Grid"), error.Message);
+        string sourceLine = source.Split('\n')[2];
+        Assert.Equal((3, sourceLine.IndexOf("/>l", StringComparison.Ordinal) + 3),
+            DesignerDocumentViewModel.ResolvePreviewerErrorPosition(error, source));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

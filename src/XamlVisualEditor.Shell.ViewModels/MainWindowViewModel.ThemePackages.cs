@@ -1,6 +1,7 @@
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
+using PrimitivesLinq = ReactiveUI.Primitives.LinqExtensions;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
@@ -64,13 +65,14 @@ public sealed partial class MainWindowViewModel
         }, RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
         foreach (DesignerDocumentViewModel document in documents)
         {
-            await Signal.FromTask(async _ =>
+            // FromTask runs the restart on the subscribing thread, a pool thread after ConfigureAwait(false).
+            await PrimitivesLinq.SubscribeOn(Signal.FromTask(async _ =>
             {
                 if (_themePackagesDisposed || document.IsDisposed || !document.UseExternalPreviewer || !Documents.Contains(document)) return RxVoid.Default;
                 try { await StartPreviewerForDocumentAsync(document); }
                 catch (Exception error) { if (!document.IsDisposed) document.SetPreviewerLaunchError(error.Message); }
                 return RxVoid.Default;
-            }, RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
+            }, RxSchedulers.MainThreadScheduler), RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
         }
     }
 }

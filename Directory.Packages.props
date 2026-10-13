@@ -13,7 +13,7 @@
     <PackageVersion Include="Avalonia.Skia" Version="12.1.2" />
     <PackageVersion Include="ProDiagnostics" Version="12.1.0.4" />
     <PackageVersion Include="ProDataGrid" Version="12.1.0.4" />
-    <PackageVersion Include="Chrome.DevTools.Avalonia" Version="0.1.0-preview.34-tobitege" />
+    <PackageVersion Include="Chrome.DevTools.Avalonia" Version="0.1.0" />
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.2" />
     <!-- Optional preview theme adapter; not referenced by the editor application. -->

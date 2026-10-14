@@ -26,11 +26,12 @@ uses Semantic Versioning.
 - Extensions can redirect a file the user opens to another file through `ExtensionContext.DocumentOpenInterceptors`, for example to open a generated file in place of its source; navigation into a file is not redirected. `ConfirmationDialogRequest.CancelText` labels the declining button.
 - The XAML code editor marks the element selected in the designer with an arrow at its first line and a bar along its lines in the gutter, and a selection in the designer scrolls the element start away from the viewport edge. The "Follow" toggle in the code editor toolbar turns this off.
 - An interceptor cancels the open by throwing `OperationCanceledException`. Extensions show a modal, cancellable progress dialog through `ProgressDialogRequest` while long work runs.
+- The Problems panel restates common XAML loader errors of the external previewer in plain words and points to their source position: an invalid value names its attribute and, for an enumeration, the allowed values; an unknown property or element names the misspelled name; text that a panel or a single-child element cannot hold is named and marked; a second child of a single-child element names the property that takes it.
 
 ### Changed
 
 - Tool tabs no longer scroll: all tabs of a dock stay visible, and tabs that do not fit shrink and shorten their titles with an ellipsis.
-- The splitter between design surface and XAML code is visible in every theme and highlights under the pointer.
+- The splitter between design surface and XAML code and the splitters between docked panels show a muted accent color at rest and the full accent under the pointer and while dragging; a splitter beside a collapsed dock stays transparent.
 - The word wrap and line number toggles and the font size of a document are editor options: a change in one document applies to every editor and persists.
 - Loading a layout no longer adds panels on its own: a debugger tool or extension panel that the saved layout does not contain stays closed until the view menu opens it. An extension panel with `PersistDockState = false` therefore starts closed after a restart.
 - A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
@@ -52,6 +53,12 @@ uses Semantic Versioning.
 - The design artboard sizes a document without an explicit size from a measurement of the rendered root, bounded by `DesignCanvasSizing.MeasureConstraint`, and has no padding around the document; `DesignCanvasSizing.ArtboardPadding` is gone.
 - The dock factory no longer keeps a list of closed tools (`IsToolClosed`, `MarkToolClosed`, `MarkToolReopened`, `ClearClosedTools`, `ReopenBuiltInTool`): a loaded layout keeps closed panels closed on its own.
 - Tests isolate every persisted shell settings file through `ShellSettingsPaths.RootOverride`, which replaces `XamlEditorDockFactory.SettingsRootOverride`.
+- Updated Avalonia from 12.1.1 to 12.1.3, Dock from 12.0.0.2 to 12.1.0.7, ReactiveUI from 23.2.28 to 26.0.1 with ReactiveUI.Avalonia 12.1.6, and System.Reactive from 6.1.0 to 7.0.0; commands and interactions use `RxVoid` instead of `Unit`.
+- The external previewer and the design surface show their preview state (out of date, disconnected, waiting for the first frame, unavailable) in the coordinate strip below the preview instead of over the rendered frame, in the editor language; a long state wraps to two lines and keeps its full text as tooltip.
+- Grid columns can be widened beyond the width of their panel: pressing a column header keeps the current column widths in pixels, so dragging a column edge scrolls the grid instead of squeezing the columns to its right. The message column of the Problems panel keeps a minimum width of 100 pixels.
+- The design theme messages in the Output panel follow the editor language.
+- Messages, comments and documentation that were still German are English.
+- SourceLink is enabled only inside a git working copy, so the solution also builds from a copy without `.git`.
 
 ### Fixed
 
@@ -89,6 +96,12 @@ uses Semantic Versioning.
 - Fixed missing satellite resource assemblies being reported as unresolved workspace assemblies.
 - Fixed closing the editor logging a binding error for every tab, pin button and document: the dock views let go of their dockables before the layout is saved.
 - Fixed the references panel and the extension manager keeping their subscriptions after the shell was disposed; the throttled references filter still reached the UI dispatcher afterwards.
+- Fixed the editor hanging at startup with growing memory while the debugger adapter path bounced between two values: the debug settings take the current adapter path instead of a stale queued one.
+- Fixed a panel shown again from the View menu staying invisible after its side dock had been emptied: the side dock gets its default width back.
+- Fixed "The calling thread cannot access this object" after the ReactiveUI migration when the previewer updated, a theme package restarted the previewer or ACP asked for a permission: these tasks start on the UI thread again.
+- Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
+- Fixed a crashing preview process being reported as a closed transport connection: its own error output stays the reported cause.
+- Fixed installing an extension failing with "Access denied" while a virus scanner still held the extracted files, and stopping the MCP server failing with "The handle is invalid" during a pending accept.
 
 ## [0.2.0] - 2026-09-01
 

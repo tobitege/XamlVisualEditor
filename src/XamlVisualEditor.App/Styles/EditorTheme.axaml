@@ -3,6 +3,7 @@
         xmlns:dock="using:Dock.Avalonia.Controls"
         xmlns:recycling="using:Avalonia.Controls.Recycling"
         xmlns:dockmodel="using:Dock.Model.Core"
+        xmlns:dps="using:Dock.Controls.ProportionalStackPanel"
         xmlns:styles="using:XamlVisualEditor.App.Styles"
         xmlns:v="using:XamlVisualEditor.App.Views">
     <Styles.Resources>
@@ -21,6 +22,8 @@
                     <SolidColorBrush x:Key="EditorDialogPrimaryHoverBrush" Color="#0784DB" />
                     <SolidColorBrush x:Key="EditorDialogPrimaryPressedBrush" Color="#0063A6" />
                     <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
+                    <SolidColorBrush x:Key="EditorSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
+                    <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#F4F4F4" />
@@ -35,6 +38,8 @@
                     <SolidColorBrush x:Key="EditorDialogPrimaryHoverBrush" Color="#005F9F" />
                     <SolidColorBrush x:Key="EditorDialogPrimaryPressedBrush" Color="#004E83" />
                     <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
+                    <SolidColorBrush x:Key="EditorSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <!-- The DataGrid theme brightens the accent of a selected row under the mouse; with a light accent the
@@ -124,12 +129,15 @@
         </Setter>
     </Style>
 
-    <!-- The splitter between design surface and XAML code stays visible in every theme; the accent marks it
-         under the pointer and while dragging. -->
-    <Style Selector="GridSplitter.designer-splitter">
-        <Setter Property="Background" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+    <!-- Splitters between design surface and XAML code and between docked panels rest in a muted accent, so
+         they read as handles; the full accent marks them under the pointer and while dragging. -->
+    <Style Selector="GridSplitter.designer-splitter, dps|ProportionalStackPanelSplitter">
+        <Setter Property="Background" Value="{DynamicResource EditorSplitterIdleBrush}" />
     </Style>
-    <Style Selector="GridSplitter.designer-splitter:pointerover, GridSplitter.designer-splitter:pressed">
+    <Style Selector="dps|ProportionalStackPanelSplitter.collapsed">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="GridSplitter.designer-splitter:pointerover, GridSplitter.designer-splitter:pressed, dps|ProportionalStackPanelSplitter:pointerover">
         <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
     </Style>
 

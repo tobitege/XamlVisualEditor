@@ -235,6 +235,10 @@ public sealed class McpServer : IAsyncDisposable
             catch (OperationCanceledException)
             {
             }
+            // Closing the listener during a pending accept can also report its released handle as invalid.
+            catch (ArgumentException) when (ct.IsCancellationRequested)
+            {
+            }
         }
 
         private async Task HandleRequestAsync(HttpListenerContext context, CancellationToken ct)

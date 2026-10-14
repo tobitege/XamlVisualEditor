@@ -96,8 +96,26 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
         }
         ct.ThrowIfCancellationRequested();
         File.Copy(packagePath, Path.Combine(stagingDirectory, fileName));
-        Directory.Move(stagingDirectory, extensionDir);
+        await MoveDirectoryAsync(stagingDirectory, extensionDir, ct).ConfigureAwait(false);
         return installed;
+    }
+
+    // A virus scanner or search indexer may still hold freshly extracted files open; Windows then denies
+    // moving their directory for a moment.
+    private static async Task MoveDirectoryAsync(string source, string destination, CancellationToken ct)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(source, destination);
+                return;
+            }
+            catch (Exception exception) when (attempt < 20 && exception is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(100, ct).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <inheritdoc />

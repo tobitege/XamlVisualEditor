@@ -44,6 +44,7 @@ public sealed class PreviewerTcpSession : IDisposable
     private double _viewportDpiY = 96;
     private FrameMessage? _lastFrame;
     private PreviewerErrorInfo? _lastError;
+    private bool _errorFromStandardError;
 
     public PreviewerTcpSession(string xamlFilePath, Action<string, string>? log)
     {
@@ -268,25 +269,41 @@ public sealed class PreviewerTcpSession : IDisposable
         const string unhandled = "Unhandled exception.";
         if (line.StartsWith(unhandled, StringComparison.Ordinal)) line = line[unhandled.Length..].TrimStart();
         if (line.StartsWith("--->", StringComparison.Ordinal)) line = line[4..].TrimStart();
-        ReportError(line);
+        ReportError(line, fromStandardError: true);
     }
 
-    internal void ReportError(string message)
+    internal void ReportError(string message) => ReportError(message, fromStandardError: false);
+
+    private void ReportError(string message, bool fromStandardError)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
             return;
         }
 
-        SetError(new PreviewerErrorInfo(message, null, null, _xamlFilePath));
+        SetError(new PreviewerErrorInfo(message, null, null, _xamlFilePath), fromStandardError: fromStandardError);
     }
 
-    private void SetError(PreviewerErrorInfo? error, IAvaloniaRemoteTransportConnection? origin = null)
+    // A crashing preview process closes the connection after writing its exception to the error output.
+    // That output names the cause, so the broken connection is only logged then.
+    internal void ReportConnectionLost(Exception exception, IAvaloniaRemoteTransportConnection? connection)
+    {
+        _log?.Invoke("Error", string.Format(UiStrings.PreviewerTransportError, exception.Message));
+        lock (_gate)
+        {
+            if (_errorFromStandardError) return;
+        }
+
+        SetError(new PreviewerErrorInfo(UiStrings.PreviewerConnectionLost, null, null, _xamlFilePath), connection);
+    }
+
+    private void SetError(PreviewerErrorInfo? error, IAvaloniaRemoteTransportConnection? origin = null, bool fromStandardError = false)
     {
         lock (_gate)
         {
             if (origin is not null && !ReferenceEquals(origin, _connection)) return;
             _lastError = error;
+            _errorFromStandardError = fromStandardError;
         }
 
         ErrorChanged?.Invoke(error);
@@ -332,12 +349,7 @@ public sealed class PreviewerTcpSession : IDisposable
         ConnectionChanged?.Invoke(connection);
 
         connection.OnMessage += OnMessage;
-        connection.OnException += (_, ex) =>
-        {
-            string message = string.Format(UiStrings.PreviewerTransportError, (object?)(ex.Message));
-            _log?.Invoke("Error", message);
-            SetError(new PreviewerErrorInfo(message, null, null, _xamlFilePath), connection);
-        };
+        connection.OnException += (_, ex) => ReportConnectionLost(ex, connection);
         connection.Start();
 
         SendPreflightMessages(connection);

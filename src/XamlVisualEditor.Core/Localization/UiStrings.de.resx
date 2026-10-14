@@ -948,6 +948,17 @@
   <data name="BindingResourceExpression" xml:space="preserve"><value>Binding- oder Ressourcenausdruck</value></data>
   <data name="Input" xml:space="preserve"><value>Eingabe</value></data>
   <data name="PreviewerTransportError" xml:space="preserve"><value>Transportfehler der Vorschau: {0}</value></data>
+  <data name="PreviewerConnectionLost" xml:space="preserve"><value>Der Vorschauprozess hat die Verbindung beendet. Details im Output.</value></data>
+  <data name="PreviewerExitedWithCode" xml:space="preserve"><value>Der Vorschauprozess wurde mit Exit-Code {0} beendet.</value></data>
+  <data name="PreviewStatus" xml:space="preserve"><value>Vorschaustatus</value></data>
+  <data name="PreviewStatusOutOfDate" xml:space="preserve"><value>Vorschau veraltet. Details unter Problems.</value></data>
+  <data name="PreviewStatusDisconnected" xml:space="preserve"><value>Vorschau getrennt; das letzte Bild wird angezeigt.</value></data>
+  <data name="PreviewStatusUnavailable" xml:space="preserve"><value>Vorschau nicht verfügbar. Details unter Problems.</value></data>
+  <data name="PreviewStatusWaiting" xml:space="preserve"><value>Warte auf das erste Vorschaubild …</value></data>
+  <data name="PreviewStatusAddRoot" xml:space="preserve"><value>Für eine Vorschau ein Wurzel-Control hinzufügen.</value></data>
+  <data name="PreviewStatusNotEditable" xml:space="preserve"><value>Vorschau veraltet und nicht bearbeitbar. Renderfehler unter Problems.</value></data>
+  <data name="PreviewStatusRenderUnavailable" xml:space="preserve"><value>Vorschau nicht verfügbar. Renderfehler unter Problems.</value></data>
+  <data name="PreviewStatusIncomplete" xml:space="preserve"><value>Vorschau unvollständig: {0} Control(s) nicht verfügbar. Details unter Problems.</value></data>
   <data name="PreviewerInvalidNumber" xml:space="preserve"><value>„{0}“ ist keine gültige Zahl für {1}.</value></data>
   <data name="PreviewerInvalidValue" xml:space="preserve"><value>„{0}“ ist kein gültiger {2}-Wert für {1}.</value></data>
   <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>„{0}“ ist kein gültiger Wert für {1}. Erlaubt: {2}.</value></data>

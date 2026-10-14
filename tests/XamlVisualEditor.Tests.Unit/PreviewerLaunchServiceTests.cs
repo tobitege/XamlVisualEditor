@@ -444,6 +444,23 @@ public sealed class PreviewerLaunchServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_Crash_Keeps_The_Cause_From_The_Error_Output_Instead_Of_The_Broken_Connection()
+    {
+        using PreviewerTcpSession session = new("Sample.axaml", log: null);
+
+        session.ReportConnectionLost(new IOException("Unable to read data from the transport connection."), connection: null);
+        Assert.Equal(UiStrings.PreviewerConnectionLost, session.LastError);
+
+        const string cause = "System.InvalidOperationException: The version of the native libSkiaSharp library (88.1) is incompatible with this version of SkiaSharp.";
+        session.ReportStandardErrorLine("Unhandled exception. System.Reflection.TargetInvocationException: Exception has been thrown by the target of an invocation.");
+        session.ReportStandardErrorLine(" ---> " + cause);
+        session.ReportStandardErrorLine("   at SkiaSharp.SKObject..cctor()");
+        session.ReportConnectionLost(new IOException("Unable to read data from the transport connection."), connection: null);
+
+        Assert.Equal(cause, session.LastError);
+    }
+
+    [Fact]
     public void MetadataInspectionDoesNotLoadTheProjectAssemblyIntoTheEditor()
     {
         Directory.CreateDirectory(_root);

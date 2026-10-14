@@ -1146,7 +1146,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _runtimeDocumentOwner = docVm;
         docVm.SetRuntimeRenderDiagnostics(renderedDocument.Diagnostics);
         SetPreviewStatus(renderedDocument.Diagnostics.Count == 0 ? null :
-            $"Preview incomplete: {renderedDocument.Diagnostics.Count} control(s) unavailable. See Problems.");
+            string.Format(UiStrings.PreviewStatusIncomplete, renderedDocument.Diagnostics.Count));
         UpdateCanvasSizeFromRoot(docVm, doc.Root, tree);
         tree.UpdateLayout();
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -15,6 +16,7 @@ using Avalonia.Remote.Protocol.Viewport;
 using Avalonia.Threading;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.Adorners;
 using XamlVisualEditor.Designer.DragDrop;
@@ -37,6 +39,11 @@ public sealed partial class PreviewerSurfaceControl : Control
 
     public static readonly StyledProperty<DesignerDocumentViewModel?> DocumentProperty =
         AvaloniaProperty.Register<PreviewerSurfaceControl, DesignerDocumentViewModel?>(nameof(Document));
+
+    public static readonly DirectProperty<PreviewerSurfaceControl, string?> StatusTextProperty =
+        AvaloniaProperty.RegisterDirect<PreviewerSurfaceControl, string?>(nameof(StatusText), control => control.StatusText);
+
+    private string? _statusText;
 
     private DesignerDocumentViewModel? _document;
     private DesignerHostSnapshot? _designTree;
@@ -114,13 +121,8 @@ public sealed partial class PreviewerSurfaceControl : Control
 
     public override void Render(DrawingContext context)
     {
-        if (_lastFrame is null || _lastFrame.Width == 0 || _lastFrame.Height == 0)
+        if (!HasFrame)
         {
-            string? launchError = _document?.Diagnostics
-                .FirstOrDefault(diagnostic => diagnostic.Code == "XVE_PREVIEW_START")?.Message;
-            DrawStatusOverlay(context, launchError ?? (_hasError
-                ? "Preview unavailable. See Problems for details."
-                : "Waiting for previewer frames..."));
             base.Render(context);
             return;
         }
@@ -153,11 +155,26 @@ public sealed partial class PreviewerSurfaceControl : Control
         using (context.PushClip(new Rect(Bounds.Size)))
         using (context.PushTransform(Matrix.CreateScale(PreviewZoom, PreviewZoom)))
             DrawMeasure(context);
-        if (_hasError)
-            DrawStatusOverlay(context, "Preview out of date. See Problems for details.");
-        else if (!_isConnected)
-            DrawStatusOverlay(context, "Preview disconnected; showing the last frame.");
     }
+
+    /// <summary>
+    /// Gets the state of the preview for the status strip below it; <see langword="null"/> while the frame is current.
+    /// </summary>
+    public string? StatusText
+    {
+        get => _statusText;
+        private set => SetAndRaise(StatusTextProperty, ref _statusText, value);
+    }
+
+    [MemberNotNullWhen(true, nameof(_lastFrame))]
+    private bool HasFrame => _lastFrame is { Width: > 0, Height: > 0 };
+
+    private void UpdateStatusText() => StatusText = !HasFrame
+        ? _document?.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Code == "XVE_PREVIEW_START")?.Message
+            ?? (_hasError ? UiStrings.PreviewStatusUnavailable : UiStrings.PreviewStatusWaiting)
+        : _hasError ? UiStrings.PreviewStatusOutOfDate
+        : !_isConnected ? UiStrings.PreviewStatusDisconnected
+        : null;
 
     protected override void ArrangeCore(Rect finalRect)
     {
@@ -229,6 +246,7 @@ public sealed partial class PreviewerSurfaceControl : Control
         UpdateConnectionState(_session?.Connection);
         UpdateViewportFromBounds();
         ApplyDesignTree(_session?.LastDesignTree);
+        UpdateStatusText();
         InvalidateVisual();
     }
 
@@ -257,6 +275,7 @@ public sealed partial class PreviewerSurfaceControl : Control
             if (document.UseExternalPreviewer) document.DesignSurface.RequestRebuild();
         }
         ApplyDesignTree(_session?.LastDesignTree);
+        UpdateStatusText();
     }
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -266,6 +285,7 @@ public sealed partial class PreviewerSurfaceControl : Control
             _document?.DesignSurface.RequestRebuild();
             ApplyDesignTree(_session?.LastDesignTree);
         }
+        if (args.PropertyName == nameof(DesignerDocumentViewModel.Diagnostics)) UpdateStatusText();
         if (!_updatingSelection) InvalidateVisual();
     }
 
@@ -878,6 +898,7 @@ public sealed partial class PreviewerSurfaceControl : Control
             _lastFrame = frame;
             _frameDirty = true;
             UpdateFrameSize(frame);
+            UpdateStatusText();
             InvalidateVisual();
         });
     }
@@ -901,6 +922,7 @@ public sealed partial class PreviewerSurfaceControl : Control
             if (!ReferenceEquals(_session, session) || !ReferenceEquals(session.Connection, connection)) return;
             if (connection is null) ReleasePreviewInput();
             UpdateConnectionState(connection);
+            UpdateStatusText();
             InvalidateVisual();
         });
     }
@@ -912,6 +934,7 @@ public sealed partial class PreviewerSurfaceControl : Control
             if (!ReferenceEquals(_session, session) || !Equals(session.LastErrorInfo, error)) return;
             _hasError = error is not null;
             if (_hasError) ReleasePreviewInput();
+            UpdateStatusText();
             InvalidateVisual();
         });
     }
@@ -935,26 +958,6 @@ public sealed partial class PreviewerSurfaceControl : Control
     private void UpdateConnectionState(IAvaloniaRemoteTransportConnection? connection)
     {
         _isConnected = connection is not null;
-    }
-
-    private static void DrawStatusOverlay(DrawingContext context, string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return;
-        }
-
-        FormattedText formatted = new(
-            text,
-            System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            new Typeface("Consolas"),
-            12,
-            Brushes.White);
-
-        Rect background = new Rect(6, 6, formatted.Width + 10, formatted.Height + 6);
-        context.FillRectangle(new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)), background);
-        context.DrawText(formatted, new Point(11, 9));
     }
 
     private void UpdateViewportFromBounds()

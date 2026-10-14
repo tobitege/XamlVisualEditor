@@ -300,7 +300,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             {
                 _telemetry.RecordCrash(exitCode);
                 if (string.IsNullOrWhiteSpace(instance.Session?.LastError))
-                    instance.Session?.ReportError($"Previewer exited with code {exitCode}.");
+                    instance.Session?.ReportError(string.Format(UiStrings.PreviewerExitedWithCode, exitCode));
             }
             log?.Invoke("Info", $"Previewer exited with code {exitCode}");
         }

@@ -2,11 +2,17 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dc="using:XamlVisualEditor.Designer.Core"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+             xmlns:v="using:XamlVisualEditor.App.Views"
              x:Class="XamlVisualEditor.App.Views.DesignerCoordinateStrip"
              x:DataType="dc:DesignSurfaceViewModel"
              Classes="editor-chrome designer-toolbar"
-             IsVisible="{CompiledBinding ShowCoordinateStrip}"
              AutomationProperties.Name="{x:Static loc:UiStrings.CoordinateStrip}">
+    <UserControl.IsVisible>
+        <MultiBinding Converter="{x:Static BoolConverters.Or}">
+            <Binding Path="ShowCoordinateStrip" />
+            <Binding Path="$self.StatusText" Converter="{x:Static ObjectConverters.IsNotNull}" />
+        </MultiBinding>
+    </UserControl.IsVisible>
     <UserControl.Styles>
         <Style Selector="Button.coordinate-value">
             <Setter Property="Background" Value="Transparent" />
@@ -22,16 +28,19 @@
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             BorderThickness="0,1,0,0" Padding="2,1">
         <DockPanel>
-            <ToggleButton DockPanel.Dock="Left" IsChecked="{CompiledBinding IsMeasuring, Mode=TwoWay}"
+            <ToggleButton DockPanel.Dock="Left" IsVisible="{CompiledBinding ShowCoordinateStrip}"
+                          IsChecked="{CompiledBinding IsMeasuring, Mode=TwoWay}"
                           Width="22" Height="22" MinWidth="22" MinHeight="22" Padding="3"
                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                           AutomationProperties.Name="{x:Static loc:UiStrings.Measure}" ToolTip.Tip="{x:Static loc:UiStrings.MeasureHint}">
                 <PathIcon Width="14" Height="14" Data="{x:Static dc:DesignerViewportIcons.MeasureIconPath}" />
             </ToggleButton>
             <TextBlock DockPanel.Dock="Right" Text="{CompiledBinding Zoom, StringFormat='{}{0:P0}'}"
+                       IsVisible="{CompiledBinding ShowCoordinateStrip}"
                        VerticalAlignment="Center" Margin="6,0" FontSize="11"
                        AutomationProperties.Name="{x:Static loc:UiStrings.Zoom}" />
-            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <WrapPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center"
+                       IsVisible="{CompiledBinding ShowCoordinateStrip}">
                 <Button Classes="coordinate-value" MinWidth="104" HorizontalContentAlignment="Left"
                         Content="{CompiledBinding Readout.PointerText, TargetNullValue='–'}"
                         Command="{CompiledBinding CopyReadoutCommand}" CommandParameter="{CompiledBinding Readout.PointerValue}"
@@ -62,6 +71,14 @@
                         AutomationProperties.Name="{x:Static loc:UiStrings.MeasureResult}"
                         ToolTip.Tip="{x:Static loc:UiStrings.MeasureResultHint}" />
             </WrapPanel>
+            <!-- Takes the width left between readout and zoom; long states wrap to two lines and keep the full text as tip. -->
+            <TextBlock x:Name="PreviewStatusText"
+                       Text="{CompiledBinding $parent[v:DesignerCoordinateStrip].StatusText}"
+                       IsVisible="{CompiledBinding $parent[v:DesignerCoordinateStrip].StatusText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       ToolTip.Tip="{CompiledBinding $parent[v:DesignerCoordinateStrip].StatusText}"
+                       VerticalAlignment="Center" Margin="6,0" FontSize="11"
+                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                       AutomationProperties.Name="{x:Static loc:UiStrings.PreviewStatus}" />
         </DockPanel>
     </Border>
 </UserControl>

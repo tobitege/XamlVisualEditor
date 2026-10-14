@@ -12,6 +12,7 @@ using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Metadata;
 using Avalonia.Platform;
 using Avalonia.Styling;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -191,8 +192,7 @@ public static class WorkspaceDesignThemeLoader
                 catch (Exception exception)
                 {
                     loadItemByItem = true;
-                    report?.Invoke($"Design themes from {sourcePath} could not be compiled as one scope in the editor"
-                        + $" ({FirstMessage(exception)}); loadable includes and theme elements are applied one by one.");
+                    report?.Invoke(string.Format(UiStrings.DesignThemesScopeFailed, sourcePath, FirstMessage(exception)));
                     return CreateItemScope(root, resourcesElement, stylesElement, sourcePath, report);
                 }
             }
@@ -264,7 +264,7 @@ public static class WorkspaceDesignThemeLoader
 
         if (report is not null && skipped.Count > 0)
         {
-            report($"Design themes skipped from {sourcePath}: {string.Join("; ", skipped)}");
+            report(string.Format(UiStrings.DesignThemesSkipped, sourcePath, string.Join("; ", skipped)));
         }
 
         return scope;

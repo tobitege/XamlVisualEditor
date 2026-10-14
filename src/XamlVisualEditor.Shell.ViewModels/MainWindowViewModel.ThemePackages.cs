@@ -61,6 +61,7 @@ public sealed partial class MainWindowViewModel
             _themePackageRestarts.Remove(extensionId, out List<DesignerDocumentViewModel>? pending);
             if (_themePackagesDisposed) return new List<DesignerDocumentViewModel>();
             foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>()) ConfigurePreviewThemes(document);
+            ApplyWorkspacePreviewTheme(_workspacePreviewTheme);
             return pending ?? new List<DesignerDocumentViewModel>();
         }, RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
         foreach (DesignerDocumentViewModel document in documents)

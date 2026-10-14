@@ -1,7 +1,7 @@
 {
   "name": "flowery-themes",
   "publisher": "xamlvisualeditor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "Flowery.NET themes",
   "contributes": {
     "editorThemes": [
@@ -17,7 +17,8 @@
         "id": "palette",
         "name": "Flowery.NET",
         "assembly": "lib/net10.0/XamlVisualEditor.FloweryThemeExtension.dll",
-        "type": "XamlVisualEditor.FloweryThemeExtension.FloweryThemeProvider"
+        "type": "XamlVisualEditor.FloweryThemeExtension.FloweryThemeProvider",
+        "requiresAssembly": "Flowery.NET"
       }
     ]
   }

@@ -30,7 +30,8 @@ public sealed partial class DesignerDocumentViewModel
         PublishDesignerDiagnostics();
     }
 
-    public void SetPreviewThemeSelection(DesignerThemeSelection? selection)
+    /// <summary>Selects the preview theme; a theme derived from the editor options does not switch to the external previewer.</summary>
+    public void SetPreviewThemeSelection(DesignerThemeSelection? selection, bool activatePreviewer = true)
     {
         if (IsDisposed || PreviewThemeRequest?.Selection == selection) return;
         PreviewThemeRequest = new(Guid.NewGuid(), PreviewThemeRequest?.Providers ?? Array.Empty<DesignerThemeProviderRegistration>(), selection);
@@ -42,7 +43,7 @@ public sealed partial class DesignerDocumentViewModel
             DesignSurface.PreviewThemes.Add(choice);
         }
         DesignSurface.SelectedPreviewTheme = choice;
-        if (selection is not null) UseExternalPreviewer = true;
+        if (selection is not null && activatePreviewer) UseExternalPreviewer = true;
     }
 
     private void InitializeDesignerThemes()

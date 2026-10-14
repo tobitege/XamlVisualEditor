@@ -4786,6 +4786,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private void RefreshExtensionContributions()
     {
         ConfigurePreviewThemes(ActiveDesignerDocument);
+        // Registered preview providers decide which theme the editor options supply.
+        if (!_themePreferencesDisposed) ApplyWorkspacePreviewTheme(_workspacePreviewTheme);
         if (_extensionContributions is null)
         {
             DisposeCollectionItems(ExtensionMenuItems);

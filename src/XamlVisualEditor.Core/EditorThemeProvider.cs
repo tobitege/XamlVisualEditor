@@ -40,6 +40,8 @@ public interface IEditorThemeService
     IReadOnlyList<EditorThemeProviderCatalog> Catalogs { get; }
     EditorThemeSelection Selection { get; }
     string? Error { get; }
+    /// <summary>Gets whether the applied editor theme renders dark, including a resolved system theme.</summary>
+    bool IsDark { get; }
     void Apply(EditorThemeSelection selection);
     /// <summary>Restores a selection; a missing provider falls back to the default theme and reports the error.</summary>
     void Restore(EditorThemeSelection selection);

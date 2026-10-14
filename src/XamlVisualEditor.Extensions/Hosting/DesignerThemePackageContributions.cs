@@ -32,8 +32,15 @@ public static class DesignerThemePackageContributions
             string assemblyPath = ResolvePackagePath(directory, Required(item, "assembly"));
             if (!string.Equals(Path.GetExtension(assemblyPath), ".dll", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Theme providers must name a managed DLL.");
+            string? requiredAssembly = null;
+            if (item.TryGetProperty("requiresAssembly", out JsonElement requires))
+            {
+                requiredAssembly = requires.ValueKind == JsonValueKind.String ? requires.GetString()
+                    : throw new InvalidDataException("requiresAssembly must be a string.");
+                ValidateSegment(requiredAssembly!, "required assembly name");
+            }
             providers.Add(new(package.Manifest.ExtensionId.ToLowerInvariant() + "/" + id, Required(item, "name"),
-                assemblyPath, Required(item, "type")));
+                assemblyPath, Required(item, "type"), requiredAssembly));
         }
         return providers;
     }

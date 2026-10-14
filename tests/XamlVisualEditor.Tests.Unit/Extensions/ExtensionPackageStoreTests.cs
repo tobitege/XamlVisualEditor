@@ -32,6 +32,7 @@ public sealed class ExtensionPackageStoreTests
             var provider = Assert.Single(DesignerThemePackageContributions.Read(installed));
             Assert.Equal("example.sample-extension/palette", provider.Id);
             Assert.Equal(payload, provider.AssemblyPath);
+            Assert.Equal("Example.Library", provider.RequiredAssembly);
             Assert.Equal(installed.InstallationDirectory, Assert.Single(await store.GetInstalledAsync(CancellationToken.None)).InstallationDirectory);
             string newer = CreatePackage(tempRoot, "sample-extension", "example", "1.1.0");
             await store.InstallAsync(newer, CancellationToken.None);
@@ -72,7 +73,7 @@ public sealed class ExtensionPackageStoreTests
             "\"name\":\"" + name + "\"," +
             "\"publisher\":\"" + publisher + "\"," +
             "\"version\":\"" + version + "\"," +
-            "\"contributes\":{\"designerThemes\":[{\"id\":\"palette\",\"name\":\"Sample\",\"assembly\":\"lib/net10.0/Sample.dll\",\"type\":\"Example.Provider\"}]}" +
+            "\"contributes\":{\"designerThemes\":[{\"id\":\"palette\",\"name\":\"Sample\",\"assembly\":\"lib/net10.0/Sample.dll\",\"type\":\"Example.Provider\",\"requiresAssembly\":\"Example.Library\"}]}" +
             "}");
 
         using (StreamWriter writer = new(zip.CreateEntry("lib/net10.0/Sample.dll").Open(), Encoding.UTF8)) writer.Write("sample payload");

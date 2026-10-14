@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Serilog;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.Shell.ViewModels;
@@ -86,9 +87,9 @@ public sealed partial class DesignSurfaceView
         _runtimeRenderFailed = true;
         canvas.ContextMenu = null;
         document.SetRuntimeRenderFailure(exception);
-        SetPreviewStatus(empty ? "Add a root control to preview this document."
-            : keepPrevious ? "Preview out of date and not editable. See Problems for rendering errors."
-            : "Preview unavailable. See Problems for rendering errors.");
+        SetPreviewStatus(empty ? UiStrings.PreviewStatusAddRoot
+            : keepPrevious ? UiStrings.PreviewStatusNotEditable
+            : UiStrings.PreviewStatusRenderUnavailable);
         ClearHover();
         _adornerLayer?.ClearAll();
         _currentVm?.SetDesignTree(null, new Dictionary<Guid, DesignItem>(), new Dictionary<Control, DesignItem>());
@@ -97,9 +98,8 @@ public sealed partial class DesignSurfaceView
 
     private void SetPreviewStatus(string? message)
     {
-        if (this.FindControl<TextBlock>("PreviewStatusText") is not { } status) return;
-        status.Text = message;
-        status.IsVisible = !string.IsNullOrWhiteSpace(message);
+        if (this.FindControl<DesignerCoordinateStrip>("CoordinateStrip") is not { } strip) return;
+        strip.StatusText = string.IsNullOrWhiteSpace(message) ? null : message;
     }
 
     private void OnRuntimeLayoutUpdated(object? sender, EventArgs args)

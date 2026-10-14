@@ -111,7 +111,8 @@
                     <DockPanel IsVisible="{CompiledBinding UseExternalPreviewer}">
                         <v:DesignerViewportToolbar DockPanel.Dock="Top" DataContext="{CompiledBinding DesignSurface}"
                                                    IsExternalPreviewer="True" FitRequested="OnPreviewerFit" SelectionRequested="OnPreviewerSelection" />
-                        <v:DesignerCoordinateStrip DockPanel.Dock="Bottom" DataContext="{CompiledBinding DesignSurface}" />
+                        <v:DesignerCoordinateStrip DockPanel.Dock="Bottom" DataContext="{CompiledBinding DesignSurface}"
+                                                   StatusText="{CompiledBinding #ExternalPreviewSurface.StatusText}" />
                         <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
                             <Border Width="24" Height="24" Background="#252526"
                                     IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />

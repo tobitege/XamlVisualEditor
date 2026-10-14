@@ -948,6 +948,17 @@
   <data name="BindingResourceExpression" xml:space="preserve"><value>Binding or resource expression</value></data>
   <data name="Input" xml:space="preserve"><value>Input</value></data>
   <data name="PreviewerTransportError" xml:space="preserve"><value>Previewer transport error: {0}</value></data>
+  <data name="PreviewerConnectionLost" xml:space="preserve"><value>The preview process closed the connection. See Output for details.</value></data>
+  <data name="PreviewerExitedWithCode" xml:space="preserve"><value>The preview process ended with exit code {0}.</value></data>
+  <data name="PreviewStatus" xml:space="preserve"><value>Preview status</value></data>
+  <data name="PreviewStatusOutOfDate" xml:space="preserve"><value>Preview out of date. See Problems for details.</value></data>
+  <data name="PreviewStatusDisconnected" xml:space="preserve"><value>Preview disconnected; showing the last frame.</value></data>
+  <data name="PreviewStatusUnavailable" xml:space="preserve"><value>Preview unavailable. See Problems for details.</value></data>
+  <data name="PreviewStatusWaiting" xml:space="preserve"><value>Waiting for the first preview frame…</value></data>
+  <data name="PreviewStatusAddRoot" xml:space="preserve"><value>Add a root control to preview this document.</value></data>
+  <data name="PreviewStatusNotEditable" xml:space="preserve"><value>Preview out of date and not editable. See Problems for rendering errors.</value></data>
+  <data name="PreviewStatusRenderUnavailable" xml:space="preserve"><value>Preview unavailable. See Problems for rendering errors.</value></data>
+  <data name="PreviewStatusIncomplete" xml:space="preserve"><value>Preview incomplete: {0} control(s) unavailable. See Problems.</value></data>
   <data name="PreviewerInvalidNumber" xml:space="preserve"><value>"{0}" is not a valid number for {1}.</value></data>
   <data name="PreviewerInvalidValue" xml:space="preserve"><value>"{0}" is not a valid {2} value for {1}.</value></data>
   <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>"{0}" is not a valid value for {1}. Allowed values: {2}.</value></data>

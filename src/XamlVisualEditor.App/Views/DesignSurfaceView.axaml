@@ -16,10 +16,7 @@
     <DockPanel>
         <v:DesignerViewportToolbar DockPanel.Dock="Top" FitRequested="OnZoomToFitClick" SelectionRequested="OnZoomToSelectionClick" />
 
-        <TextBlock x:Name="PreviewStatusText" DockPanel.Dock="Top" IsVisible="False"
-                   Margin="8,3" FontSize="11" TextWrapping="Wrap" />
-
-        <v:DesignerCoordinateStrip DockPanel.Dock="Bottom" />
+        <v:DesignerCoordinateStrip x:Name="CoordinateStrip" DockPanel.Dock="Bottom" />
 
         <!-- Artboard / design canvas with rulers -->
         <Grid>

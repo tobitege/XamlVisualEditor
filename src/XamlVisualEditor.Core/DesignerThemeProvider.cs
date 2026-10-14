@@ -17,7 +17,9 @@ public interface IDesignerThemeProvider
 public sealed record DesignerTheme(string Id, string Name, bool IsDark);
 
 /// <summary>A trusted extension's public, parameterless provider type and absolute assembly path.</summary>
-public sealed record DesignerThemeProviderRegistration(string Id, string Name, string AssemblyPath, string TypeName);
+/// <param name="RequiredAssembly">Assembly name a project must reference before the provider follows the editor theme.</param>
+public sealed record DesignerThemeProviderRegistration(string Id, string Name, string AssemblyPath, string TypeName,
+    string? RequiredAssembly = null);
 
 /// <summary>A selection independent of translated or renamed display text.</summary>
 public sealed record DesignerThemeSelection(string ProviderId, string ThemeId);

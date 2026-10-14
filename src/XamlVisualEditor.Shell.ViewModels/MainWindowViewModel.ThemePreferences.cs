@@ -39,12 +39,14 @@ public sealed partial class MainWindowViewModel
         _themePreferenceStorage = storage;
         Documents.CollectionChanged += OnThemePreferenceDocumentsChanged;
         if (workspaceInfo is not null) workspaceInfo.WorkspaceChanged += OnThemePreferenceWorkspaceChanged;
+        if (_editorThemes is not null) _editorThemes.Changed += OnEditorThemeChangedForPreview;
         _disposables.Add(Disposable.Create(() =>
         {
             _themePreferencesDisposed = true;
             Interlocked.Increment(ref _themePreferenceLoadVersion);
             Documents.CollectionChanged -= OnThemePreferenceDocumentsChanged;
             if (_themeWorkspaceInfo is not null) _themeWorkspaceInfo.WorkspaceChanged -= OnThemePreferenceWorkspaceChanged;
+            if (_editorThemes is not null) _editorThemes.Changed -= OnEditorThemeChangedForPreview;
             foreach (IDisposable subscription in _themePreferenceSubscriptions.Values) subscription.Dispose();
             _themePreferenceSubscriptions.Clear();
             if (!ThemePreferencesSaved.Wait(TimeSpan.FromSeconds(5)))
@@ -60,6 +62,29 @@ public sealed partial class MainWindowViewModel
     private void OnThemePreferenceDocumentsChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
         RefreshThemePreferenceDocuments();
 
+    private void OnEditorThemeChangedForPreview(object? sender, EventArgs args)
+    {
+        if (!_themePreferencesDisposed) ApplyWorkspacePreviewTheme(_workspacePreviewTheme);
+    }
+
+    private DesignerThemeSelection? GetEffectivePreviewTheme(DesignerDocumentViewModel document) =>
+        PreviewThemePreference.GetEffective(_workspacePreviewTheme, GetEditorDerivedPreviewTheme(document));
+
+    private DesignerThemeSelection? GetEditorDerivedPreviewTheme(DesignerDocumentViewModel document)
+    {
+        if (_editorThemes is null || _workspace is not { } workspace) return null;
+        ProjectModel? project = ProjectSelection.FindPreviewProject(workspace, _workspacePath, document.FilePath);
+        return EditorPreviewThemeDefaults.Resolve(_editorThemes.Selection, _editorThemes.IsDark,
+            _extensionContributions?.DesignerThemeProviders ?? Array.Empty<DesignerThemeProviderRegistration>(), project);
+    }
+
+    private void ApplyPreviewTheme(DesignerDocumentViewModel document)
+    {
+        ConfigurePreviewThemes(document);
+        document.SetPreviewThemeSelection(GetEffectivePreviewTheme(document),
+            activatePreviewer: PreviewThemePreference.IsExplicitChoice(_workspacePreviewTheme));
+    }
+
     private void RefreshThemePreferenceDocuments()
     {
         if (_themePreferencesDisposed) return;
@@ -71,10 +96,10 @@ public sealed partial class MainWindowViewModel
         foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())
         {
             if (_themePreferenceSubscriptions.ContainsKey(document)) continue;
-            ConfigurePreviewThemes(document);
-            document.SetPreviewThemeSelection(_workspacePreviewTheme);
+            ApplyPreviewTheme(document);
             _themePreferenceSubscriptions.Add(document, document.WhenAnyValue(item => item.PreviewThemeRequest)
-                .Select(request => request?.Selection).DistinctUntilChanged().Skip(1).Subscribe(OnWorkspacePreviewThemeSelected));
+                .Select(request => request?.Selection).DistinctUntilChanged().Skip(1)
+                .Subscribe(selection => OnWorkspacePreviewThemeSelected(document, selection)));
         }
     }
 
@@ -120,17 +145,18 @@ public sealed partial class MainWindowViewModel
         try
         {
             foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())
-                document.SetPreviewThemeSelection(selection);
+                ApplyPreviewTheme(document);
         }
         finally { _applyingWorkspaceTheme = false; }
     }
 
-    private void OnWorkspacePreviewThemeSelected(DesignerThemeSelection? selection)
+    private void OnWorkspacePreviewThemeSelected(DesignerDocumentViewModel document, DesignerThemeSelection? selection)
     {
-        if (_themePreferencesDisposed || _applyingWorkspaceTheme || selection == _workspacePreviewTheme) return;
+        if (_themePreferencesDisposed || _applyingWorkspaceTheme || selection == GetEffectivePreviewTheme(document)) return;
+        DesignerThemeSelection? stored = PreviewThemePreference.ToStored(selection, GetEditorDerivedPreviewTheme(document));
         _themePreferenceEditVersion++;
-        ApplyWorkspacePreviewTheme(selection);
-        ThemePreferencesSaved = SaveThemePreferenceAsync(ThemePreferencesSaved, _themePreferenceKey, selection);
+        ApplyWorkspacePreviewTheme(stored);
+        ThemePreferencesSaved = SaveThemePreferenceAsync(ThemePreferencesSaved, _themePreferenceKey, stored);
     }
 
     private async Task SaveThemePreferenceAsync(Task previous, string key, DesignerThemeSelection? selection)

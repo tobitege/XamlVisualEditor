@@ -20,12 +20,16 @@ Place `xve.extension.json` at the root of the NuGet package:
         "id": "palette",
         "name": "Sample themes",
         "assembly": "lib/net10.0/Example.Themes.dll",
-        "type": "Example.Themes.PreviewThemeProvider"
+        "type": "Example.Themes.PreviewThemeProvider",
+        "requiresAssembly": "Example.Themes.Library"
       }
     ]
   }
 }
 ```
+
+`requiresAssembly` is optional. It names the theme library a project must reference
+before the preview follows the editor theme (see below).
 
 Include the named DLL and its runtime assets in the package. Assembly paths are
 relative to the installed package and cannot traverse parent directories,
@@ -51,6 +55,23 @@ Calls run on the preview application's UI thread. Providers must not modify the
 document source. They may use the target library's application-wide theme APIs
 because those calls remain outside the editor process.
 
+## Following the editor theme
+
+Without a theme picked for the workspace, a document's preview follows the editor
+theme from the options. Only providers that declare `requiresAssembly` take part, and
+only for documents whose project references that assembly; other projects keep their
+own theme.
+
+- An editor theme from the same package uses the preview theme with the same ID.
+- The builtin editor themes `light` and `dark` use the preview theme of the same name;
+  `system` resolves to the variant the editor currently shows.
+- A theme picked in the designer is stored for the workspace and wins. Picking the
+  project default while the options supply a theme is stored as well; picking the
+  supplied theme returns to following the options.
+
+A theme that follows the options does not switch the document to the external
+previewer; an explicit pick does.
+
 ## Lifecycle
 
 Install and enable the package through Extensions. XVE extracts its payload into
@@ -75,7 +96,7 @@ dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.F
 ```
 
 Install the resulting package from the project's `bin/Debug` directory through Extensions.
-The provider ID is `xamlvisualeditor.flowery-themes/palette`.
+The provider ID is `xamlvisualeditor.flowery-themes/palette`; the provider requires `Flowery.NET`.
 
 The catalog uses the target application's registered themes, exclusions, and preferred order.
 IDs use lowercase registered names. Labels use registered names, not private dropdown display aliases.

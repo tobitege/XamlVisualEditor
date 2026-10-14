@@ -416,17 +416,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         launchInfo = default!;
         error = string.Empty;
 
-        ProjectModel? project = ProjectSelection.FindProjectForFile(workspace, xamlFilePath);
-        if (project is null)
-        {
-            // Render files outside all project folders (for example generated XAML in a
-            // scratch directory) against the loaded workspace project instead of refusing
-            // the start.
-            project = workspace.Projects.FirstOrDefault(p =>
-                FileSystemPathComparison.Equals(p.ProjectPath, workspacePath))
-                ?? ProjectSelection.SelectPreferredProject(workspace.Projects);
-        }
-
+        ProjectModel? project = ProjectSelection.FindPreviewProject(workspace, workspacePath, xamlFilePath);
         if (project is null)
         {
             error = UiStrings.NoProjectForXaml;

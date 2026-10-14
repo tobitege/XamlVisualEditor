@@ -54,6 +54,7 @@ public sealed class EditorThemeService : IEditorThemeService, IDisposable
     public IReadOnlyList<EditorThemeProviderCatalog> Catalogs { get; private set; } = Array.Empty<EditorThemeProviderCatalog>();
     public EditorThemeSelection Selection { get; private set; }
     public string? Error { get; private set; }
+    public bool IsDark => _application.ActualThemeVariant == ThemeVariant.Dark;
     public ThemeVariant PreviewDefaultVariant { get; }
 
     public ResourceDictionary CreatePreviewResources() => EditorThemeResources.CreatePreviewDefaults(_previewDefaults);

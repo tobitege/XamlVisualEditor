@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>XamlVisualEditor.FloweryThemeExtension</RootNamespace>
-    <VersionPrefix>0.2.0</VersionPrefix>
+    <VersionPrefix>0.3.0</VersionPrefix>
     <Description>Flowery.NET themes for the XamlVisualEditor interface and isolated previews.</Description>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeFloweryThemeRuntime</TargetsForTfmSpecificBuildOutput>
   </PropertyGroup>

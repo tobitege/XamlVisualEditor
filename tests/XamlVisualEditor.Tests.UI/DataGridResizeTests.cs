@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Logging;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -105,6 +107,69 @@ public sealed class DataGridResizeTests
             CultureInfo.CurrentUICulture = previousCulture;
             CultureInfo.DefaultThreadCurrentUICulture = previousDefaultCulture;
             XamlVisualEditor.Core.Localization.UiStrings.Culture = previousUiCulture;
+        }
+    }
+
+    [AvaloniaFact]
+    public void DraggingAStarColumnEdgeWidensTheGridInsteadOfSqueezingTheNextColumns()
+    {
+        XamlVisualEditor.App.Services.DataGridColumnSizing.Initialize();
+        IStyle[] styles =
+        [
+            new Avalonia.Themes.Fluent.FluentTheme(),
+            new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://XamlVisualEditor.App/"))
+                { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml") },
+        ];
+        Application.Current!.Styles.AddRange(styles);
+        Window? window = null;
+        try
+        {
+            DataGrid grid = new()
+            {
+                AutoGenerateColumns = false,
+                HeadersVisibility = DataGridHeadersVisibility.Column,
+                CanUserResizeColumns = true,
+                ItemsSource = new[] { "A message" }
+            };
+            foreach ((string header, DataGridLength width, double minWidth) in new[]
+            {
+                ("Message", new DataGridLength(1, DataGridLengthUnitType.Star), 100d),
+                ("Severity", new DataGridLength(120), 20d),
+                ("Source", new DataGridLength(90), 20d)
+            })
+            {
+                grid.Columns.Add(new DataGridTemplateColumn
+                {
+                    Header = header,
+                    Width = width,
+                    MinWidth = minWidth,
+                    CellTemplate = new FuncDataTemplate<string>((value, _) => new TextBlock { Text = value })
+                });
+            }
+            window = new Window { Content = grid, Width = 600, Height = 300 };
+            window.Show();
+            window.UpdateLayout();
+
+            DataGridColumnHeader messageHeader = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+                .Single(header => Equals(header.Content, "Message"));
+            Point edge = messageHeader.TranslatePoint(new Point(messageHeader.Bounds.Width - 1, messageHeader.Bounds.Height / 2), window)!.Value;
+            Point target = new(window.Bounds.Width - 5, edge.Y);
+            window.MouseDown(edge, MouseButton.Left);
+            for (int step = 1; step <= 10; step++)
+                window.MouseMove(new Point(edge.X + (target.X - edge.X) * step / 10, edge.Y), RawInputModifiers.LeftMouseButton);
+            window.MouseUp(target, MouseButton.Left);
+            window.UpdateLayout();
+
+            Assert.Equal(120, grid.Columns[1].ActualWidth, 3);
+            Assert.Equal(90, grid.Columns[2].ActualWidth, 3);
+            Assert.True(grid.Columns.Sum(column => column.ActualWidth) > window.Bounds.Width,
+                $"Columns end at {grid.Columns.Sum(column => column.ActualWidth)} within a {window.Bounds.Width} wide window.");
+        }
+        finally
+        {
+            window?.Close();
+            foreach (IStyle style in styles)
+                Application.Current!.Styles.Remove(style);
         }
     }
 

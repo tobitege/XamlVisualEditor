@@ -145,7 +145,7 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
                 ColumnKey = "Message",
                 Header = UiStrings.Message,
                 Width = new DataGridLength(1, DataGridLengthUnitType.Star),
-                MinWidth = 120,
+                MinWidth = 100,
                 SortMemberPath = "Item.Message",
                 Binding = DataGridBindingDefinition.Create<HierarchicalNode, object>(NodeItemProperty, node => node.Item),
                 CellTemplateKey = "ProblemsMessageCell"

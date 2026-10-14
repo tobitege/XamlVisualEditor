@@ -80,6 +80,7 @@ public sealed class App : Application
         LocalizedResources.Apply(this);
         Views.DocumentTabContextMenus.Extend(this);
         DialogAppearance.Initialize();
+        DataGridColumnSizing.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()

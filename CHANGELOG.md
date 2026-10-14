@@ -62,46 +62,35 @@ uses Semantic Versioning.
 
 ### Fixed
 
-- Fixed the drop preview of a control moved in a Grid of the external previewer showing one cell under the pointer while the drop placed a control with a row or column span elsewhere: preview and drop both keep the spans inside the grid, and the preview marks all spanned cells. The design surface keeps spans inside the grid in the same way.
+- Fixed moving a control with a row or column span in a Grid of the design surface: the move keeps the spans inside the grid.
 - Fixed the File Explorer freezing the window on folders with thousands of entries; a loaded folder level is added to the tree in one step.
 - Fixed the Solution Explorer search missing files in collapsed folders: the search matches any part of a name, ignoring case, and opens the folders above every match while the tree keeps its structure; clearing the search restores the folders that were open before.
 - Fixed the Solution Explorer missing the XAML files of an SDK-style project that lists other items, such as a `None Update` of a text file: the default XAML files of the project folder are always part of the tree unless `EnableDefaultItems` or `EnableDefaultAvaloniaItems` is false, and `AvaloniaXaml Remove` patterns still exclude files. The tree search and "Open in Solution Explorer" find these files now.
 - Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.
 - Fixed `IEditorServices.OpenLocationAsync` failing with "Call from invalid thread" when the file was not open yet: after opening the document, the caret and selection are set on the UI thread.
-- Fixed the status bar text, which kept its initial value because changes notified a wrong property name.
 - Fixed the line and column in the status bar, which stayed at 1, 1 for XAML documents.
 - Fixed property edits with several selected controls, which changed only the first control. The property editor now shows the properties shared by all selected controls, shows differing values as not set, and applies an edit to every selected control as one undo step. Names, collections, templates and events stay single-selection edits.
 - Fixed the selection in the designer, which stayed after a click on the empty area around the document.
 - Fixed previews that failed with an unresolved `using:` namespace when no code had loaded the referenced library yet; the previewer now loads the application libraries the project references before it compiles the XAML.
-- Fixed the read-only notice, which also showed for files that source control checks out on the first edit; it now shows only when the write protection stays, for example while TFVC works offline.
 - Fixed Solution Explorer entries such as `Y:` or `..` for files outside the project folder; these files no longer appear in the tree.
 - Fixed the pointer cursor over the selection: resize handles show the resize direction, and the selection border shows the move cursor and moves the selection.
 - Opening files, folders and workspaces rejects paths that are not fully qualified in the canonical syntax of the operating system; on Windows only drive paths and UNC paths with backslashes are accepted. Recent entries with such paths are dropped and removed from the stored history.
 - Fixed binding errors of the tool chrome when the last tool of a dock closes, gets pinned or leaves the auto-hide preview.
-- Fixed the view menu not reopening a debugger tool that was closed in its dock.
-- Fixed the name of the active window layout getting lost at restart, which also made Save ask for a name again.
 - Fixed the status bar showing line and column while no text editor is visible.
 - Fixed text and XAML editors that showed a newly opened file without syntax colors until the view scrolled.
-- Fixed a restored caret that scrolled a newly opened file sideways before the editor had its width and gutter.
 - Fixed opening a file with many diagnostics freezing the editor: the problems list is rebuilt once per result instead of once per diagnostic.
 - Fixed unreadable text of a selected row under the mouse in the explorer and other lists.
 - Fixed C# files outside a loaded project reporting every reference to another assembly as an error; they report syntax errors only.
 - Fixed a C# file outside the loaded projects pushing the project workspace aside, after which files of the projects lost their references as well.
 - Fixed saving a window layout while several documents were open: the focus moved to another open document during the save and was written into the layout, which then failed to load and was replaced by the default layout. Such a layout file loads again without the document.
 - Fixed panels whose list stopped following the selection after their tab was hidden and shown again, for example the TFVC explorer after loading a workspace.
-- Fixed the TFVC panels forgetting whether their connection settings were shown; each panel keeps its own choice.
 - Fixed the C# language service writing documents to disk, which crashed the application for read-only files.
-- Fixed save, delete and rename errors showing system text; they report read-only, access-denied and in-use files in the current language.
-- Fixed expanding a folder in the TFVC explorer scrolling the tree back to its root; only the rows of the expanded folder are replaced.
 - Fixed missing satellite resource assemblies being reported as unresolved workspace assemblies.
 - Fixed closing the editor logging a binding error for every tab, pin button and document: the dock views let go of their dockables before the layout is saved.
 - Fixed the references panel and the extension manager keeping their subscriptions after the shell was disposed; the throttled references filter still reached the UI dispatcher afterwards.
-- Fixed the editor hanging at startup with growing memory while the debugger adapter path bounced between two values: the debug settings take the current adapter path instead of a stale queued one.
 - Fixed a panel shown again from the View menu staying invisible after its side dock had been emptied: the side dock gets its default width back.
-- Fixed "The calling thread cannot access this object" after the ReactiveUI migration when the previewer updated, a theme package restarted the previewer or ACP asked for a permission: these tasks start on the UI thread again.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
-- Fixed a crashing preview process being reported as a closed transport connection: its own error output stays the reported cause.
-- Fixed installing an extension failing with "Access denied" while a virus scanner still held the extracted files, and stopping the MCP server failing with "The handle is invalid" during a pending accept.
+- Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
 
 ## [0.2.0] - 2026-09-01
 

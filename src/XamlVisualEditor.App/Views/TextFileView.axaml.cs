@@ -178,7 +178,8 @@ public sealed partial class TextFileView : UserControl
 
         // A new document resets the caret and selection of the editor; the view model keeps its own, which the
         // subscriptions below apply.
-        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);        _textEditor.FontSize = vm.FontSize;
+        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
+        _textEditor.FontSize = vm.FontSize;
         _textEditor.ShowLineNumbers = vm.ShowLineNumbers;
         _textEditor.WordWrap = vm.WordWrap;
 

@@ -959,6 +959,11 @@
   <data name="PreviewStatusNotEditable" xml:space="preserve"><value>Preview out of date and not editable. See Problems for rendering errors.</value></data>
   <data name="PreviewStatusRenderUnavailable" xml:space="preserve"><value>Preview unavailable. See Problems for rendering errors.</value></data>
   <data name="PreviewStatusIncomplete" xml:space="preserve"><value>Preview incomplete: {0} control(s) unavailable. See Problems.</value></data>
+  <data name="DesignThemesNoAppXaml" xml:space="preserve"><value>Design themes: no App.axaml or App.xaml found in the workspace (set {0} to use the themes of another application)</value></data>
+  <data name="DesignThemesLoaded" xml:space="preserve"><value>Design themes from {0}: {1}</value></data>
+  <data name="DesignThemesFailed" xml:space="preserve"><value>Design themes failed for {0}: {1}</value></data>
+  <data name="DesignThemesScopeFailed" xml:space="preserve"><value>Design themes from {0} could not be compiled as one scope in the editor ({1}); loadable includes and theme elements are applied one by one.</value></data>
+  <data name="DesignThemesSkipped" xml:space="preserve"><value>Design themes skipped from {0}: {1}</value></data>
   <data name="PreviewerInvalidNumber" xml:space="preserve"><value>"{0}" is not a valid number for {1}.</value></data>
   <data name="PreviewerInvalidValue" xml:space="preserve"><value>"{0}" is not a valid {2} value for {1}.</value></data>
   <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>"{0}" is not a valid value for {1}. Allowed values: {2}.</value></data>

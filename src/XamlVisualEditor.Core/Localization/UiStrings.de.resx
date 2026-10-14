@@ -576,7 +576,7 @@
   <data name="DocumentCreateFailed" xml:space="preserve"><value>Dokument konnte nicht erstellt werden: {0}</value></data>
   <data name="DocumentOpenFailed" xml:space="preserve"><value>Dokument konnte nicht geöffnet werden: {0}</value></data>
   <data name="DocumentSaveFailed" xml:space="preserve"><value>Dokument konnte nicht gespeichert werden; die Änderungen bleiben im Editor: {0}</value></data>
-  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(nur-lesen)</value></data>
+  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(schreibgeschützt)</value></data>
   <data name="ReadOnlyFileBanner" xml:space="preserve"><value>Diese Datei ist schreibgeschützt. Änderungen lassen sich erst speichern, wenn der Schreibschutz aufgehoben ist, zum Beispiel durch Auschecken in der Quellcodeverwaltung.</value></data>
   <data name="DocumentSaveReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gespeichert werden; die Änderungen bleiben im Editor.</value></data>
   <data name="SavingDisabled" xml:space="preserve"><value>Speichern ist deaktiviert</value></data>
@@ -959,6 +959,11 @@
   <data name="PreviewStatusNotEditable" xml:space="preserve"><value>Vorschau veraltet und nicht bearbeitbar. Renderfehler unter Problems.</value></data>
   <data name="PreviewStatusRenderUnavailable" xml:space="preserve"><value>Vorschau nicht verfügbar. Renderfehler unter Problems.</value></data>
   <data name="PreviewStatusIncomplete" xml:space="preserve"><value>Vorschau unvollständig: {0} Control(s) nicht verfügbar. Details unter Problems.</value></data>
+  <data name="DesignThemesNoAppXaml" xml:space="preserve"><value>Design-Themes: keine App.axaml oder App.xaml im Workspace gefunden (mit {0} lassen sich die Themes einer anderen Anwendung verwenden)</value></data>
+  <data name="DesignThemesLoaded" xml:space="preserve"><value>Design-Themes aus {0}: {1}</value></data>
+  <data name="DesignThemesFailed" xml:space="preserve"><value>Design-Themes aus {0} konnten nicht geladen werden: {1}</value></data>
+  <data name="DesignThemesScopeFailed" xml:space="preserve"><value>Die Design-Themes aus {0} ließen sich im Editor nicht als ein Bereich kompilieren ({1}); ladbare Includes und Theme-Elemente werden einzeln angewendet.</value></data>
+  <data name="DesignThemesSkipped" xml:space="preserve"><value>Übersprungene Design-Themes aus {0}: {1}</value></data>
   <data name="PreviewerInvalidNumber" xml:space="preserve"><value>„{0}“ ist keine gültige Zahl für {1}.</value></data>
   <data name="PreviewerInvalidValue" xml:space="preserve"><value>„{0}“ ist kein gültiger {2}-Wert für {1}.</value></data>
   <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>„{0}“ ist kein gültiger Wert für {1}. Erlaubt: {2}.</value></data>

@@ -9270,8 +9270,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (appXamlPath is null)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace"
-                + $" (set {WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable} to use another application's themes)");
+            LogOutput("Info", string.Format(UiStrings.DesignThemesNoAppXaml, WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable));
             return;
         }
 
@@ -9282,12 +9281,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             string sourceLabel = overridePath is null
                 ? appXamlPath
                 : $"{appXamlPath} ({WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable})";
-            LogOutput("Info", $"Design themes from {sourceLabel}: {string.Join("; ", details)}");
+            LogOutput("Info", string.Format(UiStrings.DesignThemesLoaded, sourceLabel, string.Join("; ", details)));
         }
         catch (Exception ex)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Warning", $"Design themes failed for {appXamlPath}: {ex.Message}");
+            LogOutput("Warning", string.Format(UiStrings.DesignThemesFailed, appXamlPath, ex.Message));
         }
     }
 

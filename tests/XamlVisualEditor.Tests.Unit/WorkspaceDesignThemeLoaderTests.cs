@@ -6,12 +6,16 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
 using Xunit;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.Tests.Unit;
 
 public class WorkspaceDesignThemeLoaderTests
 {
+    // The fixed end of the localized report after its last placeholder, in whatever UI language the test runs.
+    private static string ScopeFailedTail => UiStrings.DesignThemesScopeFailed[(UiStrings.DesignThemesScopeFailed.IndexOf("{1}", StringComparison.Ordinal) + 3)..];
+
     [AvaloniaFact]
     public void LoadFromApplicationXaml_AppliesTheLoadableParts_WhenTheApplicationScopeCannotBeCompiled()
     {
@@ -44,7 +48,7 @@ public class WorkspaceDesignThemeLoaderTests
             Style probe = Assert.IsType<Style>(Assert.Single(scope.OfType<Styles>().SelectMany(styles => styles)));
             Assert.Contains("probe", probe.Selector!.ToString(), StringComparison.Ordinal);
             Assert.Collection(reports,
-                report => Assert.Contains("applied one by one", report, StringComparison.Ordinal),
+                report => Assert.EndsWith(ScopeFailedTail, report, StringComparison.Ordinal),
                 report => Assert.Contains("avares://XamlVisualEditor.Tests.MissingAssembly/Styles.axaml", report, StringComparison.Ordinal));
 
             Assert.IsType<Styles>(factory());

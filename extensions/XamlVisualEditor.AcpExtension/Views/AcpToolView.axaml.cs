@@ -1,11 +1,11 @@
 using System;
 using System.Diagnostics;
-using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 using ReactiveUI;
 using XamlVisualEditor.Acp;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.AcpExtension.Views;
 
@@ -39,7 +39,7 @@ public sealed partial class AcpToolView : UserControl
                 await clipboard.SetTextAsync(interaction.Input);
             }
 
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
 
         _openUrlHandler = vm.OpenUrlInteraction.RegisterHandler(interaction =>
@@ -57,7 +57,7 @@ public sealed partial class AcpToolView : UserControl
             {
             }
 
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
             return System.Threading.Tasks.Task.CompletedTask;
         });
 

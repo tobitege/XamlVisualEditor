@@ -15,6 +15,9 @@ using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Intellisense;
 using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.CodeEditor;
 
@@ -178,32 +181,32 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Command to trigger completion.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> TriggerCompletionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> TriggerCompletionCommand { get; }
 
     /// <summary>
     /// Command to undo.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> UndoCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UndoCommand { get; }
 
     /// <summary>
     /// Command to redo.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> RedoCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RedoCommand { get; }
 
     /// <summary>
     /// Command to format (pretty-print) the document.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> FormatDocumentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> FormatDocumentCommand { get; }
 
     /// <summary>
     /// Command to increase font size.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> IncreaseFontSizeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> IncreaseFontSizeCommand { get; }
 
     /// <summary>
     /// Command to decrease font size.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> DecreaseFontSizeCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DecreaseFontSizeCommand { get; }
 
     public CodeEditorViewModel(
         string filePath,
@@ -241,7 +244,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
             .Throttle(TimeSpan.FromMilliseconds(300))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => OnTextChanged());
         _disposables.Add(textChangedSubscription);
 
@@ -250,7 +253,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
         _disposables.Add(semanticTokensSubscription);
 
@@ -265,14 +268,14 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         // Subscribe to sync events to receive AST→text updates
         IDisposable syncSubscription = _syncEngine.SyncEvents
             .Where(e => e.Source == SyncSource.DesignSurface || e.Source == SyncSource.Collaboration)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(OnSyncEvent);
         _disposables.Add(syncSubscription);
 
         // Map caret offset to line/column and AST node
         IDisposable caretSubscription = this.WhenAnyValue(x => x.CaretOffset)
             .Throttle(TimeSpan.FromMilliseconds(100))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(offset => UpdateCaretPosition(offset));
         _disposables.Add(caretSubscription);
 

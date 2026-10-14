@@ -14,9 +14,12 @@ using Dock.Model.Core.Events;
 using Dock.Model.ReactiveUI.Controls;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -84,7 +87,7 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
 
         IDisposable saveSubscription = _saveRequests
             .Throttle(TimeSpan.FromMilliseconds(SaveThrottleMs))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => SaveLayout());
         _disposables.Add(saveSubscription);
 
@@ -99,11 +102,11 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
 
     public ObservableCollection<OpenDocumentEntry> OpenDocuments { get; } = new();
 
-    public ReactiveCommand<CanvasDropInfo, Unit> DropFilesCommand { get; }
+    public ReactiveCommand<CanvasDropInfo, RxVoid> DropFilesCommand { get; }
 
-    public ReactiveCommand<OpenDocumentEntry?, Unit> AddOpenDocumentCommand { get; }
+    public ReactiveCommand<OpenDocumentEntry?, RxVoid> AddOpenDocumentCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> AddAllOpenDocumentsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddAllOpenDocumentsCommand { get; }
 
     [Reactive]
     public partial OpenDocumentEntry? SelectedOpenDocument { get; set; }

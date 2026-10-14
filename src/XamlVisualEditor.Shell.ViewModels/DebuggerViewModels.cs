@@ -9,8 +9,11 @@ using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions.Debugging;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -61,14 +64,14 @@ public sealed partial class BreakpointsViewModel : ReactiveObject
 
     public event Action? BreakpointsChanged;
 
-    public ReactiveCommand<Unit, Unit> ClearCommand { get; }
-    public ReactiveCommand<BreakpointEntryViewModel, Unit> RemoveCommand { get; }
-    public ReactiveCommand<Unit, Unit> RemoveSelectedCommand { get; }
-    public ReactiveCommand<Unit, Unit> EnableSelectedCommand { get; }
-    public ReactiveCommand<Unit, Unit> DisableSelectedCommand { get; }
-    public ReactiveCommand<Unit, Unit> ClearConditionCommand { get; }
-    public ReactiveCommand<Unit, Unit> ClearHitConditionCommand { get; }
-    public ReactiveCommand<Unit, Unit> ClearLogMessageCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearCommand { get; }
+    public ReactiveCommand<BreakpointEntryViewModel, RxVoid> RemoveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RemoveSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> EnableSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DisableSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearConditionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearHitConditionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearLogMessageCommand { get; }
 
     public BreakpointsViewModel()
     {
@@ -364,8 +367,8 @@ public sealed partial class WatchesViewModel : ReactiveObject
     [Reactive]
     public partial WatchExpressionViewModel? SelectedWatch { get; set; }
 
-    public ReactiveCommand<Unit, Unit> AddWatchCommand { get; }
-    public ReactiveCommand<WatchExpressionViewModel, Unit> RemoveWatchCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddWatchCommand { get; }
+    public ReactiveCommand<WatchExpressionViewModel, RxVoid> RemoveWatchCommand { get; }
 
     public WatchesViewModel()
     {
@@ -432,7 +435,7 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
                 handler => (_, _) => handler(EventArgs.Empty),
                 h => _debuggerRegistry.Changed += h,
                 h => _debuggerRegistry.Changed -= h)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(HasDebuggerService)));
     }
 
@@ -513,7 +516,7 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
                 handler => state => handler(state),
                 h => session.StateChanged += h,
                 h => session.StateChanged -= h)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(state => State = state);
         _sessionDisposables.Add(stateSubscription);
 
@@ -521,7 +524,7 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
                 handler => ev => handler(ev),
                 h => session.EventReceived += h,
                 h => session.EventReceived -= h)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleDebugEvent);
         _sessionDisposables.Add(eventSubscription);
     }

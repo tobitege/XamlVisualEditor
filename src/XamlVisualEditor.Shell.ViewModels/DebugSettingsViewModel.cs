@@ -5,8 +5,11 @@ using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions.Debugging;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -40,7 +43,7 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
 
     public bool IsNetcoredbgSelected => string.Equals(SelectedDebuggerService?.Id, NetcoredbgServiceId, StringComparison.Ordinal);
 
-    public ReactiveCommand<Unit, Unit> DownloadNetcoredbgCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DownloadNetcoredbgCommand { get; }
 
     public DebugSettingsViewModel(
         IDebuggerServiceRegistry debuggerRegistry,
@@ -63,14 +66,18 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
         AdapterPath = _getAdapterPath();
         AutoDownloadTools = _getAutoDownload();
 
+        // Deliveries are queued on the main thread scheduler. A delivered value can be stale by then,
+        // and writing it back through AdapterPath would bounce between two values forever, so the
+        // current source value is taken instead.
         adapterPathChanges
             .DistinctUntilChanged()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(path =>
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ =>
             {
-                if (!string.Equals(AdapterPath, path, StringComparison.Ordinal))
+                string current = _getAdapterPath();
+                if (!string.Equals(AdapterPath, current, StringComparison.Ordinal))
                 {
-                    AdapterPath = path;
+                    AdapterPath = current;
                 }
             });
 
@@ -83,7 +90,7 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
             .Subscribe(value => _setAutoDownload(value));
 
         IObservable<bool> canDownloadNetcoredbg = this.WhenAnyValue(x => x.SelectedDebuggerService, x => x.IsBusy)
-            .Select(tuple => string.Equals(tuple.Item1?.Id, NetcoredbgServiceId, StringComparison.Ordinal) && !tuple.Item2);
+            .Select(tuple => string.Equals(tuple.Property1?.Id, NetcoredbgServiceId, StringComparison.Ordinal) && !tuple.Property2);
         DownloadNetcoredbgCommand = ReactiveCommand.CreateFromTask(DownloadNetcoredbgAsync, canDownloadNetcoredbg);
 
         RefreshServices();
@@ -92,7 +99,7 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
                 handler => (_, _) => handler(EventArgs.Empty),
                 h => _debuggerRegistry.Changed += h,
                 h => _debuggerRegistry.Changed -= h)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => RefreshServices());
 
         this.WhenAnyValue(x => x.SelectedDebuggerService)

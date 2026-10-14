@@ -12,9 +12,12 @@ using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
 using Avalonia.Controls.DataGridSorting;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.NavigationExtension;
 
@@ -106,9 +109,9 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
 
     public SearchModel SearchModel { get; }
 
-    public ReactiveCommand<ReferenceLocationItemViewModel, Unit> OpenLocationCommand { get; }
+    public ReactiveCommand<ReferenceLocationItemViewModel, RxVoid> OpenLocationCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
     public ReferencesPanelViewModel(
         ILanguageNavigationService navigation,
@@ -155,7 +158,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
     }
 

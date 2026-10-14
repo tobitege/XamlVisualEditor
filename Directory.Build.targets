@@ -5,6 +5,10 @@
     </PropertyGroup>
   </Target>
 
+  <ItemGroup Condition="'@(PackageReference->WithMetadataValue('Identity', 'Microsoft.Build.Framework'))' != ''">
+    <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(IsXveExtension)' == 'true'">
     <XveExtensionName Condition="'$(XveExtensionName)' == ''">$(MSBuildProjectName)</XveExtensionName>
     <XveExtensionDisplayName Condition="'$(XveExtensionDisplayName)' == ''">$(MSBuildProjectName)</XveExtensionDisplayName>

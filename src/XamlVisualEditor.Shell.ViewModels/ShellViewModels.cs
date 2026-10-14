@@ -52,6 +52,9 @@ using XamlVisualEditor.Shell;
 using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Core.Logging;
 using XamlVisualEditor.Terminal;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -65,7 +68,7 @@ public interface IEditorDocumentViewModel : IDisposable
     bool IsModified { get; }
     int CurrentLine { get; }
     int CurrentColumn { get; }
-    ReactiveCommand<Unit, Unit> SaveCommand { get; }
+    ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
 }
 
 /// <summary>
@@ -174,27 +177,27 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// <summary>
     /// Command to save the document.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
 
     /// <summary>
     /// Command to close the document.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CloseCommand { get; }
 
     /// <summary>
     /// Command to switch to design view.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> DesignViewCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DesignViewCommand { get; }
 
     /// <summary>
     /// Command to switch to code view.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> CodeViewCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CodeViewCommand { get; }
 
     /// <summary>
     /// Command to switch to split view.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> SplitViewCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SplitViewCommand { get; }
 
     /// <summary>
     /// Command to start the external previewer for this document.
@@ -211,7 +214,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// <summary>
     /// Command to navigate to the selected control definition.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> NavigateToDefinitionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NavigateToDefinitionCommand { get; }
 
     public DesignerDocumentViewModel(
         string filePath,
@@ -322,7 +325,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 
         // Listen for sync events to update trees
         IDisposable syncEventsSubscription = SyncEngine.SyncEvents
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 // After any sync, commit pending changes as an undo batch
@@ -359,12 +362,12 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 
         IDisposable previewerToggleSubscription = this.WhenAnyValue(x => x.UseExternalPreviewer)
             .Where(usePreviewer => usePreviewer)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => StartPreviewerCommand?.Execute(null));
         _disposables.Add(previewerToggleSubscription);
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleBreakpointsChanged);
         _disposables.Add(breakpointSourceSubscription);
     }
@@ -606,7 +609,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
     [Reactive]
     public partial BreakpointsViewModel? Breakpoints { get; set; }
 
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
 
     public TextDocumentViewModel(string filePath, ILanguageIntellisenseRegistry? languageRegistry = null)
     {
@@ -628,7 +631,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged && _languageService is not null)
             .Throttle(TimeSpan.FromMilliseconds(400))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshDiagnosticsAsync(); });
         _disposables.Add(diagnosticsSubscription);
 
@@ -637,7 +640,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged && _languageService is not null)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
         _disposables.Add(semanticTokensSubscription);
 
@@ -658,7 +661,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         }
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleBreakpointsChanged);
         _disposables.Add(breakpointSourceSubscription);
     }
@@ -1194,7 +1197,7 @@ public sealed partial class ToolboxViewModel : ReactiveObject, IDisposable
         // Filter items on search
         IDisposable filterSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(filter =>
             {
                 foreach (ToolboxItemViewModel item in Items)
@@ -1285,17 +1288,17 @@ public sealed partial class OutputViewModel : ReactiveObject, IOutputLogSink
     /// <summary>
     /// Command to clear the output.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ClearCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearCommand { get; }
 
     /// <summary>
     /// Command to copy the selected message.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> CopySelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopySelectedCommand { get; }
 
     /// <summary>
     /// Command to copy all messages.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> CopyAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyAllCommand { get; }
 
     /// <summary>
     /// Gets or sets the selected output message.
@@ -1306,7 +1309,7 @@ public sealed partial class OutputViewModel : ReactiveObject, IOutputLogSink
     /// <summary>
     /// Interaction to copy output text to the clipboard.
     /// </summary>
-    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
 
     public OutputViewModel()
     {
@@ -1623,9 +1626,9 @@ public sealed partial class ReferencesViewModel : ReactiveObject
 
     public SearchModel SearchModel { get; }
 
-    public ReactiveCommand<ReferenceLocationViewModel, Unit> OpenLocationCommand { get; }
+    public ReactiveCommand<ReferenceLocationViewModel, RxVoid> OpenLocationCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
     public ReferencesViewModel(Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> navigateAsync)
     {
@@ -1666,7 +1669,7 @@ public sealed partial class ReferencesViewModel : ReactiveObject
 
         _lifetimeDisposables.Add(this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch));
     }
 
@@ -1832,10 +1835,10 @@ public sealed partial class DefinitionPickerDialogViewModel : ReactiveObject
     [Reactive]
     public partial ReferenceLocationViewModel? SelectedItem { get; set; }
 
-    public Interaction<ReferenceLocationViewModel?, Unit> CloseInteraction { get; } = new();
+    public Interaction<ReferenceLocationViewModel?, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> OpenCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public DefinitionPickerDialogViewModel(DefinitionPickerRequest request)
     {
@@ -1886,10 +1889,10 @@ public sealed partial class CodeActionPickerDialogViewModel : ReactiveObject
     [Reactive]
     public partial CodeActionItemViewModel? SelectedItem { get; set; }
 
-    public Interaction<LanguageCodeAction?, Unit> CloseInteraction { get; } = new();
+    public Interaction<LanguageCodeAction?, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ApplyCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public CodeActionPickerDialogViewModel(CodeActionPickerRequest request)
     {
@@ -1925,10 +1928,10 @@ public sealed partial class RenameSymbolDialogViewModel : ReactiveObject
     [Reactive]
     public partial string Name { get; set; }
 
-    public Interaction<string?, Unit> CloseInteraction { get; } = new();
+    public Interaction<string?, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ConfirmCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public RenameSymbolDialogViewModel(string title, string prompt, string name)
     {
@@ -1971,11 +1974,11 @@ public sealed partial class PreviewerTrustDialogViewModel : ReactiveObject
     public string Message { get; }
     public string Location { get; }
 
-    public Interaction<PreviewerTrustDecision, Unit> CloseInteraction { get; } = new();
+    public Interaction<PreviewerTrustDecision, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> TrustCommand { get; }
-    public ReactiveCommand<Unit, Unit> AllowOnceCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> TrustCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AllowOnceCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public PreviewerTrustDialogViewModel(PreviewerTrustRequest request)
     {
@@ -2004,10 +2007,10 @@ public sealed partial class DebugToolConsentDialogViewModel : ReactiveObject
     public string DownloadUrl { get; }
     public string InstallPath { get; }
 
-    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> AllowCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AllowCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public DebugToolConsentDialogViewModel(DebugToolConsentRequest request)
     {
@@ -2444,12 +2447,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>
     /// Interaction for opening a file dialog.
     /// </summary>
-    public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
+    public Interaction<RxVoid, string?> OpenFileInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for selecting an extension package.
     /// </summary>
-    public Interaction<Unit, string?> ExtensionPackageOpenInteraction { get; } = new();
+    public Interaction<RxVoid, string?> ExtensionPackageOpenInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for saving a file dialog.
@@ -2489,7 +2492,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>
     /// Interaction for applying theme variants.
     /// </summary>
-    public Interaction<ThemeVariantOption, Unit> ThemeVariantInteraction { get; } = new();
+    public Interaction<ThemeVariantOption, RxVoid> ThemeVariantInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for debug tool download consent.
@@ -2540,75 +2543,75 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public partial bool IsRunActive { get; private set; }
 
     // File Commands
-    public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenDocumentCommand { get; }
-    public ReactiveCommand<string, Unit> OpenPathCommand { get; }
-    public ReactiveCommand<IReadOnlyList<string>, Unit> OpenPathsCommand { get; }
-    public ReactiveCommand<Unit, Unit> SaveDocumentCommand { get; }
-    public ReactiveCommand<Unit, Unit> SaveAllCommand { get; }
-    public ReactiveCommand<Unit, Unit> ExitCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NewDocumentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenDocumentCommand { get; }
+    public ReactiveCommand<string, RxVoid> OpenPathCommand { get; }
+    public ReactiveCommand<IReadOnlyList<string>, RxVoid> OpenPathsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveDocumentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExitCommand { get; }
 
     // Save behavior commands
-    public ReactiveCommand<Unit, Unit> SetAutoSaveCommand { get; }
-    public ReactiveCommand<Unit, Unit> SetManualSaveCommand { get; }
-    public ReactiveCommand<Unit, Unit> SetNoSaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetAutoSaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetManualSaveCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetNoSaveCommand { get; }
 
     // Theme commands
-    public ReactiveCommand<Unit, Unit> SetThemeDefaultCommand { get; }
-    public ReactiveCommand<Unit, Unit> SetThemeLightCommand { get; }
-    public ReactiveCommand<Unit, Unit> SetThemeDarkCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetThemeDefaultCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetThemeLightCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetThemeDarkCommand { get; }
 
     // Extension-owned non-lifecycle shell command handlers
-    private ReactiveCommand<Unit, Unit> UndoCommand { get; }
-    private ReactiveCommand<Unit, Unit> RedoCommand { get; }
-    private ReactiveCommand<Unit, Unit> CutCommand { get; }
-    private ReactiveCommand<Unit, Unit> CopyCommand { get; }
-    private ReactiveCommand<Unit, Unit> PasteCommand { get; }
-    private ReactiveCommand<Unit, Unit> DeleteCommand { get; }
-    private ReactiveCommand<Unit, Unit> SelectAllCommand { get; }
-    private ReactiveCommand<Unit, Unit> RenameSymbolCommand { get; }
-    private ReactiveCommand<Unit, Unit> FormatDocumentCommand { get; }
-    private ReactiveCommand<Unit, Unit> CodeActionsCommand { get; }
-    private ReactiveCommand<Unit, Unit> DocumentSymbolsCommand { get; }
-    private ReactiveCommand<Unit, Unit> WorkspaceSymbolsCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> UndoCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> RedoCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> CutCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> CopyCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> PasteCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> DeleteCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> SelectAllCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> RenameSymbolCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> FormatDocumentCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> CodeActionsCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> DocumentSymbolsCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> WorkspaceSymbolsCommand { get; }
 
     // View Commands
-    private ReactiveCommand<Unit, Unit> ToggleBreakpointsCommand { get; }
-    private ReactiveCommand<Unit, Unit> ToggleCallStackCommand { get; }
-    private ReactiveCommand<Unit, Unit> ToggleLocalsCommand { get; }
-    private ReactiveCommand<Unit, Unit> ToggleWatchesCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleExtensionsManagerCommand { get; }
-    public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> ToggleBreakpointsCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> ToggleCallStackCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> ToggleLocalsCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> ToggleWatchesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleExtensionsManagerCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ResetLayoutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenCanvasCommand { get; }
 
     // Help Commands
-    public ReactiveCommand<Unit, Unit> AboutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AboutCommand { get; }
 
     // Previewer Commands
-    public ReactiveCommand<Unit, Unit> StartPreviewerCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StartPreviewerCommand { get; }
 
     // Extension-owned non-lifecycle shell command handlers
-    private ReactiveCommand<Unit, Unit> StartDebugCommand { get; }
-    private ReactiveCommand<Unit, Unit> StopDebugCommand { get; }
-    private ReactiveCommand<Unit, Unit> ContinueDebugCommand { get; }
-    private ReactiveCommand<Unit, Unit> StepOverCommand { get; }
-    private ReactiveCommand<Unit, Unit> StepInCommand { get; }
-    private ReactiveCommand<Unit, Unit> StepOutCommand { get; }
-    private ReactiveCommand<Unit, Unit> PauseDebugCommand { get; }
-    private ReactiveCommand<Unit, Unit> ToggleBreakpointCommand { get; }
-    private ReactiveCommand<Unit, Unit> StartRunCommand { get; }
-    private ReactiveCommand<Unit, Unit> StopRunCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StartDebugCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StopDebugCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> ContinueDebugCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StepOverCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StepInCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StepOutCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> PauseDebugCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> ToggleBreakpointCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StartRunCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> StopRunCommand { get; }
 
     // Terminal Commands
-    private ReactiveCommand<Unit, Unit> NewTerminalCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> NewTerminalCommand { get; }
 
     // Command palette
-    public ReactiveCommand<Unit, Unit> ShowCommandPaletteCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShowCommandPaletteCommand { get; }
 
     /// <summary>
     /// Command to close a specific document (used by tab close button).
     /// </summary>
-    public ReactiveCommand<IEditorDocumentViewModel, Unit> CloseDocumentCommand { get; }
+    public ReactiveCommand<IEditorDocumentViewModel, RxVoid> CloseDocumentCommand { get; }
 
     public MainWindowViewModel(
         IWorkspaceService? workspaceService = null,
@@ -2651,7 +2654,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _extensionViewRegistry = extensionViewRegistry;
         ExtensionManager = new ExtensionManagerViewModel(
             extensionManager ?? new NullExtensionManager(),
-            () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
+            () => ExtensionPackageOpenInteraction.Handle(RxVoid.Default));
         SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
 
         if (_extensionContributions is not null)
@@ -2724,19 +2727,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         WireDockEvents();
 
 
-        IObservable<int> activeLine = this.WhenAnyValue(x => x.ActiveDocument)
+        IObservable<int> activeLine = Observable.Switch(this.WhenAnyValue(x => x.ActiveDocument)
             .Select(doc => doc is null
                 ? Observable.Return(1)
                 : ObserveDocumentProperty(doc, nameof(IEditorDocumentViewModel.CurrentLine), () => doc.CurrentLine))
-            .Switch();
+            );
         _activeLine = activeLine.ToProperty(this, x => x.ActiveLine);
         _disposables.Add(_activeLine);
 
-        IObservable<int> activeColumn = this.WhenAnyValue(x => x.ActiveDocument)
+        IObservable<int> activeColumn = Observable.Switch(this.WhenAnyValue(x => x.ActiveDocument)
             .Select(doc => doc is null
                 ? Observable.Return(1)
                 : ObserveDocumentProperty(doc, nameof(IEditorDocumentViewModel.CurrentColumn), () => doc.CurrentColumn))
-            .Switch();
+            );
         _activeColumn = activeColumn.ToProperty(this, x => x.ActiveColumn);
         _disposables.Add(_activeColumn);
 
@@ -3077,7 +3080,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 this.WhenAnyValue(x => x.IsRunActive).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.HasDebuggerService).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.State).Select(_ => Unit.Default))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => RefreshExtensionCommandEnablement());
         _disposables.Add(extensionCommandEnablementSubscription);
 
@@ -3099,20 +3102,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _disposables.Add(activeDocumentDockSubscription);
 
         // Refresh trees on sync events from active document (Switch unsubscribes from previous)
-        IDisposable activeDocumentSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+        IDisposable activeDocumentSyncSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Where(d => d is not null && !d.IsDisposed)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
-            .Switch()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
 
-        IDisposable previewerUpdateSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+        IDisposable previewerUpdateSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Where(d => d is not null && !d.IsDisposed)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
-            .Switch()
+            )
             .Throttle(TimeSpan.FromMilliseconds(250))
-            .ObserveOn(RxSchedulers.TaskpoolScheduler)
+            .WitnessOn(RxSchedulers.TaskpoolScheduler)
             .Subscribe(d =>
             {
                 if (_workspace is null)
@@ -3163,19 +3166,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }));
 
         IDisposable executionFrameSubscription = Debugger.CallStack.WhenAnyValue(x => x.SelectedFrame)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(UpdateExecutionLocationFromFrame);
         _disposables.Add(executionFrameSubscription);
 
-        IDisposable activeDocumentDiagnosticsSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+        IDisposable activeDocumentDiagnosticsSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null
                 ? Observable.Return<(DesignerDocumentViewModel? Doc, IReadOnlyList<XamlDiagnostic> Diags)>(
                     (null, Array.Empty<XamlDiagnostic>()))
                 : doc.SyncEngine.SyncEvents.Select(e =>
                     (Doc: (DesignerDocumentViewModel?)doc,
                         Diags: (IReadOnlyList<XamlDiagnostic>)(e.Diagnostics ?? Array.Empty<XamlDiagnostic>()))))
-            .Switch()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(result =>
             {
                 string? filePath = result.Doc?.FilePath;
@@ -3184,7 +3187,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             });
         _disposables.Add(activeDocumentDiagnosticsSubscription);
 
-        IDisposable activeTextDiagnosticsSubscription = this.WhenAnyValue(x => x.ActiveTextDocument)
+        IDisposable activeTextDiagnosticsSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveTextDocument)
             .Select(doc => doc is null
                 ? Observable.Empty<IReadOnlyList<LanguageDiagnostic>>()
                 : Observable.FromEventPattern<System.Collections.Specialized.NotifyCollectionChangedEventHandler,
@@ -3193,8 +3196,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                         h => doc.Diagnostics.CollectionChanged -= h)
                     .Select(_ => (IReadOnlyList<LanguageDiagnostic>)doc.Diagnostics.ToList())
                     .StartWith((IReadOnlyList<LanguageDiagnostic>)doc.Diagnostics.ToList()))
-            .Switch()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(diags => Output.ReplaceLanguageDiagnostics(diags));
         _disposables.Add(activeTextDiagnosticsSubscription);
 
@@ -3223,34 +3226,34 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         IDisposable themeVariantInteractionSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
             .Skip(1)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(option => _ = ThemeVariantInteraction.Handle(option));
         _disposables.Add(themeVariantInteractionSubscription);
 
         // Sync tree selection when active document selection changes
-        IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+        IDisposable selectionSyncSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null || doc.IsDisposed
                 ? Observable.Return<Guid?>(null)
                 : doc.WhenAnyValue(d => d.SelectedNodeId))
-            .Switch()
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(id => ApplySelectionToTrees(id));
         _disposables.Add(selectionSyncSubscription);
 
         // Sync grid selections back to the active document
         IDisposable visualTreeSelectionSubscription = this.WhenAnyValue(x => x.VisualTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
-            .Where(t => t.doc is not null && !t.doc.IsDisposed)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
+            .Where(t => t.doc is not null && !t.doc.IsDisposed && !_suppressTreeSelectionSync)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Where(_ => !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(visualTreeSelectionSubscription);
 
         IDisposable logicalTreeSelectionSubscription = this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
-            .Where(t => t.doc is not null && !t.doc.IsDisposed)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
+            .Where(t => t.doc is not null && !t.doc.IsDisposed && !_suppressTreeSelectionSync)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Where(_ => !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
 
@@ -3282,7 +3285,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     private Task ExecuteReactiveCommandAsync(
-        ReactiveCommand<Unit, Unit> reactiveCommand,
+        ReactiveCommand<RxVoid, RxVoid> reactiveCommand,
         CancellationToken cancellationToken)
     {
         if (Dispatcher.UIThread.CheckAccess())
@@ -3311,7 +3314,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     private static Task ExecuteReactiveCommandCoreAsync(
-        ReactiveCommand<Unit, Unit> reactiveCommand,
+        ReactiveCommand<RxVoid, RxVoid> reactiveCommand,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -3345,22 +3348,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         Func<DesignerDocumentViewModel, bool> evaluator,
         params Func<DesignerDocumentViewModel, IObservable<Unit>>[] changeSources)
     {
-        return this.WhenAnyValue(x => x.ActiveDesignerDocument)
+        return Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null
                 ? Observable.Return(false)
                 : ObserveDocumentState(doc, evaluator, changeSources))
-            .Switch();
+            );
     }
 
     private IObservable<bool> ObserveTextDocumentState(
         Func<TextDocumentViewModel, bool> evaluator,
         params Func<TextDocumentViewModel, IObservable<Unit>>[] changeSources)
     {
-        return this.WhenAnyValue(x => x.ActiveTextDocument)
+        return Observable.Switch(this.WhenAnyValue(x => x.ActiveTextDocument)
             .Select(doc => doc is null
                 ? Observable.Return(false)
                 : ObserveDocumentState(doc, evaluator, changeSources))
-            .Switch();
+            );
     }
 
     private static IObservable<bool> ObserveDocumentState<TDocument>(
@@ -3537,7 +3540,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         try
         {
-            string? filePath = await OpenFileInteraction.Handle(Unit.Default);
+            string? filePath = await OpenFileInteraction.Handle(RxVoid.Default);
             if (!string.IsNullOrEmpty(filePath))
             {
                 await OpenFileAsync(filePath);
@@ -3571,7 +3574,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            await ActiveDocument.SaveCommand.Execute();
+            await ActiveDocument.SaveCommand.Execute().ToTask();
             StatusText = $"Saved {ActiveDocument.FileName}";
         }
     }
@@ -3599,7 +3602,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     continue;
                 }
 
-                await doc.SaveCommand.Execute();
+                await doc.SaveCommand.Execute().ToTask();
             }
         }
         StatusText = "All documents saved";
@@ -4021,7 +4024,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         IDisposable subscription = doc.SyncEngine.SyncEvents
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
                 _ = AutoSaveAsync(doc);
@@ -4041,7 +4044,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             h => doc.Document.TextChanged += h,
             h => doc.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
                 _ = AutoSaveAsync(doc);
@@ -4070,7 +4073,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await doc.SaveCommand.Execute();
+        await doc.SaveCommand.Execute().ToTask();
         StatusText = $"Auto-saved {doc.FileName}";
     }
 
@@ -4086,7 +4089,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await doc.SaveCommand.Execute();
+        await doc.SaveCommand.Execute().ToTask();
         StatusText = $"Auto-saved {doc.FileName}";
     }
 
@@ -6075,7 +6078,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 h => notifying.PropertyChanged -= h)
             .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) ||
                         e.EventArgs.PropertyName == nameof(IEditorDocumentViewModel.IsModified))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateDockTitle(document, dockDoc));
 
         _dockTitleSubscriptions[document] = subscription;
@@ -7215,7 +7218,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private System.Threading.Tasks.Task<bool> ConfirmDebugToolConsentAsync(DebugToolConsentRequest request)
     {
-        return DebugToolConsentInteraction.Handle(request).ToTask();
+        return DebugToolConsentInteraction.Handle(request);
     }
 
     private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
@@ -8206,7 +8209,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
     /// <summary>
     /// Command to open the associated file.
     /// </summary>
-    public ReactiveCommand<Unit, Unit>? OpenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? OpenCommand { get; }
 
     public SolutionExplorerNodeViewModel(
         string name,
@@ -8466,9 +8469,9 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
     /// <summary>Raised when a XAML file is opened from the tree.</summary>
     public event Action<string>? FileOpenRequested;
 
-    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenSelectedCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> SetStartupProjectCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SetStartupProjectCommand { get; }
 
     public SolutionExplorerViewModel(ISystemIconService? systemIcons = null, ICommands? extensionCommands = null)
     {
@@ -8507,7 +8510,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
         IObservable<bool> canOpen = this.WhenAnyValue(x => x.SelectedNode)

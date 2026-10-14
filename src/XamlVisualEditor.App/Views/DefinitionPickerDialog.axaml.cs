@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ReactiveUI;
 using XamlVisualEditor.Shell.ViewModels;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -26,7 +27,7 @@ public sealed partial class DefinitionPickerDialog : Window
             _closeHandler = vm.CloseInteraction.RegisterHandler(ctx =>
             {
                 Close(ctx.Input);
-                ctx.SetOutput(Unit.Default);
+                ctx.SetOutput(RxVoid.Default);
             });
         }
     }

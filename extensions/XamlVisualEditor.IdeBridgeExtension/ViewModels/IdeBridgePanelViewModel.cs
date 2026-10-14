@@ -12,6 +12,7 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.IdeBridgeExtension;
 
@@ -94,7 +95,7 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     private readonly ObservableCollection<IdeBridgePermissionEntryViewModel> _permissionEntries = new();
     private int _lastConnectionCount;
 
-    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
+    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
 
     [Reactive]
     public partial bool IsEnabled { get; set; }
@@ -135,17 +136,17 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
 
     public ObservableCollection<string> ActivityLog { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> ApplySettingsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ApplySettingsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RestartCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RestartCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RefreshPermissionsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshPermissionsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RevokePermissionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RevokePermissionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ClearPermissionsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearPermissionsCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CopyTokenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CopyTokenCommand { get; }
 
     public IdeBridgePanelViewModel(
         IdeBridgeRuntimeController controller,
@@ -241,7 +242,7 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
             return;
         }
 
-        await CopyToClipboardInteraction.Handle(SessionToken).ToTask().ConfigureAwait(false);
+        await CopyToClipboardInteraction.Handle(SessionToken).ConfigureAwait(false);
         AppendLog("Copied session token.");
     }
 

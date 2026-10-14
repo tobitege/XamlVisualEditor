@@ -84,7 +84,7 @@ public sealed class TerminalControlTests
         TestTerminalSession session = new();
         TerminalViewModel vm = new(session);
         TerminalTool tool = new(vm);
-        ViewLocator locator = new();
+        XamlVisualEditor.App.ViewLocator locator = new();
         Control view = locator.Build(tool);
 
         // Simulate docking host assigning the dockable as DataContext.

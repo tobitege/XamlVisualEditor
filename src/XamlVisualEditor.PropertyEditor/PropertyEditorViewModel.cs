@@ -12,6 +12,8 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -261,7 +263,7 @@ public sealed partial class PropertyEditorViewModel : ReactiveObject, IDisposabl
             .Select(text => string.IsNullOrWhiteSpace(text) ? null : text.Trim())
             .DistinctUntilChanged()
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(filter => FilterProperties(filter));
         _disposables.Add(searchSubscription);
     }
@@ -420,7 +422,7 @@ public sealed partial class PropertyEditorViewModel : ReactiveObject, IDisposabl
                 IDisposable valueSubscription = prop.WhenAnyValue(p => p.Value)
                     .Skip(1) // skip initial value
                     .Throttle(TimeSpan.FromMilliseconds(300))
-                    .ObserveOn(RxSchedulers.MainThreadScheduler)
+                    .WitnessOn(RxSchedulers.MainThreadScheduler)
                     .Subscribe(_ => ApplyPropertyChange(prop));
                 _propertySubscriptions.Add(valueSubscription);
             }

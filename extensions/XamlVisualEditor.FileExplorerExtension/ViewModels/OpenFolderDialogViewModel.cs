@@ -2,6 +2,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.FileExplorerExtension.ViewModels;
 
@@ -13,7 +14,7 @@ public sealed partial class OpenFolderDialogViewModel : ReactiveObject
 
         BrowseCommand = ReactiveCommand.CreateFromTask(async () =>
         {
-            string? path = await SelectFolderInteraction.Handle(Unit.Default).FirstAsync();
+            string? path = await SelectFolderInteraction.Handle(RxVoid.Default);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 FolderPath = path;
@@ -27,23 +28,23 @@ public sealed partial class OpenFolderDialogViewModel : ReactiveObject
                 return;
             }
 
-            await CloseInteraction.Handle(FolderPath).FirstAsync();
+            await CloseInteraction.Handle(FolderPath);
         });
 
         CancelCommand = ReactiveCommand.CreateFromTask(async () =>
-            await CloseInteraction.Handle(null).FirstAsync());
+            await CloseInteraction.Handle(null));
     }
 
     [Reactive]
     public partial string? FolderPath { get; set; }
 
-    public ReactiveCommand<Unit, Unit> BrowseCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> BrowseCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
-    public Interaction<Unit, string?> SelectFolderInteraction { get; } = new();
+    public Interaction<RxVoid, string?> SelectFolderInteraction { get; } = new();
 
-    public Interaction<string?, Unit> CloseInteraction { get; } = new();
+    public Interaction<string?, RxVoid> CloseInteraction { get; } = new();
 }

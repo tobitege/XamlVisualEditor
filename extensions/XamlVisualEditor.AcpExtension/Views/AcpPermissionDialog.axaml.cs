@@ -3,6 +3,7 @@ using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.AcpExtension.Views;
 
@@ -25,7 +26,7 @@ public sealed partial class AcpPermissionDialog : Window
             _closeHandler = vm.CloseInteraction.RegisterHandler(ctx =>
             {
                 Close(ctx.Input);
-                ctx.SetOutput(Unit.Default);
+                ctx.SetOutput(RxVoid.Default);
             });
         }
     }

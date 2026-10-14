@@ -7,6 +7,7 @@ using XamlVisualEditor.ToolboxExtension;
 using System.Reactive.Threading.Tasks;
 using ToolboxExtensionEntry = XamlVisualEditor.ToolboxExtension.ToolboxExtension;
 using Xunit;
+using ReactiveUI.Primitives.Concurrency;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 

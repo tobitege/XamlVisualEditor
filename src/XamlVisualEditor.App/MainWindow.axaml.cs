@@ -14,6 +14,7 @@ using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.App;
 
@@ -269,7 +270,7 @@ public sealed partial class MainWindow : Window
         _themeVariantHandler = vm.ThemeVariantInteraction.RegisterHandler(interaction =>
         {
             ApplyThemeVariant(interaction.Input);
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
 
         ApplyThemeVariant(vm.SelectedThemeVariant);

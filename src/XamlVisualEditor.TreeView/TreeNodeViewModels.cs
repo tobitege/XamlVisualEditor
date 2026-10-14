@@ -6,6 +6,7 @@ using System.Reactive.Linq;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Xaml.Ast;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.TreeView;
 
@@ -62,14 +63,14 @@ public sealed partial class VisualTreeNodeViewModel : ReactiveObject
     /// <summary>
     /// Command to copy this node's type name.
     /// </summary>
-    public ReactiveCommand<Unit, string> CopyTypeNameCommand { get; }
+    public ReactiveCommand<RxVoid, string> CopyTypeNameCommand { get; }
 
     public VisualTreeNodeViewModel(Guid astNodeId)
     {
         AstNodeId = astNodeId;
 
         _displayText = this.WhenAnyValue(x => x.TypeName, x => x.Name)
-            .Select(t => string.IsNullOrEmpty(t.Item2) ? t.Item1 : $"{t.Item1} ({t.Item2})")
+            .Select(t => string.IsNullOrEmpty(t.Property2) ? t.Property1 : $"{t.Property1} ({t.Property2})")
             .ToProperty(this, x => x.DisplayText);
 
         // Watch selection changes and fire event
@@ -269,10 +270,10 @@ public sealed partial class LogicalTreeNodeViewModel : ReactiveObject
         _displayText = this.WhenAnyValue(x => x.TypeName, x => x.Name, x => x.ContentPreview)
             .Select(t =>
             {
-                string text = string.IsNullOrEmpty(t.Item2) ? t.Item1 : $"{t.Item1} ({t.Item2})";
-                if (!string.IsNullOrEmpty(t.Item3))
+                string text = string.IsNullOrEmpty(t.Property2) ? t.Property1 : $"{t.Property1} ({t.Property2})";
+                if (!string.IsNullOrEmpty(t.Property3))
                 {
-                    string preview = t.Item3.Length > 30 ? t.Item3[..30] + "..." : t.Item3;
+                    string preview = t.Property3.Length > 30 ? t.Property3[..30] + "..." : t.Property3;
                     text += $" \"{preview}\"";
                 }
                 return text;

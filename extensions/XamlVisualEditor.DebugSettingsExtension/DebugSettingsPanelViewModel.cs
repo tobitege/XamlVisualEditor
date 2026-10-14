@@ -5,8 +5,10 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Debugging;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.DebugSettingsExtension;
 
@@ -54,7 +56,7 @@ public sealed class DebugSettingsPanelViewModel : ReactiveObject, IDisposable
         _disposables.Add(selectedServiceSubscription);
 
         IObservable<bool> canDownloadNetcoredbg = this.WhenAnyValue(x => x.SelectedDebuggerService, x => x.IsBusy)
-            .Select(tuple => string.Equals(tuple.Item1?.Id, NetcoredbgServiceId, StringComparison.Ordinal) && !tuple.Item2);
+            .Select(tuple => string.Equals(tuple.Property1?.Id, NetcoredbgServiceId, StringComparison.Ordinal) && !tuple.Property2);
         DownloadNetcoredbgCommand = ReactiveCommand.CreateFromTask(
             ct => _host.DownloadNetcoredbgAsync(ct),
             canDownloadNetcoredbg);
@@ -102,7 +104,7 @@ public sealed class DebugSettingsPanelViewModel : ReactiveObject, IDisposable
     public bool IsNetcoredbgSelected =>
         string.Equals(SelectedDebuggerService?.Id, NetcoredbgServiceId, StringComparison.Ordinal);
 
-    public ReactiveCommand<Unit, Unit> DownloadNetcoredbgCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DownloadNetcoredbgCommand { get; }
 
     public void Dispose()
     {

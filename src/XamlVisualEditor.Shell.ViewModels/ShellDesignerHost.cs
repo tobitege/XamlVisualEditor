@@ -8,6 +8,8 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -463,12 +465,12 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         if (document is not null && !document.IsDisposed)
         {
             IDisposable selectedNodeSubscription = document.WhenAnyValue(x => x.SelectedNodeId)
-                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(selectedNodeSubscription);
 
             IDisposable syncSubscription = document.SyncEngine.SyncEvents
-                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(syncSubscription);
 

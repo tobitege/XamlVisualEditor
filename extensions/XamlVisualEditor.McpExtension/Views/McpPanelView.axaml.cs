@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.McpExtension.Views;
 
@@ -35,7 +36,7 @@ public sealed partial class McpPanelView : UserControl
                 await clipboard.SetTextAsync(interaction.Input);
             }
 
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
     }
 

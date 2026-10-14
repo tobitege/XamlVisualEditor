@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ReactiveUI;
 using XamlVisualEditor.DotNetTemplatesExtension.ViewModels;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.DotNetTemplatesExtension.Views;
 
@@ -26,7 +27,7 @@ public sealed partial class WorkspaceOpenPromptDialog : Window
             _closeHandler = vm.CloseInteraction.RegisterHandler(ctx =>
             {
                 Close(ctx.Input);
-                ctx.SetOutput(Unit.Default);
+                ctx.SetOutput(RxVoid.Default);
             });
         }
     }

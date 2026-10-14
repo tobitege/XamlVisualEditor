@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Threading.Tasks;
 using ReactiveUI;
 using XamlVisualEditor.Acp;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.AcpExtension;
 
@@ -20,9 +21,9 @@ public sealed class AcpPermissionDialogViewModel : ReactiveObject
 
     public ObservableCollection<AcpPermissionOptionViewModel> Options { get; } = new();
 
-    public Interaction<AcpPermissionOutcome, Unit> CloseInteraction { get; } = new();
+    public Interaction<AcpPermissionOutcome, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public AcpPermissionDialogViewModel(AcpPermissionRequest request)
     {
@@ -37,13 +38,13 @@ public sealed class AcpPermissionDialogViewModel : ReactiveObject
 
         foreach (AcpPermissionOption option in request.Options)
         {
-            ReactiveCommand<Unit, Unit> selectCommand = ReactiveCommand.CreateFromTask(async () =>
-                await CloseInteraction.Handle(AcpPermissionOutcome.Selected(option.OptionId)).ToTask().ConfigureAwait(false));
+            ReactiveCommand<RxVoid, RxVoid> selectCommand = ReactiveCommand.CreateFromTask(async () =>
+                await CloseInteraction.Handle(AcpPermissionOutcome.Selected(option.OptionId)).ConfigureAwait(false));
             Options.Add(new AcpPermissionOptionViewModel(option, selectCommand));
         }
 
         CancelCommand = ReactiveCommand.CreateFromTask(async () =>
-            await CloseInteraction.Handle(AcpPermissionOutcome.Cancelled()).ToTask().ConfigureAwait(false));
+            await CloseInteraction.Handle(AcpPermissionOutcome.Cancelled()).ConfigureAwait(false));
     }
 }
 
@@ -52,9 +53,9 @@ public sealed class AcpPermissionOptionViewModel : ReactiveObject
     public string OptionId { get; }
     public string Name { get; }
     public string Kind { get; }
-    public ReactiveCommand<Unit, Unit> SelectCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectCommand { get; }
 
-    public AcpPermissionOptionViewModel(AcpPermissionOption option, ReactiveCommand<Unit, Unit> selectCommand)
+    public AcpPermissionOptionViewModel(AcpPermissionOption option, ReactiveCommand<RxVoid, RxVoid> selectCommand)
     {
         OptionId = option.OptionId;
         Name = option.Name;

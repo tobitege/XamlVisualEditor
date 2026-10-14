@@ -2,6 +2,10 @@ using System.Reactive.Disposables;
 using System.Reactive.Threading.Tasks;
 using XamlVisualEditor.Acp;
 using XamlVisualEditor.Extensions;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using PrimitivesLinq = ReactiveUI.Primitives.LinqExtensions;
+using ReactiveUI;
 
 namespace XamlVisualEditor.AcpExtension;
 
@@ -63,7 +67,9 @@ public sealed class AcpExtension : IXveExtension
                 return Task.FromResult(AcpPermissionOutcome.Cancelled());
             }
 
-            return _viewModel.PermissionInteraction.Handle(request).ToTask();
+            // The agent asks from a background thread; the permission dialog has to be raised on the main thread.
+            return PrimitivesLinq.SubscribeOn(Signal.FromTask(_ => _viewModel.PermissionInteraction.Handle(request),
+                RxSchedulers.MainThreadScheduler), RxSchedulers.MainThreadScheduler).ToTask(ct);
         });
         context.Subscriptions.Add(Disposable.Create(() => _acpService.SetPermissionHandler(null)));
 

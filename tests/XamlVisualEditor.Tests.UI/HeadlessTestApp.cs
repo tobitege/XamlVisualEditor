@@ -8,6 +8,12 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class HeadlessTestApp : Application
 {
+    public override void Initialize()
+    {
+        base.Initialize();
+        ReactiveUI.RxSchedulers.MainThreadScheduler =
+            ReactiveUI.Primitives.Concurrency.AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
+    }
 }
 
 public static class HeadlessTestAppBuilder

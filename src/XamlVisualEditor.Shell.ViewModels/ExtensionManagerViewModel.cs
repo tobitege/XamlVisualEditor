@@ -8,6 +8,9 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -70,13 +73,13 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
 
     public bool HasSelection => SelectedPackage is not null;
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> InstallCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> InstallCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> UninstallCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> UninstallCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CheckUpdatesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CheckUpdatesCommand { get; }
 
     public void Dispose()
     {

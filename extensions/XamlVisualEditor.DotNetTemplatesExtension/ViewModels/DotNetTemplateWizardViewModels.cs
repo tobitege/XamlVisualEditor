@@ -10,9 +10,12 @@ using System.Reactive.Threading.Tasks;
 using System.Threading;
 using Avalonia.Threading;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.DotNetTemplatesExtension.ViewModels;
 
@@ -196,7 +199,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         BrowseLocationCommand = ReactiveCommand.CreateFromTask(async () =>
         {
-            string? path = await SelectFolderInteraction.Handle(Unit.Default);
+            string? path = await SelectFolderInteraction.Handle(RxVoid.Default);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 Location = path;
@@ -215,7 +218,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
         RemoveProjectRowCommand = ReactiveCommand.Create(RemoveSelectedProjectRow,
             this.WhenAnyValue(x => x.SelectedProjectRow, x => x.IsSolutionSetup)
                 .CombineLatest(projectCount, (tuple, count) =>
-                    tuple.Item2 && tuple.Item1 is not null && count > 1));
+                    tuple.Property2 && tuple.Property1 is not null && count > 1));
 
         IObservable<bool> canCreate = Observable.CombineLatest(
             this.WhenAnyValue(x => x.SelectedTemplate),
@@ -235,7 +238,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.SearchText, x => x.SelectedLanguage)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyFilter());
 
         this.WhenAnyValue(x => x.Step)
@@ -292,7 +295,7 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.Location)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.TaskpoolScheduler)
+            .WitnessOn(RxSchedulers.TaskpoolScheduler)
             .Subscribe(path =>
             {
                 if (_settings is null || string.IsNullOrWhiteSpace(path))
@@ -405,27 +408,27 @@ public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 
     public string SolutionPathPreview => _solutionPathPreview.Value;
 
-    public Interaction<DotNetTemplateWizardResult?, Unit> CloseInteraction { get; } = new();
+    public Interaction<DotNetTemplateWizardResult?, RxVoid> CloseInteraction { get; } = new();
 
-    public Interaction<Unit, string?> SelectFolderInteraction { get; } = new();
+    public Interaction<RxVoid, string?> SelectFolderInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> NextCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NextCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> BackCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> BackCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RefreshTemplatesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshTemplatesCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> InstallTemplateCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> InstallTemplateCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> BrowseLocationCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> BrowseLocationCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> AddProjectRowCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AddProjectRowCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> RemoveProjectRowCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RemoveProjectRowCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CreateCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CreateCommand { get; }
 
     private readonly ObservableAsPropertyHelper<string> _projectPathPreview;
     private readonly ObservableAsPropertyHelper<string> _solutionPathPreview;
@@ -1032,11 +1035,11 @@ public sealed partial class WorkspaceOpenPromptDialogViewModel : ReactiveObject
 
     public string Message { get; }
 
-    public Interaction<WorkspaceOpenChoice, Unit> CloseInteraction { get; } = new();
+    public Interaction<WorkspaceOpenChoice, RxVoid> CloseInteraction { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> OpenCurrentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenCurrentCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> OpenNewWindowCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenNewWindowCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 }

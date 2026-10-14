@@ -166,8 +166,8 @@ public sealed partial class TextFileView : UserControl
             .Subscribe(selection =>
             {
                 _suppressSelectionUpdate = true;
-                int start = Math.Clamp(selection.Item1, 0, _textEditor.Document.TextLength);
-                int length = Math.Clamp(selection.Item2, 0, _textEditor.Document.TextLength - start);
+                int start = Math.Clamp(selection.Property1, 0, _textEditor.Document.TextLength);
+                int length = Math.Clamp(selection.Property2, 0, _textEditor.Document.TextLength - start);
                 _textEditor.SelectionStart = start;
                 _textEditor.SelectionLength = length;
                 _suppressSelectionUpdate = false;

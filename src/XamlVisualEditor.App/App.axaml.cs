@@ -81,6 +81,7 @@ public sealed class App : Application
         Views.DocumentTabContextMenus.Extend(this);
         DialogAppearance.Initialize();
         DataGridColumnSizing.Initialize();
+        DockSplitterAppearance.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()

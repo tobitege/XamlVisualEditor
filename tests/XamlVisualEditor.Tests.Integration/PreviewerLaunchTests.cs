@@ -394,6 +394,8 @@ public sealed class PreviewerLaunchTests
             throw new InvalidOperationException($"Expected theme pixel #{red:X2}{green:X2}{blue:X2}, received {actual}. "
                 + $"Previewer error: {session.LastError ?? "<none>"}. Catalog: {session.LastThemeCatalog?.RequestId}." + Environment.NewLine
                 + $"Frames after the update: {seen.Count} ({string.Join(", ", seen.Distinct())})" + Environment.NewLine
+                + $"Last design tree: render {session.LastDesignTree?.RenderId}, ThemeSample instance "
+                + $"{session.LastDesignTree?.Nodes.FirstOrDefault(node => node.Name == \"ThemeSample\")?.InstanceId}" + Environment.NewLine
                 + string.Join(Environment.NewLine, hostMessages.TakeLast(30)), exception);
         }
         finally { session.FrameReceived -= OnFrame; }

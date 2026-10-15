@@ -44,15 +44,12 @@
       </Border>
 
       <Border Grid.Row="1" Background="#13161B" CornerRadius="8" Padding="10">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" RowSpacing="8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" RowSpacing="8">
           <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="{x:Static loc:UiStrings.Session}" FontWeight="SemiBold" />
           <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{x:Static loc:UiStrings.Workspace}" VerticalAlignment="Center" />
           <TextBlock Name="McpWorkspace" Grid.Row="2" Grid.ColumnSpan="3" Text="{CompiledBinding WorkspaceId}" TextWrapping="Wrap" />
-          <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:UiStrings.Token}" VerticalAlignment="Center" />
-          <TextBox Name="McpToken" Grid.Row="3" Grid.Column="1" Text="{CompiledBinding SessionToken}" IsReadOnly="True" HorizontalAlignment="Stretch" />
-          <Button Grid.Row="3" Grid.Column="2" Content="{x:Static loc:UiStrings.Copy}" Command="{CompiledBinding CopyTokenCommand}" Padding="6,2" />
-          <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:UiStrings.Clients}" VerticalAlignment="Center" />
-          <WrapPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal">
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:UiStrings.Clients}" VerticalAlignment="Center" />
+          <WrapPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal">
             <TextBlock Text="{CompiledBinding ConnectionCount}" />
             <TextBlock Text="{x:Static loc:UiStrings.Last}" Opacity="0.6" Margin="12,0,0,0" />
             <TextBlock Text="{CompiledBinding LastConnectionAt}" TextWrapping="Wrap" />
@@ -81,7 +78,6 @@
                   <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Workspace}" Width="2*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding WorkspaceId}" />
                   <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Access}" Width="*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding AccessLevel}" />
                   <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Granted}" Width="*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding GrantedAt}" />
-                  <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Token}" Width="2*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding SessionToken}" />
                 </dg:DataGrid.Columns>
               </dg:DataGrid>
             </DockPanel>

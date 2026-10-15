@@ -1,25 +1,31 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Threading;
 
 namespace XamlVisualEditor.Designer.PreviewerHost;
 
 /// <summary>Reports source-identified controls without binding the host to the editor's Avalonia version.</summary>
 internal sealed class DesignTreeReporter
 {
-    private const string MessagePrefix = "XVE-DESIGN-TREE ";
+    internal const string MessagePrefix = "XVE-DESIGN-TREE ";
+    private static readonly ConcurrentDictionary<(Type Type, string Name, string? PropertyTypeName), PropertyInfo?> s_properties = new();
+    private static readonly ConcurrentDictionary<(Type Type, string Name), MethodInfo> s_methods = new();
     private static DesignTreeReporter? s_current;
     private readonly object _root;
     private Guid _renderId;
     private readonly MethodInfo _getNodeId;
+    private readonly Type _controlType;
+    private readonly Type _canvasType;
+    private readonly Type _gridType;
     private readonly MethodInfo _transformToVisual;
     private readonly EventInfo _layoutUpdated;
-    private readonly SynchronizationContext? _context;
+    private readonly Action<string> _write;
+    private readonly Action<Action> _post;
     private readonly ConditionalWeakTable<object, InstanceIdentity> _instances = new();
     private int _nextInstanceId;
     private bool _queued;
@@ -44,20 +50,31 @@ internal sealed class DesignTreeReporter
         current.Publish();
     }
 
-    private DesignTreeReporter(object root, Guid renderId, MethodInfo getNodeId, EventInfo layoutUpdated)
+    private DesignTreeReporter(object root, Guid renderId, MethodInfo getNodeId, EventInfo layoutUpdated, Action<string> write)
     {
         _root = root;
         _renderId = renderId;
         _getNodeId = getNodeId;
+        _controlType = getNodeId.GetParameters()[0].ParameterType;
+        _canvasType = _controlType.Assembly.GetType("Avalonia.Controls.Canvas", throwOnError: true)!;
+        _gridType = _controlType.Assembly.GetType("Avalonia.Controls.Grid", throwOnError: true)!;
         _layoutUpdated = layoutUpdated;
-        _context = SynchronizationContext.Current;
+        _write = write;
         Type extensions = Type.GetType("Avalonia.VisualExtensions, Avalonia.Base", throwOnError: true)!;
         _transformToVisual = extensions.GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Single(method => method.Name == "TransformToVisual" && method.GetParameters().Length == 2);
+        // Background runs after pending layout and render jobs, so one dispatcher pass publishes at most once.
+        Type dispatcherType = Type.GetType("Avalonia.Threading.Dispatcher, Avalonia.Base", throwOnError: true)!;
+        object dispatcher = dispatcherType.GetProperty("UIThread")!.GetValue(null)!;
+        MethodInfo post = dispatcherType.GetMethods().Single(method => method.Name == "Post"
+            && method.GetParameters() is { Length: 2 } parameters && parameters[0].ParameterType == typeof(Action));
+        object background = post.GetParameters()[1].ParameterType.GetField("Background")!.GetValue(null)!;
+        _post = action => post.Invoke(dispatcher, new[] { action, background });
         _layoutUpdated.AddEventHandler(root, new EventHandler(OnLayoutUpdated));
     }
 
-    public static void Track(object root)
+    /// <summary>Reports the tree below the loaded root; write receives each changed snapshot line.</summary>
+    public static void Track(object root, Action<string>? write = null)
     {
         if (s_current is { } previous)
         {
@@ -83,15 +100,15 @@ internal sealed class DesignTreeReporter
             || !Guid.TryParse(getRenderId.Invoke(null, new[] { root }) as string, out Guid renderId)) return;
         EventInfo? layoutUpdated = root.GetType().GetEvent("LayoutUpdated");
         if (layoutUpdated is null) return;
-        s_current = new DesignTreeReporter(root, renderId, identity!.GetMethod("GetNodeId")!, layoutUpdated);
+        s_current = new DesignTreeReporter(root, renderId, identity!.GetMethod("GetNodeId")!, layoutUpdated,
+            write ?? (line => Console.WriteLine(line)));
     }
 
     private void OnLayoutUpdated(object? sender, EventArgs args)
     {
         if (_queued || !ReferenceEquals(s_current, this)) return;
         _queued = true;
-        if (_context is null) Publish();
-        else _context.Post(_ => Publish(), null);
+        _post(Publish);
     }
 
     private void Publish()
@@ -108,7 +125,7 @@ internal sealed class DesignTreeReporter
             _controls.Clear();
             Stack<(object Visual, int? Parent, bool Visible, RectData Clip)> pending = new();
             pending.Push((_root, null, true, viewportClip));
-            Type controlType = _getNodeId.GetParameters()[0].ParameterType;
+            Type controlType = _controlType;
             while (pending.TryPop(out var entry))
             {
                 object visual = entry.Visual;
@@ -156,7 +173,7 @@ internal sealed class DesignTreeReporter
             if (payload == _lastPayload) return;
             _lastPayload = payload;
             _lastError = null;
-            Console.WriteLine(MessagePrefix + payload);
+            _write(MessagePrefix + payload);
         }
         catch (Exception exception)
         {
@@ -169,28 +186,36 @@ internal sealed class DesignTreeReporter
     // Walks the type hierarchy from the most derived type: a control that hides an inherited property with
     // "new" (for example a Padding of its own type over the Avalonia Thickness Padding) makes a plain
     // GetProperty lookup ambiguous. propertyTypeName selects the declaration with that property type.
-    internal static object? Read(object instance, string property, string? propertyTypeName = null)
-    {
-        for (Type? type = instance.GetType(); type is not null; type = type.BaseType)
-        {
-            PropertyInfo? info = type.GetProperty(property,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-            if (info is not null && info.GetIndexParameters().Length == 0
-                && (propertyTypeName is null || info.PropertyType.FullName == propertyTypeName))
-            {
-                return info.GetValue(instance);
-            }
-        }
+    internal static object? Read(object instance, string property, string? propertyTypeName = null) =>
+        FindProperty(instance.GetType(), property, propertyTypeName)?.GetValue(instance);
 
-        return null;
-    }
+    private static PropertyInfo? FindProperty(Type type, string property, string? propertyTypeName = null) =>
+        s_properties.GetOrAdd((type, property, propertyTypeName), static key =>
+        {
+            for (Type? current = key.Type; current is not null; current = current.BaseType)
+            {
+                PropertyInfo? info = current.GetProperty(key.Name,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (info is not null && info.GetIndexParameters().Length == 0
+                    && (key.PropertyTypeName is null || info.PropertyType.FullName == key.PropertyTypeName))
+                {
+                    return info;
+                }
+            }
+
+            return null;
+        });
+
+    private static MethodInfo FindMethod(Type type, string name, Func<Type, MethodInfo?> find) =>
+        s_methods.GetOrAdd((type, name), key => find(key.Type)
+            ?? throw new MissingMethodException(key.Type.FullName, key.Name));
 
     private static double Number(object instance, string property) => (double)Read(instance, property)!;
 
     private object CaptureLayout(object control, object viewport)
     {
-        Type controlType = _getNodeId.GetParameters()[0].ParameterType;
-        object Value(string name) => controlType.GetProperty(name)!.GetValue(control)!;
+        Type controlType = _controlType;
+        object Value(string name) => FindProperty(controlType, name)!.GetValue(control)!;
         object bounds = Value("Bounds");
         object desired = Value("DesiredSize");
         object margin = Value("Margin");
@@ -198,12 +223,13 @@ internal sealed class DesignTreeReporter
         object origin = Value("RenderTransformOrigin");
         object originPoint = Read(origin, "Point")!;
         object matrix = _transformToVisual.Invoke(null, new[] { control, viewport })!;
-        Type canvas = controlType.Assembly.GetType("Avalonia.Controls.Canvas", throwOnError: true)!;
-        Type grid = controlType.Assembly.GetType("Avalonia.Controls.Grid", throwOnError: true)!;
-        object Attached(Type owner, string name) => owner.GetMethod("Get" + name)!.Invoke(null, new[] { control })!;
+        Type canvas = _canvasType;
+        Type grid = _gridType;
+        object Attached(Type owner, string name) =>
+            FindMethod(owner, "Get" + name, type => type.GetMethod("Get" + name)).Invoke(null, new[] { control })!;
         double? Finite(double value) => double.IsFinite(value) ? value : null;
         double[] Tracks(string collection, string size) => grid.IsInstanceOfType(control)
-            ? ((IEnumerable)grid.GetProperty(collection)!.GetValue(control)!).Cast<object>().Select(track => Number(track, size)).ToArray()
+            ? ((IEnumerable)FindProperty(grid, collection)!.GetValue(control)!).Cast<object>().Select(track => Number(track, size)).ToArray()
             : Array.Empty<double>();
         string kind = "None";
         for (Type? type = control.GetType(); type is not null; type = type.BaseType)
@@ -237,8 +263,8 @@ internal sealed class DesignTreeReporter
             GridRow = (int)Attached(grid, "Row"), GridColumn = (int)Attached(grid, "Column"),
             GridRowSpan = (int)Attached(grid, "RowSpan"), GridColumnSpan = (int)Attached(grid, "ColumnSpan"),
             RowHeights = Tracks("RowDefinitions", "ActualHeight"), ColumnWidths = Tracks("ColumnDefinitions", "ActualWidth"),
-            RowSpacing = grid.IsInstanceOfType(control) ? (double)grid.GetProperty("RowSpacing")!.GetValue(control)! : 0,
-            ColumnSpacing = grid.IsInstanceOfType(control) ? (double)grid.GetProperty("ColumnSpacing")!.GetValue(control)! : 0,
+            RowSpacing = grid.IsInstanceOfType(control) ? (double)FindProperty(grid, "RowSpacing")!.GetValue(control)! : 0,
+            ColumnSpacing = grid.IsInstanceOfType(control) ? (double)FindProperty(grid, "ColumnSpacing")!.GetValue(control)! : 0,
             IsHorizontal = Read(control, "Orientation")?.ToString() == "Horizontal",
             Spacing = Read(control, "Spacing") is double spacing ? spacing : 0,
             HorizontalAlignment = Value("HorizontalAlignment").ToString(),
@@ -256,7 +282,9 @@ internal sealed class DesignTreeReporter
         object? bounds = Read(visual, "Bounds");
         if (transform is null || bounds is null) return null;
         localBounds ??= Activator.CreateInstance(bounds.GetType(), 0d, 0d, Number(bounds, "Width"), Number(bounds, "Height"))!;
-        object transformed = bounds.GetType().GetMethod("TransformToAABB", new[] { transform.GetType() })!
+        Type transformType = transform.GetType();
+        object transformed = FindMethod(bounds.GetType(), "TransformToAABB",
+                type => type.GetMethod("TransformToAABB", new[] { transformType }))
             .Invoke(localBounds, new[] { transform })!;
         return new RectData(Number(transformed, "X"), Number(transformed, "Y"),
             Number(transformed, "Width"), Number(transformed, "Height"));

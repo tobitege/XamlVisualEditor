@@ -41,7 +41,7 @@ public sealed class IdeBridgePermissionServiceTests
             IdeBridgePermissionService ide = new(new FakeSettings(), window);
             McpPermissionService mcp = new(new FakeSettings(), window);
             IdeBridgeWorkspacePermissionState? ideState = await ide.AuthorizeAsync("localized-test", null, CancellationToken.None);
-            McpWorkspacePermissionState? mcpState = await mcp.AuthorizeAsync("localized-test", null, CancellationToken.None);
+            McpWorkspacePermissionState? mcpState = await mcp.AuthorizeAsync("localized-test", CancellationToken.None);
             if (selection is 0 or 1)
             {
                 Assert.NotNull(ideState);

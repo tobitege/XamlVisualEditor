@@ -26,7 +26,6 @@ public static class McpProtocol
 
 /// <summary>Initialize request parameters.</summary>
 public sealed record McpInitializeParams(
-    string? SessionToken,
     string? WorkspaceId,
     McpClientInfo? ClientInfo,
     McpClientCapabilities? Capabilities);

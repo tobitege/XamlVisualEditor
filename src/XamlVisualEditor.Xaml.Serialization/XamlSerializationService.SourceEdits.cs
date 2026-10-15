@@ -103,8 +103,19 @@ public sealed partial class XamlSerializationService
             if (replacement is null)
             {
                 int start = span.Start;
+                int end = span.End;
                 while (start > 0 && sourceText[start - 1] is ' ' or '\t') start--;
-                edits.Add(new TextEdit { Offset = start, Length = span.End - start, NewText = string.Empty });
+                int lineEnd = end;
+                while (lineEnd < sourceText.Length && sourceText[lineEnd] is ' ' or '\t') lineEnd++;
+                // An attribute alone on its line takes the line with it instead of leaving it empty.
+                if (start > 0 && sourceText[start - 1] is '\r' or '\n' &&
+                    (lineEnd == sourceText.Length || sourceText[lineEnd] is '\r' or '\n'))
+                {
+                    start--;
+                    if (sourceText[start] == '\n' && start > 0 && sourceText[start - 1] == '\r') start--;
+                    end = lineEnd;
+                }
+                edits.Add(new TextEdit { Offset = start, Length = end - start, NewText = string.Empty });
             }
             else
             {

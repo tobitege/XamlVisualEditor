@@ -60,6 +60,7 @@
     <Project Path="tests/XamlVisualEditor.Tests.Integration/XamlVisualEditor.Tests.Integration.csproj" />
     <Project Path="tests/XamlVisualEditor.Tests.UI/XamlVisualEditor.Tests.UI.csproj" />
     <Project Path="tests/XamlVisualEditor.Tests.Performance/XamlVisualEditor.Tests.Performance.csproj" />
+    <Project Path="tests/XamlVisualEditor.TestControls/XamlVisualEditor.TestControls.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/ExtensionHostSpike/ExtensionHostSpike.Extension/ExtensionHostSpike.Extension.csproj" />

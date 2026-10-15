@@ -19,6 +19,7 @@ public sealed class ControlFactory
 {
     private readonly ITypeMetadataService? _metadata;
     private readonly ILogger<ControlFactory> _logger;
+    private static readonly char[] XamlWhitespace = [' ', '\t', '\r', '\n'];
 
     /// <summary>
     /// Gets or sets whether design mode is active. When true, certain runtime behaviors are suppressed.
@@ -128,12 +129,53 @@ public sealed class ControlFactory
         {
             if (child is MutableAstTextNode textNode)
             {
-                return textNode.Text;
+                return GetContentText(textNode);
             }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Returns element content text as XAML presents it: outside xml:space="preserve" whitespace runs
+    /// collapse to one space and leading and trailing whitespace is dropped. The AST keeps the source text.
+    /// </summary>
+    private static string GetContentText(MutableAstTextNode textNode)
+    {
+        if (PreservesWhitespace(textNode.Parent))
+        {
+            return textNode.Text;
+        }
+
+        return string.Join(' ', textNode.Text.Split(XamlWhitespace, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static bool PreservesWhitespace(MutableAstNode? node)
+    {
+        for (; node is not null; node = node.Parent)
+        {
+            string? directive = node switch
+            {
+                MutableAstPropertyNode { IsPropertyElement: true } property => property.XmlSpace,
+                MutableAstObjectNode element => element.Properties.FirstOrDefault(IsXmlSpaceDirective)?.Value is MutableAstTextNode value
+                    ? value.Text
+                    : null,
+                _ => null
+            };
+            if (directive is not null)
+            {
+                return directive == "preserve";
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsXmlSpaceDirective(MutableAstPropertyNode property) =>
+        !property.IsPropertyElement
+        && (property.PropertyName == "xml:space"
+            || property.XmlNamespace == "http://www.w3.org/XML/1998/namespace"
+                && (property.PropertyName == "space" || property.PropertyName.EndsWith(":space", StringComparison.Ordinal)));
 
     private Control? TryCreateDesignPreview(MutableAstObjectNode astNode)
     {
@@ -171,7 +213,7 @@ public sealed class ControlFactory
                         new MutableAstPropertyNode
                         {
                             PropertyName = "Text",
-                            Value = new MutableAstTextNode { Text = textNode.Text }
+                            Value = new MutableAstTextNode { Text = prop.IsPropertyElement ? GetContentText(textNode) : textNode.Text }
                         }
                     }
                 };
@@ -283,12 +325,23 @@ public sealed class ControlFactory
 
             if (prop.Value is MutableAstTextNode textNode)
             {
-                if (TryApplyDesignProperty(control, prop.PropertyName, textNode.Text))
+                // Property-element content follows element whitespace rules and may spell the owner type;
+                // an empty property element assigns no value.
+                string value = prop.IsPropertyElement ? GetContentText(textNode) : textNode.Text;
+                if (prop.IsPropertyElement && value.Length == 0)
                 {
                     continue;
                 }
 
-                TrySetProperty(control, prop.PropertyName, textNode.Text);
+                string propertyName = prop.IsPropertyElement
+                    ? ResolveOwnPropertyName(astNode.TypeName, prop.PropertyName) ?? prop.PropertyName
+                    : prop.PropertyName;
+                if (TryApplyDesignProperty(control, propertyName, value))
+                {
+                    continue;
+                }
+
+                TrySetProperty(control, propertyName, value);
                 continue;
             }
 

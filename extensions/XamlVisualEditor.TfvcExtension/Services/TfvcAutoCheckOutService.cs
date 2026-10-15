@@ -348,7 +348,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             }
 
             bool confirmed = await _dialogHost.ShowDialogAsync<bool>(
-                ConfirmationDialogRequest.DIALOG_ID,
+                ConfirmationDialogRequest.DialogId,
                 new ConfirmationDialogRequest(
                     TfvcStrings.OfflineEditTitle,
                     string.Format(CultureInfo.CurrentCulture, TfvcStrings.OfflineEditMessageFormat, fileName),

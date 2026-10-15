@@ -476,6 +476,87 @@ public sealed class ExtensionCommandMenuIntegrationTests
         Assert.Equal(UiStrings.Ready, host.ViewModel.StatusText);
     }
 
+    [AvaloniaFact]
+    public async Task Only_Extensions_Declaring_The_Capability_Receive_Document_Open_Interceptors()
+    {
+        DocumentOpenInterceptorRegistry interceptors = new();
+        UndeclaredInterceptorProbe undeclared = new();
+        DeclaredInterceptorProbe declared = new();
+        using ExtensionMenuTestHost host = new(additionalExtension: undeclared, secondExtension: declared,
+            documentOpenInterceptors: interceptors);
+
+        await host.ActivateAsync();
+
+        Assert.True(undeclared.Activated);
+        Assert.Null(undeclared.Interceptors);
+        Assert.Same(interceptors, declared.Interceptors);
+        Assert.Equal("redirected.axaml", await interceptors.ResolveAsync("source.xml", CancellationToken.None));
+    }
+
+    [AvaloniaFact]
+    public async Task Installed_Packages_Receive_Document_Open_Interceptors_Only_When_Their_Manifest_Declares_Them()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"xve-interceptor-packages-{Guid.NewGuid():N}");
+        try
+        {
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+            FileExtensionStateStore state = new(Path.Combine(root, "extension-state.json"));
+            ExtensionPackageInfo declared = await store.InstallAsync(InstalledPackageProbe.CreatePackage(root, "declared",
+                ExtensionHostCapabilities.DocumentOpenInterceptors), CancellationToken.None);
+            ExtensionPackageInfo undeclared = await store.InstallAsync(
+                InstalledPackageProbe.CreatePackage(root, "undeclared"), CancellationToken.None);
+            await state.SetEnabledAsync(declared.Manifest.ExtensionId, true, CancellationToken.None);
+            await state.SetEnabledAsync(undeclared.Manifest.ExtensionId, true, CancellationToken.None);
+
+            using ExtensionMenuTestHost host = new(packageStore: store, stateStore: state,
+                documentOpenInterceptors: new DocumentOpenInterceptorRegistry());
+            await host.ActivateAsync();
+
+            Assert.True(InstalledPackageProbe.ReceivedDocumentOpenInterceptors(declared.Manifest.ExtensionId));
+            Assert.False(InstalledPackageProbe.ReceivedDocumentOpenInterceptors(undeclared.Manifest.ExtensionId));
+        }
+        finally
+        {
+            InstalledPackageProbe.TryDeleteDirectory(root);
+        }
+    }
+
+    private sealed class UndeclaredInterceptorProbe : IXveExtension
+    {
+        public bool Activated { get; private set; }
+
+        public IDocumentOpenInterceptors? Interceptors { get; private set; }
+
+        public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
+        {
+            Activated = true;
+            Interceptors = context.DocumentOpenInterceptors;
+            if (context.DocumentOpenInterceptors is { } interceptors)
+                context.Subscriptions.Add(interceptors.Register(new RedirectingInterceptor("hijacked.axaml")));
+            return Task.CompletedTask;
+        }
+    }
+
+    [ExtensionCapabilities(ExtensionHostCapabilities.DocumentOpenInterceptors)]
+    private sealed class DeclaredInterceptorProbe : IXveExtension
+    {
+        public IDocumentOpenInterceptors? Interceptors { get; private set; }
+
+        public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
+        {
+            Interceptors = context.DocumentOpenInterceptors;
+            if (context.DocumentOpenInterceptors is { } interceptors)
+                context.Subscriptions.Add(interceptors.Register(new RedirectingInterceptor("redirected.axaml")));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RedirectingInterceptor(string target) : IDocumentOpenInterceptor
+    {
+        public Task<string?> RedirectAsync(string filePath, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(target);
+    }
+
     /// <summary>Records the activity state during activation and starts work that outlives it.</summary>
     private sealed class ActivityProbeExtension(BackgroundActivityTracker activities) : IXveExtension
     {
@@ -522,7 +603,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
 
         public ExtensionMenuTestHost(bool withTextEditing = false, IExtensionPackageStore? packageStore = null,
             IExtensionStateStore? stateStore = null, BackgroundActivityTracker? backgroundActivities = null,
-            IXveExtension? additionalExtension = null)
+            IXveExtension? additionalExtension = null, IDocumentOpenInterceptors? documentOpenInterceptors = null,
+            IXveExtension? secondExtension = null)
         {
             _languageRegistry = new LanguageServiceRegistry(Array.Empty<ILanguageIntellisenseService>());
             ViewModel = new MainWindowViewModel(
@@ -555,6 +637,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 : [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo)];
             if (additionalExtension is not null)
                 extensions = [.. extensions, additionalExtension];
+            if (secondExtension is not null)
+                extensions = [.. extensions, secondExtension];
             _extensionHost = new BuiltInExtensionHost(
                 extensions,
                 _commands,
@@ -588,7 +672,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 contextKeys: ContextKeys,
                 packageStore: packageStore,
                 stateStore: stateStore,
-                backgroundActivities: backgroundActivities);
+                backgroundActivities: backgroundActivities,
+                documentOpenInterceptors: documentOpenInterceptors);
         }
 
         public MainWindowViewModel ViewModel { get; }

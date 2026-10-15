@@ -32,10 +32,14 @@ internal sealed class PreviewerLaunchService : IDisposable
         public Process? Process { get; set; }
         public PreviewerTcpSession? Session { get; set; }
         public string? XamlText { get; set; }
+        public DesignerThemeRequest? ThemeRequest { get; set; }
         public SemaphoreSlim UpdateGate { get; } = new(1, 1);
         public Guid? LastSentRenderId { get; set; }
+        public Guid? LastSentThemeRequestId { get; set; }
         public Guid PendingUpdateId { get; set; }
         public TaskCompletionSource<bool>? PendingUpdate { get; set; }
+        public Guid PendingThemeId { get; set; }
+        public TaskCompletionSource<DesignerThemeResult>? PendingTheme { get; set; }
     }
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
@@ -46,7 +50,8 @@ internal sealed class PreviewerLaunchService : IDisposable
         WorkspaceModel workspace,
         string? workspacePath,
         Func<string, Task>? runWorkspaceCommandAsync,
-        Action<string, string>? log)
+        Action<string, string>? log,
+        DesignerThemeRequest? themeRequest = null)
     {
         PreviewerInstance instance;
         PreviewerInstance? replaced = null;
@@ -67,7 +72,11 @@ internal sealed class PreviewerLaunchService : IDisposable
                 instance = new PreviewerInstance { Workspace = workspace, WorkspacePath = workspacePath };
                 _instances.Add(xamlFilePath, instance);
             }
-            if (!string.IsNullOrWhiteSpace(xamlText)) instance.XamlText = xamlText;
+            if (!string.IsNullOrWhiteSpace(xamlText))
+            {
+                instance.XamlText = xamlText;
+                instance.ThemeRequest = themeRequest;
+            }
         }
 
         if (replaced is not null)
@@ -141,7 +150,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             {
                 if (IsCurrent(xamlFilePath, instance) && !string.IsNullOrWhiteSpace(e.Data))
                 {
-                    if (!TryReceiveIncrementalResult(instance, e.Data)
+                    if (!TryReceiveIncrementalResult(instance, e.Data) && !TryReceiveThemeResult(instance, e.Data)
                         && !session.TryReceiveDesignTree(e.Data) && !session.TryReceiveThemeCatalog(e.Data))
                         log?.Invoke("Info", $"Previewer: {e.Data}");
                 }
@@ -184,13 +193,15 @@ internal sealed class PreviewerLaunchService : IDisposable
         string xamlText,
         WorkspaceModel workspace,
         Action<string, string>? log,
-        string? workspacePath = null)
+        string? workspacePath = null,
+        DesignerThemeRequest? themeRequest = null)
     {
         PreviewerInstance? instance;
         lock (_gate)
         {
             if (!_instances.TryGetValue(xamlFilePath, out instance) || !ReferenceEquals(instance.Workspace, workspace)) return;
             instance.XamlText = xamlText;
+            instance.ThemeRequest = themeRequest;
             if (instance.Session is null) return;
         }
 
@@ -219,16 +230,20 @@ internal sealed class PreviewerLaunchService : IDisposable
         try
         {
             if (!IsCurrent(xamlFilePath, instance) || instance.Session is not { } session) return;
-            lock (_gate) { if (instance.XamlText != xamlText) return; }
+            DesignerThemeRequest? themeRequest;
+            lock (_gate)
+            {
+                if (instance.XamlText != xamlText) return;
+                themeRequest = instance.ThemeRequest;
+            }
             string projectPath = BuildXamlProjectPath(xamlFilePath, launchInfo.ProjectDirectory);
             string updatedXaml = NormalizeDesignDataContext(xamlText);
             (double? width, double? height) = TryGetDesignSize(updatedXaml);
             Guid? renderId = null;
-            Guid? themeRequestId = null;
+            Guid? themeRequestId = themeRequest?.RequestId;
             try
             {
                 XDocument preview = XDocument.Parse(updatedXaml);
-                themeRequestId = DesignerThemeProtocol.ReadRequest(preview)?.RequestId;
                 string? value = preview.Descendants().Attributes(XName.Get("DesignNodeIdentity.RenderId",
                     "clr-namespace:XamlVisualEditor.Designer.Rendering;assembly=XamlVisualEditor.Designer.Rendering"))
                     .FirstOrDefault()?.Value;
@@ -237,9 +252,19 @@ internal sealed class PreviewerLaunchService : IDisposable
             catch (System.Xml.XmlException) { }
             try
             {
+                // Theme requests travel on standard input, never inside the document. The host confirms the request
+                // before the document follows, and a changed theme reloads the document so that the load reports
+                // the new catalog and a rejected selection.
+                bool themeChanged = false;
+                if (themeRequest is not null && themeRequest.RequestId != instance.LastSentThemeRequestId)
+                {
+                    await SendThemeRequestAsync(instance, themeRequest);
+                    instance.LastSentThemeRequestId = themeRequest.RequestId;
+                    themeChanged = true;
+                }
                 Guid? previousRenderId = instance.LastSentRenderId;
                 await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height, renderId, themeRequestId,
-                    previousRenderId is { } previous && renderId is { } current
+                    !themeChanged && previousRenderId is { } previous && renderId is { } current
                         ? () => TrySendIncrementalUpdateAsync(instance, previous, current, updatedXaml) : null);
                 instance.LastSentRenderId = renderId;
             }
@@ -267,6 +292,38 @@ internal sealed class PreviewerLaunchService : IDisposable
         {
             lock (instance) { if (ReferenceEquals(instance.PendingUpdate, completion)) instance.PendingUpdate = null; }
         }
+    }
+
+    /// <summary>Waits until the host has applied the request, so the document that follows renders with it.</summary>
+    private static async Task SendThemeRequestAsync(PreviewerInstance instance, DesignerThemeRequest request)
+    {
+        if (instance.Process is not { } process || process.HasExited) return;
+        TaskCompletionSource<DesignerThemeResult> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (instance) { instance.PendingThemeId = request.RequestId; instance.PendingTheme = completion; }
+        try
+        {
+            await process.StandardInput.WriteLineAsync(DesignerThemeProtocol.RequestPrefix + JsonSerializer.Serialize(request));
+            await process.StandardInput.FlushAsync();
+            await completion.Task;
+        }
+        finally
+        {
+            lock (instance) { if (ReferenceEquals(instance.PendingTheme, completion)) instance.PendingTheme = null; }
+        }
+    }
+
+    private static bool TryReceiveThemeResult(PreviewerInstance instance, string message)
+    {
+        if (!message.StartsWith(DesignerThemeProtocol.ResultPrefix, StringComparison.Ordinal)) return false;
+        try
+        {
+            DesignerThemeResult? result = JsonSerializer.Deserialize<DesignerThemeResult>(message[DesignerThemeProtocol.ResultPrefix.Length..]);
+            lock (instance)
+                if (result is not null && result.RequestId == instance.PendingThemeId)
+                    instance.PendingTheme?.TrySetResult(result);
+        }
+        catch (JsonException) { }
+        return true;
     }
 
     private static bool TryReceiveIncrementalResult(PreviewerInstance instance, string message)
@@ -352,7 +409,11 @@ internal sealed class PreviewerLaunchService : IDisposable
 
     private static void DisposeInstance(PreviewerInstance instance)
     {
-        lock (instance) instance.PendingUpdate?.TrySetCanceled();
+        lock (instance)
+        {
+            instance.PendingUpdate?.TrySetCanceled();
+            instance.PendingTheme?.TrySetCanceled();
+        }
         instance.Session?.Dispose();
         if (instance.Process is not { } process) return;
         try

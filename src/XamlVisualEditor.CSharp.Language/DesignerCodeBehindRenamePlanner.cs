@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CSharp.Language;
 
@@ -21,15 +22,15 @@ public static class DesignerCodeBehindRenamePlanner
         if (newName == oldName) return null;
         if (newName is not null && (newName.StartsWith('@') || !SyntaxFacts.IsValidIdentifier(newName)
                 || SyntaxFacts.GetKeywordKind(newName) != SyntaxKind.None))
-            throw new InvalidOperationException("The new control name is not a valid C# member name.");
+            throw new InvalidOperationException(UiStrings.CodeBehindRenameInvalidName);
         Compilation compilation = await project.GetCompilationAsync(cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("The project compilation is unavailable.");
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameCompilationUnavailable);
         INamedTypeSymbol owner = compilation.GetTypeByMetadataName(className)
-            ?? throw new InvalidOperationException($"The code-behind class '{className}' could not be resolved.");
+            ?? throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameClassMissing, className));
         if (!SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly))
-            throw new InvalidOperationException("The code-behind class is not defined in the owning project.");
+            throw new InvalidOperationException(UiStrings.CodeBehindRenameClassForeign);
         if (newName is not null && owner.GetMembers(newName).Length != 0)
-            throw new InvalidOperationException($"The code-behind class already contains a member named '{newName}'.");
+            throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameMemberExists, newName));
 
         Solution solution = project.Solution;
         Dictionary<DocumentId, Document> documents = solution.Projects.SelectMany(candidate => candidate.Documents)
@@ -79,7 +80,7 @@ public static class DesignerCodeBehindRenamePlanner
         }
 
         if (pending.Count == 0) return null;
-        if (newName is null) throw new InvalidOperationException($"The name '{oldName}' is referenced by code-behind and cannot be removed.");
+        if (newName is null) throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameNameReferenced, oldName));
         return new LanguageWorkspaceEdit
         {
             DocumentEdits = pending.OrderBy(pair => pair.Key, FileSystemPathComparison.Comparer).Select(pair =>
@@ -108,7 +109,7 @@ public static class DesignerCodeBehindRenamePlanner
                 pending.Add(path, entry = new PendingDocument(text.ToString()));
             }
             if (entry.Edits.TryGetValue(span, out TextEdit? existing) && existing.NewText != replacement)
-                throw new InvalidOperationException($"Conflicting rename edits in '{path}'.");
+                throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameConflictingEdits, path));
             entry.Edits[span] = new TextEdit { Offset = span.Start, Length = span.Length, NewText = replacement };
         }
     }

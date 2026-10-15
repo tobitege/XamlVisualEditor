@@ -23,35 +23,86 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class McpIntegrationTests
 {
     [Fact]
-    public async Task InitializeStoresSessionToken()
+    public async Task FirstConnectPersistsConsentAndReconnectIsGrantedWithoutPrompt()
     {
         InMemorySettingsStore settings = new();
         string workspacePath = "/tmp/xve";
         string workspaceId = System.IO.Path.GetFullPath(workspacePath);
-        var allowlist = new Dictionary<string, McpWorkspacePermissionState>
-        {
-            [workspaceId] = new McpWorkspacePermissionState("token-123", McpAccessLevel.Full, DateTimeOffset.UtcNow)
-        };
-        await settings.UpdateAsync("mcp.permissions", allowlist, SettingsTarget.Workspace, CancellationToken.None);
-
-        StubWorkspaceInfo workspaceInfo = new(workspacePath);
-        McpPermissionService permissionService = new(settings, new InMemoryWindow());
-        McpSessionService sessionService = new(permissionService, workspaceInfo);
+        StubWindow window = new(XamlVisualEditor.Core.Localization.UiStrings.AllowReadOnly);
         McpSessionRegistry registry = new();
-        McpHandshakeHandler handler = new(sessionService, registry);
+        McpRequestRouter router = CreateHandshakeRouter(settings, window, new StubWorkspaceInfo(workspacePath), registry, out _);
+
+        McpInitializeResult first = await InitializeAsync(router);
+        Assert.Equal(1, window.QuickPickCount);
+        Dictionary<string, McpWorkspacePermissionState>? persisted = settings.Get<Dictionary<string, McpWorkspacePermissionState>>("mcp.permissions");
+        Assert.NotNull(persisted);
+        Assert.Equal(McpAccessLevel.ReadOnly, persisted![workspaceId].AccessLevel);
+
+        McpInitializeResult second = await InitializeAsync(router);
+        Assert.Equal(1, window.QuickPickCount);
+        Assert.NotEqual(first.SessionToken, second.SessionToken);
+        Assert.Equal(McpAccessLevel.ReadOnly, registry.Resolve(new McpRequestContext(null, second.SessionToken))?.AccessLevel);
+        Assert.NotNull(registry.Resolve(new McpRequestContext(null, first.SessionToken)));
+    }
+
+    [Fact]
+    public async Task RevokedConsentEndsLiveSessionsAndPromptsAgain()
+    {
+        InMemorySettingsStore settings = new();
+        string workspacePath = "/tmp/xve";
+        StubWindow window = new(XamlVisualEditor.Core.Localization.UiStrings.AllowFullAccess);
+        McpSessionRegistry registry = new();
+        McpRequestRouter router = CreateHandshakeRouter(settings, window, new StubWorkspaceInfo(workspacePath), registry, out McpPermissionService permissions);
+        permissions.PermissionsRevoked += registry.Revoke;
+
+        McpInitializeResult first = await InitializeAsync(router);
+        await permissions.ClearPermissionAsync(System.IO.Path.GetFullPath(workspacePath), CancellationToken.None);
+        Assert.Null(registry.Resolve(new McpRequestContext(null, first.SessionToken)));
+        Assert.Equal(0, registry.Count);
+
+        McpInitializeResult second = await InitializeAsync(router);
+        Assert.Equal(2, window.QuickPickCount);
+        Assert.NotNull(registry.Resolve(new McpRequestContext(null, second.SessionToken)));
+
+        await permissions.ClearAllAsync(CancellationToken.None);
+        Assert.Null(registry.Resolve(new McpRequestContext(null, second.SessionToken)));
+        Assert.Empty(await permissions.GetPermissionsAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeniedConsentIsNotPersistedAndFailsInitialize()
+    {
+        InMemorySettingsStore settings = new();
+        StubWindow window = new(XamlVisualEditor.Core.Localization.UiStrings.Deny);
+        McpSessionRegistry registry = new();
+        McpRequestRouter router = CreateHandshakeRouter(settings, window, new StubWorkspaceInfo("/tmp/xve"), registry, out McpPermissionService permissions);
+
+        await Assert.ThrowsAsync<McpJsonRpcException>(() => InitializeAsync(router));
+        await Assert.ThrowsAsync<McpJsonRpcException>(() => InitializeAsync(router));
+        Assert.Equal(2, window.QuickPickCount);
+        Assert.Empty(await permissions.GetPermissionsAsync(CancellationToken.None));
+        Assert.Equal(0, registry.Count);
+    }
+
+    private static McpRequestRouter CreateHandshakeRouter(
+        InMemorySettingsStore settings,
+        IWindow window,
+        IWorkspaceInfo workspaceInfo,
+        McpSessionRegistry registry,
+        out McpPermissionService permissions)
+    {
+        permissions = new McpPermissionService(settings, window);
         McpRequestRouter router = new(registry);
-        handler.Register(router);
+        new McpHandshakeHandler(new McpSessionService(permissions, workspaceInfo), registry).Register(router);
+        return router;
+    }
 
-        McpInitializeParams init = new("token-123", null, new McpClientInfo("tests", "1"), null);
-        JsonElement parameters = JsonSerializer.SerializeToElement(init, McpMessageFraming.SerializerOptions);
-
+    private static async Task<McpInitializeResult> InitializeAsync(McpRequestRouter router)
+    {
+        JsonElement parameters = JsonSerializer.SerializeToElement(
+            new McpInitializeParams(null, new McpClientInfo("tests", "1"), null), McpMessageFraming.SerializerOptions);
         object? result = await router.DispatchAsync(McpProtocol.InitializeMethod, new McpRequestContext(null, null), parameters, CancellationToken.None);
-        McpInitializeResult initResult = Assert.IsType<McpInitializeResult>(result);
-        Assert.NotEqual("token-123", initResult.SessionToken);
-
-        McpSessionInfo? session = registry.Resolve(new McpRequestContext(null, initResult.SessionToken));
-        Assert.NotNull(session);
-        Assert.Equal(McpAccessLevel.Full, session!.AccessLevel);
+        return Assert.IsType<McpInitializeResult>(result);
     }
 
     [Fact]
@@ -118,37 +169,6 @@ public sealed class McpIntegrationTests
     }
 
     [Fact]
-    public async Task InitializeReauthorizesWhenSessionTokenIsMissing()
-    {
-        InMemorySettingsStore settings = new();
-        string workspacePath = "/tmp/xve";
-        string workspaceId = System.IO.Path.GetFullPath(workspacePath);
-        var allowlist = new Dictionary<string, McpWorkspacePermissionState>
-        {
-            [workspaceId] = new McpWorkspacePermissionState("token-old", McpAccessLevel.ReadOnly, DateTimeOffset.UtcNow)
-        };
-        await settings.UpdateAsync("mcp.permissions", allowlist, SettingsTarget.Workspace, CancellationToken.None);
-
-        StubWorkspaceInfo workspaceInfo = new(workspacePath);
-        StubWindow window = new(XamlVisualEditor.Core.Localization.UiStrings.AllowFullAccess);
-        McpPermissionService permissionService = new(settings, window);
-        McpSessionService sessionService = new(permissionService, workspaceInfo);
-
-        McpInitializeOutcome outcome = await sessionService.InitializeAsync(
-            new McpInitializeParams(null, null, new McpClientInfo("tests", "1"), null),
-            CancellationToken.None);
-
-        Assert.Equal(McpAccessLevel.Full, outcome.AccessLevel);
-        Assert.NotEqual("token-old", outcome.Result.SessionToken);
-
-        Dictionary<string, McpWorkspacePermissionState>? persisted = settings.Get<Dictionary<string, McpWorkspacePermissionState>>("mcp.permissions");
-        Assert.NotNull(persisted);
-        Assert.True(persisted!.TryGetValue(workspaceId, out McpWorkspacePermissionState? updated));
-        Assert.NotNull(updated);
-        Assert.NotEqual(outcome.Result.SessionToken, updated!.SessionToken);
-    }
-
-    [Fact]
     public async Task InitializeAutoGrantsWhenWindowIsNonInteractive()
     {
         InMemorySettingsStore settings = new();
@@ -158,7 +178,7 @@ public sealed class McpIntegrationTests
         McpSessionService sessionService = new(permissionService, workspaceInfo);
 
         McpInitializeOutcome outcome = await sessionService.InitializeAsync(
-            new McpInitializeParams(null, null, new McpClientInfo("tests", "1"), null),
+            new McpInitializeParams(null, new McpClientInfo("tests", "1"), null),
             CancellationToken.None);
 
         Assert.Equal(McpAccessLevel.Full, outcome.AccessLevel);
@@ -168,8 +188,7 @@ public sealed class McpIntegrationTests
         Dictionary<string, McpWorkspacePermissionState>? persisted = settings.Get<Dictionary<string, McpWorkspacePermissionState>>("mcp.permissions");
         Assert.NotNull(persisted);
         Assert.True(persisted!.TryGetValue(workspaceId, out McpWorkspacePermissionState? state));
-        Assert.NotNull(state);
-        Assert.NotEqual(outcome.Result.SessionToken, state!.SessionToken);
+        Assert.Equal(McpAccessLevel.Full, state!.AccessLevel);
     }
 
     [Fact]
@@ -329,12 +348,15 @@ public sealed class McpIntegrationTests
             _quickPickSelection = quickPickSelection;
         }
 
+        public int QuickPickCount { get; private set; }
+
         public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShowWarningMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShowErrorMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
         public Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, QuickPickOptions options, CancellationToken cancellationToken)
         {
+            QuickPickCount++;
             if (string.IsNullOrWhiteSpace(_quickPickSelection))
             {
                 return Task.FromResult<QuickPickItem?>(null);

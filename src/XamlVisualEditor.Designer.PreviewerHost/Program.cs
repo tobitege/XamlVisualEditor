@@ -251,11 +251,32 @@ internal static class RuntimeXamlLoaderRegistrar
 {
     private static string? s_targetDirectory;
     private static DesignerThemeProviderSession? s_themeProviders;
+    private static XamlVisualEditor.Core.DesignerThemeCatalog? s_pendingThemeCatalog;
+    private static string? s_themeError;
     private static readonly IncrementalPreviewUpdater s_incremental = new();
     private static readonly HashSet<string> s_referenceScans = new(StringComparer.OrdinalIgnoreCase);
 
     internal static XamlVisualEditor.Core.DesignerUpdateResult ApplyIncrementalUpdate(XamlVisualEditor.Core.DesignerUpdateRequest request) =>
         s_incremental.Apply(request, DesignTreeReporter.FindControls, DesignTreeReporter.Refresh);
+
+    /// <summary>
+    /// Applies a theme request received on standard input. The editor sends the matching document afterwards and
+    /// accepts the catalog only for that document, so the next load reports the catalog and fails while the
+    /// selection is rejected.
+    /// </summary>
+    internal static XamlVisualEditor.Core.DesignerThemeResult ApplyThemeRequest(XamlVisualEditor.Core.DesignerThemeRequest request)
+    {
+        try
+        {
+            (s_pendingThemeCatalog, s_themeError) = (s_themeProviders ??= new DesignerThemeProviderSession()).Apply(request);
+        }
+        catch (Exception error)
+        {
+            s_pendingThemeCatalog = null;
+            s_themeError = error.GetBaseException().Message;
+        }
+        return new(request.RequestId, s_themeError);
+    }
 
     public static void Configure(string targetAssemblyPath)
     {
@@ -453,9 +474,13 @@ internal static class RuntimeXamlLoaderRegistrar
         object? stream = GetPropertyValue(document, "Stream") ?? GetPropertyValue(document, "XamlStream")
             ?? GetPropertyValue(document, "ContentStream");
         string? source = stream is Stream { CanSeek: false } ? null : GetXamlFromDocument(document);
-        if (source is not null && source.Contains(XamlVisualEditor.Core.DesignerThemeProtocol.PropertyName, StringComparison.Ordinal)
-            && XamlVisualEditor.Core.DesignerThemeProtocol.ReadRequest(System.Xml.Linq.XDocument.Parse(source)) is { } themeRequest)
-            (s_themeProviders ??= new DesignerThemeProviderSession()).Apply(themeRequest);
+        if (s_pendingThemeCatalog is { } themeCatalog)
+        {
+            s_pendingThemeCatalog = null;
+            Console.WriteLine(XamlVisualEditor.Core.DesignerThemeProtocol.CatalogPrefix
+                + System.Text.Json.JsonSerializer.Serialize(themeCatalog));
+        }
+        if (s_themeError is { } themeError) throw new InvalidOperationException(themeError);
 
         object loaded = TryLoadWithRuntimeLoader(document, configuration, out object? result)
             ? result ?? throw new InvalidOperationException("AvaloniaRuntimeXamlLoader.Load returned null.")

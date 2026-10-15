@@ -16,6 +16,11 @@ namespace XamlVisualEditor.Sync;
 /// (code editor, designer, property editor, tree view, collaboration) through
 /// a single source-of-truth mutable AST.
 /// </summary>
+/// <remarks>
+/// The engine is not thread-safe. Its members are called from one thread at a time, normally the UI thread;
+/// <see cref="LoadAsync"/> may run on a worker thread while no other member is in use, and the awaiting caller
+/// resumes on the owning thread. <c>_isSyncing</c> only guards against re-entrant calls from sync event handlers.
+/// </remarks>
 public sealed class SyncEngine : ReactiveObject, ISyncEngine
 {
     private readonly IXamlParsingService _parser;
@@ -24,11 +29,10 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     private readonly UndoRedoService _undoRedo;
     private readonly Subject<SyncEvent> _syncSubject = new();
     private readonly List<AstChange> _pendingChanges = new();
-    private readonly object _syncLock = new();
 
     private MutableAstDocument? _document;
-    private volatile bool _isSyncing;
-    private volatile bool _isDisposed;
+    private bool _isSyncing;
+    private bool _isDisposed;
     private string _lastKnownText = string.Empty;
     private string _synchronizedAst = string.Empty;
     private DocumentSnapshot? _checkpoint;
@@ -110,19 +114,16 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         MutableAstDocument? document = result.Document as MutableAstDocument;
         string serialized = document is null ? string.Empty : _serializer.Serialize(document);
 
-        lock (_syncLock)
-        {
-            ct.ThrowIfCancellationRequested();
-            ObjectDisposedException.ThrowIf(_isDisposed, this);
-            if (_editGroup is not null) _editGroup.Completed = true;
-            _editGroup = null;
-            _undoRedo.Clear();
-            SetDocument(document);
-            _diagnostics = result.Diagnostics;
-            _lastKnownText = xamlText;
-            _synchronizedAst = serialized;
-            _checkpoint = CaptureSnapshot();
-        }
+        ct.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        if (_editGroup is not null) _editGroup.Completed = true;
+        _editGroup = null;
+        _undoRedo.Clear();
+        SetDocument(document);
+        _diagnostics = result.Diagnostics;
+        _lastKnownText = xamlText;
+        _synchronizedAst = serialized;
+        _checkpoint = CaptureSnapshot();
 
         return Task.CompletedTask;
     }
@@ -132,7 +133,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     {
         ct.ThrowIfCancellationRequested();
         if (_editGroup is not null) throw new InvalidOperationException("Finish or cancel the current edit before saving.");
-        CommitUndoBatch("Edit");
+        CommitUndoBatch(UiStrings.Edit);
         return Task.FromResult(_lastKnownText);
     }
 
@@ -141,11 +142,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     {
         if (_isSyncing || _isDisposed) return;
         if (_editGroup is not null) RollbackEdit(_editGroup);
-        lock (_syncLock)
-        {
-            if (_isSyncing || _isDisposed) return;
-            _isSyncing = true;
-        }
+        _isSyncing = true;
 
         try
         {
@@ -159,26 +156,20 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
             _lastKnownText = newText;
             _diagnostics = result.Diagnostics;
             _synchronizedAst = _document is null ? string.Empty : _serializer.Serialize(_document);
-            RecordSnapshot("Edit XAML");
+            RecordSnapshot(UiStrings.TextEdit);
             Publish(source, Array.Empty<AstChange>());
         }
         finally
         {
-            lock (_syncLock)
-            {
-                _isSyncing = false;
-            }
+            _isSyncing = false;
         }
     }
 
     /// <inheritdoc />
     public void NotifyAstChanged(AstChange change, SyncSource source)
     {
-        lock (_syncLock)
-        {
-            if (_isSyncing || _isDisposed) return;
-            _isSyncing = true;
-        }
+        if (_isSyncing || _isDisposed) return;
+        _isSyncing = true;
 
         try
         {
@@ -224,10 +215,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         }
         finally
         {
-            lock (_syncLock)
-            {
-                _isSyncing = false;
-            }
+            _isSyncing = false;
         }
     }
 
@@ -242,11 +230,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// </summary>
     public void NotifyAstChanged(MutableAstDocument document, SyncSource source)
     {
-        lock (_syncLock)
-        {
-            if (_isSyncing || _isDisposed) return;
-            _isSyncing = true;
-        }
+        if (_isSyncing || _isDisposed) return;
+        _isSyncing = true;
 
         try
         {
@@ -256,7 +241,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
             }
 
             SynchronizeAst();
-            RecordSnapshot("Edit");
+            RecordSnapshot(UiStrings.Edit);
 
             SyncEvent syncEvent = new()
             {
@@ -271,10 +256,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         }
         finally
         {
-            lock (_syncLock)
-            {
-                _isSyncing = false;
-            }
+            _isSyncing = false;
         }
     }
 
@@ -310,11 +292,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// </summary>
     public void CommitUndoBatch(string description)
     {
-        lock (_syncLock)
-        {
-            if (_isDisposed || _isSyncing || _editGroup is not null) return;
-            _isSyncing = true;
-        }
+        if (_isDisposed || _isSyncing || _editGroup is not null) return;
+        _isSyncing = true;
         try
         {
             SynchronizeAst();
@@ -333,7 +312,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         if (!CanEditAst) throw new InvalidOperationException("Resolve XAML errors before editing the designer.");
         if (_editGroup is null)
         {
-            CommitUndoBatch("Edit");
+            CommitUndoBatch(UiStrings.Edit);
             _editGroup = new EditGroup(_checkpoint!, description, source);
         }
         EditGroup group = _editGroup;
@@ -550,11 +529,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// <inheritdoc />
     public void Dispose()
     {
-        lock (_syncLock)
-        {
-            if (_isDisposed) return;
-            _isDisposed = true;
-        }
+        if (_isDisposed) return;
+        _isDisposed = true;
 
         if (_editGroup is not null) _editGroup.Completed = true;
         _editGroup = null;

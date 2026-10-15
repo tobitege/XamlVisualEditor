@@ -1597,21 +1597,28 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 return;
             }
 
+            // The catalog reads assembly files by path; an assembly loaded from an already
+            // registered or loaded path does not change its content.
+            bool addsCatalogPath = !asm.IsDynamic && !string.IsNullOrEmpty(asm.Location)
+                && !_registeredAssemblyPaths.Values.Contains(asm.Location, StringComparer.OrdinalIgnoreCase)
+                && !_loadedAssemblies.Any(loaded => !loaded.IsDynamic
+                    && string.Equals(loaded.Location, asm.Location, StringComparison.OrdinalIgnoreCase));
             _loadedAssemblies.Add(asm);
-            AddXmlnsDefinitions(asm);
-            _typeCatalog = null;
-            _namespaceTypes.Clear();
+            bool addsMappings = AddXmlnsDefinitions(asm);
+            if (addsCatalogPath) _typeCatalog = null;
+            if (addsCatalogPath || addsMappings) _namespaceTypes.Clear();
         }
     }
 
-    private void AddXmlnsDefinitions(System.Reflection.Assembly asm)
+    private bool AddXmlnsDefinitions(System.Reflection.Assembly asm)
     {
         string? asmName = asm.GetName().Name;
         if (string.IsNullOrWhiteSpace(asmName))
         {
-            return;
+            return false;
         }
 
+        bool added = false;
         foreach (System.Reflection.CustomAttributeData attr in asm.GetCustomAttributesData())
         {
             if (!IsXmlnsDefinitionAttribute(attr.AttributeType))
@@ -1637,8 +1644,13 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 _xmlnsMappings[xmlNamespace] = list;
             }
 
-            list.Add(new XmlnsDefinition(xmlNamespace, clrNamespace, asmName));
+            XmlnsDefinition mapping = new(xmlNamespace, clrNamespace, asmName);
+            if (list.Contains(mapping)) continue;
+            list.Add(mapping);
+            added = true;
         }
+
+        return added;
     }
 
     private static bool IsXmlnsDefinitionAttribute(Type attributeType)

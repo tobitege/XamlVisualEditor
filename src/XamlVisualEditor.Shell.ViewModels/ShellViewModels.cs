@@ -8649,7 +8649,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         try
         {
             await _previewerLaunchService.SendUpdateXamlAsync(document.FilePath, xaml, workspace,
-                (level, message) => LogOutput(level, message), workspacePath);
+                (level, message) => LogOutput(level, message), workspacePath, document.PreviewThemeRequest);
             if (!document.IsDisposed && ReferenceEquals(workspace, _workspace)) document.SetPreviewerLaunchError(null);
         }
         catch (Exception) when (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(workspace, _workspace))
@@ -8701,7 +8701,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             workspacePath,
             command => ReferenceEquals(_workspace, workspace)
                 ? RunWorkspaceCommandAsync(command) : System.Threading.Tasks.Task.CompletedTask,
-            (level, message) => LogOutput(level, message));
+            (level, message) => LogOutput(level, message),
+            document.PreviewThemeRequest);
 
         if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace))
         {

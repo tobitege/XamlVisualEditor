@@ -6,7 +6,13 @@ using System.Text.Json;
 
 namespace XamlVisualEditor.Core;
 
-/// <summary>Machine-local assembly snapshots for workspaces built by another process.</summary>
+/// <summary>
+/// Machine-local assembly snapshots for workspaces whose build output another running process
+/// keeps locked. The optional file <c>%APPDATA%\XamlVisualEditor\assembly-snapshots.json</c> holds an
+/// array of entries; the entry with the longest <see cref="WorkspaceRoot"/> containing the workspace
+/// makes the editor resolve references and output assemblies from <see cref="SnapshotDirectory"/>, a
+/// copy of <see cref="SourceDirectory"/>, instead of the live output.
+/// </summary>
 public sealed class AssemblySnapshotSettings
 {
     public required string WorkspaceRoot { get; init; }
@@ -20,9 +26,17 @@ public sealed class AssemblySnapshotSettings
             "XamlVisualEditor", "assembly-snapshots.json");
         if (!File.Exists(settingsPath)) return null;
 
-        AssemblySnapshotSettings[] settings = JsonSerializer.Deserialize<AssemblySnapshotSettings[]>(
-            SharedFileReader.ReadAllText(settingsPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? Array.Empty<AssemblySnapshotSettings>();
+        AssemblySnapshotSettings[] settings;
+        try
+        {
+            settings = JsonSerializer.Deserialize<AssemblySnapshotSettings[]>(
+                SharedFileReader.ReadAllText(settingsPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? Array.Empty<AssemblySnapshotSettings>();
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"The assembly snapshot settings in {settingsPath} are invalid: {exception.Message}", exception);
+        }
         AssemblySnapshotSettings? selected = settings
             .Where(setting => IsWithin(workspacePath, setting.WorkspaceRoot))
             .OrderByDescending(setting => setting.WorkspaceRoot.Length)

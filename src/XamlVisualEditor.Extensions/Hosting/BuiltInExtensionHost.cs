@@ -81,13 +81,13 @@ public sealed class BuiltInExtensionHost : IDisposable
         ITerminalBridge terminal,
         IExtensionViewHost viewHost,
         ISettings settings,
+        IExtensionPackageStore? packageStore = null,
+        IExtensionStateStore? stateStore = null,
+        ILogger<BuiltInExtensionHost>? logger = null,
         IControlCatalog? controlCatalog = null,
         Func<string, IExtensionStorage>? storageFactory = null,
         ITextEditorViewHost? textEditorView = null,
         IContextKeys? contextKeys = null,
-        IExtensionPackageStore? packageStore = null,
-        IExtensionStateStore? stateStore = null,
-        ILogger<BuiltInExtensionHost>? logger = null,
         IBackgroundActivities? backgroundActivities = null,
         IDocumentOpenInterceptors? documentOpenInterceptors = null)
     {
@@ -143,7 +143,8 @@ public sealed class BuiltInExtensionHost : IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             string extensionId = ResolveExtensionId(extension);
             using IDisposable? activity = BeginActivation(extensionId);
-            ExtensionContext context = CreateContext(extensionId, ResolveExtensionPath(extension));
+            ExtensionContext context = CreateContext(extensionId, ResolveExtensionPath(extension),
+                ExtensionCapabilitiesAttribute.GetDeclared(extension.GetType()));
             await extension.ActivateAsync(context, cancellationToken);
         }
 
@@ -192,7 +193,8 @@ public sealed class BuiltInExtensionHost : IDisposable
                 foreach (Type type in InstalledExtensionPackages.FindExtensionTypes(assembly))
                 {
                     IXveExtension extension = (IXveExtension)Activator.CreateInstance(type)!;
-                    ExtensionContext context = CreateContext(extensionId, package.InstallationDirectory!);
+                    ExtensionContext context = CreateContext(extensionId, package.InstallationDirectory!,
+                        package.Manifest.Capabilities);
                     await extension.ActivateAsync(context, cancellationToken);
                     _logger.LogInformation("Activated extension package {ExtensionId} ({Type})", extensionId, type.FullName);
                 }
@@ -217,7 +219,9 @@ public sealed class BuiltInExtensionHost : IDisposable
         _extensionSubscriptions.Clear();
     }
 
-    private ExtensionContext CreateContext(string extensionId, string extensionPath)
+    // capabilities: host capabilities the extension declared, from its manifest for installed packages and
+    // from ExtensionCapabilitiesAttribute for extensions registered with the editor.
+    private ExtensionContext CreateContext(string extensionId, string extensionPath, IReadOnlyList<string> capabilities)
     {
         List<IDisposable> subscriptions = new();
         _extensionSubscriptions.Add(subscriptions);
@@ -265,7 +269,9 @@ public sealed class BuiltInExtensionHost : IDisposable
             TextEditorView = _textEditorView,
             ContextKeys = _contextKeys,
             BackgroundActivities = _backgroundActivities,
-            DocumentOpenInterceptors = _documentOpenInterceptors
+            // An interceptor can redirect every file open, so only extensions that declare it receive the registry.
+            DocumentOpenInterceptors = capabilities.Contains(ExtensionHostCapabilities.DocumentOpenInterceptors,
+                StringComparer.OrdinalIgnoreCase) ? _documentOpenInterceptors : null
         };
     }
 

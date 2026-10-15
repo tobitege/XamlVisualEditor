@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Xaml.Ast;
 
@@ -42,10 +43,26 @@ public sealed class ToolboxDropHandler
         DropPosition position,
         string xmlNamespace = "https://github.com/avaloniaui",
         ITypeMetadataService? metadata = null,
+        bool generateAutomationIds = false) =>
+        Drop(typeName, defaultXaml, targetItem, position, out _, xmlNamespace, metadata, generateAutomationIds);
+
+    /// <summary>
+    /// Handles the drop operation, creating a new AST node from the toolbox item;
+    /// <paramref name="error"/> explains a rejected drop.
+    /// </summary>
+    public MutableAstObjectNode? Drop(
+        string typeName,
+        string defaultXaml,
+        IDesignItem? targetItem,
+        DropPosition position,
+        out string? error,
+        string xmlNamespace = "https://github.com/avaloniaui",
+        ITypeMetadataService? metadata = null,
         bool generateAutomationIds = false)
     {
         if (targetItem is not DesignItem designItem)
         {
+            error = UiStrings.DropTargetUnavailable;
             return null;
         }
 
@@ -57,12 +74,15 @@ public sealed class ToolboxDropHandler
 
         LayoutEditService editor = new(metadata, generateAutomationIds);
         if (position == DropPosition.Inside)
-            return editor.TryInsert(designItem.AstNode, newNode, out _) ? newNode : null;
+            return editor.TryInsert(designItem.AstNode, newNode, out error) ? newNode : null;
         MutableAstObjectNode? parent = LayoutEditService.GetParent(designItem.AstNode);
-        if (parent is null) return null;
-        int index = editor.GetChildren(parent).ToList().IndexOf(designItem.AstNode);
-        if (index < 0) return null;
-        return editor.TryInsert(parent, newNode, out _, index + (position == DropPosition.After ? 1 : 0)) ? newNode : null;
+        int index = parent is null ? -1 : editor.GetChildren(parent).ToList().IndexOf(designItem.AstNode);
+        if (parent is null || index < 0)
+        {
+            error = UiStrings.DropPositionUnavailable;
+            return null;
+        }
+        return editor.TryInsert(parent, newNode, out error, index + (position == DropPosition.After ? 1 : 0)) ? newNode : null;
     }
 }
 
@@ -74,16 +94,29 @@ public sealed class SurfaceDropHandler
     /// <summary>
     /// Moves a design item to a new position relative to a target.
     /// </summary>
-    public bool Move(IDesignItem source, IDesignItem target, DropPosition position, ITypeMetadataService? metadata = null)
+    public bool Move(IDesignItem source, IDesignItem target, DropPosition position, ITypeMetadataService? metadata = null) =>
+        Move(source, target, position, metadata, out _);
+
+    /// <summary>
+    /// Moves a design item to a new position relative to a target; <paramref name="error"/> explains a rejected move.
+    /// </summary>
+    public bool Move(IDesignItem source, IDesignItem target, DropPosition position, ITypeMetadataService? metadata,
+        out string? error)
     {
         if (source is not DesignItem sourceItem || target is not DesignItem targetItem)
         {
+            error = UiStrings.DropTargetUnavailable;
             return false;
         }
 
         LayoutEditService editor = new(metadata);
         DesignItem? newParent = position == DropPosition.Inside ? targetItem : targetItem.Parent as DesignItem;
-        if (newParent is null || !editor.TryMoveRelative(sourceItem.AstNode, targetItem.AstNode, position, out _)) return false;
+        if (newParent is null)
+        {
+            error = UiStrings.DropPositionUnavailable;
+            return false;
+        }
+        if (!editor.TryMoveRelative(sourceItem.AstNode, targetItem.AstNode, position, out error)) return false;
         if (sourceItem.Parent is DesignItem previousParent) previousParent.RemoveChild(sourceItem);
         int index = editor.GetChildren(newParent.AstNode).OfType<MutableAstObjectNode>().ToList().IndexOf(sourceItem.AstNode);
         newParent.InsertChild(Math.Clamp(index, 0, newParent.Children.Count), sourceItem);
@@ -100,7 +133,14 @@ public sealed class TreeDropHandler
     /// Moves a node in the AST based on tree view drag-and-drop.
     /// </summary>
     public bool MoveNode(Guid sourceNodeId, Guid targetNodeId, DropPosition position, AstNodeMap nodeMap,
-        ITypeMetadataService? metadata = null)
+        ITypeMetadataService? metadata = null) =>
+        MoveNode(sourceNodeId, targetNodeId, position, nodeMap, metadata, out _);
+
+    /// <summary>
+    /// Moves a node in the AST based on tree view drag-and-drop; <paramref name="error"/> explains a rejected move.
+    /// </summary>
+    public bool MoveNode(Guid sourceNodeId, Guid targetNodeId, DropPosition position, AstNodeMap nodeMap,
+        ITypeMetadataService? metadata, out string? error)
     {
         MutableAstNode? sourceNode = nodeMap.FindById(sourceNodeId);
         MutableAstNode? targetNode = nodeMap.FindById(targetNodeId);
@@ -108,9 +148,10 @@ public sealed class TreeDropHandler
         if (sourceNode is not MutableAstObjectNode source ||
             targetNode is not MutableAstObjectNode target)
         {
+            error = UiStrings.DropTargetUnavailable;
             return false;
         }
 
-        return new LayoutEditService(metadata).TryMoveRelative(source, target, position, out _);
+        return new LayoutEditService(metadata).TryMoveRelative(source, target, position, out error);
     }
 }

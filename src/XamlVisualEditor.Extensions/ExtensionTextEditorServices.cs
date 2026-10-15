@@ -145,7 +145,7 @@ public enum TextEditorViewAction
 public static class TextEditorContextKeys
 {
     /// <summary>True while the active document shows an editor that can run view actions.</summary>
-    public const string HAS_ACTIVE_EDITOR = "textEditor.hasActiveEditor";
+    public const string HasActiveEditor = "textEditor.hasActiveEditor";
 }
 
 /// <summary>Applies view options to the host editors and runs view actions on the editor of the active document.</summary>
@@ -154,7 +154,7 @@ public interface ITextEditorViewHost
     /// <summary>Gets the options the editors currently show.</summary>
     TextEditorViewOptions Options { get; }
 
-    /// <summary>Gets whether the active document shows an editor; <see cref="TextEditorContextKeys.HAS_ACTIVE_EDITOR"/> follows it.</summary>
+    /// <summary>Gets whether the active document shows an editor; <see cref="TextEditorContextKeys.HasActiveEditor"/> follows it.</summary>
     bool HasActiveEditor { get; }
 
     /// <summary>Applies options to every open and future editor.</summary>

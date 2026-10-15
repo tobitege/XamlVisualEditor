@@ -292,7 +292,8 @@ public sealed class App : Application
         services.AddSingleton<ExtensionPackageLoader>();
         services.AddSingleton<IExtensionPackageStore>(sp => new ExtensionPackageStore(
             ExtensionPackagePaths.GetInstalledRoot(),
-            sp.GetRequiredService<ExtensionPackageLoader>()));
+            sp.GetRequiredService<ExtensionPackageLoader>(),
+            sp.GetService<ILogger<ExtensionPackageStore>>()));
         services.AddSingleton<IExtensionPackageCatalog>(sp => new LocalExtensionPackageCatalog(
             ExtensionPackagePaths.GetCatalogRoot(),
             sp.GetRequiredService<ExtensionPackageLoader>()));

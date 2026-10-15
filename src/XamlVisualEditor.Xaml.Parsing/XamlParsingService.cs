@@ -52,22 +52,10 @@ public sealed class XamlParsingService : IXamlParsingService
             }
 
             MutableAstDocument document = new();
-            MutableAstObjectNode root = ConvertElement(xDoc.Root, document, diagnostics);
+            MutableAstObjectNode root = ConvertElement(xDoc.Root, document, diagnostics, inheritedPreserve: false);
             document.Root = root;
             ReadDocumentTrivia(xDoc, document);
             document.NodeMap.RegisterTree(root);
-
-            // Extract namespace declarations from root
-            foreach (XAttribute attr in xDoc.Root.Attributes())
-            {
-                if (attr.IsNamespaceDeclaration)
-                {
-                    string prefix = attr.Name.LocalName == "xmlns"
-                        ? ""
-                        : attr.Name.LocalName;
-                    document.NamespaceAliases[prefix] = attr.Value;
-                }
-            }
 
             return new ParseResult
             {
@@ -108,7 +96,8 @@ public sealed class XamlParsingService : IXamlParsingService
     private static MutableAstObjectNode ConvertElement(
         XElement element,
         MutableAstDocument document,
-        List<XamlDiagnostic> diagnostics)
+        List<XamlDiagnostic> diagnostics,
+        bool inheritedPreserve)
     {
         if (element.Parent is null) RegisterNamespaceAliases(element, document);
 
@@ -118,7 +107,8 @@ public sealed class XamlParsingService : IXamlParsingService
             XmlNamespace = element.Name.NamespaceName
         };
         ReadLocalNamespaces(element, node.NamespaceAliases);
-        bool preserveWhitespace = PreservesWhitespace(element);
+        bool preserve = PreservesWhitespace(element, inheritedPreserve);
+        bool preserveWhitespace = preserve || HasMixedContent(element);
 
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
         {
@@ -182,12 +172,12 @@ public sealed class XamlParsingService : IXamlParsingService
                     // Check if this is a property element (TypeName.PropertyName)
                     if (childElement.Name.LocalName.Contains('.'))
                     {
-                        MutableAstPropertyNode property = ConvertPropertyElement(childElement, node, document, diagnostics);
+                        MutableAstPropertyNode property = ConvertPropertyElement(childElement, node, document, diagnostics, preserve);
                         property.LeadingTrivia.AddRange(pendingTrivia);
                     }
                     else
                     {
-                        MutableAstObjectNode childNode = ConvertElement(childElement, document, diagnostics);
+                        MutableAstObjectNode childNode = ConvertElement(childElement, document, diagnostics, preserve);
                         childNode.LeadingTrivia.AddRange(pendingTrivia);
                         node.Children.Add(childNode);
                     }
@@ -241,7 +231,8 @@ public sealed class XamlParsingService : IXamlParsingService
         XElement element,
         MutableAstObjectNode parentNode,
         MutableAstDocument document,
-        List<XamlDiagnostic> diagnostics)
+        List<XamlDiagnostic> diagnostics,
+        bool inheritedPreserve)
     {
         string propName = element.Name.LocalName;
 
@@ -253,7 +244,8 @@ public sealed class XamlParsingService : IXamlParsingService
             XmlSpace = element.Attribute(XNamespace.Xml + "space")?.Value
         };
         ReadLocalNamespaces(element, propNode.NamespaceAliases);
-        bool preserveWhitespace = PreservesWhitespace(element);
+        bool preserve = PreservesWhitespace(element, inheritedPreserve);
+        bool preserveWhitespace = preserve || HasMixedContent(element);
 
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
         {
@@ -269,7 +261,7 @@ public sealed class XamlParsingService : IXamlParsingService
             if (child is XProcessingInstruction instruction) { pendingTrivia.Add(new XmlTrivia(instruction.Target, instruction.Data)); continue; }
             MutableAstNode? value = child switch
             {
-                XElement childElement => ConvertElement(childElement, document, diagnostics),
+                XElement childElement => ConvertElement(childElement, document, diagnostics, preserve),
                 XText text when preserveWhitespace || !string.IsNullOrWhiteSpace(text.Value) => new MutableAstTextNode { Text = text.Value },
                 _ => null
             };
@@ -300,13 +292,14 @@ public sealed class XamlParsingService : IXamlParsingService
         return propNode;
     }
 
-    private static bool PreservesWhitespace(XElement element)
-    {
-        foreach (XElement ancestor in element.AncestorsAndSelf())
-            if (ancestor.Attribute(XNamespace.Xml + "space") is { } directive)
-                return directive.Value == "preserve";
-        return false;
-    }
+    // In mixed content such as "Hello <Bold>x</Bold> <Italic>y</Italic>" the whitespace between the
+    // inline elements is displayed text, as the serializer's source merge also treats it.
+    private static bool HasMixedContent(XElement element) =>
+        element.HasElements && element.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value));
+
+    // A local xml:space directive overrides the mode inherited from the enclosing element.
+    private static bool PreservesWhitespace(XElement element, bool inheritedPreserve) =>
+        element.Attribute(XNamespace.Xml + "space") is { } directive ? directive.Value == "preserve" : inheritedPreserve;
 
     private static void ReadDocumentTrivia(XDocument xml, MutableAstDocument document)
     {
@@ -356,11 +349,10 @@ public sealed class XamlParsingService : IXamlParsingService
                     });
 
                     MutableAstDocument document = new();
-                    MutableAstObjectNode root = ConvertElement(repairedDoc.Root, document, diagnostics);
+                    MutableAstObjectNode root = ConvertElement(repairedDoc.Root, document, diagnostics, inheritedPreserve: false);
                     document.Root = root;
                     ReadDocumentTrivia(repairedDoc, document);
                     document.NodeMap.RegisterTree(root);
-                    ExtractNamespaces(repairedDoc.Root, document);
                     return document;
                 }
             }
@@ -388,11 +380,10 @@ public sealed class XamlParsingService : IXamlParsingService
                         });
 
                         MutableAstDocument document = new();
-                        MutableAstObjectNode root = ConvertElement(truncatedDoc.Root, document, diagnostics);
+                        MutableAstObjectNode root = ConvertElement(truncatedDoc.Root, document, diagnostics, inheritedPreserve: false);
                         document.Root = root;
                         ReadDocumentTrivia(truncatedDoc, document);
                         document.NodeMap.RegisterTree(root);
-                        ExtractNamespaces(truncatedDoc.Root, document);
                         return document;
                     }
                 }
@@ -408,18 +399,6 @@ public sealed class XamlParsingService : IXamlParsingService
         {
             System.Diagnostics.Trace.TraceError($"Tolerant XAML parse failed unexpectedly: {ex}");
             return null;
-        }
-    }
-
-    private static void ExtractNamespaces(XElement root, MutableAstDocument document)
-    {
-        foreach (XAttribute attr in root.Attributes())
-        {
-            if (attr.IsNamespaceDeclaration)
-            {
-                string prefix = attr.Name.LocalName == "xmlns" ? "" : attr.Name.LocalName;
-                document.NamespaceAliases[prefix] = attr.Value;
-            }
         }
     }
 

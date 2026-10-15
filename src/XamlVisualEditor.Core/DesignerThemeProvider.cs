@@ -34,10 +34,20 @@ public sealed record DesignerThemeProviderCatalog(string Id, string Name, IReadO
 /// <summary>A catalog from the isolated preview host, not the editor's assembly context.</summary>
 public sealed record DesignerThemeCatalog(Guid RequestId, IReadOnlyList<DesignerThemeProviderCatalog> Providers);
 
+/// <summary>Confirms that the preview host processed a theme request; Error names a rejected selection.</summary>
+public sealed record DesignerThemeResult(Guid RequestId, string? Error = null);
+
 /// <summary>Framework-independent transport metadata for preview theme extensions.</summary>
 public static class DesignerThemeProtocol
 {
     public const string CatalogPrefix = "XVE-THEME-CATALOG ";
+
+    /// <summary>Prefixes a theme request on the preview host's standard input, the only channel that loads providers.</summary>
+    public const string RequestPrefix = "XVE-THEME-REQUEST ";
+
+    public const string ResultPrefix = "XVE-THEME-RESULT ";
+
+    /// <summary>Preview-only attribute that makes a theme change replace the rendered document; the host never reads it.</summary>
     public const string PropertyName = "DesignPreviewSettings.ThemeRequest";
     public const string XmlNamespace = "clr-namespace:XamlVisualEditor.Designer.Rendering;assembly=XamlVisualEditor.Designer.Rendering";
 

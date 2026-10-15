@@ -777,7 +777,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         string title, string message, string action, bool destructive = false)
     {
         if (_dialogHost is null || _monitoringCancellation is null) return false;
-        bool? result = await _dialogHost.ShowDialogAsync<bool>(ConfirmationDialogRequest.DIALOG_ID,
+        bool? result = await _dialogHost.ShowDialogAsync<bool>(ConfirmationDialogRequest.DialogId,
             new ConfirmationDialogRequest(title, message, action, destructive), _monitoringCancellation.Token);
         return result == true;
     }

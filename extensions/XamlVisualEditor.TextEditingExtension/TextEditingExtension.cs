@@ -62,7 +62,7 @@ public sealed class TextEditingExtension : IXveExtension
     private const string GO_TO_LINE_COMMAND_ID = "navigation.goToLine";
 
     private const string WHEN_DOCUMENT = "hasActiveDocument";
-    private const string WHEN_EDITOR = TextEditorContextKeys.HAS_ACTIVE_EDITOR;
+    private const string WHEN_EDITOR = TextEditorContextKeys.HasActiveEditor;
     private const double ZOOM_STEP = 1d;
 
     /// <inheritdoc />

@@ -54,7 +54,7 @@ public sealed class TfvcOfflineCoordinator : IDisposable
                 _session.Settings.CollectionUrl,
                 _session.StatusMessage);
             bool confirmed = await _dialogHost.ShowDialogAsync<bool>(
-                ConfirmationDialogRequest.DIALOG_ID,
+                ConfirmationDialogRequest.DialogId,
                 new ConfirmationDialogRequest(TfvcStrings.GoOfflinePromptTitle, message, TfvcStrings.GoOfflineConfirm),
                 cancellationToken);
             if (confirmed)

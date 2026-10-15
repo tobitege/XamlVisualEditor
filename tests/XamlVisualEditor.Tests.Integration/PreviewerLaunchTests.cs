@@ -89,7 +89,7 @@ public sealed class PreviewerLaunchTests
         System.Collections.Concurrent.ConcurrentQueue<string> hostMessages = new();
         PreviewerLaunchResult started = await previewerService.StartPreviewerAsync(xamlPath,
             renderer.PrepareXaml(document, themeRequest: request), workspace, null, null,
-            (level, message) => hostMessages.Enqueue(level + ": " + message));
+            (level, message) => hostMessages.Enqueue(level + ": " + message), request);
         Assert.True(started.Success, started.ErrorMessage);
         Process process = Assert.IsType<Process>(started.Process);
         PreviewerTcpSession session = GetSession(previewerService, xamlPath);
@@ -107,7 +107,7 @@ public sealed class PreviewerLaunchTests
             (byte red, byte green, byte blue) = theme == "light"
                 ? ((byte)255, (byte)255, (byte)255) : ((byte)0x1D, (byte)0x23, (byte)0x2A);
             await AssertThemeFrameAsync(session,
-                () => previewerService.SendUpdateXamlAsync(xamlPath, prepared, workspace, null), red, green, blue);
+                () => previewerService.SendUpdateXamlAsync(xamlPath, prepared, workspace, null, themeRequest: request), red, green, blue);
             Guid renderId = Guid.Parse(Assert.Single(System.Xml.Linq.XDocument.Parse(prepared).Root!.Attributes(),
                 attribute => attribute.Name.LocalName == "DesignNodeIdentity.RenderId").Value);
             DesignerHostSnapshot tree = await WaitForDesignTreeAsync(session, renderId);
@@ -330,7 +330,7 @@ public sealed class PreviewerLaunchTests
                     _ => ((byte)0x33, (byte)0x44, (byte)0x55)
                 };
                 await AssertThemeFrameAsync(firstSession,
-                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue);
+                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null, themeRequest: request), red, green, blue);
                 DesignerHostSnapshot tree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
                 DesignerHostNode sample = Assert.Single(tree.Nodes, node => node.Name == "ThemeSample");
                 Assert.Equal(160, sample.Width);
@@ -352,7 +352,7 @@ public sealed class PreviewerLaunchTests
         DesignerThemeRequest partialRequest = new(Guid.NewGuid(), new[] { unavailable, provider }, new(provider.Id, "harbor"));
         string partialPreview = renderer.PrepareXaml(themedDocument, themeRequest: partialRequest);
         await AssertThemeFrameAsync(firstSession,
-            () => previewerService.SendUpdateXamlAsync(xamlFilePath, partialPreview, workspace, null), 0x12, 0x34, 0x56);
+            () => previewerService.SendUpdateXamlAsync(xamlFilePath, partialPreview, workspace, null, themeRequest: partialRequest), 0x12, 0x34, 0x56);
         Assert.NotNull(Assert.Single(firstSession.LastThemeCatalog!.Providers, item => item.Id == unavailable.Id).Error);
         Assert.Null(firstSession.LastError);
 
@@ -362,13 +362,15 @@ public sealed class PreviewerLaunchTests
         firstSession.ErrorReceived += OnRejected;
         try
         {
-            await previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: rejectedRequest), workspace, null);
+            await previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: rejectedRequest), workspace, null,
+                themeRequest: rejectedRequest);
             Assert.Contains("Missing", await rejected.Task.WaitAsync(TimeSpan.FromSeconds(20)), StringComparison.Ordinal);
         }
         finally { firstSession.ErrorReceived -= OnRejected; }
         DesignerThemeRequest recoveredRequest = partialRequest with { RequestId = Guid.NewGuid(), Selection = null };
         await AssertThemeFrameAsync(firstSession,
-            () => previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: recoveredRequest), workspace, null), 0x33, 0x44, 0x55);
+            () => previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: recoveredRequest), workspace, null,
+                themeRequest: recoveredRequest), 0x33, 0x44, 0x55);
         Assert.Null(firstSession.LastError);
         Assert.False(firstProcess.HasExited);
         previewerService.StopPreviewer(xamlFilePath, firstProcess);

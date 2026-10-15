@@ -19,7 +19,7 @@ public sealed class AppDialogHost : IDialogHost
     public AppDialogHost(MainWindowProvider windowProvider)
     {
         _windowProvider = windowProvider;
-        _factories[ConfirmationDialogRequest.DIALOG_ID] = input =>
+        _factories[ConfirmationDialogRequest.DialogId] = input =>
         {
             if (input is not ConfirmationDialogRequest request)
                 throw new ArgumentException("Confirmation dialog requires a confirmation request.", nameof(input));
@@ -29,7 +29,7 @@ public sealed class AppDialogHost : IDialogHost
                     request.IsDestructive, request.CancelText)
             };
         };
-        _factories[ProgressDialogRequest.DIALOG_ID] = input =>
+        _factories[ProgressDialogRequest.DialogId] = input =>
         {
             if (input is not ProgressDialogRequest request)
                 throw new ArgumentException("Progress dialog requires a progress request.", nameof(input));

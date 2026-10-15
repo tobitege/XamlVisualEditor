@@ -290,11 +290,9 @@ public sealed partial class XamlSerializationService : IXamlSerializationService
     private static string EnsurePrefix(string xmlNamespace, Dictionary<string, string> namespaces, bool requirePrefix = false)
     {
         if (xmlNamespace == XNamespace.Xml.NamespaceName) return "xml";
-        if (string.IsNullOrEmpty(xmlNamespace))
-        {
-            if (namespaces.ContainsKey(string.Empty)) namespaces[string.Empty] = string.Empty;
-            return string.Empty;
-        }
+        // A node without a namespace inherits the default namespace in scope; an element parsed with
+        // xmlns="" keeps that declaration through its own namespace aliases.
+        if (string.IsNullOrEmpty(xmlNamespace)) return string.Empty;
         foreach (KeyValuePair<string, string> kvp in namespaces)
         {
             if (kvp.Value == xmlNamespace && (!requirePrefix || !string.IsNullOrEmpty(kvp.Key)))

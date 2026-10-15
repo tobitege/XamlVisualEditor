@@ -7,10 +7,35 @@ namespace XamlVisualEditor.Sync;
 /// </summary>
 public sealed class UndoRedoService : IDisposable
 {
+    /// <summary>Gets the number of undo frames kept when no explicit depth is given.</summary>
+    public const int DefaultMaxDepth = 100;
+
+    // The most recent frame is the last node; the oldest frame is dropped first.
+    private readonly LinkedList<UndoFrame> _undoStack = new();
+    private readonly Stack<UndoFrame> _redoStack = new();
+    private readonly List<AstChange> _currentBatch = new();
+    private bool _isUndoRedoInProgress;
+    private bool _isDisposed;
+
+    /// <summary>Creates a service that keeps at most <see cref="DefaultMaxDepth"/> undo frames.</summary>
+    public UndoRedoService() : this(DefaultMaxDepth)
+    {
+    }
+
+    /// <summary>Creates a service that keeps at most <paramref name="maxDepth"/> undo frames and drops the oldest beyond it.</summary>
+    public UndoRedoService(int maxDepth)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxDepth, 1);
+        MaxDepth = maxDepth;
+    }
+
+    /// <summary>Gets the maximum number of undo frames kept.</summary>
+    public int MaxDepth { get; }
+
     public bool CanUndoCompanion(DocumentCompanionChange change)
     {
-        return _undoStack.TryPeek(out var frame) &&
-               System.Linq.Enumerable.Contains(frame.CompanionChanges, change);
+        return _undoStack.Last is { } node &&
+               System.Linq.Enumerable.Contains(node.Value.CompanionChanges, change);
     }
 
     public bool CanRedoCompanion(DocumentCompanionChange change)
@@ -18,12 +43,6 @@ public sealed class UndoRedoService : IDisposable
         return _redoStack.TryPeek(out var frame) &&
                System.Linq.Enumerable.Contains(frame.CompanionChanges, change);
     }
-
-    private readonly Stack<UndoFrame> _undoStack = new();
-    private readonly Stack<UndoFrame> _redoStack = new();
-    private readonly List<AstChange> _currentBatch = new();
-    private bool _isUndoRedoInProgress;
-    private bool _isDisposed;
 
     /// <summary>
     /// Gets whether an undo operation is available.
@@ -82,7 +101,7 @@ public sealed class UndoRedoService : IDisposable
             Changes = _currentBatch.ToList()
         };
 
-        _undoStack.Push(frame);
+        PushUndo(frame);
         _redoStack.Clear();
         _currentBatch.Clear();
         StateChanged?.Invoke();
@@ -98,7 +117,7 @@ public sealed class UndoRedoService : IDisposable
             _currentBatch.Clear();
             return false;
         }
-        _undoStack.Push(new UndoFrame
+        PushUndo(new UndoFrame
         {
             Description = description,
             Changes = _currentBatch.ToArray(),
@@ -128,9 +147,9 @@ public sealed class UndoRedoService : IDisposable
         _isUndoRedoInProgress = true;
         try
         {
-            UndoFrame frame = _undoStack.Peek();
+            UndoFrame frame = _undoStack.Last!.Value;
             Replay(frame, forward: false, restoreSnapshot);
-            _undoStack.Pop();
+            _undoStack.RemoveLast();
             _redoStack.Push(frame);
             ReplaySnapshot = frame.Before;
             StateChanged?.Invoke();
@@ -160,7 +179,7 @@ public sealed class UndoRedoService : IDisposable
             UndoFrame frame = _redoStack.Peek();
             Replay(frame, forward: true, restoreSnapshot);
             _redoStack.Pop();
-            _undoStack.Push(frame);
+            PushUndo(frame);
             ReplaySnapshot = frame.After;
             StateChanged?.Invoke();
 
@@ -183,6 +202,12 @@ public sealed class UndoRedoService : IDisposable
         _currentBatch.Clear();
         ReplaySnapshot = null;
         StateChanged?.Invoke();
+    }
+
+    private void PushUndo(UndoFrame frame)
+    {
+        _undoStack.AddLast(frame);
+        while (_undoStack.Count > MaxDepth) _undoStack.RemoveFirst();
     }
 
     private static void Replay(UndoFrame frame, bool forward, Action<DocumentSnapshot>? restoreSnapshot)

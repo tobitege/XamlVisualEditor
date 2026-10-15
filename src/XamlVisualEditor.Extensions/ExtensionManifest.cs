@@ -29,8 +29,43 @@ public sealed class ExtensionManifest
     /// <summary>Gets the contribution definitions.</summary>
     public JsonElement? Contributes { get; init; }
 
+    /// <summary>Gets the sensitive host capabilities the extension uses, see <see cref="ExtensionHostCapabilities"/>.</summary>
+    public IReadOnlyList<string> Capabilities { get; init; } = Array.Empty<string>();
+
     /// <summary>Gets the computed extension id.</summary>
     public string ExtensionId => Publisher + "." + Name;
+}
+
+/// <summary>Sensitive host capabilities that an extension receives only when it declares them.</summary>
+public static class ExtensionHostCapabilities
+{
+    /// <summary>Provides <see cref="ExtensionContext.DocumentOpenInterceptors"/>, which can redirect every user-requested open.</summary>
+    public const string DocumentOpenInterceptors = "documentOpenInterceptors";
+}
+
+/// <summary>
+/// Declares the sensitive host capabilities of an extension registered with the editor.
+/// Installed extension packages declare them in the <c>capabilities</c> array of their manifest instead.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class ExtensionCapabilitiesAttribute : Attribute
+{
+    /// <summary>Creates the declaration.</summary>
+    public ExtensionCapabilitiesAttribute(params string[] capabilities)
+    {
+        Capabilities = capabilities;
+    }
+
+    /// <summary>Gets the declared capabilities, see <see cref="ExtensionHostCapabilities"/>.</summary>
+    public IReadOnlyList<string> Capabilities { get; }
+
+    /// <summary>Returns the capabilities declared on <paramref name="extensionType"/>.</summary>
+    public static IReadOnlyList<string> GetDeclared(Type extensionType)
+    {
+        ArgumentNullException.ThrowIfNull(extensionType);
+        return extensionType.GetCustomAttributes(typeof(ExtensionCapabilitiesAttribute), inherit: false)
+            is [ExtensionCapabilitiesAttribute attribute] ? attribute.Capabilities : Array.Empty<string>();
+    }
 }
 
 /// <summary>Describes an extension package.</summary>

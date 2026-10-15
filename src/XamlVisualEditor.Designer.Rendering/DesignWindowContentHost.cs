@@ -84,12 +84,10 @@ public sealed class DesignWindowContentHost : Control, IDisposable
         if (_window.Background is { } background) context.DrawRectangle(background, null, new Rect(Bounds.Size));
     }
 
-    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnDetachedFromVisualTree(e);
-        Dispose();
-    }
-
+    /// <summary>
+    /// Releases the window content and closes the window. Detaching does not dispose the host, because a recycled view
+    /// is attached again later; the owner disposes it when it replaces or discards the surface.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;

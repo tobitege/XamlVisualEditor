@@ -1041,9 +1041,12 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return value.Contains('*') || value.Contains('?');
     }
 
+    // As in MSBuild, "**/" matches zero or more directories, so "**/*.axaml" also matches a file in the
+    // project root.
     private static bool GlobMatch(string text, string pattern)
     {
         string regex = Regex.Escape(pattern)
+            .Replace("\\*\\*/", "(?:.*/)?")
             .Replace("\\*\\*", ".*")
             .Replace("\\*", "[^/]*")
             .Replace("\\?", "[^/]");

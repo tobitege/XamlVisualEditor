@@ -152,6 +152,16 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
                 if (hasMethod)
                 {
+                    if (methodElement.ValueKind != JsonValueKind.String)
+                    {
+                        if (hasId && TryGetIdValue(idElement, out object? invalidId) && invalidId is not null)
+                        {
+                            await SendErrorAsync(invalidId, -32600, "Invalid Request", ct).ConfigureAwait(false);
+                        }
+
+                        continue;
+                    }
+
                     string? method = methodElement.GetString();
                     if (string.IsNullOrWhiteSpace(method))
                     {

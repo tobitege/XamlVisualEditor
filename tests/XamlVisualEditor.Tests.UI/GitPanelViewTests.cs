@@ -116,6 +116,27 @@ public sealed class GitPanelViewTests
         Assert.Equal("c.cs", Assert.Single(gitService.LastDiscardedPaths));
     }
 
+    [AvaloniaFact]
+    public async Task Failed_discard_is_shown_in_the_panel_after_the_refresh()
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false)
+        {
+            DiscardFailure = "error: unable to unlink c.cs"
+        };
+        RecordingDialogHost dialogs = new() { Confirm = true };
+        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
+        await vm.ToggleMonitoringCommand.Execute().ToTask();
+        await vm.RefreshAsync();
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
+        await vm.DiscardCommand.Execute().ToTask();
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+
+        Assert.Equal(1, gitService.DiscardCalls);
+        Assert.Equal(string.Format(UiStrings.GitCommandFailed, "error: unable to unlink c.cs"), vm.ErrorMessage);
+    }
+
     private static GitRepositoryStatus CreateStatus() => new()
     {
         RepositoryRoot = string.Empty,
@@ -291,11 +312,14 @@ public sealed class GitPanelViewTests
             LastUnstagedPaths = paths.ToArray();
             return Task.CompletedTask;
         }
+        public string? DiscardFailure { get; set; }
         public Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
         {
             DiscardCalls++;
             LastDiscardedPaths = paths.ToArray();
-            return Task.CompletedTask;
+            return DiscardFailure is null
+                ? Task.CompletedTask
+                : Task.FromException(new InvalidOperationException(DiscardFailure));
         }
         public Task CommitAsync(string repoPath, string message, CancellationToken ct = default) => throw new NotSupportedException();
     }

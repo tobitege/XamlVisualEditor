@@ -71,6 +71,12 @@ public sealed partial class DesignSurfaceView
         }
     }
 
+    // A window preview keeps its hidden window while the recycled view is detached, so replacing the surface releases it.
+    private void ReleaseRuntimeSurface()
+    {
+        if (_rootControl is DesignWindowContentHost host) host.Dispose();
+    }
+
     private void ShowRuntimeRenderFailure(Panel canvas, DesignerDocumentViewModel document, Exception exception)
     {
         bool empty = string.IsNullOrWhiteSpace(document.SyncEngine.CurrentText);
@@ -79,6 +85,7 @@ public sealed partial class DesignSurfaceView
             && _rootControl is not null && _runtimeRenderedDocument is not null;
         if (!keepPrevious)
         {
+            ReleaseRuntimeSurface();
             canvas.Children.Clear();
             _rootControl = null;
             _runtimeRenderedDocument = null;

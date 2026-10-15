@@ -74,6 +74,12 @@ public interface IEditorDocumentViewModel : IDisposable
     int CurrentLine { get; }
     int CurrentColumn { get; }
     ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
+
+    /// <summary>Saves the editor text even though the file changed on disk after it was read or last saved.</summary>
+    System.Threading.Tasks.Task OverwriteFileAsync();
+
+    /// <summary>Replaces the editor text with the current file content on disk.</summary>
+    System.Threading.Tasks.Task ReloadFromDiskAsync();
 }
 
 /// <summary>
@@ -4274,17 +4280,51 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     /// <summary>
     /// Saves a document and reports a file that cannot be written, such as a read-only file that source control has
-    /// not checked out. The document stays modified, so no change is lost.
+    /// not checked out. The document stays modified, so no change is lost. A file that changed on disk is overwritten
+    /// or reloaded as the user decides; a reload returns false, because the editor text was not saved.
     /// </summary>
-    private async System.Threading.Tasks.Task<bool> TrySaveDocumentAsync(IEditorDocumentViewModel doc)
+    // Documents whose save conflict the user left open; automatic saves skip them until a manual save resolves it.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<IEditorDocumentViewModel, object> _unresolvedSaveConflicts = new();
+
+    private async System.Threading.Tasks.Task<bool> TrySaveDocumentAsync(IEditorDocumentViewModel doc, bool automatic = false)
     {
+        if (automatic && _unresolvedSaveConflicts.TryGetValue(doc, out _))
+        {
+            return false;
+        }
+
         try
         {
-            await doc.SaveCommand.Execute().ToTask();
-            return true;
+            try
+            {
+                await doc.SaveCommand.Execute().ToTask();
+                _unresolvedSaveConflicts.Remove(doc);
+                return true;
+            }
+            catch (FileChangedOutsideEditorException)
+            {
+                switch (await SaveConflictInteraction.Handle(doc.FileName))
+                {
+                    case SaveConflictChoice.Overwrite:
+                        await doc.OverwriteFileAsync();
+                        _unresolvedSaveConflicts.Remove(doc);
+                        return true;
+                    case SaveConflictChoice.Reload:
+                        await doc.ReloadFromDiskAsync();
+                        _unresolvedSaveConflicts.Remove(doc);
+                        StatusText = string.Format(UiStrings.DocumentReloadedFromDisk, (object?)doc.FileName);
+                        return false;
+                    default:
+                        _unresolvedSaveConflicts.AddOrUpdate(doc, new object());
+                        StatusText = UiStrings.SaveCanceled;
+                        return false;
+                }
+            }
         }
-        // InvalidOperationException reports a document that cannot be saved yet, for example during a designer edit.
-        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException)
+        // InvalidOperationException reports a document that cannot be saved yet, for example during a designer edit;
+        // DecoderFallbackException a file on disk that cannot be reloaded as text.
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException
+            or DecoderFallbackException)
         {
             _logger.LogWarning("Save document failed: {Message}", ex.Message);
             SetPersistentStatus(FileSystemErrorMessages.TryGetReadOnlyEntryName(ex, doc.FilePath, out string? readOnlyName)
@@ -4749,13 +4789,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (await TrySaveDocumentAsync(doc))
+        if (await TrySaveDocumentAsync(doc, automatic: true))
         {
             StatusText = string.Format(UiStrings.DocumentAutoSaved, (object?)(doc.FileName));
         }
     }
 
-    private async System.Threading.Tasks.Task AutoSaveAsync(TextDocumentViewModel doc)
+    internal async System.Threading.Tasks.Task AutoSaveAsync(TextDocumentViewModel doc)
     {
         if (SaveBehavior != SaveBehavior.AutoSave)
         {
@@ -4767,7 +4807,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (await TrySaveDocumentAsync(doc))
+        if (await TrySaveDocumentAsync(doc, automatic: true))
         {
             StatusText = string.Format(UiStrings.DocumentAutoSaved, (object?)(doc.FileName));
         }
@@ -7860,10 +7900,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // Returns null when an interceptor cancelled the open.
     private async System.Threading.Tasks.Task<string?> ResolveUserOpenPathAsync(string filePath)
     {
-        if (FileSystemPathValidation.IsAccepted(filePath))
-        {
-            filePath = NormalizeDocumentPath(filePath);
-        }
+        filePath = NormalizeAcceptedDocumentPath(filePath);
 
         if (_documentOpenResolver is null
             || !FileSystemPathValidation.IsAccepted(filePath)
@@ -8104,6 +8141,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         return doc;
     }
+
+    /// <summary>Normalizes a caller's path like an open does, so lookups find the open document; other paths stay as given.</summary>
+    internal static string NormalizeAcceptedDocumentPath(string filePath) =>
+        FileSystemPathValidation.IsAccepted(filePath) ? NormalizeDocumentPath(filePath) : filePath;
 
     // Document identity uses the full path, so one file reached through different spellings maps to one document.
     private static string NormalizeDocumentPath(string filePath)
@@ -8374,6 +8415,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             StopDocumentPreviewers();
+            // A workspace without build outputs loads no assemblies, so the resolver and design themes of the
+            // previous one must not stay active.
+            _assemblyResolver?.Dispose();
+            _assemblyResolver = null;
+            WorkspaceDesignThemeRegistry.Clear();
             _workspace = workspace;
             _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
             _workspacePath = workspacePath;
@@ -8914,14 +8960,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string outputPath,
         int timeoutMs)
     {
+        string requestedPath = NormalizeAcceptedDocumentPath(filePath);
         DesignerDocumentViewModel? doc = Documents
             .OfType<DesignerDocumentViewModel>()
-            .FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
+            .FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, requestedPath));
         if (doc is null)
         {
             return new(false, UiStrings.DesignerDocumentNotOpen, 0, 0, outputPath);
         }
 
+        // The previewer service keys its hosts by the path of the open document.
+        filePath = doc.FilePath;
         if (_workspace is null)
         {
             return new(false, UiStrings.NoWorkspaceLoaded, 0, 0, outputPath);
@@ -8934,14 +8983,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         ActiveDocument = doc;
         // A document that shows its live previewer keeps it after the export; only a host started for the export ends.
-        bool usesLivePreviewer = doc.UseExternalPreviewer || _previewerLaunchService.TryGetSession(filePath, out _);
+        bool hasSession = _previewerLaunchService.TryGetSession(filePath, out PreviewerTcpSession? liveSession);
+        bool usesLivePreviewer = doc.UseExternalPreviewer || hasSession;
+        // A running previewer still shows the frame of an earlier state until it renders the exported one.
+        Avalonia.Remote.Protocol.Viewport.FrameMessage? staleFrame = liveSession?.LastFrame;
         PreviewerLaunchResult launch = await _previewerLaunchService.StartPreviewerAsync(
             filePath,
-            doc.SyncEngine.CurrentText,
+            GetPreviewerXaml(doc),
             _workspace,
             _workspacePath,
             command => RunWorkspaceCommandAsync(command),
-            (level, message) => LogOutput(level, message));
+            (level, message) => LogOutput(level, message),
+            doc.PreviewThemeRequest);
         if (!launch.Success)
         {
             return new(false, launch.ErrorMessage ?? UiStrings.PreviewerStartFailedText, 0, 0, outputPath);
@@ -8955,7 +9008,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         doc.PreviewerSession = session;
         try
         {
-            Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await WaitForStableFrameAsync(session, timeoutMs);
+            Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await WaitForStableFrameAsync(session, timeoutMs, staleFrame);
             if (frame is null)
             {
                 return new(false, UiStrings.PreviewerFrameTimeout, 0, 0, outputPath);
@@ -8980,17 +9033,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     // Frames arrive several times while the preview builds up (viewport negotiation); the last
-    // frame counts as stable once 1.5 s passed without a size change or resize request.
+    // frame counts as stable once 1.5 s passed without a size change or resize request. The stale frame, which the
+    // session held before the update, and frames without size never count.
     internal static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
         PreviewerTcpSession session,
-        int timeoutMs)
+        int timeoutMs,
+        Avalonia.Remote.Protocol.Viewport.FrameMessage? staleFrame = null)
     {
+        static bool IsUsable(Avalonia.Remote.Protocol.Viewport.FrameMessage? frame,
+            Avalonia.Remote.Protocol.Viewport.FrameMessage? stale) =>
+            frame is { Width: > 0, Height: > 0 } && !ReferenceEquals(frame, stale);
+
         object gate = new();
-        Avalonia.Remote.Protocol.Viewport.FrameMessage? last = session.LastFrame;
+        Avalonia.Remote.Protocol.Viewport.FrameMessage? last = null;
         DateTime lastChangeUtc = DateTime.UtcNow;
 
         void OnFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame)
         {
+            if (!IsUsable(frame, staleFrame)) return;
             lock (gate)
             {
                 if (last is null || frame.Width != last.Width || frame.Height != last.Height)
@@ -9015,6 +9075,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         session.ViewportResizeRequested += OnResize;
         try
         {
+            // Read after subscribing, so a frame that arrived before the subscription is not lost.
+            Avalonia.Remote.Protocol.Viewport.FrameMessage? current = session.LastFrame;
+            lock (gate)
+            {
+                if (last is null && IsUsable(current, staleFrame)) last = current;
+            }
+
             DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             while (DateTime.UtcNow < deadlineUtc)
             {

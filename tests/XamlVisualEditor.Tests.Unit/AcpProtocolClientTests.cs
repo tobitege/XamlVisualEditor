@@ -159,16 +159,23 @@ public sealed class AcpProtocolClientTests
         await using AcpProtocolClient client = pipe.CreateClient();
         new AcpFileSystemHandler().Register(client);
         client.Start(timeout.Token);
-        string path = Path.Combine(AppContext.BaseDirectory, "acp-file-" + Guid.NewGuid().ToString("N") + ".txt");
-        string original = "\n\nGrüße\r\n";
-        await File.WriteAllTextAsync(path, original);
-        await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 1, method = "fs/read_text_file", @params = new { sessionId = "s", path } }));
-        using JsonDocument read = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
-        Assert.Equal(original, read.RootElement.GetProperty("result").GetProperty("content").GetString());
-        await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "fs/write_text_file", @params = new { sessionId = "s", path, content = "" } }));
-        using JsonDocument write = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
-        Assert.True(write.RootElement.TryGetProperty("result", out _));
-        Assert.Equal(string.Empty, await File.ReadAllTextAsync(path));
+        string path = Path.Combine(Path.GetTempPath(), "acp-file-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            string original = "\n\nGrüße\r\n";
+            await File.WriteAllTextAsync(path, original);
+            await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 1, method = "fs/read_text_file", @params = new { sessionId = "s", path } }));
+            using JsonDocument read = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
+            Assert.Equal(original, read.RootElement.GetProperty("result").GetProperty("content").GetString());
+            await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "fs/write_text_file", @params = new { sessionId = "s", path, content = "" } }));
+            using JsonDocument write = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
+            Assert.True(write.RootElement.TryGetProperty("result", out _));
+            Assert.Equal(string.Empty, await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private sealed class DuplexPipe : IDisposable

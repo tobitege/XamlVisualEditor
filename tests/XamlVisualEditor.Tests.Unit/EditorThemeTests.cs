@@ -221,7 +221,7 @@ public sealed class EditorThemeTests
     public void ProviderPaletteOverridesTheBuiltInBackdrops()
     {
         using ThemeHost host = new();
-        EditorThemePalette palette = new FloweryEditorThemeProvider().GetPalette("cupcake");
+        EditorThemePalette palette = new SampleEditorThemeProvider().GetPalette("violet");
         host.Application.RequestedThemeVariant = ThemeVariant.Light;
         host.Application.Resources = EditorThemeResources.Create(palette);
         Color background = Color.Parse(palette.Colors[EditorThemeColor.Background]);

@@ -69,18 +69,26 @@ public sealed class TextEditorViewBindingTests
     public async Task ManualFoldingSurvivesTheFoldingUpdateAfterATextChange()
     {
         using CodeEditorViewModel document = CreateCodeDocument("one\ntwo\nthree\nfour\n");
+        XamlCodeEditorView view = new() { DataContext = document };
 
-        await WithViewAsync(new XamlCodeEditorView { DataContext = document }, async editor =>
+        await WithViewAsync(view, async editor =>
         {
             FoldingManager manager = GetFoldingManager(editor);
             editor.Select(4, 9);
             Assert.True(TextEditorViewHost.CollapseSelection(editor));
             FoldingSection created = Assert.Single(manager.AllFoldings);
             int start = created.StartOffset;
+            int updates = view.FoldingUpdateCount;
 
             document.Document.Insert(0, "zero\n");
-            await Task.Delay(500, TestContext.Current.CancellationToken);
-            await Flush();
+            // The view computes the regions again once the throttle after the text change has passed.
+            using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            while (view.FoldingUpdateCount == updates)
+            {
+                await Task.Delay(20, timeout.Token);
+                await Flush();
+            }
 
             FoldingSection kept = Assert.Single(manager.AllFoldings);
             Assert.Equal(start + 5, kept.StartOffset);

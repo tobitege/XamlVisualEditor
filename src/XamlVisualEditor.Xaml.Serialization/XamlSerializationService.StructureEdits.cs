@@ -316,9 +316,7 @@ public sealed partial class XamlSerializationService
             Text = text;
             Document = XDocument.Parse(text, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
             LineOffsets = GetSourceLineOffsets(text);
-            int newline = text.IndexOf('\n');
-            NewLine = newline >= 0 ? newline > 0 && text[newline - 1] == '\r' ? "\r\n" : "\n"
-                : text.Contains('\r') ? "\r" : Environment.NewLine;
+            NewLine = DetectNewLine(text);
         }
 
         public string Text { get; }

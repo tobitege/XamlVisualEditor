@@ -253,6 +253,29 @@ public sealed class McpTransportTests
     }
 
     [Fact]
+    public async Task StdioAnswersANonStringMethodWithInvalidRequestAndKeepsReading()
+    {
+        McpRequestRouter router = new(new McpSessionRegistry());
+        router.Register("ping", (_, _, _) => Task.FromResult<object?>(new { }));
+        byte[] input = Encoding.UTF8.GetBytes("""{"jsonrpc":"2.0","id":3,"method":42}""" + "\n" + PingJson + "\n");
+        using MemoryStream output = new();
+        await using McpJsonRpcConnection connection = new(new MemoryStream(input), output, router);
+        TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Disconnected += error => { if (error is null) disconnected.TrySetResult(); else disconnected.TrySetException(error); };
+        connection.Start(CancellationToken.None);
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        string[] lines = Encoding.UTF8.GetString(output.ToArray()).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        using JsonDocument invalid = JsonDocument.Parse(lines[0]);
+        Assert.Equal(3, invalid.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(-32600, invalid.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        using JsonDocument ping = JsonDocument.Parse(lines[1]);
+        Assert.Equal(2, ping.RootElement.GetProperty("id").GetInt32());
+        Assert.True(ping.RootElement.TryGetProperty("result", out _));
+    }
+
+    [Fact]
     public async Task StdioConnectionAnswersRequestsDeliveredByteByByte()
     {
         McpRequestRouter router = new(new McpSessionRegistry());

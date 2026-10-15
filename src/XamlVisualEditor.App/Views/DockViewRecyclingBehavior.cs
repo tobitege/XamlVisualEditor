@@ -5,6 +5,7 @@ using Avalonia.Xaml.Interactivity;
 using Dock.Avalonia.Controls;
 using Dock.Model.Core;
 using Dock.Model.Core.Events;
+using XamlVisualEditor.Designer.Rendering;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -76,6 +77,12 @@ public sealed class DockViewRecyclingBehavior : Behavior<DockControl>
                 foreach (XamlCodeEditorView editor in view.GetSelfAndVisualDescendants().OfType<XamlCodeEditorView>().ToArray())
                 {
                     editor.Dispose();
+                }
+
+                // A window preview keeps its hidden window across detaches as well.
+                foreach (DesignWindowContentHost host in view.GetSelfAndVisualDescendants().OfType<DesignWindowContentHost>().ToArray())
+                {
+                    host.Dispose();
                 }
             }
 

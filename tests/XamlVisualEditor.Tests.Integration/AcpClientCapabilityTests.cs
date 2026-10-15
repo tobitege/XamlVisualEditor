@@ -134,6 +134,73 @@ public sealed class AcpClientCapabilityTests
     }
 
     [Fact]
+    public async Task TerminalOutputReportsTheExitStatusOnlyAfterTheOutputIsComplete()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        await using AcpProtocolClient client = pipe.CreateClient();
+
+        AcpTerminalManager terminalManager = new();
+        terminalManager.Register(client);
+        client.Start(cts.Token);
+
+        // The command exits at once; a process it leaves behind writes to the inherited output pipe
+        // about one second later.
+        string command = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh";
+        string[] args = OperatingSystem.IsWindows()
+            ? new[] { "/c", "start", "/b", "cmd", "/c", "ping -n 2 127.0.0.1 >nul & echo late-output" }
+            : new[] { "-c", "(sleep 1; echo late-output) &" };
+
+        await SendRequestAsync(pipe.ServerWriter, 1, "terminal/create", new { command, args }, cts.Token);
+        JsonElement createResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
+        string terminalId = createResponse.GetProperty("result").GetProperty("terminalId").GetString() ?? string.Empty;
+
+        JsonElement output;
+        while (true)
+        {
+            output = Assert.IsType<JsonElement>(terminalManager.GetOutput(terminalId));
+            if (output.GetProperty("exitStatus").ValueKind == JsonValueKind.Object) break;
+            await Task.Delay(TimeSpan.FromMilliseconds(20), cts.Token);
+        }
+
+        Assert.Contains("late-output", output.GetProperty("output").GetString(), StringComparison.Ordinal);
+
+        await SendRequestAsync(pipe.ServerWriter, 2, "terminal/release", new { terminalId }, cts.Token);
+        JsonElement releaseResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
+        Assert.True(releaseResponse.TryGetProperty("result", out _), releaseResponse.ToString());
+    }
+
+    [Fact]
+    public async Task ReleasedTerminalOutputIsKeptOnlyForTheMostRecentTerminals()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        await using AcpProtocolClient client = pipe.CreateClient();
+
+        AcpTerminalManager terminalManager = new(maxReleasedOutputs: 2);
+        terminalManager.Register(client);
+        client.Start(cts.Token);
+
+        string command = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/echo";
+        string[] args = OperatingSystem.IsWindows() ? new[] { "/c", "echo", "hello" } : new[] { "hello" };
+        string[] terminalIds = new string[3];
+        for (int index = 0; index < terminalIds.Length; index++)
+        {
+            await SendRequestAsync(pipe.ServerWriter, 10 + index * 2, "terminal/create", new { command, args }, cts.Token);
+            JsonElement createResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
+            terminalIds[index] = createResponse.GetProperty("result").GetProperty("terminalId").GetString() ?? string.Empty;
+
+            await SendRequestAsync(pipe.ServerWriter, 11 + index * 2, "terminal/release", new { terminalId = terminalIds[index] }, cts.Token);
+            JsonElement releaseResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
+            Assert.True(releaseResponse.TryGetProperty("result", out _), releaseResponse.ToString());
+        }
+
+        Assert.Null(terminalManager.GetOutput(terminalIds[0]));
+        Assert.NotNull(terminalManager.GetOutput(terminalIds[1]));
+        Assert.NotNull(terminalManager.GetOutput(terminalIds[2]));
+    }
+
+    [Fact]
     public async Task PermissionRequestRoundTrip()
     {
         using DuplexPipe pipe = new();

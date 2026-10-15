@@ -36,6 +36,35 @@ public sealed class WorkspaceXamlDiscoveryTests : IDisposable
         Assert.DoesNotContain(Path.Combine("bin", "Debug", "Copied.axaml"), files);
     }
 
+    [Fact]
+    public void Recursive_Wildcard_Also_Matches_Files_In_The_Project_Root()
+    {
+        CreateFile("App.axaml");
+        string removing = CreateProject("""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <AvaloniaXaml Remove="**/*.axaml" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        string[] remaining = Discover(removing);
+
+        Assert.DoesNotContain("App.axaml", remaining);
+        Assert.DoesNotContain(Path.Combine("Views", "Main.axaml"), remaining);
+
+        string including = CreateProject("""
+            <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+              <ItemGroup><AvaloniaXaml Include="**/*.axaml" /></ItemGroup>
+            </Project>
+            """);
+
+        string[] included = Discover(including);
+
+        Assert.Contains("App.axaml", included);
+        Assert.Contains(Path.Combine("Views", "Main.axaml"), included);
+    }
+
     [Theory]
     [InlineData("EnableDefaultItems")]
     [InlineData("EnableDefaultAvaloniaItems")]

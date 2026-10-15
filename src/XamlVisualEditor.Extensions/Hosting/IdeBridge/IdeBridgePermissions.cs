@@ -53,7 +53,16 @@ public sealed class IdeBridgePermissionService
         accessLevel == IdeBridgeAccessLevel.Full ? CreateFullCapabilities() : CreateReadOnlyCapabilities();
 
     /// <summary>Returns the stored consent of the workspace or prompts for and persists a new one.</summary>
-    public async Task<IdeBridgeWorkspacePermissionState?> AuthorizeAsync(string workspaceId, CancellationToken ct)
+    public Task<IdeBridgeWorkspacePermissionState?> AuthorizeAsync(string workspaceId, CancellationToken ct) =>
+        AuthorizeAsync(workspaceId, null, ct);
+
+    /// <summary>
+    /// Returns the stored consent of the workspace or prompts for and persists a new one.
+    /// <paramref name="onAuthorized"/> runs with the granted consent before a revocation can remove it,
+    /// so a session registered there is ended by every later revocation.
+    /// </summary>
+    public async Task<IdeBridgeWorkspacePermissionState?> AuthorizeAsync(string workspaceId,
+        Action<IdeBridgeWorkspacePermissionState>? onAuthorized, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(workspaceId))
         {
@@ -66,6 +75,7 @@ public sealed class IdeBridgePermissionService
             Dictionary<string, IdeBridgeWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
             if (states.TryGetValue(workspaceId, out IdeBridgeWorkspacePermissionState? existing))
             {
+                onAuthorized?.Invoke(existing);
                 return existing;
             }
 
@@ -77,6 +87,7 @@ public sealed class IdeBridgePermissionService
 
             states[workspaceId] = granted;
             await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            onAuthorized?.Invoke(granted);
             return granted;
         }
         finally
@@ -214,12 +225,16 @@ public sealed class IdeBridgePermissionService
             Write: true);
     }
 
+    // The settings return the stored dictionary itself, which other readers enumerate concurrently; it is
+    // never changed in place, every change is made on a copy that is then saved.
     private Task<Dictionary<string, IdeBridgeWorkspacePermissionState>> LoadStatesAsync(CancellationToken ct)
     {
         Dictionary<string, IdeBridgeWorkspacePermissionState>? states = _settings
             .Get<Dictionary<string, IdeBridgeWorkspacePermissionState>>(SettingsSection);
 
-        return Task.FromResult(states ?? new Dictionary<string, IdeBridgeWorkspacePermissionState>(StringComparer.Ordinal));
+        return Task.FromResult(states is null
+            ? new Dictionary<string, IdeBridgeWorkspacePermissionState>(StringComparer.Ordinal)
+            : new Dictionary<string, IdeBridgeWorkspacePermissionState>(states, StringComparer.Ordinal));
     }
 
     private Task SaveStatesAsync(Dictionary<string, IdeBridgeWorkspacePermissionState> states, CancellationToken ct)

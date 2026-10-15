@@ -83,6 +83,10 @@ public sealed class ExtensionTreeViewModelTests
             ExtensionViewType.Tree,
             ExtensionViewLocation.Left,
             0);
+        // The test assembly runs main-thread work on the calling thread; the model belongs to the UI dispatcher.
+        ReactiveUI.Primitives.Concurrency.ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
+        using IDisposable scheduler = System.Reactive.Disposables.Disposable.Create(() => ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler);
+        ReactiveUI.RxSchedulers.MainThreadScheduler = ReactiveUI.Primitives.Concurrency.AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
         var viewModel = new ExtensionTreeViewModel(contribution, new WideTreeProvider(5000));
         int rootNotifications = 0;
         viewModel.RootItems.CollectionChanged += (_, _) => rootNotifications++;

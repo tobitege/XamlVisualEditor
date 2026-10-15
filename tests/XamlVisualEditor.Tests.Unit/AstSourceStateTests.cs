@@ -40,6 +40,44 @@ public sealed class AstSourceStateTests
     [Theory]
     [InlineData("\n")]
     [InlineData("\r\n")]
+    public void Editing_a_sibling_attribute_keeps_whitespace_only_content_of_an_element_without_children(string newline)
+    {
+        string source = string.Join(newline,
+            "<Grid xmlns=\"https://github.com/avaloniaui\">",
+            "    <StackPanel>",
+            "</StackPanel>",
+            "    <Button Width=\"80\" />",
+            "</Grid>");
+        MutableAstDocument document = Parse(source);
+        MutableAstObjectNode button = document.Root!.Children.OfType<MutableAstObjectNode>()
+            .Single(node => node.TypeName == "Button");
+
+        button.SetPropertyValue("Width", "120");
+        IReadOnlyList<TextEdit> edits = new XamlSerializationService()
+            .ComputeMinimalEdits(document, source, Array.Empty<AstChange>());
+
+        string expected = source.Replace("Width=\"80\"", "Width=\"120\"", StringComparison.Ordinal);
+        Assert.Equal(expected, Apply(source, edits));
+    }
+
+    [Fact]
+    public void Replacing_the_whole_text_keeps_the_xml_declaration_and_the_line_endings_of_the_source()
+    {
+        // The document type declaration is not represented by the serialized text, so neither the attribute
+        // edits nor the structural merge apply and the serialized text replaces the source.
+        const string source = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE Root>\n<Root>\n    <A />\n</Root>";
+        const string serialized = "<Root>\r\n    <A />\r\n    <B />\r\n</Root>";
+
+        string edited = Apply(source, XamlSerializationService.ComputeMinimalEdits(source, serialized));
+
+        Assert.StartsWith("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n", edited);
+        Assert.DoesNotContain('\r', edited);
+        Assert.NotNull(XDocument.Parse(edited).Root!.Element("B"));
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
     public void Replacing_the_last_own_line_attribute_with_trailing_spaces_keeps_the_start_tag_intact(string newline)
     {
         string source = "<Button" + newline + "    Foo=\"1\"   " + newline + "    />";

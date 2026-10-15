@@ -19,6 +19,7 @@ public sealed class PreviewerFrameValidationTests
     [InlineData(4, 2, 12, 32, PixelFormat.Bgra8888, false)]
     [InlineData(4, 2, -16, 32, PixelFormat.Bgra8888, false)]
     [InlineData(4, 2, 8, 15, PixelFormat.Rgb565, false)]
+    [InlineData(4, 2, 16, 32, PixelFormat.Rgba8888, false)]
     [InlineData(-4, 2, 16, 32, PixelFormat.Bgra8888, false)]
     [InlineData(4, 0, 16, 32, PixelFormat.Bgra8888, false)]
     [InlineData(PreviewerTcpSession.MaxFrameDimension + 1, 1, 0, 0, PixelFormat.Bgra8888, false)]
@@ -68,5 +69,37 @@ public sealed class PreviewerFrameValidationTests
         Assert.Equal(1, await acknowledged.Reader.ReadAsync(cancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), cancellationToken));
         lock (raised) Assert.Equal(new long[] { 2 }, raised);
         Assert.Equal(2, session.LastFrame?.SequenceId);
+    }
+
+    [Fact]
+    public async Task Waiting_for_a_stable_frame_ignores_the_stale_frame_and_frames_without_size()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using PreviewerTcpSession session = new("Stable.axaml", log: null);
+        using IAvaloniaRemoteTransportConnection connection = await new BsonTcpTransport().Connect(IPAddress.Loopback, session.Port);
+        connection.Start();
+
+        async Task SendAndWaitAsync(long sequenceId, int width, int height)
+        {
+            await connection.Send(new FrameMessage
+            {
+                SequenceId = sequenceId, Width = width, Height = height, Stride = width * 4,
+                Format = PixelFormat.Bgra8888, Data = new byte[width * height * 4]
+            });
+            using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            while (session.LastFrame?.SequenceId != sequenceId) await Task.Delay(10, timeout.Token);
+        }
+
+        await SendAndWaitAsync(1, 2, 2);
+        FrameMessage stale = session.LastFrame!;
+        Assert.Null(await MainWindowViewModel.WaitForStableFrameAsync(session, 500, stale));
+
+        await SendAndWaitAsync(2, 0, 0);
+        Assert.Null(await MainWindowViewModel.WaitForStableFrameAsync(session, 500, stale));
+
+        await SendAndWaitAsync(3, 2, 2);
+        FrameMessage? frame = await MainWindowViewModel.WaitForStableFrameAsync(session, 10000, stale);
+        Assert.Equal(3, frame?.SequenceId);
     }
 }

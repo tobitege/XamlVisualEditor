@@ -19,18 +19,37 @@ public sealed class McpSessionService
         InitializeAsync(request, McpProtocol.StdioProtocolVersions, ct);
 
     /// <summary>Authorizes the client and answers with the requested protocol version when it is one of <paramref name="supportedVersions"/>.</summary>
-    public async Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, IReadOnlyList<string> supportedVersions, CancellationToken ct)
+    public Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, IReadOnlyList<string> supportedVersions, CancellationToken ct) =>
+        InitializeAsync(request, supportedVersions, null, ct);
+
+    /// <summary>
+    /// Authorizes the client and answers with the requested protocol version when it is one of <paramref name="supportedVersions"/>.
+    /// <paramref name="register"/> receives the new session before a revocation of the consent can run.
+    /// </summary>
+    public async Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, IReadOnlyList<string> supportedVersions,
+        Action<McpInitializeOutcome>? register, CancellationToken ct)
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
+        McpInitializeOutcome? outcome = null;
         McpWorkspacePermissionState? state = await _permissions
-            .AuthorizeAsync(workspaceId, ct)
+            .AuthorizeAsync(workspaceId, granted =>
+            {
+                outcome = CreateOutcome(request, supportedVersions, workspaceId, granted);
+                register?.Invoke(outcome);
+            }, ct)
             .ConfigureAwait(false);
 
-        if (state is null)
+        if (state is null || outcome is null)
         {
             throw new McpJsonRpcException(-32000, "Permission denied.");
         }
 
+        return outcome;
+    }
+
+    private static McpInitializeOutcome CreateOutcome(McpInitializeParams? request, IReadOnlyList<string> supportedVersions,
+        string workspaceId, McpWorkspacePermissionState state)
+    {
         McpServerInfo serverInfo = new("XamlVisualEditor", ExtensionSdkInfo.ApiVersion.ToString());
         McpServerCapabilities capabilities = new(
             new McpToolsCapability(),

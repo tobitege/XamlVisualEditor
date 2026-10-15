@@ -31,7 +31,15 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
         IReadOnlyList<string> supportedVersions = context.Connection is null
             ? McpProtocol.HttpProtocolVersions
             : McpProtocol.StdioProtocolVersions;
-        McpInitializeOutcome outcome = await _sessionService.InitializeAsync(request, supportedVersions, ct).ConfigureAwait(false);
+        // The session is registered while the consent cannot be revoked, so a revocation either precedes
+        // the authorization or ends the registered session.
+        McpInitializeOutcome outcome = await _sessionService.InitializeAsync(request, supportedVersions,
+            authorized => Register(context, authorized), ct).ConfigureAwait(false);
+        return outcome.Result;
+    }
+
+    private void Register(McpRequestContext context, McpInitializeOutcome outcome)
+    {
         McpInitializeResult result = outcome.Result;
         McpSessionInfo session = new(result.WorkspaceId, outcome.AccessLevel, result.SessionToken, result.ProtocolVersion);
 
@@ -43,7 +51,5 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
         {
             _registry.Set(result.SessionToken, session);
         }
-
-        return result;
     }
 }

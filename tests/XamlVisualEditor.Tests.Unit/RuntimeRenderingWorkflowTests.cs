@@ -338,8 +338,21 @@ public sealed class RuntimeRenderingWorkflowTests
             Assert.Equal(document.Root!.Id, identities[surface]);
             Assert.DoesNotContain(sourceWindow, identities.Keys);
             Assert.Same(content, sourceWindow.Content);
+
+            // A recycled view leaves the visual tree and returns later; the window keeps its content.
+            host.Content = null;
+            host.UpdateLayout();
+            Assert.False(closed);
+            host.Content = surface;
+            host.UpdateLayout();
+            Assert.Same(content, sourceWindow.Content);
+            Assert.Same(surface, content.GetVisualParent());
+            Assert.True(content.Bounds.Width > 0);
+            Assert.Equal("After", ancestorBinding.Text);
         }
         finally { host.Close(); }
+        Assert.False(closed);
+        surface.Dispose();
         Assert.True(closed);
     }
 

@@ -7,4 +7,7 @@
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\XamlVisualEditor.Xaml.Parsing\XamlWhitespaceRules.cs" Link="XamlWhitespaceRules.cs" />
+  </ItemGroup>
 </Project>

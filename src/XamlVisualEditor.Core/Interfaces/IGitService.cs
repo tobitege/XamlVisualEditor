@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
-/// Provides git operations for repository status, diff, and staging workflows.
+/// Provides git operations for repository status, diff, and staging workflows. Paths are passed as literal
+/// paths, not as patterns. Stage, unstage, discard and commit throw <see cref="System.InvalidOperationException"/>
+/// with git's error output when git fails.
 /// </summary>
 public interface IGitService
 {

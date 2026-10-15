@@ -18,6 +18,8 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
     public void Register(McpRequestRouter router)
     {
         router.Register(McpProtocol.InitializeMethod, (context, paramsElement, ct) => HandleInitializeAsync(context, paramsElement, ct));
+        router.Register(McpProtocol.InitializedNotification, (_, _, _) => Task.FromResult<object?>(null));
+        router.Register("ping", (_, _, _) => Task.FromResult<object?>(new { }));
     }
 
     private async Task<object?> HandleInitializeAsync(McpRequestContext context, JsonElement? parameters, CancellationToken ct)
@@ -26,16 +28,21 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
             ? null
             : JsonSerializer.Deserialize<McpInitializeParams>(parameters.Value.GetRawText(), McpMessageFraming.SerializerOptions);
 
-        McpInitializeOutcome outcome = await _sessionService.InitializeAsync(request, ct).ConfigureAwait(false);
+        IReadOnlyList<string> supportedVersions = context.Connection is null
+            ? McpProtocol.HttpProtocolVersions
+            : McpProtocol.StdioProtocolVersions;
+        McpInitializeOutcome outcome = await _sessionService.InitializeAsync(request, supportedVersions, ct).ConfigureAwait(false);
         McpInitializeResult result = outcome.Result;
-        McpSessionInfo session = new(result.WorkspaceId, outcome.AccessLevel, result.SessionToken);
+        McpSessionInfo session = new(result.WorkspaceId, outcome.AccessLevel, result.SessionToken, result.ProtocolVersion);
 
         if (context.Connection is not null)
         {
             _registry.Set(context.Connection, session);
         }
-
-        _registry.Set(result.SessionToken, session);
+        else
+        {
+            _registry.Set(result.SessionToken, session);
+        }
 
         return result;
     }

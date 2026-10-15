@@ -1,5 +1,6 @@
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.Xaml.Intellisense;
@@ -866,7 +867,7 @@ public sealed class ClosingTagCompletionProvider : ICompletionProvider
             {
                 DisplayText = $"</{tagName}>",
                 InsertText = $"{tagName}>",
-                Description = $"Close <{tagName}> element",
+                Description = string.Format(UiStrings.CloseXamlElement, tagName),
                 Kind = CompletionItemKind.ClosingTag,
                 Priority = 0
             });

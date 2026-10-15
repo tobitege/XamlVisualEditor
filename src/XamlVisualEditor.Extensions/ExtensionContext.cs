@@ -102,6 +102,24 @@ public sealed class ExtensionContext
     /// <summary>Gets the designer host service.</summary>
     public IDesignerHost Designer { get; }
 
+    /// <summary>Gets the workspace control catalog when the host supports visual control discovery.</summary>
+    public IControlCatalog? ControlCatalog { get; init; }
+
+    /// <summary>Gets the text editor view options and actions when the host provides text editors.</summary>
+    public ITextEditorViewHost? TextEditorView { get; init; }
+
+    /// <summary>Gets the context keys that command and menu conditions read, when the host evaluates conditions.</summary>
+    public IContextKeys? ContextKeys { get; init; }
+
+    /// <summary>Gets the registry for work that keeps the editor from being fully ready, when the host reports such work.</summary>
+    public IBackgroundActivities? BackgroundActivities { get; init; }
+
+    /// <summary>
+    /// Gets the registry for interceptors of user-requested opens, when the host consults them and the extension
+    /// declares <see cref="ExtensionHostCapabilities.DocumentOpenInterceptors"/>.
+    /// </summary>
+    public IDocumentOpenInterceptors? DocumentOpenInterceptors { get; init; }
+
     /// <summary>Gets the workspace service.</summary>
     public IWorkspace Workspace { get; }
 

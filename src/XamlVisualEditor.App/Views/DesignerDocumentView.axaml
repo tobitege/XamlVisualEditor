@@ -2,46 +2,69 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:ad="using:XamlVisualEditor.Designer.Adorners"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.DesignerDocumentView"
              x:Name="Root"
              x:DataType="vm:DesignerDocumentViewModel">
 
-    <DockPanel>
+    <Grid>
+    <DockPanel IsEnabled="{CompiledBinding !IsLoading}">
         <!-- View mode tabs -->
-        <Border DockPanel.Dock="Top"
+        <Border DockPanel.Dock="Top" Classes="editor-chrome"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
                 Padding="4,2"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                 BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-                <RadioButton Content="Split" GroupName="ViewMode"
+            <WrapPanel Orientation="Horizontal">
+                <WrapPanel.Styles>
+                    <Style Selector="WrapPanel > :is(Control)">
+                        <Setter Property="Margin" Value="1,1" />
+                    </Style>
+                </WrapPanel.Styles>
+                <RadioButton Content="{x:Static loc:UiStrings.Split}" GroupName="ViewMode"
                              IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
                              Padding="12,4"
                              FontSize="12" />
-                <RadioButton Content="Design" GroupName="ViewMode"
+                <RadioButton Content="{x:Static loc:UiStrings.Design}" GroupName="ViewMode"
                              IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsDesign}}"
                              Padding="12,4"
                              FontSize="12" />
-                <RadioButton Content="XAML" GroupName="ViewMode"
+                <RadioButton Content="{x:Static loc:UiStrings.Xaml}" GroupName="ViewMode"
                              IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsCode}}"
                              Padding="12,4"
                              FontSize="12" />
-                <ToggleButton Content="Previewer"
+                <ToggleButton Content="{x:Static loc:UiStrings.Previewer}"
                               IsChecked="{CompiledBinding UseExternalPreviewer, Mode=TwoWay}"
                               Padding="12,4"
                               FontSize="12" />
                 <Separator Margin="6,0" />
-                <RadioButton Content="Split V" GroupName="SplitDirection"
+                <RadioButton Theme="{StaticResource {x:Type ToggleButton}}"
+                              GroupName="SplitDirection" ToolTip.Tip="{x:Static loc:UiStrings.TopBottom}"
+                              AutomationProperties.Name="{x:Static loc:UiStrings.SplitHorizontallyHint}"
                               IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitVertical}}"
                               IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
-                              Padding="12,4"
-                              FontSize="12" />
-                <RadioButton Content="Split H" GroupName="SplitDirection"
+                              Width="28" Height="28" Padding="4"
+                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                    <PathIcon Width="16" Height="16"
+                              Data="M 0,0 H 16 V 16 H 0 Z M 2,2 V 7 H 14 V 2 Z M 2,9 V 14 H 14 V 9 Z" />
+                </RadioButton>
+                <RadioButton Theme="{StaticResource {x:Type ToggleButton}}"
+                              GroupName="SplitDirection" ToolTip.Tip="{x:Static loc:UiStrings.SideBySide}"
+                              AutomationProperties.Name="{x:Static loc:UiStrings.SplitVerticallyHint}"
                               IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitHorizontal}}"
                               IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
-                              Padding="12,4"
-                              FontSize="12" />
-            </StackPanel>
+                              Width="28" Height="28" Padding="4"
+                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                    <PathIcon Width="16" Height="16"
+                              Data="M 0,0 H 16 V 16 H 0 Z M 2,2 V 14 H 7 V 2 Z M 9,2 V 14 H 14 V 2 Z" />
+                </RadioButton>
+            </WrapPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" IsVisible="{CompiledBinding ShowReadOnlyNotice}"
+                Background="#4A3B00" BorderBrush="#C9A227" BorderThickness="0,0,0,1" Padding="8,4">
+            <TextBlock Text="{x:Static loc:UiStrings.ReadOnlyFileBanner}" Foreground="#FFE08A" TextWrapping="Wrap" />
         </Border>
 
         <Grid v:SplitterLayoutBehavior.PersistenceKey="DesignerDocument">
@@ -85,18 +108,38 @@
                     <Border IsVisible="{CompiledBinding UseExternalPreviewer, Converter={x:Static BoolConverters.Not}}">
                         <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
                     </Border>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollBarVisibility="Auto"
-                                  IsVisible="{CompiledBinding UseExternalPreviewer}">
-                        <v:PreviewerSurfaceControl Session="{CompiledBinding PreviewerSession}"
-                                                   HorizontalAlignment="Left"
-                                                   VerticalAlignment="Top" />
-                    </ScrollViewer>
+                    <DockPanel IsVisible="{CompiledBinding UseExternalPreviewer}">
+                        <v:DesignerViewportToolbar DockPanel.Dock="Top" DataContext="{CompiledBinding DesignSurface}"
+                                                   IsExternalPreviewer="True" FitRequested="OnPreviewerFit" SelectionRequested="OnPreviewerSelection" />
+                        <v:DesignerCoordinateStrip DockPanel.Dock="Bottom" DataContext="{CompiledBinding DesignSurface}"
+                                                   StatusText="{CompiledBinding #ExternalPreviewSurface.StatusText}" />
+                        <Grid RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
+                            <Border Width="24" Height="24" Background="#252526"
+                                    IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
+                            <ad:RulerControl x:Name="ExternalHorizontalRuler" Grid.Column="1" Height="24"
+                                             Orientation="Horizontal" Zoom="{CompiledBinding DesignSurface.Zoom}"
+                                             Guides="{CompiledBinding DesignSurface.VerticalGuides}"
+                                             PointerPosition="{CompiledBinding DesignSurface.Readout.PointerX}"
+                                             IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
+                            <ad:RulerControl x:Name="ExternalVerticalRuler" Grid.Row="1" Width="24"
+                                             Orientation="Vertical" Zoom="{CompiledBinding DesignSurface.Zoom}"
+                                             Guides="{CompiledBinding DesignSurface.HorizontalGuides}"
+                                             PointerPosition="{CompiledBinding DesignSurface.Readout.PointerY}"
+                                             IsVisible="{CompiledBinding DesignSurface.ShowRulers}" />
+                            <ScrollViewer x:Name="PreviewerViewport" Grid.Row="1" Grid.Column="1"
+                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                          Background="Transparent" PointerPressed="OnPreviewerViewportPressed">
+                                <v:PreviewerSurfaceControl x:Name="ExternalPreviewSurface" Session="{CompiledBinding PreviewerSession}"
+                                                           Document="{CompiledBinding}"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Top" />
+                            </ScrollViewer>
+                        </Grid>
+                    </DockPanel>
                 </Grid>
             </Border>
 
             <GridSplitter Width="4"
-                          Background="Transparent"
+                          Classes="designer-splitter"
                           ResizeBehavior="PreviousAndNext"
                           ResizeDirection="Columns"
                           HorizontalAlignment="Stretch"
@@ -114,7 +157,7 @@
             </GridSplitter>
 
             <GridSplitter Height="4"
-                          Background="Transparent"
+                          Classes="designer-splitter"
                           ResizeBehavior="PreviousAndNext"
                           ResizeDirection="Rows"
                           HorizontalAlignment="Stretch"
@@ -165,5 +208,16 @@
             </Border>
         </Grid>
     </DockPanel>
-
+        <Border IsVisible="{CompiledBinding IsLoading}" Classes="editor-chrome"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="16" CornerRadius="4" Margin="16"
+                HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
+            <StackPanel Spacing="10" MinWidth="260">
+                <TextBlock Text="{CompiledBinding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <ProgressBar IsIndeterminate="True" Height="4" />
+                <TextBlock Text="{CompiledBinding LoadingStatus}" TextWrapping="Wrap" />
+                <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CloseCommand}" HorizontalAlignment="Right" />
+            </StackPanel>
+        </Border>
+    </Grid>
 </UserControl>

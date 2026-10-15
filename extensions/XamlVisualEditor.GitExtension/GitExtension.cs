@@ -1,4 +1,5 @@
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.GitExtension;
@@ -8,18 +9,20 @@ public sealed class GitExtension : IXveExtension
     private const string ViewId = "git.panel";
     private readonly IGitService _gitService;
     private readonly IWorkspaceInfo _workspaceInfo;
+    private readonly IDialogHost _dialogHost;
 
-    public GitExtension(IGitService gitService, IWorkspaceInfo workspaceInfo)
+    public GitExtension(IGitService gitService, IWorkspaceInfo workspaceInfo, IDialogHost dialogHost)
     {
         _gitService = gitService;
         _workspaceInfo = workspaceInfo;
+        _dialogHost = dialogHost;
     }
 
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
         ExtensionViewContribution view = new(
             ViewId,
-            "Git",
+            UiStrings.Git,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Bottom,
             40);
@@ -29,7 +32,7 @@ public sealed class GitExtension : IXveExtension
             new[] { view });
         IDisposable providerRegistration = context.Views.RegisterCustomViewProvider(
             ViewId,
-            new GitPanelViewProvider(_gitService, _workspaceInfo));
+            new GitPanelViewProvider(_gitService, _workspaceInfo, _dialogHost));
 
         context.Subscriptions.Add(viewRegistration);
         context.Subscriptions.Add(providerRegistration);
@@ -41,16 +44,18 @@ public sealed class GitExtension : IXveExtension
     {
         private readonly IGitService _gitService;
         private readonly IWorkspaceInfo _workspaceInfo;
+        private readonly IDialogHost _dialogHost;
 
-        public GitPanelViewProvider(IGitService gitService, IWorkspaceInfo workspaceInfo)
+        public GitPanelViewProvider(IGitService gitService, IWorkspaceInfo workspaceInfo, IDialogHost dialogHost)
         {
             _gitService = gitService;
             _workspaceInfo = workspaceInfo;
+            _dialogHost = dialogHost;
         }
 
         public object? CreateViewModel()
         {
-            return new GitPanelViewModel(_gitService, _workspaceInfo);
+            return new GitPanelViewModel(_gitService, _workspaceInfo, _dialogHost);
         }
     }
 }

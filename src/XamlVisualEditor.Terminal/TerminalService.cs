@@ -5,6 +5,7 @@ namespace XamlVisualEditor.Terminal;
 public interface ITerminalService
 {
     ITerminalSession CreateSession(TerminalSessionOptions options);
+    int StartExternalSession(TerminalSessionOptions options);
 }
 
 public sealed class TerminalService : ITerminalService
@@ -30,5 +31,11 @@ public sealed class TerminalService : ITerminalService
             _ptyProvider,
             _emulatorFactory,
             _loggerFactory?.CreateLogger<TerminalSession>());
+    }
+
+    public int StartExternalSession(TerminalSessionOptions options)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("External Windows terminals require Windows.");
+        return WindowsPtyProvider.StartExternalProcess(options);
     }
 }

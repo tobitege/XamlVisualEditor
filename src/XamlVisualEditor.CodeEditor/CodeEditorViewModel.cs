@@ -10,6 +10,7 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Intellisense;
@@ -25,9 +26,10 @@ namespace XamlVisualEditor.CodeEditor;
 /// ViewModel for the XAML code editor panel.
 /// Wraps an AvaloniaEdit TextDocument and integrates with the sync engine.
 /// </summary>
-public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
+public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, ITextEditorDisplayState
 {
     private readonly CompositeDisposable _disposables = new();
+    private readonly System.Reactive.Subjects.Subject<int> _revealLineRequests = new();
     private readonly SyncEngine _syncEngine;
     private readonly CompletionProviderRegistry _completionRegistry;
     private readonly ITypeMetadataService? _metadataService;
@@ -126,6 +128,35 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     public partial int? ExecutionLine { get; set; }
 
     /// <summary>
+    /// Gets or sets whether a selection in the designer moves the caret to the element, scrolls to it and marks its lines.
+    /// </summary>
+    [Reactive]
+    public partial bool FollowDesignerSelection { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the lines of the element selected in the designer, which the editor marks in its gutter.
+    /// </summary>
+    [Reactive]
+    public partial SourceLineRange? SelectedElementLines { get; set; }
+
+    /// <summary>
+    /// Gets or sets the lines of the diagnostic location opened from the problems list, which the editor marks in its
+    /// gutter in the error color until the text changes.
+    /// </summary>
+    [Reactive]
+    public partial SourceLineRange? DiagnosticLines { get; set; }
+
+    /// <summary>
+    /// Gets the line numbers the view scrolls into the middle of the editor.
+    /// </summary>
+    public IObservable<int> RevealLineRequests => _revealLineRequests;
+
+    /// <summary>
+    /// Asks the view to scroll a 1-based line into the middle of the editor.
+    /// </summary>
+    public void RevealLine(int line) => _revealLineRequests.OnNext(line);
+
+    /// <summary>
     /// Gets the version used to refresh breakpoint line highlights.
     /// </summary>
     [Reactive]
@@ -208,6 +239,15 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public ReactiveCommand<RxVoid, RxVoid> DecreaseFontSizeCommand { get; }
 
+    private bool _hasPendingTextChanges;
+
+    /// <summary>Gets whether typed changes still need to enter the shared document history.</summary>
+    public bool HasPendingTextChanges
+    {
+        get => _hasPendingTextChanges;
+        private set => this.RaiseAndSetIfChanged(ref _hasPendingTextChanges, value);
+    }
+
     public CodeEditorViewModel(
         string filePath,
         SyncEngine syncEngine,
@@ -231,9 +271,26 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         XamlParsingService parsingService = new();
         _semanticLanguageService = new XamlLanguageService(_completionRegistry, parsingService, metadata);
 
+        IObservable<Unit> historyChanges = Observable.FromEvent(
+            handler => _syncEngine.UndoRedo.StateChanged += handler,
+            handler => _syncEngine.UndoRedo.StateChanged -= handler);
+        IObservable<Unit> commandState = Observable.Merge(historyChanges,
+                this.WhenAnyValue(editor => editor.HasPendingTextChanges).Select(_ => Unit.Default))
+            .WitnessOn(RxSchedulers.MainThreadScheduler);
+
         TriggerCompletionCommand = ReactiveCommand.Create(TriggerCompletion);
-        UndoCommand = ReactiveCommand.Create(() => Document.UndoStack.Undo());
-        RedoCommand = ReactiveCommand.Create(() => Document.UndoStack.Redo());
+        UndoCommand = ReactiveCommand.Create(() =>
+        {
+            FlushPendingTextChanges();
+            _syncEngine.Undo();
+        }, commandState.Select(_ => HasPendingTextChanges || _syncEngine.UndoRedo.CanUndo).DistinctUntilChanged());
+        RedoCommand = ReactiveCommand.Create(() =>
+        {
+            FlushPendingTextChanges();
+            _syncEngine.Redo();
+        }, commandState.Select(_ => !HasPendingTextChanges && _syncEngine.UndoRedo.CanRedo).DistinctUntilChanged());
+        _disposables.Add(UndoCommand);
+        _disposables.Add(RedoCommand);
         FormatDocumentCommand = ReactiveCommand.Create(FormatDocument);
         IncreaseFontSizeCommand = ReactiveCommand.Create(() => { FontSize = Math.Min(FontSize + 2, 48); });
         DecreaseFontSizeCommand = ReactiveCommand.Create(() => { FontSize = Math.Max(FontSize - 2, 8); });
@@ -243,9 +300,10 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
                 h => Document.TextChanged += h,
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
+            .Do(_ => HasPendingTextChanges = true)
             .Throttle(TimeSpan.FromMilliseconds(300))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => OnTextChanged());
+            .Subscribe(_ => FlushPendingTextChanges());
         _disposables.Add(textChangedSubscription);
 
         IDisposable semanticTokensSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
@@ -265,9 +323,17 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
             .Subscribe(evt => { _ = NotifyDocumentChangedAsync(); });
         _disposables.Add(syncDocumentSubscription);
 
+        // Any edit shifts or invalidates the marked diagnostic location.
+        IDisposable diagnosticLinesSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => Document.TextChanged += h,
+                h => Document.TextChanged -= h)
+            .Where(_ => DiagnosticLines is not null)
+            .Subscribe(_ => DiagnosticLines = null);
+        _disposables.Add(diagnosticLinesSubscription);
+
         // Subscribe to sync events to receive AST→text updates
         IDisposable syncSubscription = _syncEngine.SyncEvents
-            .Where(e => e.Source == SyncSource.DesignSurface || e.Source == SyncSource.Collaboration)
+            .Where(e => e.Source != SyncSource.CodeEditor)
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(OnSyncEvent);
         _disposables.Add(syncSubscription);
@@ -296,6 +362,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void SetTextSilently(string text)
     {
+        HasPendingTextChanges = false;
         _suppressTextChanged = true;
         try
         {
@@ -313,8 +380,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void SelectAll()
     {
-        SelectionStart = 0;
-        SelectionLength = Document.TextLength;
+        SetSelection(0, Document.TextLength, Document.TextLength);
     }
 
     /// <summary>
@@ -330,6 +396,19 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
 
         int clamped = Math.Clamp(offset, 0, Document.TextLength);
         CaretOffset = clamped;
+    }
+
+    /// <summary>Sets selection and caret; observers see the change only after all three values are set.</summary>
+    public void SetSelection(int start, int length, int caretOffset)
+    {
+        int textLength = Document.TextLength;
+        int clampedStart = Math.Clamp(start, 0, textLength);
+        using (DelayChangeNotifications())
+        {
+            SelectionStart = clampedStart;
+            SelectionLength = Math.Clamp(length, 0, textLength - clampedStart);
+            CaretOffset = Math.Clamp(caretOffset, 0, textLength);
+        }
     }
 
     public int GetOffsetForLineColumn(int line, int column)
@@ -375,24 +454,115 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
         return offset;
     }
 
-    private void OnTextChanged()
+    /// <summary>
+    /// Gets the document lines the specified AST node spans, from its start tag to its end tag.
+    /// </summary>
+    public SourceLineRange? GetLineRangeForNode(MutableAstObjectNode node)
     {
+        if (GetOffsetForNode(node) is not { } startOffset)
+        {
+            return null;
+        }
+
+        int startLine = Document.GetLineByOffset(startOffset).LineNumber;
+        string text = Document.Text;
+        // The XML line position of an element points at its name, one character after the '<'.
+        int tagStart = startOffset < text.Length && text[startOffset] == '<'
+            ? startOffset
+            : text.LastIndexOf('<', Math.Min(startOffset, text.Length - 1));
+        int endOffset = tagStart < 0 ? -1 : XmlElementExtent.FindEnd(text, tagStart);
+        int endLine = endOffset > startOffset
+            ? Document.GetLineByOffset(endOffset - 1).LineNumber
+            : startLine;
+        return new SourceLineRange(startLine, endLine);
+    }
+
+    /// <summary>
+    /// Moves the caret to a diagnostic location, marks the start tag that contains it (or only its line when it lies
+    /// outside a start tag) and scrolls the marked lines into the middle of the editor.
+    /// </summary>
+    public void MarkDiagnostic(int line, int column)
+    {
+        if (Document.TextLength == 0)
+        {
+            return;
+        }
+
+        int offset = GetOffsetForLineColumn(line, column);
+        SetSelection(offset, 0, offset);
+        int offsetLine = Document.GetLineByOffset(offset).LineNumber;
+        SourceLineRange lines = GetStartTagLines(offset) ?? new SourceLineRange(offsetLine, offsetLine);
+        DiagnosticLines = lines;
+        RevealLine(lines.StartLine);
+    }
+
+    private SourceLineRange? GetStartTagLines(int offset)
+    {
+        string text = Document.Text;
+        // Attribute values cannot contain '<', so the nearest '<' before a position inside a start tag begins that tag.
+        int tagStart = text.LastIndexOf('<', Math.Min(offset, text.Length - 1));
+        if (tagStart < 0 || tagStart + 1 >= text.Length || !(char.IsLetter(text[tagStart + 1]) || text[tagStart + 1] == '_'))
+        {
+            return null;
+        }
+
+        int tagEnd = XmlElementExtent.FindStartTagEnd(text, tagStart);
+        if (tagEnd <= offset)
+        {
+            return null;
+        }
+
+        return new SourceLineRange(Document.GetLineByOffset(tagStart).LineNumber, Document.GetLineByOffset(tagEnd - 1).LineNumber);
+    }
+
+    /// <summary>
+    /// Commits pending typing before saving, replaying history, or leaving the editor.
+    /// </summary>
+    public void FlushPendingTextChanges()
+    {
+        if (!HasPendingTextChanges)
+        {
+            return;
+        }
+
         IsModified = true;
 
         string text = Document.Text;
 
         // Commit any pending AST changes as an undo batch before re-parsing
-        _syncEngine.CommitUndoBatch("Text edit");
+        _syncEngine.CommitUndoBatch(UiStrings.TextEdit);
 
         _syncEngine.NotifyTextChanged(text, SyncSource.CodeEditor);
+        HasPendingTextChanges = false;
     }
 
     private void OnSyncEvent(SyncEvent syncEvent)
     {
-        if (syncEvent.XamlText is not null)
+        if (HasPendingTextChanges || !string.Equals(syncEvent.XamlText,
+                _syncEngine.CurrentText ?? string.Empty, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        string previousText = Document.Text;
+        if (syncEvent.XamlText is { } currentText &&
+            !string.Equals(previousText, currentText, StringComparison.Ordinal))
         {
             int caretOffset = CaretOffset;
-            SetTextSilently(syncEvent.XamlText);
+            int start = 0;
+            while (start < previousText.Length && start < currentText.Length && previousText[start] == currentText[start]) start++;
+            int suffix = 0;
+            while (suffix < previousText.Length - start && suffix < currentText.Length - start
+                && previousText[^(suffix + 1)] == currentText[^(suffix + 1)]) suffix++;
+            HasPendingTextChanges = false;
+            _suppressTextChanged = true;
+            try
+            {
+                Document.Replace(start, previousText.Length - start - suffix,
+                    currentText.Substring(start, currentText.Length - start - suffix));
+                IsModified = false;
+            }
+            finally { _suppressTextChanged = false; }
             SetCaretOffsetFromSync(caretOffset);
         }
 
@@ -752,6 +922,8 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
     public void Dispose()
     {
         _disposables.Dispose();
+        _revealLineRequests.OnCompleted();
+        _revealLineRequests.Dispose();
     }
 
     private static IReadOnlyList<XamlDiagnostic> MapDiagnostics(

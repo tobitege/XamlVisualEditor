@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Acp;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.App.Services;
 
@@ -155,7 +156,7 @@ public sealed class AcpOAuthDeviceFlowService : IAcpOAuthDeviceFlowService
             return;
         }
 
-        string message = "OAuth request failed (" + (int)response.StatusCode + ")";
+        string message = UiStrings.OAuthRequestFailedPrefix + (int)response.StatusCode + ")";
         if (!string.IsNullOrWhiteSpace(body))
         {
             message += ": " + body;

@@ -4,7 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Services;
 
@@ -17,6 +19,25 @@ public sealed class AppDialogHost : IDialogHost
     public AppDialogHost(MainWindowProvider windowProvider)
     {
         _windowProvider = windowProvider;
+        _factories[ConfirmationDialogRequest.DialogId] = input =>
+        {
+            if (input is not ConfirmationDialogRequest request)
+                throw new ArgumentException("Confirmation dialog requires a confirmation request.", nameof(input));
+            return new ConfirmDialog
+            {
+                DataContext = new ConfirmDialogViewModel(request.Title, request.Message, request.ConfirmText,
+                    request.IsDestructive, request.CancelText)
+            };
+        };
+        _factories[ProgressDialogRequest.DialogId] = input =>
+        {
+            if (input is not ProgressDialogRequest request)
+                throw new ArgumentException("Progress dialog requires a progress request.", nameof(input));
+            return new ProgressDialog
+            {
+                DataContext = new ProgressDialogViewModel(request.Title, request.Message, request.CancelText)
+            };
+        };
     }
 
     public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory)

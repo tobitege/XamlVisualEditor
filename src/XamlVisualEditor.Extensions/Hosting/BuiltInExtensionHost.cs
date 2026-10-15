@@ -1,19 +1,20 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
 /// <summary>
 /// Activates in-proc extensions registered via DI and enabled installed extension
-/// packages (their manifest's main assembly is loaded into the default load context so
-/// contract types unify with the editor's own).
+/// packages whose manifest names a main assembly (loaded into the default load context,
+/// so contract types unify with the editor's own).
 /// </summary>
 public sealed class BuiltInExtensionHost : IDisposable
 {
     private readonly IEnumerable<IXveExtension> _extensions;
-    private readonly IExtensionPackageStore _packageStore;
-    private readonly IExtensionStateStore _stateStore;
+    private readonly IExtensionPackageStore? _packageStore;
+    private readonly IExtensionStateStore? _stateStore;
     private readonly ILogger<BuiltInExtensionHost> _logger;
     private readonly ICommands _commands;
     private readonly ICommandMetadataRegistry _commandMetadata;
@@ -42,6 +43,12 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly ITerminalBridge _terminal;
     private readonly IExtensionViewHost _viewHost;
     private readonly ISettings _settings;
+    private readonly Func<string, IExtensionStorage> _storageFactory;
+    private readonly IControlCatalog? _controlCatalog;
+    private readonly ITextEditorViewHost? _textEditorView;
+    private readonly IContextKeys? _contextKeys;
+    private readonly IBackgroundActivities? _backgroundActivities;
+    private readonly IDocumentOpenInterceptors? _documentOpenInterceptors;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
 
@@ -74,9 +81,15 @@ public sealed class BuiltInExtensionHost : IDisposable
         ITerminalBridge terminal,
         IExtensionViewHost viewHost,
         ISettings settings,
-        IExtensionPackageStore packageStore,
-        IExtensionStateStore stateStore,
-        ILogger<BuiltInExtensionHost>? logger = null)
+        IExtensionPackageStore? packageStore = null,
+        IExtensionStateStore? stateStore = null,
+        ILogger<BuiltInExtensionHost>? logger = null,
+        IControlCatalog? controlCatalog = null,
+        Func<string, IExtensionStorage>? storageFactory = null,
+        ITextEditorViewHost? textEditorView = null,
+        IContextKeys? contextKeys = null,
+        IBackgroundActivities? backgroundActivities = null,
+        IDocumentOpenInterceptors? documentOpenInterceptors = null)
     {
         _extensions = extensions;
         _packageStore = packageStore;
@@ -109,6 +122,12 @@ public sealed class BuiltInExtensionHost : IDisposable
         _terminal = terminal;
         _viewHost = viewHost;
         _settings = settings;
+        _storageFactory = storageFactory ?? (_ => new InMemoryExtensionStorage());
+        _controlCatalog = controlCatalog;
+        _textEditorView = textEditorView;
+        _contextKeys = contextKeys;
+        _backgroundActivities = backgroundActivities;
+        _documentOpenInterceptors = documentOpenInterceptors;
     }
 
     public async Task ActivateAsync(CancellationToken cancellationToken)
@@ -121,61 +140,68 @@ public sealed class BuiltInExtensionHost : IDisposable
         _activated = true;
         foreach (IXveExtension extension in _extensions)
         {
-            ExtensionContext context = CreateContext(ResolveExtensionId(extension), ResolveExtensionPath(extension));
-            await extension.ActivateAsync(context, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            string extensionId = ResolveExtensionId(extension);
+            using IDisposable? activity = BeginActivation(extensionId);
+            ExtensionContext context = CreateContext(extensionId, ResolveExtensionPath(extension),
+                ExtensionCapabilitiesAttribute.GetDeclared(extension.GetType()));
+            await extension.ActivateAsync(context, cancellationToken);
         }
 
-        await ActivateInstalledPackagesAsync(cancellationToken).ConfigureAwait(false);
+        await ActivateInstalledPackagesAsync(cancellationToken);
     }
 
     private async Task ActivateInstalledPackagesAsync(CancellationToken cancellationToken)
     {
+        if (_packageStore is null || _stateStore is null)
+        {
+            return;
+        }
+
         IReadOnlyList<ExtensionPackageInfo> installed;
         try
         {
-            installed = await _packageStore.GetInstalledAsync(cancellationToken).ConfigureAwait(false);
+            installed = await _packageStore.GetInstalledAsync(cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Installed extension packages could not be listed");
+            _logger.LogWarning(exception, "Installed extension packages could not be listed");
             return;
         }
 
         foreach (ExtensionPackageInfo package in installed)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string extensionId = package.Manifest.ExtensionId;
             try
             {
-                bool enabled = await _stateStore.GetEnabledAsync(extensionId, cancellationToken).ConfigureAwait(false);
-                if (!enabled || string.IsNullOrWhiteSpace(package.Manifest.Main))
+                if (string.IsNullOrWhiteSpace(package.Manifest.Main)
+                    || !await _stateStore.GetEnabledAsync(extensionId, cancellationToken))
                 {
                     continue;
                 }
 
-                string contentDirectory = InstalledExtensionPackages.ExtractContent(package.PackagePath);
-                string? mainAssemblyPath = InstalledExtensionPackages.ResolveMainAssemblyPath(contentDirectory, package.Manifest.Main);
-                if (mainAssemblyPath is null)
+                if (InstalledExtensionPackages.ResolveMainAssemblyPath(package) is not { } mainAssemblyPath)
                 {
-                    _logger.LogWarning("Extension package {ExtensionId}: main assembly '{Main}' not found", extensionId, package.Manifest.Main);
+                    _logger.LogWarning("Extension package {ExtensionId}: main assembly '{Main}' not found",
+                        extensionId, package.Manifest.Main);
                     continue;
                 }
 
+                using IDisposable? activity = BeginActivation(extensionId);
                 Assembly assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(mainAssemblyPath);
                 foreach (Type type in InstalledExtensionPackages.FindExtensionTypes(assembly))
                 {
-                    if (Activator.CreateInstance(type) is not IXveExtension extension)
-                    {
-                        continue;
-                    }
-
-                    ExtensionContext context = CreateContext(extensionId, contentDirectory);
-                    await extension.ActivateAsync(context, cancellationToken).ConfigureAwait(false);
+                    IXveExtension extension = (IXveExtension)Activator.CreateInstance(type)!;
+                    ExtensionContext context = CreateContext(extensionId, package.InstallationDirectory!,
+                        package.Manifest.Capabilities);
+                    await extension.ActivateAsync(context, cancellationToken);
                     _logger.LogInformation("Activated extension package {ExtensionId} ({Type})", extensionId, type.FullName);
                 }
             }
-            catch (Exception ex)
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "Extension package {ExtensionId} failed to activate", extensionId);
+                _logger.LogWarning(exception, "Extension package {ExtensionId} failed to activate", extensionId);
             }
         }
     }
@@ -193,12 +219,19 @@ public sealed class BuiltInExtensionHost : IDisposable
         _extensionSubscriptions.Clear();
     }
 
-    private ExtensionContext CreateContext(string extensionId, string extensionPath)
+    /// <summary>Creates the activation context of one extension.</summary>
+    /// <param name="capabilities">
+    /// Host capabilities the extension declared, from its manifest for installed packages and from
+    /// <see cref="ExtensionCapabilitiesAttribute"/> for extensions registered with the editor. The extension
+    /// declares them itself and the extension manager lists them for the user; the check only withholds services
+    /// that were not declared and is not a sandbox, because extension code runs in the editor process.
+    /// </param>
+    private ExtensionContext CreateContext(string extensionId, string extensionPath, IReadOnlyList<string> capabilities)
     {
         List<IDisposable> subscriptions = new();
         _extensionSubscriptions.Add(subscriptions);
 
-        IExtensionStorage storage = new InMemoryExtensionStorage();
+        IExtensionStorage storage = _storageFactory(extensionId);
         IExtensionLogger logger = new NullExtensionLogger();
         IExtensionPermissions permissions = new ExtensionPermissionService(extensionId, _settings, _window);
 
@@ -235,8 +268,20 @@ public sealed class BuiltInExtensionHost : IDisposable
             _settings,
             storage,
             logger,
-            subscriptions);
+            subscriptions)
+        {
+            ControlCatalog = _controlCatalog,
+            TextEditorView = _textEditorView,
+            ContextKeys = _contextKeys,
+            BackgroundActivities = _backgroundActivities,
+            // An interceptor can redirect every file open, so only extensions that declare it receive the registry.
+            DocumentOpenInterceptors = capabilities.Contains(ExtensionHostCapabilities.DocumentOpenInterceptors,
+                StringComparer.OrdinalIgnoreCase) ? _documentOpenInterceptors : null
+        };
     }
+
+    private IDisposable? BeginActivation(string extensionId) =>
+        _backgroundActivities?.Begin(string.Format(UiStrings.ActivatingExtensionStatus, extensionId));
 
     private static string ResolveExtensionId(IXveExtension extension)
     {

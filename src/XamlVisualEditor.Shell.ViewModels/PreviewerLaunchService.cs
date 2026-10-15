@@ -4,20 +4,67 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
 internal sealed class PreviewerLaunchService : IDisposable
 {
-    private readonly Dictionary<string, Process> _processes = new(FileSystemPathComparison.Comparer);
-    private readonly Dictionary<string, PreviewerTcpSession> _sessions = new(FileSystemPathComparison.Comparer);
+    private readonly object _gate = new();
+    private readonly Dictionary<string, PreviewerInstance> _instances = new(FileSystemPathComparison.Comparer);
     private readonly PreviewerTelemetryStore _telemetry = new();
+    private bool _disposed;
+
+    private sealed class PreviewerInstance
+    {
+        public required WorkspaceModel Workspace { get; init; }
+        public string? WorkspacePath { get; init; }
+        public Action<string, string>? Log { get; init; }
+        public TaskCompletionSource<PreviewerLaunchResult> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Process? Process { get; set; }
+        public PreviewerTcpSession? Session { get; set; }
+        public string? XamlText { get; set; }
+        public DesignerThemeRequest? ThemeRequest { get; set; }
+        public SemaphoreSlim UpdateGate { get; } = new(1, 1);
+        public Guid? LastSentRenderId { get; set; }
+        public Guid? LastSentThemeRequestId { get; set; }
+        public Guid PendingUpdateId { get; set; }
+        public TaskCompletionSource<bool>? PendingUpdate { get; set; }
+        public Guid PendingThemeId { get; set; }
+        public TaskCompletionSource<DesignerThemeResult>? PendingTheme { get; set; }
+    }
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
+
+    private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>Waits for an ended host process; returns false when it did not exit within the timeout.</summary>
+    internal Func<Process, TimeSpan, bool> WaitForProcessExit { get; init; } =
+        static (process, timeout) => process.WaitForExit(timeout);
+
+    /// <summary>Registers an already running host process and its session for a file.</summary>
+    internal void AddRunningInstance(string xamlFilePath, WorkspaceModel workspace, string? workspacePath,
+        Process? process, PreviewerTcpSession? session, Action<string, string>? log = null)
+    {
+        PreviewerInstance instance = new()
+        {
+            Workspace = workspace, WorkspacePath = workspacePath, Log = log, Process = process, Session = session
+        };
+        instance.Started.TrySetResult(new PreviewerLaunchResult(true, null, process));
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _instances.Add(xamlFilePath, instance);
+        }
+    }
 
     public async Task<PreviewerLaunchResult> StartPreviewerAsync(
         string xamlFilePath,
@@ -25,12 +72,68 @@ internal sealed class PreviewerLaunchService : IDisposable
         WorkspaceModel workspace,
         string? workspacePath,
         Func<string, Task>? runWorkspaceCommandAsync,
+        Action<string, string>? log,
+        DesignerThemeRequest? themeRequest = null)
+    {
+        PreviewerInstance instance;
+        PreviewerInstance? replaced = null;
+        bool created;
+        lock (_gate)
+        {
+            if (_disposed) return PreviewerLaunchResult.Fail("The previewer service is closed.");
+            created = !_instances.TryGetValue(xamlFilePath, out instance!);
+            if (!created && (!ReferenceEquals(instance.Workspace, workspace) ||
+                !FileSystemPathComparison.Comparer.Equals(instance.WorkspacePath, workspacePath)))
+            {
+                replaced = instance;
+                _instances.Remove(xamlFilePath);
+                created = true;
+            }
+            if (created)
+            {
+                instance = new PreviewerInstance { Workspace = workspace, WorkspacePath = workspacePath, Log = log };
+                _instances.Add(xamlFilePath, instance);
+            }
+            if (!string.IsNullOrWhiteSpace(xamlText))
+            {
+                instance.XamlText = xamlText;
+                instance.ThemeRequest = themeRequest;
+            }
+        }
+
+        if (replaced is not null)
+        {
+            replaced.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer workspace changed."));
+            DisposeInstance(replaced);
+        }
+
+        if (created)
+            _ = StartInstanceAsync(xamlFilePath, instance, workspace, workspacePath, runWorkspaceCommandAsync, log);
+
+        PreviewerLaunchResult result = await instance.Started.Task;
+        if (result.Success && !IsCurrent(xamlFilePath, instance))
+            return PreviewerLaunchResult.Fail("The previewer was closed or replaced.");
+        if (!created && result.Success && !string.IsNullOrWhiteSpace(xamlText))
+        {
+            if (TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))
+                await SendInstanceUpdateAsync(xamlFilePath, instance, xamlText, launchInfo);
+        }
+        return result;
+    }
+
+    private async Task StartInstanceAsync(
+        string xamlFilePath,
+        PreviewerInstance instance,
+        WorkspaceModel workspace,
+        string? workspacePath,
+        Func<string, Task>? runWorkspaceCommandAsync,
         Action<string, string>? log)
     {
-        if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out string error))
+        try
         {
-            return PreviewerLaunchResult.Fail(error);
-        }
+        if (!IsCurrent(xamlFilePath, instance)) return;
+        if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out string error))
+            throw new InvalidOperationException(error);
 
         if (!launchInfo.HasRequiredAssets)
         {
@@ -41,79 +144,67 @@ internal sealed class PreviewerLaunchService : IDisposable
             }
 
             if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out launchInfo, out error))
-            {
-                return PreviewerLaunchResult.Fail(error);
-            }
+                throw new InvalidOperationException(error);
+            if (!launchInfo.HasRequiredAssets)
+                throw new InvalidOperationException("Previewer assets are still missing. Build the workspace and editor first.");
         }
 
-        if (_processes.TryGetValue(xamlFilePath, out Process? existing) && !existing.HasExited)
-        {
-            if (!string.IsNullOrWhiteSpace(xamlText))
-            {
-                await SendUpdateXamlAsync(xamlFilePath, xamlText, workspace, log, workspacePath);
-            }
-
-            return PreviewerLaunchResult.FromProcess(existing);
-        }
-
-        PreviewerTcpSession session = GetOrCreateSession(xamlFilePath, log);
-        launchInfo = launchInfo with { TransportUri = $"tcp-bson://127.0.0.1:{session.Port}/" };
+        if (!IsCurrent(xamlFilePath, instance)) return;
         LogCompiledBindingsSetting(launchInfo.TargetAssemblyPath, log);
-        ProcessStartInfo startInfo = BuildStartInfo(launchInfo);
-        try
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        Process process;
+        lock (_gate)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            Process process = new() { StartInfo = startInfo, EnableRaisingEvents = true };
-            process.Exited += (_, _) =>
+            if (!IsCurrent(xamlFilePath, instance)) return;
+            PreviewerTcpSession session = new(xamlFilePath, log);
+            instance.Session = session;
+            session.ErrorReceived += errorInfo =>
             {
-                if (process.ExitCode != 0)
-                {
-                    _telemetry.RecordCrash(process.ExitCode);
-                    if (string.IsNullOrWhiteSpace(session.LastError))
-                    {
-                        session.ReportError($"Previewer exited with code {process.ExitCode}.");
-                    }
-                }
-
-                log?.Invoke("Info", $"Previewer exited with code {process.ExitCode}");
-                _processes.Remove(xamlFilePath);
-                if (_sessions.Remove(xamlFilePath, out PreviewerTcpSession? removed))
-                {
-                    removed.Dispose();
-                }
+                if (IsCurrent(xamlFilePath, instance)) PreviewerErrorReceived?.Invoke(errorInfo);
             };
-            process.Start();
+            launchInfo = launchInfo with { TransportUri = $"tcp-bson://127.0.0.1:{session.Port}/" };
+            process = new Process { StartInfo = BuildStartInfo(launchInfo), EnableRaisingEvents = true };
+            instance.Process = process;
+            process.Exited += (_, _) => OnProcessExited(xamlFilePath, instance, log);
             process.OutputDataReceived += (_, e) =>
             {
-                if (!string.IsNullOrWhiteSpace(e.Data))
+                if (IsCurrent(xamlFilePath, instance) && !string.IsNullOrWhiteSpace(e.Data))
                 {
-                    log?.Invoke("Info", $"Previewer: {e.Data}");
+                    if (!TryReceiveIncrementalResult(instance, e.Data) && !TryReceiveThemeResult(instance, e.Data)
+                        && !session.TryReceiveDesignTree(e.Data) && !session.TryReceiveThemeCatalog(e.Data))
+                        log?.Invoke("Info", $"Previewer: {e.Data}");
                 }
             };
             process.ErrorDataReceived += (_, e) =>
             {
-                if (!string.IsNullOrWhiteSpace(e.Data))
+                if (IsCurrent(xamlFilePath, instance) && !string.IsNullOrWhiteSpace(e.Data))
                 {
                     log?.Invoke("Error", $"Previewer: {e.Data}");
-                    session.ReportError(e.Data);
+                    session.ReportStandardErrorLine(e.Data);
                 }
             };
+            process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
-            stopwatch.Stop();
-            _telemetry.RecordStart(stopwatch.Elapsed);
-            _processes[xamlFilePath] = process;
+        }
+        stopwatch.Stop();
+        _telemetry.RecordStart(stopwatch.Elapsed);
+        string? latestXaml;
+        lock (_gate) latestXaml = instance.XamlText;
+        if (!string.IsNullOrWhiteSpace(latestXaml))
+            await SendInstanceUpdateAsync(xamlFilePath, instance, latestXaml, launchInfo);
+        lock (_gate)
+        {
+            if (IsCurrent(xamlFilePath, instance))
+                instance.Started.TrySetResult(PreviewerLaunchResult.FromProcess(process));
+        }
+        if (IsCurrent(xamlFilePath, instance))
             log?.Invoke("Info", $"Previewer started: {launchInfo.TargetAssemblyPath}");
-            if (!string.IsNullOrWhiteSpace(xamlText))
-            {
-                await SendUpdateXamlAsync(xamlFilePath, xamlText, workspace, log, workspacePath);
-            }
-            return PreviewerLaunchResult.FromProcess(process);
         }
         catch (Exception ex)
         {
             _telemetry.RecordFailure(ex.Message);
-            return PreviewerLaunchResult.Fail($"Previewer launch failed: {ex.Message}");
+            ReleaseInstance(xamlFilePath, instance, $"Previewer launch failed: {ex.Message}");
         }
     }
 
@@ -122,11 +213,16 @@ internal sealed class PreviewerLaunchService : IDisposable
         string xamlText,
         WorkspaceModel workspace,
         Action<string, string>? log,
-        string? workspacePath = null)
+        string? workspacePath = null,
+        DesignerThemeRequest? themeRequest = null)
     {
-        if (!_sessions.TryGetValue(xamlFilePath, out PreviewerTcpSession? session))
+        PreviewerInstance? instance;
+        lock (_gate)
         {
-            return;
+            if (!_instances.TryGetValue(xamlFilePath, out instance) || !ReferenceEquals(instance.Workspace, workspace)) return;
+            instance.XamlText = xamlText;
+            instance.ThemeRequest = themeRequest;
+            if (instance.Session is null) return;
         }
 
         if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))
@@ -134,63 +230,252 @@ internal sealed class PreviewerLaunchService : IDisposable
             return;
         }
 
-        string projectPath = BuildXamlProjectPath(xamlFilePath, launchInfo.ProjectDirectory);
-        string updatedXaml = NormalizeDesignDataContext(xamlText);
-        (double? width, double? height) = TryGetDesignSize(updatedXaml);
-        await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height);
+        await SendInstanceUpdateAsync(xamlFilePath, instance, xamlText, launchInfo);
         log?.Invoke("Info", "Previewer XAML update sent");
     }
 
     public bool TryGetSession(string xamlFilePath, out PreviewerTcpSession? session)
-        => _sessions.TryGetValue(xamlFilePath, out session);
-
-    /// <summary>Beendet den Previewer-Prozess einer Datei und entsorgt die Session.</summary>
-    public void StopPreviewer(string xamlFilePath)
     {
-        if (_processes.Remove(xamlFilePath, out Process? process))
+        lock (_gate)
         {
+            session = _instances.TryGetValue(xamlFilePath, out PreviewerInstance? instance) ? instance.Session : null;
+            return session is not null;
+        }
+    }
+
+    private async Task SendInstanceUpdateAsync(string xamlFilePath, PreviewerInstance instance,
+        string xamlText, PreviewerLaunchInfo launchInfo)
+    {
+        await instance.UpdateGate.WaitAsync();
+        try
+        {
+            if (!IsCurrent(xamlFilePath, instance) || instance.Session is not { } session) return;
+            DesignerThemeRequest? themeRequest;
+            lock (_gate)
+            {
+                if (instance.XamlText != xamlText) return;
+                themeRequest = instance.ThemeRequest;
+            }
+            string projectPath = BuildXamlProjectPath(xamlFilePath, launchInfo.ProjectDirectory);
+            string updatedXaml = NormalizeDesignDataContext(xamlText);
+            (double? width, double? height) = TryGetDesignSize(updatedXaml);
+            Guid? renderId = null;
+            Guid? themeRequestId = themeRequest?.RequestId;
             try
             {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
+                XDocument preview = XDocument.Parse(updatedXaml);
+                string? value = preview.Descendants().Attributes(XName.Get("DesignNodeIdentity.RenderId",
+                    "clr-namespace:XamlVisualEditor.Designer.Rendering;assembly=XamlVisualEditor.Designer.Rendering"))
+                    .FirstOrDefault()?.Value;
+                if (Guid.TryParse(value, out Guid parsed)) renderId = parsed;
             }
-            catch
+            catch (System.Xml.XmlException) { }
+            try
             {
+                // Theme requests travel on standard input, never inside the document. The host confirms the request
+                // before the document follows, and a changed theme reloads the document so that the load reports
+                // the new catalog and a rejected selection.
+                bool themeChanged = false;
+                if (themeRequest is not null && themeRequest.RequestId != instance.LastSentThemeRequestId)
+                {
+                    await SendThemeRequestAsync(instance, themeRequest);
+                    instance.LastSentThemeRequestId = themeRequest.RequestId;
+                    themeChanged = true;
+                }
+                Guid? previousRenderId = instance.LastSentRenderId;
+                await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height, renderId, themeRequestId,
+                    !themeChanged && previousRenderId is { } previous && renderId is { } current
+                        ? () => TrySendIncrementalUpdateAsync(instance, previous, current, updatedXaml) : null);
+                instance.LastSentRenderId = renderId;
+            }
+            catch (Exception) when (!IsCurrent(xamlFilePath, instance))
+            {
+                // Closing or replacing a host ends pending transport requests.
             }
         }
+        finally { instance.UpdateGate.Release(); }
+    }
 
-        if (_sessions.Remove(xamlFilePath, out PreviewerTcpSession? session))
+    private static async Task<bool> TrySendIncrementalUpdateAsync(PreviewerInstance instance, Guid previous, Guid current, string xaml)
+    {
+        if (instance.Process is not { } process || process.HasExited) return false;
+        Guid requestId = Guid.NewGuid();
+        TaskCompletionSource<bool> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (instance) { instance.PendingUpdateId = requestId; instance.PendingUpdate = completion; }
+        try
         {
-            session.Dispose();
+            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new DesignerUpdateRequest(requestId, previous, current, xaml)));
+            await process.StandardInput.FlushAsync();
+            return await completion.Task;
         }
+        finally
+        {
+            lock (instance) { if (ReferenceEquals(instance.PendingUpdate, completion)) instance.PendingUpdate = null; }
+        }
+    }
+
+    /// <summary>Waits until the host has applied the request, so the document that follows renders with it.</summary>
+    private static async Task SendThemeRequestAsync(PreviewerInstance instance, DesignerThemeRequest request)
+    {
+        if (instance.Process is not { } process || process.HasExited) return;
+        TaskCompletionSource<DesignerThemeResult> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (instance) { instance.PendingThemeId = request.RequestId; instance.PendingTheme = completion; }
+        try
+        {
+            await process.StandardInput.WriteLineAsync(DesignerThemeProtocol.RequestPrefix + JsonSerializer.Serialize(request));
+            await process.StandardInput.FlushAsync();
+            await completion.Task;
+        }
+        finally
+        {
+            lock (instance) { if (ReferenceEquals(instance.PendingTheme, completion)) instance.PendingTheme = null; }
+        }
+    }
+
+    private static bool TryReceiveThemeResult(PreviewerInstance instance, string message)
+    {
+        if (!message.StartsWith(DesignerThemeProtocol.ResultPrefix, StringComparison.Ordinal)) return false;
+        try
+        {
+            DesignerThemeResult? result = JsonSerializer.Deserialize<DesignerThemeResult>(message[DesignerThemeProtocol.ResultPrefix.Length..]);
+            lock (instance)
+                if (result is not null && result.RequestId == instance.PendingThemeId)
+                    instance.PendingTheme?.TrySetResult(result);
+        }
+        catch (JsonException) { }
+        return true;
+    }
+
+    private static bool TryReceiveIncrementalResult(PreviewerInstance instance, string message)
+    {
+        if (!message.StartsWith(DesignerUpdateProtocol.ResultPrefix, StringComparison.Ordinal)) return false;
+        try
+        {
+            DesignerUpdateResult? result = JsonSerializer.Deserialize<DesignerUpdateResult>(message[DesignerUpdateProtocol.ResultPrefix.Length..]);
+            lock (instance)
+                if (result is not null && result.RequestId == instance.PendingUpdateId)
+                    instance.PendingUpdate?.TrySetResult(result.Applied);
+        }
+        catch (JsonException) { }
+        return true;
+    }
+
+    private bool IsCurrent(string xamlFilePath, PreviewerInstance instance)
+    {
+        lock (_gate)
+            return !_disposed && _instances.TryGetValue(xamlFilePath, out PreviewerInstance? current)
+                && ReferenceEquals(current, instance);
+    }
+
+    private void OnProcessExited(string xamlFilePath, PreviewerInstance instance, Action<string, string>? log)
+    {
+        lock (_gate)
+        {
+            if (!IsCurrent(xamlFilePath, instance)) return;
+            int exitCode = instance.Process!.ExitCode;
+            if (exitCode != 0)
+            {
+                _telemetry.RecordCrash(exitCode);
+                if (string.IsNullOrWhiteSpace(instance.Session?.LastError))
+                    instance.Session?.ReportError(string.Format(UiStrings.PreviewerExitedWithCode, exitCode));
+            }
+            log?.Invoke("Info", $"Previewer exited with code {exitCode}");
+        }
+        ReleaseInstance(xamlFilePath, instance, "The previewer process exited.");
+    }
+
+    private void ReleaseInstance(string xamlFilePath, PreviewerInstance instance, string reason)
+    {
+        lock (_gate)
+        {
+            if (!_instances.TryGetValue(xamlFilePath, out PreviewerInstance? current)
+                || !ReferenceEquals(current, instance)) return;
+            _instances.Remove(xamlFilePath);
+        }
+        instance.Started.TrySetResult(PreviewerLaunchResult.Fail(reason));
+        DisposeInstance(instance);
+    }
+
+    /// <summary>Ends the previewer process of a file and disposes its session.</summary>
+    public void StopPreviewer(string xamlFilePath, Process? expectedProcess = null)
+    {
+        PreviewerInstance? instance;
+        lock (_gate)
+        {
+            if (!_instances.TryGetValue(xamlFilePath, out instance) ||
+                (expectedProcess is not null && !ReferenceEquals(instance.Process, expectedProcess))) return;
+            _instances.Remove(xamlFilePath);
+        }
+        instance.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer was closed."));
+        DisposeInstance(instance);
     }
 
     public void Dispose()
     {
-        foreach (Process process in _processes.Values)
+        PreviewerInstance[] instances;
+        lock (_gate)
         {
-            try
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-            }
-            catch
-            {
-            }
+            if (_disposed) return;
+            _disposed = true;
+            instances = _instances.Values.ToArray();
+            _instances.Clear();
+        }
+        // Every host is ended before the first wait, so one slow host does not delay ending the others.
+        List<PreviewerInstance> ending = new();
+        foreach (PreviewerInstance instance in instances)
+        {
+            instance.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer service is closed."));
+            if (EndInstance(instance) is not null) ending.Add(instance);
         }
 
-        _processes.Clear();
-
-        foreach (PreviewerTcpSession session in _sessions.Values)
+        // Closing the service waits for the hosts, so no process outlives the editor.
+        Stopwatch elapsed = Stopwatch.StartNew();
+        foreach (PreviewerInstance instance in ending)
         {
-            session.Dispose();
+            TimeSpan remaining = ProcessExitTimeout - elapsed.Elapsed;
+            WaitForExitAndDispose(instance, remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
         }
+    }
 
-        _sessions.Clear();
+    // The wait runs off the calling thread; closing a document must not block the UI thread.
+    private void DisposeInstance(PreviewerInstance instance)
+    {
+        if (EndInstance(instance) is not null)
+            _ = Task.Run(() => WaitForExitAndDispose(instance, ProcessExitTimeout));
+    }
+
+    private static Process? EndInstance(PreviewerInstance instance)
+    {
+        lock (instance)
+        {
+            instance.PendingUpdate?.TrySetCanceled();
+            instance.PendingTheme?.TrySetCanceled();
+        }
+        instance.Session?.Dispose();
+        if (instance.Process is not { } process) return null;
+        try
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            instance.Log?.Invoke("Warning", $"The previewer process could not be ended: {ex.Message}");
+        }
+        return process;
+    }
+
+    private void WaitForExitAndDispose(PreviewerInstance instance, TimeSpan timeout)
+    {
+        if (instance.Process is not { } process) return;
+        try
+        {
+            if (!WaitForProcessExit(process, timeout))
+                instance.Log?.Invoke("Warning", "The previewer process did not exit after it was ended.");
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception) { }
+        finally { process.Dispose(); }
     }
 
     private static ProcessStartInfo BuildStartInfo(PreviewerLaunchInfo launchInfo)
@@ -214,6 +499,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             WorkingDirectory = launchInfo.WorkingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -242,20 +528,10 @@ internal sealed class PreviewerLaunchService : IDisposable
         launchInfo = default!;
         error = string.Empty;
 
-        ProjectModel? project = ProjectSelection.FindProjectForFile(workspace, xamlFilePath);
+        ProjectModel? project = ProjectSelection.FindPreviewProject(workspace, workspacePath, xamlFilePath);
         if (project is null)
         {
-            // Dateien ausserhalb aller Projektordner (z. B. generierte XAML in einem
-            // Scratch-Verzeichnis) gegen das geladene Workspace-Projekt rendern statt
-            // den Start zu verweigern.
-            project = workspace.Projects.FirstOrDefault(p =>
-                FileSystemPathComparison.Equals(p.ProjectPath, workspacePath))
-                ?? ProjectSelection.SelectPreferredProject(workspace.Projects);
-        }
-
-        if (project is null)
-        {
-            error = "No project found for XAML file.";
+            error = UiStrings.NoProjectForXaml;
             return false;
         }
 
@@ -264,15 +540,12 @@ internal sealed class PreviewerLaunchService : IDisposable
         string? xamlAssemblyPath = ProjectSelection.ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(xamlAssemblyPath) || !File.Exists(xamlAssemblyPath))
         {
-            error = "Project output assembly not found. Build the project first.";
+            error = UiStrings.ProjectAssemblyMissing;
             return false;
         }
 
-        // Der PreviewerHost bootet die Ziel-Assembly als App (AppBuilder-Einstieg).
-        // Klassenbibliotheken haben keinen Einstiegspunkt; geboodet wird dann die per
-        // XVE_PREVIEWER_APP_ASSEMBLY benannte App-Assembly bzw. ein Exe-Projekt des
-        // Workspace. Die XAML wird weiterhin gegen die Projekt-Assembly aufgeloest
-        // (UpdateXamlMessage.AssemblyPath).
+        // Prefer the configured application and its resources. The host can also
+        // bootstrap a standalone library without an executable entry point.
         string targetAssemblyPath = xamlAssemblyPath;
         if (!project.IsExecutable)
         {
@@ -280,19 +553,13 @@ internal sealed class PreviewerLaunchService : IDisposable
                 xamlAssemblyPath,
                 workspace.Projects,
                 Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY"));
-            if (string.IsNullOrWhiteSpace(hostApplication))
-            {
-                error = "Previewer host application not found. Set XVE_PREVIEWER_APP_ASSEMBLY to an executable application assembly.";
-                return false;
-            }
-
-            targetAssemblyPath = hostApplication;
+            targetAssemblyPath = hostApplication ?? xamlAssemblyPath;
         }
 
         string? outputDir = Path.GetDirectoryName(targetAssemblyPath);
         if (string.IsNullOrWhiteSpace(outputDir))
         {
-            error = "Project output directory could not be determined.";
+            error = UiStrings.ProjectOutputDirectoryUnknown;
             return false;
         }
 
@@ -409,7 +676,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         }
     }
 
-    private static bool TryGetAssemblyMetadataValue(
+    internal static bool TryGetAssemblyMetadataValue(
         string assemblyPath,
         string key,
         out string? value)
@@ -422,26 +689,23 @@ internal sealed class PreviewerLaunchService : IDisposable
 
         try
         {
-            Assembly asm = Assembly.LoadFrom(assemblyPath);
-            foreach (CustomAttributeData attr in asm.GetCustomAttributesData())
+            using FileStream stream = File.OpenRead(assemblyPath);
+            using PEReader pe = new(stream);
+            if (!pe.HasMetadata) return false;
+            MetadataReader metadata = pe.GetMetadataReader();
+            if (!metadata.IsAssembly) return false;
+            foreach (CustomAttributeHandle handle in metadata.GetAssemblyDefinition().GetCustomAttributes())
             {
-                if (!string.Equals(attr.AttributeType.FullName, typeof(AssemblyMetadataAttribute).FullName, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (attr.ConstructorArguments.Count != 2)
-                {
-                    continue;
-                }
-
-                string? attrKey = attr.ConstructorArguments[0].Value as string;
-                if (!string.Equals(attrKey, key, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                value = attr.ConstructorArguments[1].Value as string;
+                CustomAttribute attribute = metadata.GetCustomAttribute(handle);
+                if (attribute.Constructor.Kind != HandleKind.MemberReference) continue;
+                MemberReference constructor = metadata.GetMemberReference((MemberReferenceHandle)attribute.Constructor);
+                if (constructor.Parent.Kind != HandleKind.TypeReference) continue;
+                TypeReference type = metadata.GetTypeReference((TypeReferenceHandle)constructor.Parent);
+                if (metadata.GetString(type.Namespace) != "System.Reflection"
+                    || metadata.GetString(type.Name) != nameof(AssemblyMetadataAttribute)) continue;
+                BlobReader blob = metadata.GetBlobReader(attribute.Value);
+                if (blob.ReadUInt16() != 1 || !string.Equals(blob.ReadSerializedString(), key, StringComparison.Ordinal)) continue;
+                value = blob.ReadSerializedString();
                 return true;
             }
         }
@@ -450,19 +714,6 @@ internal sealed class PreviewerLaunchService : IDisposable
         }
 
         return false;
-    }
-
-    private PreviewerTcpSession GetOrCreateSession(string xamlFilePath, Action<string, string>? log)
-    {
-        if (_sessions.TryGetValue(xamlFilePath, out PreviewerTcpSession? existing))
-        {
-            return existing;
-        }
-
-        PreviewerTcpSession session = new(xamlFilePath, log);
-        session.ErrorReceived += error => PreviewerErrorReceived?.Invoke(error);
-        _sessions[xamlFilePath] = session;
-        return session;
     }
 
     private static string BuildXamlProjectPath(string xamlFilePath, string? projectDir)
@@ -504,10 +755,10 @@ internal sealed class PreviewerLaunchService : IDisposable
                 return xamlText;
             }
 
-            // Der Runtime-Compiler des Previewers muss die x:Class-Wurzel selbst instanziieren
-            // und verlangt dafuer einen parameterlosen Konstruktor; viele Formulare haben nur
-            // parametrisierte. Die Design-Kopie laedt deshalb ohne x:Class (Inhaltsbaum unter
-            // dem schlichten Wurzelelement) - fuer die Layout-Vorschau ohne Belang.
+            // The previewer's runtime compiler has to instantiate the x:Class root itself and
+            // needs a parameterless constructor for it; many forms only have parameterized
+            // ones. The design copy therefore loads without x:Class (the content tree under the
+            // plain root element), which does not matter for the layout preview.
             doc.Root.Attribute(XName.Get("Class", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Remove();
 
             foreach (XElement element in doc.Descendants())
@@ -613,8 +864,8 @@ internal readonly record struct PreviewerLaunchInfo(
     string MethodArguments,
     string? ProjectDirectory)
 {
-    // Klassenbibliotheken erzeugen keine eigene runtimeconfig.json; der Prozessstart nutzt
-    // dann die Runtime-Dateien des PreviewerHost (siehe ResolveHostRuntimeFiles).
+    // Class libraries produce no runtimeconfig.json of their own; the process start then uses
+    // the runtime files of the PreviewerHost (see ResolveHostRuntimeFiles).
     public bool HasRequiredAssets =>
         File.Exists(HostPath) &&
         File.Exists(TargetAssemblyPath) &&
@@ -632,7 +883,11 @@ internal readonly record struct PreviewerLaunchResult(bool Success, string? Erro
     public static PreviewerLaunchResult Fail(string message) => new(false, message, null);
 }
 
-public sealed record PreviewerErrorInfo(string Message, int? Line, int? Column, string? FilePath);
+public sealed record PreviewerErrorInfo(string Message, int? Line, int? Column, string? FilePath,
+    IReadOnlyList<PreviewerElementPathSegment>? ElementPath = null, string? TextContent = null, string? AttributeName = null);
+
+/// <summary>Maps an element of the preview to its element in the source document.</summary>
+public sealed record PreviewerElementPathSegment(string Namespace, string Name, int Index);
 
 internal sealed class PreviewerTelemetryStore
 {
@@ -687,7 +942,7 @@ internal sealed class PreviewerTelemetryStore
                 return new PreviewerTelemetryData();
             }
 
-            string json = File.ReadAllText(path);
+            string json = SharedFileReader.ReadAllText(path);
             PreviewerTelemetryData? data = JsonSerializer.Deserialize<PreviewerTelemetryData>(json);
             return data ?? new PreviewerTelemetryData();
         }
@@ -712,10 +967,7 @@ internal sealed class PreviewerTelemetryStore
 
     private static string GetTelemetryPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "previewer-telemetry.json");
+        return Path.Combine(ShellSettingsPaths.GetRoot(), "previewer-telemetry.json");
     }
 
     private sealed class PreviewerTelemetryData

@@ -3,4 +3,7 @@
     <RootNamespace>XamlVisualEditor.Acp</RootNamespace>
     <Description>Agent Client Protocol (ACP) client, JSON-RPC, and stdio transport</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+  </ItemGroup>
 </Project>

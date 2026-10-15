@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.DotNetTemplatesExtension.ViewModels;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -42,7 +43,7 @@ public sealed partial class NewDotNetWizardDialog : Window
             {
                 FolderPickerOpenOptions options = new()
                 {
-                    Title = "Select Location",
+                    Title = UiStrings.SelectLocation,
                     AllowMultiple = false
                 };
 

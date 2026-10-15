@@ -35,14 +35,10 @@ public interface IGitService
     Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
 
     /// <summary>
-    /// Discards changes for the specified paths.
+    /// Discards the unstaged changes of the specified paths by restoring their working files from the index;
+    /// staged changes and files that exist only in the index are kept.
     /// </summary>
     Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
-
-    /// <summary>
-    /// Removes untracked files for the specified paths.
-    /// </summary>
-    Task RemoveUntrackedAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
 
     /// <summary>
     /// Creates a commit with the given message.

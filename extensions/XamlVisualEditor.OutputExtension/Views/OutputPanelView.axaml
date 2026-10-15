@@ -2,36 +2,38 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.OutputExtension"
              xmlns:dg="using:Avalonia.Controls"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.OutputExtension.Views.OutputPanelView"
              x:DataType="vm:OutputPanelViewModel">
-  <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,*" Margin="8" ColumnSpacing="8" RowSpacing="8">
-    <TextBlock Text="Output (Extension)" FontWeight="SemiBold" Grid.ColumnSpan="2" />
+  <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,*" Margin="4" ColumnSpacing="4" RowSpacing="4">
+    <TextBlock Text="{x:Static loc:UiStrings.ExtensionOutput}" FontWeight="SemiBold" Grid.ColumnSpan="2" />
 
-    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
-      <Button Content="Clear Channel" Command="{CompiledBinding ClearChannelCommand}" Padding="6,2" />
-      <Button Content="Clear All" Command="{CompiledBinding ClearAllChannelsCommand}" Padding="6,2" />
-      <Button Content="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
-      <Button Content="Copy All" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
-      <Button Content="Clear Filters" Command="{CompiledBinding ClearFiltersCommand}" Padding="6,2" />
-    </StackPanel>
+    <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Classes="editor-toolbar" Orientation="Horizontal">
+      <Button Content="{x:Static loc:UiStrings.ClearChannel}" Command="{CompiledBinding ClearChannelCommand}" Padding="6,2" />
+      <Button Content="{x:Static loc:UiStrings.ClearAll}" Command="{CompiledBinding ClearAllChannelsCommand}" Padding="6,2" />
+      <Button Content="{x:Static loc:UiStrings.CopySelectedTitle}" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
+      <Button Content="{x:Static loc:UiStrings.CopyAllTitle}" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
+      <Button Content="{x:Static loc:UiStrings.ClearFiltersTitle}" Command="{CompiledBinding ClearFiltersCommand}" Padding="6,2" />
+    </WrapPanel>
 
     <TextBox Grid.Row="2"
-             PlaceholderText="Search channels..."
+             PlaceholderText="{x:Static loc:UiStrings.SearchChannels}"
              Text="{CompiledBinding ChannelSearchText, Mode=TwoWay}" />
     <TextBox Grid.Row="2"
              Grid.Column="1"
-             PlaceholderText="Search messages..."
+             PlaceholderText="{x:Static loc:UiStrings.SearchMessages}"
              Text="{CompiledBinding MessageSearchText, Mode=TwoWay}" />
 
     <dg:DataGrid Grid.Row="3"
                  ItemsSource="{CompiledBinding ChannelsView}"
                  SelectedItem="{CompiledBinding SelectedChannel, Mode=TwoWay}"
                  AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
                  CanUserSortColumns="True"
                  IsReadOnly="True"
                  GridLinesVisibility="None">
       <dg:DataGrid.Columns>
-        <dg:DataGridTextColumn Header="Channel"
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Channel}"
                                Width="*"
                                x:DataType="vm:OutputChannelViewModel"
                                Binding="{CompiledBinding Name}" />
@@ -42,15 +44,21 @@
                  ItemsSource="{CompiledBinding MessagesView}"
                  SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}"
                  AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
                  CanUserSortColumns="True"
                  IsReadOnly="True"
                  GridLinesVisibility="None">
       <dg:DataGrid.Columns>
-        <dg:DataGridTextColumn Header="Time"
-                               Width="160"
-                               x:DataType="vm:OutputMessageEntry"
-                               Binding="{CompiledBinding Timestamp}" />
-        <dg:DataGridTextColumn Header="Message"
+        <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Time}" Width="80" SortMemberPath="Timestamp">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:OutputMessageEntry">
+              <TextBlock Text="{CompiledBinding Timestamp, StringFormat='{}{0:HH:mm:ss}'}"
+                         ToolTip.Tip="{CompiledBinding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss zzz}'}"
+                         VerticalAlignment="Center" />
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Message}"
                                Width="*"
                                x:DataType="vm:OutputMessageEntry"
                                Binding="{CompiledBinding Message}" />

@@ -127,8 +127,8 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             return await _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs);
         }
 
-        // Kein async-Lambda an die Action-Ueberladung geben (liefe als async void und kehrte
-        // beim ersten await zurueck); stattdessen die Task des VM-Aufrufs explizit abwarten.
+        // Do not pass an async lambda to the Action overload (it would run as async void and
+        // return at the first await); await the task of the view model call explicitly instead.
         Task<PreviewExportResult> inner = await Dispatcher.UIThread.InvokeAsync<Task<PreviewExportResult>>(
             () => _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs),
             DispatcherPriority.Background);
@@ -168,17 +168,55 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         return result;
     }
 
+    public async Task<bool> OpenDiagnosticLocationAsync(LanguageLocation location, CancellationToken ct)
+    {
+        if (location is null || string.IsNullOrWhiteSpace(location.FilePath))
+        {
+            return false;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await OpenDiagnosticLocationCoreAsync(location, ct).ConfigureAwait(false);
+        }
+
+        bool result = false;
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            result = await OpenDiagnosticLocationCoreAsync(location, ct).ConfigureAwait(false);
+        }, DispatcherPriority.Background, ct);
+        return result;
+    }
+
     private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath, EditorDocumentOpenBehavior behavior)
     {
-        await _mainViewModel.OpenFileAsync(filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
-        IEditorDocumentViewModel? document = _mainViewModel.Documents
-            .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
+        // The returned document can show a different file when an interceptor redirected the open.
+        IEditorDocumentViewModel? document = await _mainViewModel.OpenFileAsync(
+            filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
         return document is null ? null : GetAdapter(document);
+    }
+
+    // The caret, selection and text document belong to the UI thread, so both methods continue on it after opening.
+    private async Task<bool> OpenDiagnosticLocationCoreAsync(LanguageLocation location, CancellationToken ct)
+    {
+        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct);
+        if (doc is CodeEditorDocumentAdapter codeEditor)
+        {
+            codeEditor.MarkDiagnostic(location.Range.Start);
+            return true;
+        }
+
+        return SelectLocation(doc, location);
     }
 
     private async Task<bool> OpenLocationCoreAsync(LanguageLocation location, CancellationToken ct)
     {
-        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct).ConfigureAwait(false);
+        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct);
+        return SelectLocation(doc, location);
+    }
+
+    private static bool SelectLocation(IEditorDocument? doc, LanguageLocation location)
+    {
         if (doc is not EditorDocumentAdapter adapter)
         {
             return false;
@@ -218,6 +256,23 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         }
 
         _documents.Clear();
+    }
+
+    /// <inheritdoc />
+    public void SetWriteProtectionManaged(string filePath, bool managed)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SetWriteProtectionManaged(filePath, managed));
+            return;
+        }
+
+        foreach (IEditorDocumentViewModel document in _mainViewModel.Documents)
+        {
+            if (!FileSystemPathComparison.Equals(document.FilePath, filePath)) continue;
+            if (document is DesignerDocumentViewModel designer) designer.IsWriteProtectionManaged = managed;
+            else if (document is TextDocumentViewModel text) text.IsWriteProtectionManaged = managed;
+        }
     }
 
     private void OnDocumentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -304,6 +359,8 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
         public abstract int SelectionLength { get; set; }
 
+        public abstract void SetSelection(int start, int length, int caretOffset);
+
         public event EventHandler<EditorDocumentChangedEventArgs>? Changed;
 
         public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
@@ -343,11 +400,20 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
                 return;
             }
 
-            foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
+            // One update keeps a multi-line edit a single undo step.
+            document.BeginUpdate();
+            try
             {
-                int offset = Math.Clamp(edit.Offset, 0, document.TextLength);
-                int length = Math.Clamp(edit.Length, 0, document.TextLength - offset);
-                document.Replace(offset, length, edit.NewText);
+                foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
+                {
+                    int offset = Math.Clamp(edit.Offset, 0, document.TextLength);
+                    int length = Math.Clamp(edit.Length, 0, document.TextLength - offset);
+                    document.Replace(offset, length, edit.NewText);
+                }
+            }
+            finally
+            {
+                document.EndUpdate();
             }
         }
     }
@@ -374,11 +440,21 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             set => _editor.SelectionLength = value;
         }
 
+        public override void SetSelection(int start, int length, int caretOffset)
+        {
+            _editor.SetSelection(start, length, caretOffset);
+        }
+
         public override Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
         {
             ApplyEdits(Document, edits);
             _editor.IsModified = true;
             return Task.CompletedTask;
+        }
+
+        public void MarkDiagnostic(LanguageTextPosition position)
+        {
+            _editor.MarkDiagnostic(position.Line, position.Column);
         }
 
         public CodeEditorDocumentAdapter(CodeEditorViewModel editor)
@@ -412,6 +488,11 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         {
             get => _editor.SelectionLength;
             set => _editor.SelectionLength = value;
+        }
+
+        public override void SetSelection(int start, int length, int caretOffset)
+        {
+            _editor.SetSelection(start, length, caretOffset);
         }
 
         public override Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)

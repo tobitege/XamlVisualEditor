@@ -70,48 +70,44 @@ public sealed class McpJsonRpcConnection : IAsyncDisposable
     private async Task ReadLoopAsync(CancellationToken ct)
     {
         Exception? error = null;
+        using StreamReader reader = new(_input, System.Text.Encoding.UTF8, false, 4096, leaveOpen: true);
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                using JsonDocument message = await McpMessageFraming.ReadMessageAsync(_input, ct).ConfigureAwait(false);
+                JsonDocument message;
+                try { message = await McpMessageFraming.ReadMessageAsync(reader, ct).ConfigureAwait(false); }
+                catch (JsonException)
+                {
+                    await SendErrorAsync(null, -32700, "Parse error", ct).ConfigureAwait(false);
+                    continue;
+                }
+                using JsonDocument messageLifetime = message;
                 JsonElement root = message.RootElement;
-                if (root.ValueKind != JsonValueKind.Object)
+                // A 2025-03-26 client may send a batch: an array of requests and notifications, answered by one array.
+                if (root.ValueKind == JsonValueKind.Array)
                 {
+                    List<object> responses = new();
+                    foreach (JsonElement item in root.EnumerateArray())
+                    {
+                        if (await ProcessMessageAsync(item, ct).ConfigureAwait(false) is { } itemResponse)
+                            responses.Add(itemResponse);
+                    }
+                    if (root.GetArrayLength() == 0)
+                        responses.Add(CreateErrorPayload(null, -32600, "Invalid Request"));
+                    if (responses.Count > 0)
+                        await SendAsync(responses, ct).ConfigureAwait(false);
                     continue;
                 }
 
-                bool hasId = root.TryGetProperty("id", out JsonElement idElement);
-                bool hasMethod = root.TryGetProperty("method", out JsonElement methodElement);
-
-                if (hasId && !hasMethod)
-                {
-                    continue;
-                }
-
-                if (hasMethod)
-                {
-                    string? method = methodElement.GetString();
-                    if (string.IsNullOrWhiteSpace(method))
-                    {
-                        continue;
-                    }
-
-                    JsonElement? parameters = root.TryGetProperty("params", out JsonElement paramsElement)
-                        ? paramsElement.Clone()
-                        : null;
-
-                    if (hasId)
-                    {
-                        await HandleRequestAsync(method, idElement, parameters, ct).ConfigureAwait(false);
-                        continue;
-                    }
-
-                    NotificationReceived?.Invoke(method, parameters);
-                }
+                if (await ProcessMessageAsync(root, ct).ConfigureAwait(false) is { } response)
+                    await SendAsync(response, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch (EndOfStreamException)
         {
         }
         catch (Exception ex)
@@ -124,56 +120,87 @@ public sealed class McpJsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private async Task HandleRequestAsync(string method, JsonElement idElement, JsonElement? parameters, CancellationToken ct)
+    // Handles one message and returns the response to send, or null for notifications and ignored messages.
+    private async Task<object?> ProcessMessageAsync(JsonElement root, CancellationToken ct)
+    {
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("jsonrpc", out JsonElement version)
+            || version.ValueKind != JsonValueKind.String || version.GetString() != "2.0")
+        {
+            return CreateErrorPayload(null, -32600, "Invalid Request");
+        }
+
+        bool hasId = root.TryGetProperty("id", out JsonElement idElement);
+        if (!root.TryGetProperty("method", out JsonElement methodElement))
+        {
+            return null;
+        }
+
+        string? method = methodElement.GetString();
+        if (string.IsNullOrWhiteSpace(method))
+        {
+            return null;
+        }
+
+        JsonElement? parameters = root.TryGetProperty("params", out JsonElement paramsElement)
+            ? paramsElement.Clone()
+            : null;
+
+        if (hasId)
+        {
+            return await HandleRequestAsync(method, idElement, parameters, ct).ConfigureAwait(false);
+        }
+
+        if (method == McpProtocol.InitializedNotification)
+        {
+            await _router.DispatchAsync(method, new McpRequestContext(this, null), parameters, ct).ConfigureAwait(false);
+        }
+        NotificationReceived?.Invoke(method, parameters);
+        return null;
+    }
+
+    private async Task<object?> HandleRequestAsync(string method, JsonElement idElement, JsonElement? parameters, CancellationToken ct)
     {
         if (!TryGetIdValue(idElement, out object? idValue) || idValue is null)
         {
-            return;
+            return null;
         }
 
         McpRequestContext context = new(this, sessionToken: null);
         try
         {
             object? result = await _router.DispatchAsync(method, context, parameters, ct).ConfigureAwait(false);
-            await SendResultAsync(idValue, result, ct).ConfigureAwait(false);
+            return new
+            {
+                jsonrpc = "2.0",
+                id = idValue,
+                result
+            };
         }
         catch (McpJsonRpcException ex)
         {
-            await SendErrorAsync(idValue, ex.Code, ex.Message, ct).ConfigureAwait(false);
+            return CreateErrorPayload(idValue, ex.Code, ex.Message);
         }
         catch (Exception ex)
         {
-            await SendErrorAsync(idValue, -32000, ex.Message, ct).ConfigureAwait(false);
+            return CreateErrorPayload(idValue, -32000, ex.Message);
         }
     }
 
-    private Task SendResultAsync(object idValue, object? result, CancellationToken ct)
+    private Task SendErrorAsync(object? idValue, int code, string message, CancellationToken ct) =>
+        SendAsync(CreateErrorPayload(idValue, code, message), ct);
+
+    // A dictionary keeps a null id in the output, which the serializer options omit for anonymous types.
+    private static Dictionary<string, object?> CreateErrorPayload(object? idValue, int code, string message) => new()
     {
-        var payload = new
+        ["jsonrpc"] = "2.0",
+        ["id"] = idValue,
+        ["error"] = new
         {
-            jsonrpc = "2.0",
-            id = idValue,
-            result
-        };
-
-        return SendAsync(payload, ct);
-    }
-
-    private Task SendErrorAsync(object idValue, int code, string message, CancellationToken ct)
-    {
-        var payload = new
-        {
-            jsonrpc = "2.0",
-            id = idValue,
-            error = new
-            {
-                code,
-                message
-            }
-        };
-
-        return SendAsync(payload, ct);
-    }
+            code,
+            message
+        }
+    };
 
     private static bool TryGetIdValue(JsonElement element, out object? id)
     {

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ReactiveUI;
 using ReactiveUI.Primitives.Concurrency;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Lsp;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -57,7 +58,7 @@ public sealed partial class LspSettingsViewModel : ReactiveObject
         }
         else
         {
-            StatusText = "LSP settings store unavailable.";
+            StatusText = UiStrings.LspStoreUnavailable;
         }
     }
 
@@ -103,7 +104,7 @@ public sealed partial class LspSettingsViewModel : ReactiveObject
                 Servers.Add(LspServerEntryViewModel.FromServer(server));
             }
 
-            StatusText = servers.Count == 0 ? "No LSP servers configured." : "LSP settings loaded.";
+            StatusText = servers.Count == 0 ? UiStrings.NoLspServers : UiStrings.LspSettingsLoaded;
             RequiresRestart = false;
             return Disposable.Empty;
         });
@@ -124,7 +125,7 @@ public sealed partial class LspSettingsViewModel : ReactiveObject
 
         RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
-            StatusText = "LSP settings saved. Restart required.";
+            StatusText = UiStrings.LspSettingsSaved;
             RequiresRestart = true;
             return Disposable.Empty;
         });

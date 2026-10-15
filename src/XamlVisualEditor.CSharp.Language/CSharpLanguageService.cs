@@ -9,13 +9,15 @@ using Microsoft.CodeAnalysis.Tags;
 using Microsoft.CodeAnalysis.Text;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CSharp.Language;
 
 /// <summary>
 /// Roslyn-based C# language service.
 /// </summary>
-public sealed class CSharpLanguageService : ILanguageIntellisenseService, ILanguageWorkspaceWarmup, IDisposable
+public sealed partial class CSharpLanguageService : ILanguageIntellisenseService, ILanguageWorkspaceWarmup,
+    IDesignerCodeBehindRefactoringService, IDisposable
 {
     private readonly CSharpWorkspaceManager _workspaceManager;
 
@@ -50,6 +52,23 @@ public sealed class CSharpLanguageService : ILanguageIntellisenseService, ILangu
     public Task WarmWorkspaceAsync(CancellationToken ct = default)
     {
         return _workspaceManager.WarmWorkspaceAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<LanguageWorkspaceEdit?> PrepareControlRenameAsync(DesignerCodeBehindRenameRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        Solution solution = await _workspaceManager.GetSolutionAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameProjectNotLoaded);
+        foreach (var openDocument in request.OpenDocumentTexts)
+            foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(openDocument.Key))
+                solution = solution.WithDocumentText(id, SourceText.From(openDocument.Value));
+        // A project with several target frameworks loads once per framework, all sharing the same sources.
+        Project project = solution.Projects.FirstOrDefault(candidate =>
+            FileSystemPathComparison.Equals(candidate.FilePath, request.ProjectPath))
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameOwningProjectMissing);
+        return await DesignerCodeBehindRenamePlanner.CreateAsync(project, request.ClassName,
+            request.OldName, request.NewName, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(
@@ -137,20 +156,32 @@ public sealed class CSharpLanguageService : ILanguageIntellisenseService, ILangu
             return Array.Empty<LanguageDiagnostic>();
         }
 
-        Compilation? compilation = await document.Project.GetCompilationAsync(ct).ConfigureAwait(false);
-        if (compilation is null)
-        {
-            return Array.Empty<LanguageDiagnostic>();
-        }
-
         SyntaxTree? tree = await document.GetSyntaxTreeAsync(ct).ConfigureAwait(false);
         if (tree is null)
         {
             return Array.Empty<LanguageDiagnostic>();
         }
 
+        // A file outside the loaded projects knows only the runtime assemblies, so every reference to another
+        // assembly would count as an error; such a file reports its syntax errors only.
+        IEnumerable<Diagnostic> found;
+        if (_workspaceManager.IsProjectDocument(document))
+        {
+            Compilation? compilation = await document.Project.GetCompilationAsync(ct).ConfigureAwait(false);
+            if (compilation is null)
+            {
+                return Array.Empty<LanguageDiagnostic>();
+            }
+
+            found = compilation.GetDiagnostics(ct);
+        }
+        else
+        {
+            found = tree.GetDiagnostics(ct);
+        }
+
         List<LanguageDiagnostic> diagnostics = new();
-        foreach (Diagnostic diag in compilation.GetDiagnostics(ct))
+        foreach (Diagnostic diag in found)
         {
             if (!diag.Location.IsInSource || diag.Location.SourceTree != tree)
             {

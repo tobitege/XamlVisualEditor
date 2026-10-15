@@ -1,5 +1,4 @@
 using System.IO;
-using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
@@ -11,48 +10,23 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class InstalledExtensionPackagesTests
 {
     [Fact]
-    public void ExtractContent_ExtractsArchiveNextToPackage()
+    public void ResolveMainAssemblyPath_ResolvesInsideTheInstallationDirectoryOnly()
     {
-        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            string packagePath = Path.Combine(root, "sample.nupkg");
-            using (ZipArchive archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
-            {
-                ZipArchiveEntry entry = archive.CreateEntry("payload.txt");
-                using StreamWriter writer = new(entry.Open());
-                writer.Write("payload");
-            }
-
-            string contentDirectory = InstalledExtensionPackages.ExtractContent(packagePath);
-
-            Assert.Equal(Path.Combine(root, "content"), contentDirectory);
-            Assert.Equal("payload", File.ReadAllText(Path.Combine(contentDirectory, "payload.txt")));
-
-            // A second call reuses the existing directory without failing.
-            Assert.Equal(contentDirectory, InstalledExtensionPackages.ExtractContent(packagePath));
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void ResolveMainAssemblyPath_RejectsMissingAndEscapingEntries()
-    {
-        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "xve-package-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             string assemblyPath = Path.Combine(root, "extension.dll");
-            File.WriteAllBytes(assemblyPath, new byte[] { 0x4D, 0x5A });
+            File.WriteAllBytes(assemblyPath, [0x4D, 0x5A]);
 
-            Assert.Equal(assemblyPath, InstalledExtensionPackages.ResolveMainAssemblyPath(root, "extension.dll"));
-            Assert.Null(InstalledExtensionPackages.ResolveMainAssemblyPath(root, "missing.dll"));
-            Assert.Null(InstalledExtensionPackages.ResolveMainAssemblyPath(root, "..\\extension.dll"));
-            Assert.Null(InstalledExtensionPackages.ResolveMainAssemblyPath(root, null));
+            Assert.Equal(assemblyPath, InstalledExtensionPackages.ResolveMainAssemblyPath(Package(root, "extension.dll")));
+            Assert.Null(InstalledExtensionPackages.ResolveMainAssemblyPath(Package(root, "missing.dll")));
+            Assert.Null(InstalledExtensionPackages.ResolveMainAssemblyPath(Package(root, null)));
+            Assert.Null(InstalledExtensionPackages.ResolveMainAssemblyPath(Package(null, "extension.dll")));
+            Assert.Throws<InvalidDataException>(() =>
+                InstalledExtensionPackages.ResolveMainAssemblyPath(Package(root, "..\\extension.dll")));
+            Assert.Throws<InvalidDataException>(() =>
+                InstalledExtensionPackages.ResolveMainAssemblyPath(Package(root, "extension.json")));
         }
         finally
         {
@@ -68,24 +42,21 @@ public sealed class InstalledExtensionPackagesTests
         Assert.Contains(typeof(SampleInstalledExtension), types);
         Assert.DoesNotContain(typeof(SampleExtensionWithoutDefaultConstructor), types);
     }
+
+    private static ExtensionPackageInfo Package(string? installationDirectory, string? main) =>
+        new(Path.Combine(installationDirectory ?? Path.GetTempPath(), "sample.nupkg"),
+            new ExtensionManifest { Name = "sample", Publisher = "tests", Version = "1.0.0", Main = main },
+            installationDirectory);
 }
 
 public sealed class SampleInstalledExtension : IXveExtension
 {
-    public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
-public sealed class SampleExtensionWithoutDefaultConstructor : IXveExtension
+public sealed class SampleExtensionWithoutDefaultConstructor(string name) : IXveExtension
 {
-    public SampleExtensionWithoutDefaultConstructor(string _)
-    {
-    }
+    public string Name { get; } = name;
 
-    public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }

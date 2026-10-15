@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:core="using:XamlVisualEditor.Core"
+        xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+        x:Class="XamlVisualEditor.App.Views.OptionsDialog"
+        x:DataType="vm:OptionsDialogViewModel"
+        Classes="editor-chrome" Title="{x:Static loc:UiStrings.OptionsTitle}"
+        Width="760" Height="640" MinWidth="640" MinHeight="440"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{CompiledBinding CancelCommand}" />
+  </Window.KeyBindings>
+  <DockPanel Margin="16">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+      <Button Name="SaveOptions" Content="{x:Static loc:UiStrings.Save}" Command="{CompiledBinding SaveCommand}" IsDefault="True" MinWidth="90" />
+      <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" MinWidth="90" />
+    </StackPanel>
+    <TextBlock DockPanel.Dock="Bottom" Text="{CompiledBinding Error}" IsVisible="{CompiledBinding Error, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap" Foreground="{DynamicResource EditorErrorBrush}" Margin="0,8,0,0" />
+    <ScrollViewer Name="OptionsScrollViewer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
+      <StackPanel Name="OptionsContent" Spacing="12" Margin="0,0,16,0">
+        <TextBlock Text="{x:Static loc:UiStrings.EditorThemeTitle}" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+          <ComboBox Name="EditorThemeProviderChoice" ItemsSource="{CompiledBinding EditorThemeProviders}"
+                    SelectedItem="{CompiledBinding SelectedEditorThemeProvider, Mode=TwoWay}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="core:EditorThemeProviderCatalog"><TextBlock Text="{CompiledBinding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <ComboBox Grid.Column="1" Name="EditorThemeChoice" ItemsSource="{CompiledBinding EditorThemes}"
+                    SelectedItem="{CompiledBinding SelectedEditorTheme, Mode=TwoWay}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="core:EditorTheme"><TextBlock Text="{CompiledBinding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+        </Grid>
+        <TextBlock Text="{x:Static loc:UiStrings.EditorThemeHint}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding EditorThemeError}" IsVisible="{CompiledBinding EditorThemeError, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap" Foreground="{DynamicResource EditorErrorBrush}" />
+        <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.Language}" FontWeight="SemiBold" />
+        <ComboBox Name="LanguageChoice" ItemsSource="{CompiledBinding Languages}" SelectedItem="{CompiledBinding SelectedLanguage, Mode=TwoWay}" MinWidth="240" />
+        <TextBlock Text="{x:Static loc:UiStrings.LanguageRestartHint}" TextWrapping="Wrap" />
+        <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.StartupGroup}" FontWeight="SemiBold" />
+        <CheckBox Name="RestoreLastWorkspaceChoice" Content="{x:Static loc:UiStrings.RestoreLastWorkspace}"
+                  IsChecked="{CompiledBinding RestoreLastWorkspace, Mode=TwoWay}" />
+        <TextBlock Text="{x:Static loc:UiStrings.RestoreLastWorkspaceHint}" TextWrapping="Wrap" />
+        <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.WindowGroup}" FontWeight="SemiBold" />
+        <CheckBox Name="ShowFullPathInTitleChoice" Content="{x:Static loc:UiStrings.ShowFullPathInTitle}"
+                  IsChecked="{CompiledBinding ShowFullPathInTitle, Mode=TwoWay}" />
+        <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.FileExplorer}" FontWeight="SemiBold" />
+        <CheckBox Name="FileExplorerFoldersBeforeFilesChoice" Content="{x:Static loc:UiStrings.FoldersBeforeFiles}"
+                  IsChecked="{CompiledBinding FileExplorerFoldersBeforeFiles, Mode=TwoWay}" />
+        <Separator Margin="0,4" />
+        <TextBlock Text="{x:Static loc:UiStrings.TerminalGroup}" FontWeight="SemiBold" />
+        <TextBlock Text="{x:Static loc:UiStrings.WindowsTerminalOptionsHint}" TextWrapping="Wrap" />
+        <StackPanel Spacing="10" IsEnabled="{CompiledBinding IsWindows}">
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+            <TextBlock Text="{x:Static loc:UiStrings.TerminalMode}" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" Name="TerminalLocationChoice" ItemsSource="{CompiledBinding Locations}" SelectedItem="{CompiledBinding SelectedLocation, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+            <TextBlock Grid.Row="1" Text="{x:Static loc:UiStrings.TerminalShell}" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="1" Grid.Column="1" Name="TerminalShellChoice" ItemsSource="{CompiledBinding Shells}" SelectedItem="{CompiledBinding SelectedShell, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+          </Grid>
+          <TextBlock Text="{x:Static loc:UiStrings.ExecutablePaths}" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Text="{x:Static loc:UiStrings.TerminalPathsHint}" TextWrapping="Wrap" />
+          <TextBlock Text="{x:Static loc:UiStrings.CmdExecutable}" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Name="CommandPromptPath" Text="{CompiledBinding CommandPromptPath, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="{x:Static loc:UiStrings.Browse}" Command="{CompiledBinding BrowseCommand}" CommandParameter="{x:Static vm:TerminalShell.CommandPrompt}" />
+          </Grid>
+          <TextBlock Text="{x:Static loc:UiStrings.WindowsPowerShellExecutable}" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Name="WindowsPowerShellPath" Text="{CompiledBinding WindowsPowerShellPath, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="{x:Static loc:UiStrings.Browse}" Command="{CompiledBinding BrowseCommand}" CommandParameter="{x:Static vm:TerminalShell.WindowsPowerShell}" />
+          </Grid>
+          <TextBlock Text="{x:Static loc:UiStrings.PowerShellExecutable}" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Name="PowerShell7Path" Text="{CompiledBinding PowerShell7Path, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="{x:Static loc:UiStrings.Browse}" Command="{CompiledBinding BrowseCommand}" CommandParameter="{x:Static vm:TerminalShell.PowerShell7}" />
+          </Grid>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

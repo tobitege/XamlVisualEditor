@@ -2,104 +2,154 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:controls="using:XamlVisualEditor.GitExtension.Controls"
+             xmlns:views="using:XamlVisualEditor.GitExtension.Views"
              xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.GitExtension.Views.GitPanelView"
              x:DataType="vm:GitPanelViewModel">
 
+    <UserControl.Styles>
+        <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+        </Style>
+        <Style Selector="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
         <!-- Header -->
-        <DockPanel Grid.Row="0" Margin="8,6" LastChildFill="True">
-            <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
-                <TextBlock Text="Git" FontWeight="SemiBold" />
-                <TextBlock Text="|" Opacity="0.4" />
-                <TextBlock Text="Branch:" Opacity="0.7" />
+        <DockPanel Grid.Row="0" Margin="8,6" LastChildFill="False">
+            <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left"
+                        IsVisible="{CompiledBinding IsGitMonitoringEnabled}">
+                <TextBlock Text="{x:Static loc:UiStrings.Git}" FontWeight="SemiBold" />
+                <TextBlock Text="{x:Static loc:UiStrings.BranchLabel}" />
                 <TextBlock Text="{CompiledBinding BranchName}" />
-                <TextBlock Text="Upstream:" Opacity="0.7" Margin="8,0,0,0" />
+                <TextBlock Text="{x:Static loc:UiStrings.UpstreamLabel}" Margin="8,0,0,0" />
                 <TextBlock Text="{CompiledBinding UpstreamName}" />
-                <TextBlock Text="Ahead:" Opacity="0.7" Margin="8,0,0,0" />
+                <TextBlock Text="{x:Static loc:UiStrings.AheadLabel}" Margin="8,0,0,0" />
                 <TextBlock Text="{CompiledBinding AheadBy}" />
-                <TextBlock Text="Behind:" Opacity="0.7" Margin="8,0,0,0" />
+                <TextBlock Text="{x:Static loc:UiStrings.BehindLabel}" Margin="8,0,0,0" />
                 <TextBlock Text="{CompiledBinding BehindBy}" />
             </StackPanel>
 
-            <Button Content="Refresh"
+            <ToggleButton Content="{CompiledBinding GitMonitoringLabel}"
+                          IsChecked="{CompiledBinding IsGitMonitoringEnabled, Mode=OneWay}"
+                          Command="{CompiledBinding ToggleMonitoringCommand}"
+                          ToolTip.Tip="{x:Static loc:UiStrings.GitMonitoringToggle}"
+                          AutomationProperties.Name="{x:Static loc:UiStrings.GitMonitoringToggle}"
+                          Padding="8,2" Margin="8,0,0,0" DockPanel.Dock="Right" />
+            <ToggleButton Name="GitDiffToggle" Content="{CompiledBinding DiffToggleLabel}"
+                          IsChecked="{CompiledBinding IsDiffVisible, Mode=OneWay}"
+                          Command="{CompiledBinding ToggleDiffCommand}"
+                          Padding="8,2" Margin="8,0,0,0" DockPanel.Dock="Right" />
+            <Button Content="{x:Static loc:UiStrings.Refresh}"
                     Command="{CompiledBinding RefreshCommand}"
+                    IsEnabled="{CompiledBinding IsGitMonitoringEnabled}"
                     Padding="8,2"
                     DockPanel.Dock="Right" />
+            <ProgressBar Width="80" Height="4" IsIndeterminate="True"
+                         IsVisible="{CompiledBinding IsBusy}"
+                         VerticalAlignment="Center" Margin="8,0" DockPanel.Dock="Right" />
         </DockPanel>
 
         <!-- Toolbar -->
-        <DockPanel Grid.Row="1" Margin="8,0,8,6" LastChildFill="True">
+        <DockPanel Grid.Row="1" Margin="8,0,8,6" LastChildFill="True"
+                   IsEnabled="{CompiledBinding IsGitMonitoringEnabled}">
             <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
                 <TextBox Width="200"
-                         PlaceholderText="Search changes..."
+                         PlaceholderText="{x:Static loc:UiStrings.SearchChanges}"
+                         PlaceholderForeground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                          Text="{CompiledBinding SearchText, Mode=TwoWay}" />
-                <Button Content="Stage" Command="{CompiledBinding StageCommand}" Padding="8,2" />
-                <Button Content="Unstage" Command="{CompiledBinding UnstageCommand}" Padding="8,2" />
-                <Button Content="Discard" Command="{CompiledBinding DiscardCommand}" Padding="8,2" />
-                <Button Content="Stage All" Command="{CompiledBinding StageAllCommand}" Padding="8,2" />
-                <Button Content="Unstage All" Command="{CompiledBinding UnstageAllCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.Stage}" Command="{CompiledBinding StageCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.Unstage}" Command="{CompiledBinding UnstageCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.Discard}" Command="{CompiledBinding DiscardCommand}"
+                        ToolTip.Tip="{x:Static loc:UiStrings.GitDiscardTooltip}" ToolTip.ShowOnDisabled="True"
+                        Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.StageAll}" Command="{CompiledBinding StageAllCommand}" Padding="8,2" />
+                <Button Content="{x:Static loc:UiStrings.UnstageAll}" Command="{CompiledBinding UnstageAllCommand}" Padding="8,2" />
             </StackPanel>
             <TextBlock Text="{CompiledBinding ErrorMessage}"
-                       Foreground="Orange"
+                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                        VerticalAlignment="Center"
                        DockPanel.Dock="Right" />
         </DockPanel>
 
         <!-- Main content -->
-        <Grid Grid.Row="2" ColumnDefinitions="2*,3*" RowDefinitions="*" Margin="8">
-            <TabControl Grid.Row="0" Grid.Column="0">
-                <TabItem Header="{CompiledBinding StagedCount, StringFormat='Staged ({0})'}">
+        <Grid Name="GitContentGrid" Grid.Row="2" RowDefinitions="*" Margin="8"
+              IsEnabled="{CompiledBinding IsGitMonitoringEnabled}"
+              views:GitDiffPaneBehavior.IsOpen="{CompiledBinding IsDiffVisible}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="220" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="3*" MinWidth="180" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Name="GitListPane" Grid.Column="0">
+                <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
+                    <TextBlock Text="{x:Static loc:UiStrings.Commit}" FontWeight="SemiBold" />
+                    <TextBox PlaceholderText="{x:Static loc:UiStrings.CommitMessage}"
+                             PlaceholderForeground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                             Text="{CompiledBinding CommitMessage, Mode=TwoWay}" />
+                    <Button Content="{x:Static loc:UiStrings.Commit}" Command="{CompiledBinding CommitCommand}" Padding="8,2" />
+                </StackPanel>
+
+                <TabControl>
+                <TabItem Header="{CompiledBinding StagedCount, StringFormat={x:Static loc:UiStrings.StagedCountFormat}}">
                     <dg:DataGrid ItemsSource="{CompiledBinding StagedView}"
                                  SelectedItem="{CompiledBinding SelectedStagedChange, Mode=TwoWay}"
                                  AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
                                  CanUserSortColumns="True"
                                  GridLinesVisibility="None"
                                  IsReadOnly="True">
                         <dg:DataGrid.Columns>
-                            <dg:DataGridTextColumn Header="Path"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Path}"
                                                    Width="*"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding DisplayPath}" />
-                            <dg:DataGridTextColumn Header="Status"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Status}"
                                                    Width="120"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding StatusLabel}" />
                         </dg:DataGrid.Columns>
                     </dg:DataGrid>
                 </TabItem>
-                <TabItem Header="{CompiledBinding UnstagedCount, StringFormat='Unstaged ({0})'}">
+                <TabItem Header="{CompiledBinding UnstagedCount, StringFormat={x:Static loc:UiStrings.UnstagedCountFormat}}">
                     <dg:DataGrid ItemsSource="{CompiledBinding UnstagedView}"
                                  SelectedItem="{CompiledBinding SelectedUnstagedChange, Mode=TwoWay}"
                                  AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
                                  CanUserSortColumns="True"
                                  GridLinesVisibility="None"
                                  IsReadOnly="True">
                         <dg:DataGrid.Columns>
-                            <dg:DataGridTextColumn Header="Path"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Path}"
                                                    Width="*"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding DisplayPath}" />
-                            <dg:DataGridTextColumn Header="Status"
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Status}"
                                                    Width="120"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding StatusLabel}" />
                         </dg:DataGrid.Columns>
                     </dg:DataGrid>
                 </TabItem>
-            </TabControl>
+                </TabControl>
+            </DockPanel>
 
-            <DockPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,0">
-                <StackPanel DockPanel.Dock="Top" Spacing="4">
-                    <TextBlock Text="Commit" FontWeight="SemiBold" />
-                    <TextBox PlaceholderText="Commit message"
-                             Text="{CompiledBinding CommitMessage, Mode=TwoWay}" />
-                    <Button Content="Commit" Command="{CompiledBinding CommitCommand}" Padding="8,2" />
-                    <TextBlock Text="{CompiledBinding DiffLineCount, StringFormat='Diff ({0})'}"
-                               FontWeight="SemiBold"
-                               Margin="0,8,0,0" />
-                </StackPanel>
+            <GridSplitter Name="GitDiffSplitter" Grid.Column="1" Width="4"
+                          Background="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          IsVisible="{CompiledBinding IsDiffVisible}"
+                          AutomationProperties.Name="{x:Static loc:UiStrings.GitResizeDiff}" />
 
+            <DockPanel Name="GitDiffPane" Grid.Column="2" Margin="8,0,0,0"
+                       IsVisible="{CompiledBinding IsDiffVisible}">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="{CompiledBinding DiffLineCount, StringFormat={x:Static loc:UiStrings.DiffCountFormat}}"
+                           FontWeight="SemiBold" Margin="0,0,0,4" />
                 <Border BorderBrush="#333" BorderThickness="1" Padding="4">
                     <controls:GitDiffTextEditor DiffLines="{CompiledBinding DiffLines}"
                                                 IsReadOnly="True"

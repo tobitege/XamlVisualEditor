@@ -6,7 +6,9 @@ using Avalonia.Threading;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
@@ -14,7 +16,7 @@ using ReactiveUI.Primitives.Concurrency;
 namespace XamlVisualEditor.Shell.ViewModels;
 
 /// <summary>Shell-backed designer host implementation for extensions.</summary>
-public sealed class ShellDesignerHost : IDesignerHost, IDisposable
+public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocumentNotifications, IDisposable
 {
     private readonly MainWindowViewModel _mainViewModel;
     private readonly CompositeDisposable _disposables = new();
@@ -27,14 +29,19 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
     {
         _mainViewModel = mainViewModel;
 
-        IDisposable activeDesignerSubscription = _mainViewModel
+        IObservable<DesignerDocumentViewModel?> activeDocuments = _mainViewModel
             .WhenAnyValue(
                 x => x.ActiveDesignerDocument,
                 x => x.ActiveDocument,
                 ResolveCurrentDocument)
-            .DistinctUntilChanged()
-            .Subscribe(PublishActiveDocument);
-        _disposables.Add(activeDesignerSubscription);
+            .DistinctUntilChanged();
+        _disposables.Add(activeDocuments.Subscribe(PublishActiveDocument));
+        _disposables.Add(Observable.Switch(activeDocuments.Select(document => document is null
+                ? Observable.Empty<DesignerDocumentChangedEventArgs>()
+                : document.SyncEngine.SyncEvents.Select(_ => new DesignerDocumentChangedEventArgs(document.FilePath)))
+            )
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(args => DocumentChanged?.Invoke(this, args)));
 
         _disposables.Add(_selectionSubscription);
     }
@@ -55,6 +62,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
     public event EventHandler<DesignerDocumentChangedEventArgs>? ActiveDocumentChanged;
 
     public event EventHandler<DesignerSelectionChangedEventArgs>? SelectionChanged;
+    public event EventHandler<DesignerDocumentChangedEventArgs>? DocumentChanged;
 
     public async Task<IReadOnlyList<DesignerNodeSummary>> GetSelectedNodesAsync(CancellationToken cancellationToken)
     {
@@ -117,11 +125,11 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         if (Dispatcher.UIThread.CheckAccess())
         {
-            return SetPropertyCore(nodeId, propertyName, value);
+            return await SetPropertyCoreAsync(nodeId, propertyName, value, cancellationToken);
         }
 
         return await Dispatcher.UIThread.InvokeAsync(
-            () => SetPropertyCore(nodeId, propertyName, value),
+            () => SetPropertyCoreAsync(nodeId, propertyName, value, cancellationToken),
             DispatcherPriority.Background);
     }
 
@@ -216,7 +224,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
         if (document.NodeMap.FindById(id) is MutableAstObjectNode node)
         {
-            return BuildPropertyInfo(document, node);
+            return AddPropertyTypeSemantics(document, node, BuildPropertyInfo(document, node));
         }
 
         if (TryFindDesignItem(document, id, out IDesignItem? designItem) && designItem is not null)
@@ -248,10 +256,11 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         return BuildEventInfo(document, node);
     }
 
-    private bool SetPropertyCore(string nodeId, string propertyName, string? value)
+    private async Task<bool> SetPropertyCoreAsync(
+        string nodeId, string propertyName, string? value, CancellationToken cancellationToken)
     {
         DesignerDocumentViewModel? document = GetActiveDocument();
-        if (document is null || document.IsDisposed)
+        if (document is null || document.IsDisposed || !document.SyncEngine.CanEditAst)
         {
             return false;
         }
@@ -263,25 +272,33 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
         if (document.NodeMap.FindById(id) is MutableAstObjectNode node)
         {
-            node.SetPropertyValue(propertyName, string.IsNullOrWhiteSpace(value) ? null : value);
-
-            if (document.SyncEngine.CurrentDocument is not null)
+            TypeMetadata? type = document.MetadataService?.GetType(node.XmlNamespace, node.TypeName);
+            if (propertyName == "x:Name" || propertyName == "Name" && type?.IsControl == true
+                || DesignerNameEditor.FindNameProperty(node, document.MetadataService)?.PropertyName == propertyName)
             {
-                document.SyncEngine.NotifyAstChanged(document.SyncEngine.CurrentDocument, SyncSource.PropertyEditor);
-                document.SyncEngine.CommitUndoBatch($"Set {propertyName}");
+                return await _mainViewModel.RenameDesignerControlAsync(document, node, value, cancellationToken);
             }
+
+            if (GetEventsCore(nodeId).Any(item => string.Equals(item.Name, propertyName, StringComparison.Ordinal)))
+            {
+                return await _mainViewModel.SetDesignerEventHandlerAsync(document, node, propertyName, value, cancellationToken);
+            }
+            PropertyMetadata? property = type is null ? null : document.MetadataService?.GetProperties(type)
+                .FirstOrDefault(candidate => candidate.Name == propertyName);
+            if (property is not null) PropertyValueValidator.Validate(property, value);
+            using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Set {propertyName}", SyncSource.PropertyEditor);
+            string localName = FindLocalProperty(document, node, propertyName)?.PropertyName ?? propertyName;
+            node.SetPropertyValue(localName, value);
+            edit.Commit();
 
             return true;
         }
 
         if (TryFindDesignItem(document, id, out IDesignItem? designItem) && designItem is not null)
         {
-            designItem.SetProperty(propertyName, string.IsNullOrWhiteSpace(value) ? null : value);
-            if (document.SyncEngine.CurrentDocument is not null)
-            {
-                document.SyncEngine.NotifyAstChanged(document.SyncEngine.CurrentDocument, SyncSource.PropertyEditor);
-                document.SyncEngine.CommitUndoBatch($"Set {propertyName}");
-            }
+            using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Set {propertyName}", SyncSource.PropertyEditor);
+            designItem.SetProperty(propertyName, value);
+            edit.Commit();
 
             return true;
         }
@@ -301,12 +318,10 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
         DesignerDocumentViewModel? document = GetActiveDocument();
         MutableAstDocument? currentDocument = document?.SyncEngine.CurrentDocument;
-        if (document is null || document.IsDisposed || currentDocument?.Root is null)
+        if (document is null || document.IsDisposed || currentDocument?.Root is null || !document.SyncEngine.CanEditAst)
         {
             return null;
         }
-
-        MutableAstObjectNode? parent = ResolveParentNode(document, parentNodeId) ?? currentDocument.Root;
 
         MutableAstObjectNode inserted = new()
         {
@@ -314,10 +329,24 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             XmlNamespace = xmlNamespace
         };
 
-        parent.Children.Add(inserted);
+        LayoutEditService editor = new(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds);
+        MutableAstObjectNode? parent;
+        if (!string.IsNullOrWhiteSpace(parentNodeId))
+        {
+            parent = Guid.TryParse(parentNodeId, out Guid targetId)
+                ? document.NodeMap.FindById(targetId) as MutableAstObjectNode : null;
+            if (parent is null) throw new InvalidOperationException("The requested insertion target is no longer available.");
+        }
+        else
+        {
+            parent = editor.FindInsertionParent(currentDocument.Root, ResolveParentNode(document, null), inserted);
+        }
+        if (parent is null) throw new InvalidOperationException("Select a layout panel or an empty content slot.");
+
+        using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Insert {typeName}");
+        if (!editor.TryInsert(parent, inserted, out string? error)) throw new InvalidOperationException(error);
+        edit.Commit();
         document.SetSelectedNode(inserted.Id, SyncSource.DesignSurface);
-        document.SyncEngine.NotifyAstChanged(currentDocument, SyncSource.DesignSurface);
-        document.SyncEngine.CommitUndoBatch($"Insert {typeName}");
 
         return inserted.Id.ToString("D");
     }
@@ -326,7 +355,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
     {
         DesignerDocumentViewModel? document = GetActiveDocument();
         MutableAstDocument? currentDocument = document?.SyncEngine.CurrentDocument;
-        if (document is null || document.IsDisposed || currentDocument is null)
+        if (document is null || document.IsDisposed || currentDocument is null || !document.SyncEngine.CanEditAst)
         {
             return false;
         }
@@ -336,19 +365,19 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             return false;
         }
 
-        if (document.NodeMap.FindById(id) is not MutableAstObjectNode node || node.Parent is not MutableAstObjectNode parent)
+        if (document.NodeMap.FindById(id) is not MutableAstObjectNode node)
         {
             return false;
         }
 
-        parent.Children.Remove(node);
+        using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Delete {node.TypeName}");
+        if (!new LayoutEditService(document.MetadataService).TryRemove(node, out _)) return false;
         if (document.SelectedNodeId == id)
         {
             document.SetSelectedNode(null, SyncSource.DesignSurface);
         }
 
-        document.SyncEngine.NotifyAstChanged(currentDocument, SyncSource.DesignSurface);
-        document.SyncEngine.CommitUndoBatch($"Delete {node.TypeName}");
+        edit.Commit();
         return true;
     }
 
@@ -364,7 +393,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
         DesignerDocumentViewModel? document = GetActiveDocument();
         MutableAstDocument? currentDocument = document?.SyncEngine.CurrentDocument;
-        if (document is null || document.IsDisposed || currentDocument is null)
+        if (document is null || document.IsDisposed || currentDocument is null || !document.SyncEngine.CanEditAst)
         {
             return null;
         }
@@ -374,13 +403,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             return null;
         }
 
-        if (document.NodeMap.FindById(id) is not MutableAstObjectNode node || node.Parent is not MutableAstObjectNode parent)
-        {
-            return null;
-        }
-
-        int index = parent.Children.IndexOf(node);
-        if (index < 0)
+        if (document.NodeMap.FindById(id) is not MutableAstObjectNode node)
         {
             return null;
         }
@@ -391,13 +414,13 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             XmlNamespace = wrapperXmlNamespace
         };
 
-        parent.Children.RemoveAt(index);
-        wrapper.Children.Add(node);
-        parent.Children.Insert(index, wrapper);
+        using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Wrap with {wrapperTypeName}");
+        if (!new LayoutEditService(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds)
+            .TryWrap(node, wrapper, out string? error))
+            throw new InvalidOperationException(error);
 
+        edit.Commit();
         document.SetSelectedNode(wrapper.Id, SyncSource.DesignSurface);
-        document.SyncEngine.NotifyAstChanged(currentDocument, SyncSource.DesignSurface);
-        document.SyncEngine.CommitUndoBatch($"Wrap with {wrapperTypeName}");
 
         return wrapper.Id.ToString("D");
     }
@@ -542,7 +565,8 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         {
             foreach (PropertyMetadata prop in metadataService.GetProperties(meta))
             {
-                string? value = node.GetPropertyValue(prop.Name);
+                MutableAstPropertyNode? local = FindLocalProperty(document, node, prop.Name);
+                string? value = (local?.Value as MutableAstTextNode)?.Text;
                 IReadOnlyList<string>? enumOptions = prop.ClrType is { IsEnum: true }
                     ? Enum.GetNames(prop.ClrType)
                     : null;
@@ -556,13 +580,15 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
                     prop.TypeFullName,
                     value,
                     prop.IsReadOnly,
-                    string.IsNullOrWhiteSpace(prop.Category) ? CategorizeProperty(prop.Name) : prop.Category,
+                    string.IsNullOrWhiteSpace(prop.Category) || prop.Category == "Misc"
+                        ? CategorizeProperty(prop.Name, prop.DeclaringTypeName) : prop.Category,
                     prop.Description,
                     defaultValue,
                     prop.IsAttached,
                     prop.OwnerType,
-                    enumOptions));
+                    enumOptions) { HasLocalValue = local is not null });
                 propertyNames.Add(prop.Name);
+                if (local is not null) propertyNames.Add(local.PropertyName);
             }
         }
 
@@ -584,7 +610,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
                 DefaultValue: null,
                 IsAttached: false,
                 OwnerType: null,
-                EnumOptions: null));
+                EnumOptions: null) { HasLocalValue = true });
             propertyNames.Add(property.PropertyName);
         }
 
@@ -610,7 +636,8 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
                 descriptor.PropertyType.FullName ?? descriptor.PropertyType.Name,
                 designItem.GetProperty(descriptor.Name),
                 descriptor.IsReadOnly,
-                string.IsNullOrWhiteSpace(descriptor.Category) ? null : descriptor.Category,
+                string.IsNullOrWhiteSpace(descriptor.Category) || descriptor.Category == "Misc"
+                    ? CategorizeProperty(descriptor.Name) : descriptor.Category,
                 descriptor.Description,
                 defaultValue,
                 IsAttached: descriptor.Name.Contains('.'),
@@ -934,7 +961,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             : $"{name} \"{normalized}\"";
     }
 
-    private static string CategorizeProperty(string propertyName)
+    private static string CategorizeProperty(string propertyName, string? declaringTypeName = null)
     {
         return propertyName switch
         {
@@ -958,55 +985,39 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             "Name" or "x:Name" or "Classes" or "Tag" or "DataContext"
                 => "Miscellaneous",
 
-            _ => "Common"
+            _ => declaringTypeName ?? "Common"
         };
     }
 
     private sealed class ShellDesignerTransaction : IDesignerTransaction
     {
-        private readonly DesignerDocumentViewModel? _document;
-        private readonly string _name;
-        private bool _isCompleted;
+        private readonly DocumentEditTransaction? _transaction;
 
         public ShellDesignerTransaction(DesignerDocumentViewModel? document, string name)
         {
-            _document = document;
-            _name = string.IsNullOrWhiteSpace(name) ? "Designer Transaction" : name;
+            if (document?.SyncEngine.CanEditAst == true)
+            {
+                _transaction = document.SyncEngine.BeginEditTransaction(
+                    string.IsNullOrWhiteSpace(name) ? "Designer Transaction" : name);
+            }
         }
 
         public Task CommitAsync(CancellationToken cancellationToken)
         {
-            if (_isCompleted || _document?.SyncEngine.CurrentDocument is null)
-            {
-                _isCompleted = true;
-                return Task.CompletedTask;
-            }
-
-            _document.SyncEngine.NotifyAstChanged(_document.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
-            _document.SyncEngine.CommitUndoBatch(_name);
-            _isCompleted = true;
+            cancellationToken.ThrowIfCancellationRequested();
+            _transaction?.Commit();
             return Task.CompletedTask;
         }
 
         public Task RollbackAsync(CancellationToken cancellationToken)
         {
-            if (_isCompleted)
-            {
-                return Task.CompletedTask;
-            }
-
-            _document?.SyncEngine.Undo();
-            _isCompleted = true;
+            _transaction?.Rollback();
             return Task.CompletedTask;
         }
 
         public void Dispose()
         {
-            if (!_isCompleted)
-            {
-                _document?.SyncEngine.CommitUndoBatch(_name);
-                _isCompleted = true;
-            }
+            _transaction?.Dispose();
         }
     }
 }

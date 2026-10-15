@@ -1,18 +1,16 @@
-using System.Security.Cryptography;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Extensions.Hosting.Mcp;
 
-/// <summary>Stores a workspace permission decision.</summary>
+/// <summary>Stores a workspace permission decision. Session tokens are issued per session and never persisted.</summary>
 public sealed record McpWorkspacePermissionState(
-    string SessionToken,
     McpAccessLevel AccessLevel,
     DateTimeOffset GrantedAt);
 
 /// <summary>Allowlist entry for UI.</summary>
 public sealed record McpWorkspacePermissionEntry(
     string WorkspaceId,
-    string SessionToken,
     McpAccessLevel AccessLevel,
     DateTimeOffset GrantedAt);
 
@@ -24,13 +22,17 @@ public sealed class McpPermissionService
     private readonly IWindow _window;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Raised after the consent of one workspace, or of all workspaces (<c>null</c>), was removed.</summary>
+    public event Action<string?>? PermissionsRevoked;
+
     public McpPermissionService(ISettings settings, IWindow window)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _window = window ?? throw new ArgumentNullException(nameof(window));
     }
 
-    public async Task<McpWorkspacePermissionState?> AuthorizeAsync(string workspaceId, string? sessionToken, CancellationToken ct)
+    /// <summary>Returns the stored consent of the workspace or prompts for and persists a new one.</summary>
+    public async Task<McpWorkspacePermissionState?> AuthorizeAsync(string workspaceId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(workspaceId))
         {
@@ -43,21 +45,7 @@ public sealed class McpPermissionService
             Dictionary<string, McpWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
             if (states.TryGetValue(workspaceId, out McpWorkspacePermissionState? existing))
             {
-                if (!string.IsNullOrWhiteSpace(sessionToken)
-                    && string.Equals(existing.SessionToken, sessionToken, StringComparison.Ordinal))
-                {
-                    return existing;
-                }
-
-                McpWorkspacePermissionState? renewed = await PromptForConsentAsync(ct).ConfigureAwait(false);
-                if (renewed is null)
-                {
-                    return null;
-                }
-
-                states[workspaceId] = renewed;
-                await SaveStatesAsync(states, ct).ConfigureAwait(false);
-                return renewed;
+                return existing;
             }
 
             McpWorkspacePermissionState? granted = await PromptForConsentAsync(ct).ConfigureAwait(false);
@@ -83,7 +71,7 @@ public sealed class McpPermissionService
         foreach (KeyValuePair<string, McpWorkspacePermissionState> entry in states)
         {
             McpWorkspacePermissionState state = entry.Value;
-            results.Add(new McpWorkspacePermissionEntry(entry.Key, state.SessionToken, state.AccessLevel, state.GrantedAt));
+            results.Add(new McpWorkspacePermissionEntry(entry.Key, state.AccessLevel, state.GrantedAt));
         }
 
         return results;
@@ -96,48 +84,60 @@ public sealed class McpPermissionService
             return;
         }
 
-        Dictionary<string, McpWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
-        if (states.Remove(workspaceId))
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            Dictionary<string, McpWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
+            if (states.Remove(workspaceId))
+                await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            PermissionsRevoked?.Invoke(workspaceId);
         }
+        finally { _gate.Release(); }
     }
 
-    public Task ClearAllAsync(CancellationToken ct)
+    public async Task ClearAllAsync(CancellationToken ct)
     {
-        return SaveStatesAsync(new Dictionary<string, McpWorkspacePermissionState>(StringComparer.Ordinal), ct);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await SaveStatesAsync(new Dictionary<string, McpWorkspacePermissionState>(StringComparer.Ordinal), ct).ConfigureAwait(false);
+            PermissionsRevoked?.Invoke(null);
+        }
+        finally { _gate.Release(); }
     }
 
     private async Task<McpWorkspacePermissionState?> PromptForConsentAsync(CancellationToken ct)
     {
         IReadOnlyList<QuickPickItem> items = new[]
         {
-            new QuickPickItem("Allow read-only", "Read files, diagnostics, and editor state", null),
-            new QuickPickItem("Allow full access", "Read and write files, commands, terminals", null),
-            new QuickPickItem("Deny", "Block this client", null)
+            new QuickPickItem(UiStrings.AllowReadOnly, UiStrings.ReadFilesDiagnosticsEditor, null),
+            new QuickPickItem(UiStrings.AllowFullAccess, UiStrings.FullAccessDescription, null),
+            new QuickPickItem(UiStrings.Deny, UiStrings.BlockClient, null)
         };
 
-        QuickPickItem? choice = await _window.ShowQuickPickAsync(items, new QuickPickOptions("MCP access", false), ct).ConfigureAwait(false);
+        QuickPickItem? choice = await _window.ShowQuickPickAsync(items, new QuickPickOptions(UiStrings.McpAccess, false), ct).ConfigureAwait(false);
         if (choice is null)
         {
             if (_window is InMemoryWindow or NullWindow)
             {
-                return new McpWorkspacePermissionState(CreateToken(), McpAccessLevel.Full, DateTimeOffset.UtcNow);
+                return new McpWorkspacePermissionState(McpAccessLevel.Full, DateTimeOffset.UtcNow);
             }
 
             return null;
         }
 
-        if (string.Equals(choice.Label, "Deny", StringComparison.OrdinalIgnoreCase))
+        bool readOnly = string.Equals(choice.Label, items[0].Label, StringComparison.Ordinal);
+        bool fullAccess = string.Equals(choice.Label, items[1].Label, StringComparison.Ordinal);
+        if (!readOnly && !fullAccess)
         {
             return null;
         }
 
-        McpAccessLevel accessLevel = string.Equals(choice.Label, "Allow full access", StringComparison.OrdinalIgnoreCase)
+        McpAccessLevel accessLevel = fullAccess
             ? McpAccessLevel.Full
             : McpAccessLevel.ReadOnly;
 
-        return new McpWorkspacePermissionState(CreateToken(), accessLevel, DateTimeOffset.UtcNow);
+        return new McpWorkspacePermissionState(accessLevel, DateTimeOffset.UtcNow);
     }
 
     private Task<Dictionary<string, McpWorkspacePermissionState>> LoadStatesAsync(CancellationToken ct)
@@ -151,11 +151,5 @@ public sealed class McpPermissionService
     private Task SaveStatesAsync(Dictionary<string, McpWorkspacePermissionState> states, CancellationToken ct)
     {
         return _settings.UpdateAsync(SettingsSection, states, SettingsTarget.Workspace, ct);
-    }
-
-    private static string CreateToken()
-    {
-        byte[] bytes = RandomNumberGenerator.GetBytes(32);
-        return Convert.ToBase64String(bytes);
     }
 }

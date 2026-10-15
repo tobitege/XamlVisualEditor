@@ -4,85 +4,19 @@
              xmlns:input="using:Avalonia.Input"
              xmlns:ad="using:XamlVisualEditor.Designer.Adorners"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
+             xmlns:text="using:Avalonia.Controls.Documents"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.DesignSurfaceView"
              x:DataType="dc:DesignSurfaceViewModel"
-             Background="#1E1E1E"
+             Background="{DynamicResource EditorCanvasBackdropBrush}"
              Focusable="True"
              input:DragDrop.AllowDrop="True">
 
     <DockPanel>
-        <!-- Design surface toolbar -->
-        <Border DockPanel.Dock="Top"
-                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
-                Padding="4,2">
-            <StackPanel Orientation="Horizontal" Spacing="4">
-                <TextBlock Text="Zoom:" VerticalAlignment="Center" Margin="4,0" FontSize="12" />
-                <Slider Minimum="0.1" Maximum="8.0"
-                        Value="{CompiledBinding Zoom, Mode=TwoWay}"
-                        Width="120"
-                        VerticalAlignment="Center" />
-                <TextBlock Text="{CompiledBinding Zoom, StringFormat='{}{0:P0}'}"
-                           VerticalAlignment="Center" Margin="4,0" FontSize="12" />
-                <Button Content="-"
-                    Command="{CompiledBinding ZoomOutCommand}"
-                    Padding="6,2"
-                    FontSize="12" />
-                <Button Content="+"
-                    Command="{CompiledBinding ZoomInCommand}"
-                    Padding="6,2"
-                    FontSize="12" />
-                <Button Content="100%"
-                    Command="{CompiledBinding ResetZoomCommand}"
-                    Padding="6,2"
-                    FontSize="12" />
-                <Button Content="Fit"
-                    Click="OnZoomToFitClick"
-                    Padding="6,2"
-                    FontSize="12" />
-                <Button Content="Sel"
-                    Click="OnZoomToSelectionClick"
-                    Padding="6,2"
-                    FontSize="12" />
-                <Separator />
-                <Button Content="Settings" Padding="6,2" FontSize="12">
-                    <Button.Flyout>
-                        <Flyout Placement="Bottom">
-                            <StackPanel Spacing="6" Margin="8">
-                                <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}"
-                                              Content="Grid" />
-                                <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
-                                              Content="Snap Grid" />
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="Theme" VerticalAlignment="Center" />
-                                    <ComboBox ItemsSource="{CompiledBinding ThemeVariants}"
-                                              SelectedItem="{CompiledBinding PreviewThemeVariant, Mode=TwoWay}"
-                                              MinWidth="140" />
-                                </StackPanel>
-                                <Separator />
-                                <ToggleButton IsChecked="{CompiledBinding ShowAlignmentGuides, Mode=TwoWay}"
-                                              Content="Align" />
-                                <ToggleButton IsChecked="{CompiledBinding SnapLinesEnabled, Mode=TwoWay}"
-                                              Content="Snap Align" />
-                                <ToggleButton IsChecked="{CompiledBinding ShowSpacingGuides, Mode=TwoWay}"
-                                              Content="Spacing" />
-                                <Separator />
-                                <ToggleButton IsChecked="{CompiledBinding ShowGuides, Mode=TwoWay}"
-                                              Content="Guides" />
-                                <ToggleButton IsChecked="{CompiledBinding SnapToGuides, Mode=TwoWay}"
-                                              Content="Snap Guides" />
-                                <ToggleButton IsChecked="{CompiledBinding ShowRulers, Mode=TwoWay}"
-                                              Content="Rulers" />
-                                <Separator />
-                                <ToggleButton IsChecked="{CompiledBinding ShowMarginPadding, Mode=TwoWay}"
-                                              Content="Margin" />
-                                <ToggleButton IsChecked="{CompiledBinding IsEditMode, Mode=TwoWay}"
-                                              Content="Edit" />
-                            </StackPanel>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-            </StackPanel>
-        </Border>
+        <v:DesignerViewportToolbar DockPanel.Dock="Top" FitRequested="OnZoomToFitClick" SelectionRequested="OnZoomToSelectionClick" />
+
+        <v:DesignerCoordinateStrip x:Name="CoordinateStrip" DockPanel.Dock="Bottom" />
 
         <!-- Artboard / design canvas with rulers -->
         <Grid>
@@ -106,6 +40,7 @@
                              Orientation="Horizontal"
                              Zoom="{CompiledBinding Zoom}"
                              Guides="{CompiledBinding VerticalGuides}"
+                             PointerPosition="{CompiledBinding Readout.PointerX}"
                              IsVisible="{CompiledBinding ShowRulers}" />
 
             <ad:RulerControl Name="VerticalRuler"
@@ -114,6 +49,7 @@
                              Orientation="Vertical"
                              Zoom="{CompiledBinding Zoom}"
                              Guides="{CompiledBinding HorizontalGuides}"
+                             PointerPosition="{CompiledBinding Readout.PointerY}"
                              IsVisible="{CompiledBinding ShowRulers}" />
 
             <ScrollViewer Name="SurfaceScrollViewer"
@@ -121,13 +57,17 @@
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           input:DragDrop.AllowDrop="True">
-                    <ThemeVariantScope RequestedThemeVariant="{CompiledBinding PreviewThemeVariant}">
+                    <ThemeVariantScope RequestedThemeVariant="{CompiledBinding PreviewThemeVariant}"
+                                       text:TextElement.Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}">
+                        <i:Interaction.Behaviors>
+                            <v:EditorThemeIsolationBehavior Service="{CompiledBinding EditorThemeService}" />
+                        </i:Interaction.Behaviors>
                         <Border Name="SurfaceBorder"
                             BorderBrush="#3F3F46"
                             BorderThickness="1"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Top"
-                        Margin="0"
+                        Margin="8"
                             BoxShadow="0 2 8 0 #40000000">
                         <!-- The design canvas where controls are rendered -->
                         <Grid Name="ZoomContainer">
@@ -145,20 +85,26 @@
                             </Grid.Height>
                             <Grid Name="ZoomSurface"
                                 Width="{CompiledBinding CanvasWidth}"
-                                Height="{CompiledBinding CanvasHeight}">
+                                Height="{CompiledBinding CanvasHeight}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top">
                                 <Grid.RenderTransform>
                                     <ScaleTransform ScaleX="{CompiledBinding Zoom}"
                                                     ScaleY="{CompiledBinding Zoom}" />
                                 </Grid.RenderTransform>
                                 <Grid.RenderTransformOrigin>0,0</Grid.RenderTransformOrigin>
-                                <ad:DesignGridLayer ShowGrid="{CompiledBinding ShowGrid}"
-                                                    GridSize="{CompiledBinding GridSnapSize}" />
                                 <Panel Name="DesignCanvas"
                                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                                        ClipToBounds="True"
                                        input:DragDrop.AllowDrop="True">
                                     <!-- Child controls will be added programmatically -->
                                 </Panel>
+                                <ad:DesignGridLayer ShowGrid="{CompiledBinding ShowGrid}"
+                                                    GridSize="{CompiledBinding GridSnapSize}"
+                                                    Zoom="{CompiledBinding Zoom}" />
+                                <ad:DesignMeasureLayer Start="{CompiledBinding Readout.MeasureStart}"
+                                                       End="{CompiledBinding Readout.MeasureEnd}"
+                                                       Zoom="{CompiledBinding Zoom}" />
                                 <ad:DesignAdornerLayer Name="AdornerLayer"
                                                        IsVisible="{CompiledBinding IsEditMode}" />
                             </Grid>
@@ -167,21 +113,23 @@
                 </ThemeVariantScope>
             </ScrollViewer>
 
-            <Border Grid.Row="1"
+            <Border Name="RebuildProgressOverlay"
+                    Grid.Row="1"
                     Grid.Column="1"
                     ZIndex="1000"
-                    Background="#D01E1E1E"
+                    Background="{DynamicResource EditorBusyBackdropBrush}"
                     IsHitTestVisible="False"
-                    IsVisible="{CompiledBinding IsRebuilding}">
+                    IsVisible="{CompiledBinding ShowRebuildProgress}">
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Spacing="12">
                     <ProgressBar Width="280" IsIndeterminate="True" />
                     <TextBlock Text="{CompiledBinding RebuildStatus}"
-                               Foreground="White"
+                               Foreground="{DynamicResource EditorWindowForegroundBrush}"
                                HorizontalAlignment="Center" />
-                    <TextBlock Text="Control constructors run on the UI thread."
-                               Foreground="#BFFFFFFF"
+                    <TextBlock Text="{x:Static loc:UiStrings.UiThreadConstructorsHint}"
+                               Foreground="{DynamicResource EditorWindowForegroundBrush}"
+                               Opacity="0.7"
                                FontSize="11"
                                HorizontalAlignment="Center" />
                 </StackPanel>

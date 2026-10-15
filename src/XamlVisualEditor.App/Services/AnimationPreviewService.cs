@@ -10,6 +10,7 @@ using Avalonia.Data;
 using Avalonia.Media;
 using Avalonia.Styling;
 using XamlVisualEditor.Animation;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 
@@ -30,25 +31,25 @@ public sealed class AnimationPreviewService : IAnimationPreviewService
 
         if (designSurface is null)
         {
-            error = "Design surface is not available.";
+            error = UiStrings.DesignSurfaceUnavailable;
             return false;
         }
 
         if (targetNodeId is null)
         {
-            error = "Select a target element to preview.";
+            error = UiStrings.SelectPreviewTarget;
             return false;
         }
 
         if (timeline.Tracks.Count == 0)
         {
-            error = "Add at least one track to preview.";
+            error = UiStrings.TrackRequiredForPreview;
             return false;
         }
 
         if (!TryResolveControl(designSurface, targetNodeId.Value, out Control control))
         {
-            error = "Unable to locate the target element for preview.";
+            error = UiStrings.PreviewTargetNotFound;
             return false;
         }
 
@@ -159,7 +160,7 @@ public sealed class AnimationPreviewService : IAnimationPreviewService
 
         if (animation.Children.Count == 0)
         {
-            error = "No valid keyframes could be created for preview.";
+            error = UiStrings.PreviewKeyframesUnavailable;
         }
 
         return animation;

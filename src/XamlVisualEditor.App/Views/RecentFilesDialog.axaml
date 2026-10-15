@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+        x:Class="XamlVisualEditor.App.Views.RecentFilesDialog"
+        x:DataType="vm:RecentFilesDialogViewModel"
+        Classes="editor-chrome" Title="{x:Static loc:UiStrings.RecentFilesTitle}"
+        Width="880" Height="520" MinWidth="640" MinHeight="360"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{CompiledBinding CloseCommand}" />
+  </Window.KeyBindings>
+  <Grid Margin="12" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+    <TextBox Name="RecentSearch" PlaceholderText="{x:Static loc:UiStrings.SearchNameOrPath}"
+             Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+    <DataGrid Grid.Row="1" Name="RecentEntries" ItemsSource="{CompiledBinding Entries}"
+              ColumnDefinitionsSource="{CompiledBinding Columns}"
+              SelectedItem="{CompiledBinding SelectedEntry, Mode=TwoWay}"
+              SortingModel="{CompiledBinding SortingModel}"
+              FilteringModel="{CompiledBinding FilteringModel}"
+              SearchModel="{CompiledBinding SearchModel}"
+              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+              CanUserSortColumns="True" CanUserResizeColumns="True" RowHeight="28" ColumnHeaderHeight="28">
+      <DataGrid.Styles>
+        <Style Selector="DataGridCell TextBlock" x:DataType="vm:RecentFileEntry">
+          <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+          <Setter Property="ToolTip.Tip" Value="{CompiledBinding FilePath}" />
+        </Style>
+      </DataGrid.Styles>
+      <DataGrid.KeyBindings>
+        <KeyBinding Gesture="Delete" Command="{CompiledBinding RemoveCommand}" />
+      </DataGrid.KeyBindings>
+    </DataGrid>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="RemoveRecentEntry" Content="{x:Static loc:UiStrings.RemoveFromList}" Command="{CompiledBinding RemoveCommand}" />
+      <Button Content="{x:Static loc:UiStrings.Close}" Command="{CompiledBinding CloseCommand}" MinWidth="80" />
+    </StackPanel>
+  </Grid>
+</Window>

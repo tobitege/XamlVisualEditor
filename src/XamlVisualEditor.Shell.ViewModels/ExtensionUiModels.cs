@@ -1,6 +1,7 @@
 using System.Reactive.Threading.Tasks;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
+using XamlVisualEditor.Core;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
@@ -116,14 +117,36 @@ public abstract partial class ExtensionCommandItemViewModel : ReactiveObject, ID
 
 public sealed partial class ExtensionMenuItemViewModel : ExtensionCommandItemViewModel
 {
+    private bool _isChecked;
+
     public ExtensionMenuItemViewModel(
         string commandId,
         string title,
         string? location,
         string? group,
         int priority,
-        ICommand command,
-        string? inputGesture = null)
+        ICommand? command,
+        string? inputGesture = null,
+        string? checkedWhen = null,
+        string? submenu = null,
+        string? submenuGroup = null)
+        : this(commandId, title, location, group, priority, command, inputGesture, checkedWhen, submenu, submenuGroup,
+            isSeparator: false)
+    {
+    }
+
+    private ExtensionMenuItemViewModel(
+        string commandId,
+        string title,
+        string? location,
+        string? group,
+        int priority,
+        ICommand? command,
+        string? inputGesture,
+        string? checkedWhen,
+        string? submenu,
+        string? submenuGroup,
+        bool isSeparator)
         : base(command)
     {
         CommandId = commandId;
@@ -133,7 +156,46 @@ public sealed partial class ExtensionMenuItemViewModel : ExtensionCommandItemVie
         Priority = priority;
         InputGestureText = inputGesture;
         InputGesture = ParseInputGesture(inputGesture);
+        CheckedWhen = string.IsNullOrWhiteSpace(checkedWhen) ? null : checkedWhen;
+        Submenu = string.IsNullOrWhiteSpace(submenu) ? null : submenu;
+        SubmenuGroup = submenuGroup;
+        IsSeparator = isSeparator;
     }
+
+    /// <summary>Creates a separator between two groups of a menu.</summary>
+    public static ExtensionMenuItemViewModel CreateSeparator(string? location, string? group)
+    {
+        return new ExtensionMenuItemViewModel("separator." + group, string.Empty, location, group, int.MinValue, null, null, null,
+            null, null, isSeparator: true);
+    }
+
+    /// <summary>Gets whether the item is a separator.</summary>
+    public bool IsSeparator { get; }
+
+    /// <summary>Gets the menu header; Avalonia draws a menu item with the header "-" as a separator.</summary>
+    public string Header => IsSeparator ? "-" : Title;
+
+    /// <summary>Gets the items of the submenu this item opens; empty for a command item.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> Children { get; } = new();
+
+    /// <summary>Gets the condition that checks a toggle item; <see langword="null"/> for a plain item.</summary>
+    public string? CheckedWhen { get; }
+
+    /// <summary>Gets whether the item shows a check mark.</summary>
+    public bool IsToggle => CheckedWhen is not null;
+
+    /// <summary>Gets or sets whether a toggle item is checked.</summary>
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => this.RaiseAndSetIfChanged(ref _isChecked, value);
+    }
+
+    /// <summary>Gets the title of the submenu the item belongs to.</summary>
+    public string? Submenu { get; }
+
+    /// <summary>Gets the group of the item inside its submenu.</summary>
+    public string? SubmenuGroup { get; }
 
     public string CommandId { get; }
 
@@ -268,11 +330,16 @@ public sealed partial class ExtensionCommandPaletteItemViewModel : ReactiveObjec
 
 public sealed partial class ExtensionKeyBindingViewModel : ReactiveObject
 {
-    public ExtensionKeyBindingViewModel(string commandId, string gesture, ICommand command)
+    public ExtensionKeyBindingViewModel(
+        string commandId,
+        string gesture,
+        ICommand command,
+        CommandKeybindingScope scope = CommandKeybindingScope.Window)
     {
         CommandId = commandId;
         Gesture = gesture;
         Command = command;
+        Scope = scope;
     }
 
     public string CommandId { get; }
@@ -280,6 +347,9 @@ public sealed partial class ExtensionKeyBindingViewModel : ReactiveObject
     public string Gesture { get; }
 
     public ICommand Command { get; }
+
+    /// <summary>Gets where the keybinding applies.</summary>
+    public CommandKeybindingScope Scope { get; }
 }
 
 public sealed partial class ExtensionAsyncCommand : ICommand
@@ -322,8 +392,10 @@ public sealed partial class ExtensionAsyncCommand : ICommand
 
 public sealed partial record CommandPaletteRequest(string Title, IReadOnlyList<ExtensionCommandPaletteItemViewModel> Items);
 
-public sealed partial class CommandPaletteDialogViewModel : ReactiveObject
+public sealed partial class CommandPaletteDialogViewModel : ReactiveObject, IDisposable
 {
+    private readonly IDisposable _filterSubscription;
+
     public CommandPaletteDialogViewModel(CommandPaletteRequest request)
     {
         Title = request.Title;
@@ -343,11 +415,14 @@ public sealed partial class CommandPaletteDialogViewModel : ReactiveObject
         CancelCommand = ReactiveCommand.CreateFromTask(async () =>
             await CloseInteraction.Handle(null));
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilter);
     }
+
+    /// <summary>Stops the pending filter timer.</summary>
+    public void Dispose() => _filterSubscription.Dispose();
 
     public string Title { get; }
 
@@ -393,6 +468,7 @@ public abstract partial class ExtensionViewModel : ReactiveObject
 {
     protected ExtensionViewModel(ExtensionViewContribution contribution)
     {
+        Contribution = contribution;
         ViewId = contribution.ViewId;
         Title = contribution.Title;
         ViewType = contribution.Type;
@@ -401,7 +477,11 @@ public abstract partial class ExtensionViewModel : ReactiveObject
         ActivateByDefault = contribution.ActivateByDefault;
         ContainerId = contribution.ContainerId;
         PersistDockState = contribution.PersistDockState;
+        AutoHideByDefault = contribution.AutoHideByDefault;
     }
+
+    /// <summary>Gets the contribution the view was created from.</summary>
+    public ExtensionViewContribution Contribution { get; }
 
     public string ViewId { get; }
 
@@ -418,6 +498,9 @@ public abstract partial class ExtensionViewModel : ReactiveObject
     public string? ContainerId { get; }
 
     public bool PersistDockState { get; }
+
+    /// <summary>Gets whether a new panel stays collapsed by default.</summary>
+    public bool AutoHideByDefault { get; }
 }
 
 public sealed partial class ExtensionWebviewViewModel : ExtensionViewModel
@@ -431,6 +514,7 @@ public sealed partial class ExtensionWebviewViewModel : ExtensionViewModel
     public string PlaceholderMessage { get; }
 }
 
+/// <summary>Hosts the view model that an extension supplies for a custom view; the extension owns its lifetime.</summary>
 public sealed partial class ExtensionCustomViewModel : ExtensionViewModel
 {
     public ExtensionCustomViewModel(ExtensionViewContribution contribution, object? viewModel)
@@ -444,14 +528,22 @@ public sealed partial class ExtensionCustomViewModel : ExtensionViewModel
 
 public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 {
+    /// <summary>Limits the compact explorer display to the File Explorer.</summary>
+    public bool IsFileExplorer => ViewId == "fileExplorer.panel";
+
     private const string FilterPropertyPath = "Item.Label";
+    private readonly System.Reactive.Subjects.Subject<object> _revealRequests = new();
     private readonly IExtensionTreeDataProvider _provider;
+    private readonly IDisposable _filterSubscription;
     private bool _isDisposed;
 
-    public ExtensionTreeViewModel(ExtensionViewContribution contribution, IExtensionTreeDataProvider provider)
+    public ExtensionTreeViewModel(ExtensionViewContribution contribution, IExtensionTreeDataProvider provider,
+        bool foldersBeforeFiles = true)
         : base(contribution)
     {
         _provider = provider;
+        FoldersBeforeFiles = foldersBeforeFiles;
+        SortComparer = IsFileExplorer ? new FileExplorerComparer(this) : null;
 
         SortingModel = new SortingModel();
         FilteringModel = new FilteringModel();
@@ -469,13 +561,23 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
             IsLeafSelector = item => item is ExtensionTreeNodeViewModel node && !node.HasChildren,
             IsExpandedSelector = item => ((ExtensionTreeNodeViewModel)item).IsExpanded,
             IsExpandedSetter = (item, value) => SetExpanded(item, value),
-            VirtualizeChildren = true
+            VirtualizeChildren = true,
+            AllowExpandToItemSearch = true,
+            SiblingComparer = SortComparer as IComparer<object>
         };
 
         Model = new HierarchicalModel(options);
         Model.SetRoots(RootItems);
+        // Sorting moves the rows under the grid selection; the selected item is selected again at its new place.
+        SortingModel.SortingChanged += (_, _) =>
+        {
+            if (SelectedNode is { } node && Model.FindNode(node) is { } row)
+            {
+                _revealRequests.OnNext(row);
+            }
+        };
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
@@ -521,7 +623,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         _provider.Changed += OnProviderChanged;
     }
 
-    public ObservableCollection<ExtensionTreeNodeViewModel> RootItems { get; } = new();
+    public BatchObservableCollection<ExtensionTreeNodeViewModel> RootItems { get; } = new();
 
     public HierarchicalModel Model { get; }
 
@@ -575,12 +677,8 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
 
         await ScheduleOnMainThreadAsync(() =>
         {
-            RootItems.Clear();
-            foreach (ExtensionTreeNodeViewModel node in nodes)
-            {
-                RootItems.Add(node);
-            }
-
+            // The model rebuilds all root rows for each notification; one reset keeps large folders linear.
+            RootItems.ReplaceAll(nodes);
             Model.Refresh();
             ApplyFilterAndSearch(FilterText);
         });
@@ -599,6 +697,94 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         await LoadAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Expands the folders down to the item of a file and selects it; items take part through
+    /// <see cref="IExtensionTreeItemPathProvider"/>. Returns false when no item stands for the file.
+    /// </summary>
+    public async Task<bool> RevealPathAsync(string filePath, CancellationToken cancellationToken)
+    {
+        if (RootItems.Count == 0)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        IReadOnlyList<ExtensionTreeNodeViewModel> level = RootItems.ToArray();
+        while (level.FirstOrDefault(node => node.Element is IExtensionTreeItemPathProvider item
+                   && FileSystemPathComparison.IsSameOrDescendant(filePath, item.FullPath)) is { } next)
+        {
+            if (FileSystemPathComparison.Equals(((IExtensionTreeItemPathProvider)next.Element).FullPath, filePath))
+            {
+                Model.Refresh();
+                if (!Model.TryExpandToItem(next, out HierarchicalNode? row) || row is null)
+                {
+                    return false;
+                }
+
+                SelectedRow = row;
+                _revealRequests.OnNext(row);
+                return true;
+            }
+
+            next.IsExpanded = true;
+            await next.EnsureChildrenAsync(cancellationToken);
+            level = next.Children.ToArray();
+        }
+
+        return false;
+    }
+
+    /// <summary>Gets the rows that <see cref="RevealPathAsync"/> selected and the view scrolls into view.</summary>
+    public IObservable<object> RevealRequests => _revealRequests;
+
+    /// <summary>Gets whether the File Explorer lists folders before files, also when sorted by its column header.</summary>
+    public bool FoldersBeforeFiles { get; private set; }
+
+    /// <summary>
+    /// Gets the comparer of the File Explorer rows, for its default order and its column header sorting; null for other
+    /// trees, which keep the order of their provider.
+    /// </summary>
+    public System.Collections.IComparer? SortComparer { get; }
+
+    /// <summary>Changes whether folders come before files and sorts the loaded rows again.</summary>
+    public void SetFoldersBeforeFiles(bool value)
+    {
+        if (FoldersBeforeFiles == value) return;
+        FoldersBeforeFiles = value;
+        if (SortComparer is IComparer<object> comparer && SortingModel.Descriptors.Count == 0)
+            Model.ApplySiblingComparer(comparer, recursive: true);
+    }
+
+    // Folders stay in front in both sort directions: the grid negates the whole result for a descending sort, so the
+    // folder part is negated here in advance.
+    private sealed class FileExplorerComparer(ExtensionTreeViewModel owner) : System.Collections.IComparer, IComparer<object>
+    {
+        public int Compare(object? x, object? y)
+        {
+            if (Unwrap(x) is not { } left || Unwrap(y) is not { } right) return 0;
+            if (owner.FoldersBeforeFiles)
+            {
+                int folders = IsFolder(right).CompareTo(IsFolder(left));
+                if (folders != 0)
+                {
+                    bool descending = owner.SortingModel.Descriptors.Count > 0
+                        && owner.SortingModel.Descriptors[0].Direction == System.ComponentModel.ListSortDirection.Descending;
+                    return descending ? -folders : folders;
+                }
+            }
+
+            return string.Compare(left.Label, right.Label, StringComparison.CurrentCultureIgnoreCase);
+        }
+
+        private static ExtensionTreeNodeViewModel? Unwrap(object? item) => item switch
+        {
+            HierarchicalNode node => node.Item as ExtensionTreeNodeViewModel,
+            _ => item as ExtensionTreeNodeViewModel
+        };
+
+        private static bool IsFolder(ExtensionTreeNodeViewModel node) =>
+            node.Element is IExtensionTreeItemPathProvider { IsDirectory: true };
+    }
+
     public void Dispose()
     {
         if (_isDisposed)
@@ -607,6 +793,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         }
 
         _provider.Changed -= OnProviderChanged;
+        _filterSubscription.Dispose();
         _isDisposed = true;
     }
 
@@ -984,7 +1171,7 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
 
     public bool CanOpenWorkspace { get; }
 
-    public ObservableCollection<ExtensionTreeNodeViewModel> Children { get; } = new();
+    public BatchObservableCollection<ExtensionTreeNodeViewModel> Children { get; } = new();
 
     [Reactive]
     public partial bool IsExpanded { get; set; }
@@ -1047,12 +1234,7 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
                 nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, _refresh));
             }
 
-            Children.Clear();
-            foreach (ExtensionTreeNodeViewModel node in nodes)
-            {
-                Children.Add(node);
-            }
-
+            Children.ReplaceAll(nodes);
             HasChildren = Children.Count > 0;
             _isLoaded = true;
             _refresh();

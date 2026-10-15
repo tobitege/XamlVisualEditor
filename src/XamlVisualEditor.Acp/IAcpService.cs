@@ -12,6 +12,7 @@ public interface IAcpService
 
     event Action<string>? StderrReceived;
     event Action<string, JsonElement?>? NotificationReceived;
+    event Action? ConnectionChanged;
 
     Task ConnectAsync(AcpAgentProcessOptions options, CancellationToken ct);
     Task ConnectMockAgentAsync(CancellationToken ct);
@@ -21,6 +22,8 @@ public interface IAcpService
     Task<string> CreateSessionAsync(object? parameters, CancellationToken ct);
     Task<JsonElement> PromptAsync(string sessionId, object? content, CancellationToken ct);
     Task CancelAsync(string sessionId, CancellationToken ct);
+
+    JsonElement? GetTerminalOutput(string terminalId);
 
     Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken ct);
     Task SendNotificationAsync(string method, object? parameters, CancellationToken ct);

@@ -49,6 +49,12 @@ public sealed class AcpFileSystemHandler
 
     private static async Task<JsonElement?> ReadTextFileAsync(string path, int startLine, int? limit, CancellationToken ct)
     {
+        if (startLine == 1 && limit is null)
+        {
+            string content = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+            return JsonSerializer.SerializeToElement(new { content });
+        }
+
         if (limit == 0)
         {
             return JsonSerializer.SerializeToElement(new { content = string.Empty });
@@ -71,7 +77,7 @@ public sealed class AcpFileSystemHandler
 
             if (currentLine >= startLine)
             {
-                if (builder.Length > 0)
+                if (collected > 0)
                 {
                     builder.Append('\n');
                 }
@@ -96,7 +102,7 @@ public sealed class AcpFileSystemHandler
         string path = RequireString(parameters, "path");
         EnsureAbsolutePath(path);
 
-        string content = RequireString(parameters, "content");
+        string content = RequireString(parameters, "content", allowEmpty: true);
 
         string? directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
@@ -108,7 +114,7 @@ public sealed class AcpFileSystemHandler
         return JsonSerializer.SerializeToElement(new { });
     }
 
-    private static string RequireString(JsonElement? parameters, string name)
+    private static string RequireString(JsonElement? parameters, string name, bool allowEmpty = false)
     {
         if (parameters is null)
         {
@@ -118,7 +124,7 @@ public sealed class AcpFileSystemHandler
         if (parameters.Value.TryGetProperty(name, out JsonElement element) && element.ValueKind == JsonValueKind.String)
         {
             string? value = element.GetString();
-            if (!string.IsNullOrWhiteSpace(value))
+            if (value is not null && (allowEmpty || !string.IsNullOrWhiteSpace(value)))
             {
                 return value;
             }

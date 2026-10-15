@@ -1,5 +1,12 @@
 namespace XamlVisualEditor.Extensions.Hosting;
 
+/// <summary>Allows preview hosts to release package assemblies before a provider changes.</summary>
+public interface IExtensionThemeProviderLifecycle
+{
+    event Func<string, CancellationToken, Task>? ThemeProvidersChanging;
+    event Func<string, CancellationToken, Task>? ThemeProvidersChanged;
+}
+
 /// <summary>Coordinates extension install and enablement.</summary>
 public interface IExtensionManager
 {

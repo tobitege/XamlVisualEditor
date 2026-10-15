@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.CollaborationExtension.Views;
 
@@ -46,7 +47,7 @@ public sealed class CollaborationExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     CollaborationViewId,
-                    "Collaboration",
+                    UiStrings.Collaboration,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     50,
@@ -59,7 +60,7 @@ public sealed class CollaborationExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleCollaborationCommandId,
-                    "Collaboration",
+                    UiStrings.Collaboration,
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     65)
@@ -68,49 +69,49 @@ public sealed class CollaborationExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ToggleCollaborationCommandId,
             new CommandMetadata(
-                Title: "View: Toggle Collaboration",
-                Category: "View",
+                Title: UiStrings.ToggleCollaborationCommand,
+                Category: UiStrings.View,
                 Priority: 100)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             StartSessionCommandId,
             new CommandMetadata(
-                Title: "Collaboration: Start Session",
-                Category: "Collaboration",
+                Title: UiStrings.CollaborationStartCommand,
+                Category: UiStrings.Collaboration,
                 Priority: 10)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             JoinSessionCommandId,
             new CommandMetadata(
-                Title: "Collaboration: Join Session",
-                Category: "Collaboration",
+                Title: UiStrings.CollaborationJoinCommand,
+                Category: UiStrings.Collaboration,
                 Priority: 20)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             LeaveSessionCommandId,
             new CommandMetadata(
-                Title: "Collaboration: Leave Session",
-                Category: "Collaboration",
+                Title: UiStrings.CollaborationLeaveCommand,
+                Category: UiStrings.Collaboration,
                 Priority: 30)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ShareSessionCommandId,
             new CommandMetadata(
-                Title: "Collaboration: Copy Share Link",
-                Category: "Collaboration",
+                Title: UiStrings.CollaborationShareCommand,
+                Category: UiStrings.Collaboration,
                 Priority: 40)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             InviteParticipantCommandId,
             new CommandMetadata(
-                Title: "Collaboration: Invite Participant",
-                Category: "Collaboration",
+                Title: UiStrings.CollaborationInviteCommand,
+                Category: UiStrings.Collaboration,
                 Priority: 50)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
             new[]
             {
-                new ExtensionCommandPaletteContribution(StartSessionCommandId, "Start Collaboration Session", "Collaboration"),
-                new ExtensionCommandPaletteContribution(JoinSessionCommandId, "Join Collaboration Session", "Collaboration"),
-                new ExtensionCommandPaletteContribution(LeaveSessionCommandId, "Leave Collaboration Session", "Collaboration"),
-                new ExtensionCommandPaletteContribution(ShareSessionCommandId, "Copy Collaboration Share Link", "Collaboration"),
-                new ExtensionCommandPaletteContribution(InviteParticipantCommandId, "Invite Collaboration Participant", "Collaboration")
+                new ExtensionCommandPaletteContribution(StartSessionCommandId, UiStrings.StartCollaborationSession, UiStrings.Collaboration),
+                new ExtensionCommandPaletteContribution(JoinSessionCommandId, UiStrings.JoinCollaborationSession, UiStrings.Collaboration),
+                new ExtensionCommandPaletteContribution(LeaveSessionCommandId, UiStrings.LeaveCollaborationSession, UiStrings.Collaboration),
+                new ExtensionCommandPaletteContribution(ShareSessionCommandId, UiStrings.CopyCollaborationLink, UiStrings.Collaboration),
+                new ExtensionCommandPaletteContribution(InviteParticipantCommandId, UiStrings.InviteCollaborationParticipant, UiStrings.Collaboration)
             }));
 
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
@@ -119,7 +120,6 @@ public sealed class CollaborationExtension : IXveExtension
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, 95);
         statusBarItem.CommandId = ToggleCollaborationCommandId;
-        statusBarItem.Show();
         UpdateStatusBar(statusBarItem, context.Collaboration);
         context.Subscriptions.Add(statusBarItem);
 
@@ -142,8 +142,8 @@ public sealed class CollaborationExtension : IXveExtension
     {
         string? sessionId = await context.Window.ShowInputBoxAsync(
             new InputBoxOptions(
-                "Join Collaboration Session",
-                "Enter a session id",
+                UiStrings.JoinCollaborationSession,
+                UiStrings.SessionIdPrompt,
                 context.Collaboration.SessionId),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -155,7 +155,7 @@ public sealed class CollaborationExtension : IXveExtension
         if (!joined)
         {
             await context.Window.ShowWarningMessageAsync(
-                "Unable to join the collaboration session.",
+                UiStrings.JoinCollaborationFailed,
                 cancellationToken);
         }
     }
@@ -166,13 +166,13 @@ public sealed class CollaborationExtension : IXveExtension
         if (string.IsNullOrWhiteSpace(link))
         {
             await context.Window.ShowWarningMessageAsync(
-                "Start or join a session before sharing a link.",
+                UiStrings.ShareSessionRequired,
                 cancellationToken);
             return;
         }
 
         await context.Window.ShowInformationMessageAsync(
-            "Share link: " + link,
+            UiStrings.ShareLinkPrefix + link,
             cancellationToken);
     }
 
@@ -180,8 +180,8 @@ public sealed class CollaborationExtension : IXveExtension
     {
         string? invitee = await context.Window.ShowInputBoxAsync(
             new InputBoxOptions(
-                "Invite Participant",
-                "Enter a participant name or email",
+                UiStrings.InviteParticipantTitle,
+                UiStrings.ParticipantPrompt,
                 null),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(invitee))
@@ -193,13 +193,13 @@ public sealed class CollaborationExtension : IXveExtension
         if (!invited)
         {
             await context.Window.ShowWarningMessageAsync(
-                "Unable to send invite. Start or join a collaboration session first.",
+                UiStrings.InviteSessionRequired,
                 cancellationToken);
             return;
         }
 
         await context.Window.ShowInformationMessageAsync(
-            "Invite prepared for " + invitee.Trim(),
+            UiStrings.InvitePreparedPrefix + invitee.Trim(),
             cancellationToken);
     }
 
@@ -207,18 +207,20 @@ public sealed class CollaborationExtension : IXveExtension
     {
         if (!collaboration.IsSessionActive)
         {
-            statusBarItem.Text = "Collab: Offline";
-            statusBarItem.Tooltip = "No active collaboration session";
+            statusBarItem.Hide();
             return;
         }
 
         int participantCount = collaboration.GetParticipants().Count;
         string session = string.IsNullOrWhiteSpace(collaboration.SessionId)
-            ? "unknown"
+            ? UiStrings.Unknown
             : collaboration.SessionId!;
 
-        statusBarItem.Text = $"Collab: {participantCount}";
-        statusBarItem.Tooltip = $"Session {session} ({participantCount} participant{(participantCount == 1 ? string.Empty : "s")})";
+        statusBarItem.Text = string.Format(UiStrings.CollaborationCount, participantCount);
+        statusBarItem.Tooltip = participantCount == 1
+            ? string.Format(UiStrings.SessionOneParticipant, session)
+            : string.Format(UiStrings.SessionParticipants, session, participantCount);
+        statusBarItem.Show();
     }
 
     private sealed class CollaborationPanelViewProvider : ICustomViewProvider

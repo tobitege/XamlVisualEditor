@@ -12,6 +12,7 @@ using ReactiveUI;
 using ReactiveUI.Primitives.Concurrency;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions.Debugging;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -717,7 +718,7 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
         IDebuggerService? service = _debuggerRegistry.GetActiveService();
         if (service is null)
         {
-            throw new InvalidOperationException("No debugger service is configured.");
+            throw new InvalidOperationException(UiStrings.DebuggerNotConfigured);
         }
 
         return service;

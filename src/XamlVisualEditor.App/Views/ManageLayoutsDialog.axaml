@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+        x:Class="XamlVisualEditor.App.Views.ManageLayoutsDialog"
+        x:DataType="vm:ManageLayoutsDialogViewModel"
+        Classes="editor-chrome" Title="{x:Static loc:UiStrings.ManageLayoutsTitle}"
+        Width="520" Height="420" MinWidth="400" MinHeight="300"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{CompiledBinding CloseCommand}" />
+  </Window.KeyBindings>
+  <Grid Margin="12" RowDefinitions="*,Auto,Auto,Auto,Auto" RowSpacing="8">
+    <Panel>
+      <ListBox Name="LayoutNames" ItemsSource="{CompiledBinding Names}"
+               SelectedItem="{CompiledBinding SelectedName, Mode=TwoWay}" SelectionMode="Single">
+        <ListBox.KeyBindings>
+          <KeyBinding Gesture="Delete" Command="{CompiledBinding DeleteCommand}" />
+        </ListBox.KeyBindings>
+      </ListBox>
+      <TextBlock Text="{x:Static loc:UiStrings.ManageLayoutsEmpty}"
+                 IsVisible="{CompiledBinding !HasNames}"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Panel>
+    <TextBlock Grid.Row="1" Text="{x:Static loc:UiStrings.LayoutSavePrompt}" />
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox Name="LayoutName" Text="{CompiledBinding EditName, Mode=TwoWay}"
+               IsEnabled="{CompiledBinding HasNames}">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{CompiledBinding RenameCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+      <Button Grid.Column="1" Name="RenameLayout" Content="{x:Static loc:UiStrings.Rename}"
+              Command="{CompiledBinding RenameCommand}" MinWidth="100" />
+    </Grid>
+    <TextBlock Grid.Row="3" Name="LayoutError" Text="{CompiledBinding ErrorText}" TextWrapping="Wrap"
+               Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+               IsVisible="{CompiledBinding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="DeleteLayout" Content="{x:Static loc:UiStrings.Delete}" Command="{CompiledBinding DeleteCommand}" MinWidth="80" />
+      <Button Content="{x:Static loc:UiStrings.Close}" Command="{CompiledBinding CloseCommand}" MinWidth="80" />
+    </StackPanel>
+  </Grid>
+</Window>

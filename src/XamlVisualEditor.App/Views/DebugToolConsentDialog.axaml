@@ -1,9 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.App.Views.DebugToolConsentDialog"
+        Classes="editor-chrome"
         x:DataType="vm:DebugToolConsentDialogViewModel"
-        Width="520" Height="260"
+        Title="{CompiledBinding Title}"
+        Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
   <StackPanel Margin="16" Spacing="10">
@@ -11,15 +14,15 @@
     <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
     <Border Background="#22000000" Padding="8" CornerRadius="4">
       <StackPanel Spacing="4">
-        <TextBlock Text="{CompiledBinding ToolId, StringFormat=Tool: {0}}" />
-        <TextBlock Text="{CompiledBinding Version, StringFormat=Version: {0}}" />
-        <TextBlock Text="{CompiledBinding DownloadUrl, StringFormat=Download: {0}}" TextWrapping="Wrap" />
-        <TextBlock Text="{CompiledBinding InstallPath, StringFormat=Install to: {0}}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding ToolId, StringFormat={x:Static loc:UiStrings.ToolFormat}}" />
+        <TextBlock Text="{CompiledBinding Version, StringFormat={x:Static loc:UiStrings.VersionFormat}}" />
+        <TextBlock Text="{CompiledBinding DownloadUrl, StringFormat={x:Static loc:UiStrings.DownloadFormat}}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding InstallPath, StringFormat={x:Static loc:UiStrings.InstallToFormat}}" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
-      <Button Content="Download" Command="{CompiledBinding AllowCommand}" IsDefault="True" />
+      <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+      <Button Content="{x:Static loc:UiStrings.Download}" Command="{CompiledBinding AllowCommand}" IsDefault="True" />
     </StackPanel>
   </StackPanel>
 </Window>

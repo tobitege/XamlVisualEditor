@@ -4,56 +4,76 @@ using XamlVisualEditor.Xaml.Ast;
 namespace XamlVisualEditor.Designer.Rendering;
 
 /// <summary>
-/// Extension point for the design surface control instantiation. Hooks let external
-/// extensions take over or refine the preview of control libraries whose behavior the
-/// generic factory cannot know (custom layout engines, runtime-coupled containers).
+/// Extension point for the design surface. Hooks let external extensions refine the
+/// rendered preview of control libraries whose runtime environment the design surface
+/// does not provide (for example containers that wrap their content at run time).
 /// </summary>
 public interface IDesignPreviewHook
 {
     /// <summary>
-    /// Creates the control for an AST node, or returns null to let the default factory
-    /// handle it. <paramref name="createChildTree"/> builds nested nodes through the
-    /// factory so hook-created containers participate in the normal pipeline.
+    /// Called on the UI thread after the design surface rendered a document and before it
+    /// is shown. <paramref name="root"/> is the rendered root control (the actual
+    /// <see cref="Window"/> for window documents); <paramref name="rootNode"/> is the
+    /// document's source root element, including directives such as x:Class.
+    /// Hooks may adjust the rendered tree in place.
     /// </summary>
-    Control? TryCreateControl(MutableAstObjectNode node, Func<MutableAstObjectNode, Control?> createChildTree);
-
-    /// <summary>
-    /// Called after the factory finished a node: the control exists, its properties are
-    /// applied, and its children are attached. Hooks may adjust the result in place.
-    /// </summary>
-    void PostProcess(Control control, MutableAstObjectNode node);
+    void PostProcess(Control root, MutableAstObjectNode rootNode);
 }
 
 /// <summary>
 /// Process-wide registry for design preview hooks. A registry (instead of constructor
-/// injection) because the design surface builds control factories per document while
-/// hooks arrive from independently activated extensions.
+/// injection) because the design surface renders per document while hooks arrive from
+/// independently activated extensions.
 /// </summary>
 public static class DesignPreviewHookRegistry
 {
-    private static readonly object Gate = new();
-    private static IDesignPreviewHook[] _hooks = Array.Empty<IDesignPreviewHook>();
+    private static readonly Lock Gate = new();
+    private static IDesignPreviewHook[] _hooks = [];
 
     /// <summary>Gets the currently registered hooks.</summary>
     public static IReadOnlyList<IDesignPreviewHook> Hooks => _hooks;
 
-    /// <summary>Registers a hook; disposing the result removes it again.</summary>
+    /// <summary>
+    /// Registers a hook; disposing the result removes it again. A hook that is already
+    /// registered is not added a second time: the call returns a registration whose
+    /// disposal does nothing, and the first registration keeps owning the hook.
+    /// </summary>
     public static IDisposable Register(IDesignPreviewHook hook)
     {
-        if (hook is null)
-        {
-            throw new ArgumentNullException(nameof(hook));
-        }
-
+        ArgumentNullException.ThrowIfNull(hook);
         lock (Gate)
         {
-            IDesignPreviewHook[] next = new IDesignPreviewHook[_hooks.Length + 1];
-            _hooks.CopyTo(next, 0);
-            next[^1] = hook;
-            _hooks = next;
+            if (_hooks.Any(existing => ReferenceEquals(existing, hook)))
+            {
+                return new Registration(null);
+            }
+
+            _hooks = [.. _hooks, hook];
         }
 
         return new Registration(hook);
+    }
+
+    /// <summary>
+    /// Runs every registered hook on a rendered document. A failing hook does not stop the
+    /// others or the preview; <paramref name="onError"/> receives the failure.
+    /// </summary>
+    public static void Apply(Control root, MutableAstObjectNode rootNode, Action<IDesignPreviewHook, Exception> onError)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(rootNode);
+        ArgumentNullException.ThrowIfNull(onError);
+        foreach (IDesignPreviewHook hook in _hooks)
+        {
+            try
+            {
+                hook.PostProcess(root, rootNode);
+            }
+            catch (Exception exception)
+            {
+                onError(hook, exception);
+            }
+        }
     }
 
     private static void Remove(IDesignPreviewHook hook)
@@ -64,22 +84,15 @@ public static class DesignPreviewHookRegistry
         }
     }
 
-    private sealed class Registration : IDisposable
+    private sealed class Registration(IDesignPreviewHook? hook) : IDisposable
     {
-        private IDesignPreviewHook? _hook;
-
-        public Registration(IDesignPreviewHook hook)
-        {
-            _hook = hook;
-        }
+        private IDesignPreviewHook? _hook = hook;
 
         public void Dispose()
         {
-            IDesignPreviewHook? hook = _hook;
-            _hook = null;
-            if (hook is not null)
+            if (Interlocked.Exchange(ref _hook, null) is { } registered)
             {
-                Remove(hook);
+                Remove(registered);
             }
         }
     }

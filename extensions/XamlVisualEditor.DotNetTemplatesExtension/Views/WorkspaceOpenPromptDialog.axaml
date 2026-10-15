@@ -1,10 +1,13 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.DotNetTemplatesExtension.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.DotNetTemplatesExtension.Views.WorkspaceOpenPromptDialog"
         x:DataType="vm:WorkspaceOpenPromptDialogViewModel"
+        Title="{CompiledBinding Title}"
+        Classes="editor-chrome"
         Width="420"
-        Height="180"
+        SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="12">
@@ -16,14 +19,15 @@
     <StackPanel Orientation="Horizontal"
                 HorizontalAlignment="Right"
                 Spacing="8">
-      <Button Content="Open"
+      <Button Content="{x:Static loc:UiStrings.Open}"
               Command="{CompiledBinding OpenCurrentCommand}"
               MinWidth="90" />
-      <Button Content="Open in New Window"
+      <Button Content="{x:Static loc:UiStrings.OpenInNewWindow}"
               Command="{CompiledBinding OpenNewWindowCommand}"
               MinWidth="160" />
-      <Button Content="Cancel"
+      <Button Content="{x:Static loc:UiStrings.Cancel}"
               Command="{CompiledBinding CancelCommand}"
+              IsCancel="True"
               MinWidth="90" />
     </StackPanel>
   </StackPanel>

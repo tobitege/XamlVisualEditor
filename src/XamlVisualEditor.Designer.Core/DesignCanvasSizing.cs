@@ -1,4 +1,4 @@
-using System;
+using Avalonia;
 
 namespace XamlVisualEditor.Designer.Core;
 
@@ -15,10 +15,13 @@ public static class DesignCanvasSizing
     public const double DefaultHeight = 600;
 
     /// <summary>
-    /// Extra artboard space beyond the document size, so border strokes on the
-    /// document edge stay visible instead of ending on the clip boundary.
+    /// Upper bound for measuring the rendered root. A finite bound keeps virtualizing
+    /// panels and scroll viewers from realizing their entire content.
     /// </summary>
-    public const double ArtboardPadding = 10;
+    public const double MaxMeasuredExtent = 4096;
+
+    /// <summary>Gets the size constraint used to measure the rendered root.</summary>
+    public static Size MeasureConstraint { get; } = new(MaxMeasuredExtent, MaxMeasuredExtent);
 
     /// <summary>
     /// Resolves the artboard size: an explicit size (DesignWidth/DesignHeight or
@@ -33,18 +36,18 @@ public static class DesignCanvasSizing
         double? measuredWidth,
         double? measuredHeight)
     {
-        double width = explicitWidth ?? minWidth ?? DefaultWidth;
-        if (!explicitWidth.HasValue && measuredWidth is { } contentWidth && double.IsFinite(contentWidth))
+        return (Resolve(explicitWidth, minWidth, measuredWidth, DefaultWidth),
+            Resolve(explicitHeight, minHeight, measuredHeight, DefaultHeight));
+    }
+
+    private static double Resolve(double? explicitValue, double? minimum, double? measured, double fallback)
+    {
+        if (explicitValue.HasValue)
         {
-            width = Math.Max(width, contentWidth);
+            return explicitValue.Value;
         }
 
-        double height = explicitHeight ?? minHeight ?? DefaultHeight;
-        if (!explicitHeight.HasValue && measuredHeight is { } contentHeight && double.IsFinite(contentHeight))
-        {
-            height = Math.Max(height, contentHeight);
-        }
-
-        return (width, height);
+        double value = minimum ?? fallback;
+        return measured is { } content && double.IsFinite(content) ? Math.Max(value, content) : value;
     }
 }

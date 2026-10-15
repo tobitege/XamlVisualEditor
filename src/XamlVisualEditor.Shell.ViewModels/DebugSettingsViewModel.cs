@@ -8,6 +8,7 @@ using ReactiveUI;
 using ReactiveUI.Primitives.Concurrency;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions.Debugging;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -138,28 +139,28 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
     {
         if (_installer is null)
         {
-            StatusText = "Debug tool installer unavailable.";
+            StatusText = UiStrings.DebugInstallerUnavailable;
             return;
         }
 
         IsBusy = true;
-        StatusText = "Downloading netcoredbg...";
+        StatusText = UiStrings.DownloadingNetcoredbg;
         try
         {
             string? path = await _installer.EnsureNetcoredbgAsync(_confirmAsync).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 AdapterPath = path;
-                StatusText = "netcoredbg installed.";
+                StatusText = UiStrings.NetcoredbgInstalled;
             }
             else
             {
-                StatusText = "netcoredbg download cancelled.";
+                StatusText = UiStrings.NetcoredbgDownloadCanceled;
             }
         }
         catch (Exception ex)
         {
-            StatusText = $"Download failed: {ex.Message}";
+            StatusText = string.Format(UiStrings.DownloadFailed, ex.Message);
         }
         finally
         {

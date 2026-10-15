@@ -2,29 +2,31 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.WatchesView"
              x:DataType="vm:WatchesViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="6,4">
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBlock Text="Watches" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <Button Content="Remove" Command="{CompiledBinding RemoveWatchCommand}" CommandParameter="{CompiledBinding SelectedWatch}" Padding="6,2" />
+        <TextBlock Text="{x:Static loc:UiStrings.Watches}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Button Content="{x:Static loc:UiStrings.Remove}" Command="{CompiledBinding RemoveWatchCommand}" CommandParameter="{CompiledBinding SelectedWatch}" Padding="6,2" />
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBox Width="280" PlaceholderText="Expression" Text="{CompiledBinding NewExpression, Mode=TwoWay}" />
-        <Button Content="Add" Command="{CompiledBinding AddWatchCommand}" Padding="6,2" />
+        <TextBox Width="280" PlaceholderText="{x:Static loc:UiStrings.Expression}" Text="{CompiledBinding NewExpression, Mode=TwoWay}" />
+        <Button Content="{x:Static loc:UiStrings.Add}" Command="{CompiledBinding AddWatchCommand}" Padding="6,2" />
       </StackPanel>
     </StackPanel>
 
     <dg:DataGrid ItemsSource="{CompiledBinding Items}"
                 SelectedItem="{CompiledBinding SelectedWatch, Mode=TwoWay}"
                 AutoGenerateColumns="False"
+                CanUserResizeColumns="True"
                 GridLinesVisibility="None"
                 IsReadOnly="True">
       <dg:DataGrid.Columns>
-        <dg:DataGridTextColumn Header="Expression" Binding="{CompiledBinding Expression}" Width="2*" />
-        <dg:DataGridTextColumn Header="Result" Binding="{CompiledBinding Result}" Width="2*" />
-        <dg:DataGridTextColumn Header="Type" Binding="{CompiledBinding TypeName}" Width="*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Expression}" Binding="{CompiledBinding Expression}" Width="2*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Result}" Binding="{CompiledBinding Result}" Width="2*" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Type}" Binding="{CompiledBinding TypeName}" Width="*" />
       </dg:DataGrid.Columns>
     </dg:DataGrid>
   </DockPanel>

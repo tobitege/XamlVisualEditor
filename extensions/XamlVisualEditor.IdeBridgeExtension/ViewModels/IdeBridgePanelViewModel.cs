@@ -3,13 +3,16 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
@@ -21,14 +24,14 @@ public sealed partial class IdeBridgePermissionEntryViewModel
     public IdeBridgePermissionEntryViewModel(IdeBridgeWorkspacePermissionEntry entry)
     {
         WorkspaceId = entry.WorkspaceId;
-        SessionToken = entry.SessionToken;
+        AccessLevel = entry.AccessLevel.ToString();
         GrantedAt = entry.GrantedAt.ToLocalTime().ToString("u");
         Capabilities = FormatCapabilities(entry.Capabilities);
     }
 
     public string WorkspaceId { get; }
 
-    public string SessionToken { get; }
+    public string AccessLevel { get; }
 
     public string GrantedAt { get; }
 
@@ -95,8 +98,6 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     private readonly ObservableCollection<IdeBridgePermissionEntryViewModel> _permissionEntries = new();
     private int _lastConnectionCount;
 
-    public Interaction<string, RxVoid> CopyToClipboardInteraction { get; } = new();
-
     [Reactive]
     public partial bool IsEnabled { get; set; }
 
@@ -110,7 +111,7 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     public partial string? UnixSocketPath { get; set; }
 
     [Reactive]
-    public partial string StatusText { get; private set; } = "Stopped";
+    public partial string StatusText { get; private set; } = UiStrings.Stopped;
 
     [Reactive]
     public partial string EndpointText { get; private set; } = "stdio";
@@ -123,9 +124,6 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
 
     [Reactive]
     public partial string? WorkspaceId { get; private set; }
-
-    [Reactive]
-    public partial string? SessionToken { get; private set; }
 
     [Reactive]
     public partial IdeBridgePermissionEntryViewModel? SelectedPermission { get; set; }
@@ -146,8 +144,6 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
 
     public ReactiveCommand<RxVoid, RxVoid> ClearPermissionsCommand { get; }
 
-    public ReactiveCommand<RxVoid, RxVoid> CopyTokenCommand { get; }
-
     public IdeBridgePanelViewModel(
         IdeBridgeRuntimeController controller,
         IdeBridgePermissionService permissions,
@@ -162,7 +158,6 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
         RefreshPermissionsCommand = ReactiveCommand.CreateFromTask(RefreshPermissionsAsync);
         RevokePermissionCommand = ReactiveCommand.CreateFromTask(RevokeSelectedAsync, this.WhenAnyValue(x => x.SelectedPermission).Select(p => p is not null));
         ClearPermissionsCommand = ReactiveCommand.CreateFromTask(ClearPermissionsAsync);
-        CopyTokenCommand = ReactiveCommand.CreateFromTask(CopyTokenAsync, this.WhenAnyValue(x => x.SessionToken).Select(token => !string.IsNullOrWhiteSpace(token)));
 
         IdeBridgeSettings settings = _controller.CurrentSettings;
         IsEnabled = settings.Enabled;
@@ -192,28 +187,26 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     private async Task ApplySettingsAsync()
     {
         IdeBridgeSettings settings = BuildSettings();
-        await _controller.ApplySettingsAsync(settings, CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Applied settings.");
+        await _controller.ApplySettingsAsync(settings, CancellationToken.None);
+        AppendLog(UiStrings.SettingsApplied);
         UpdateStatus();
     }
 
     private async Task RestartAsync()
     {
-        await _controller.RestartAsync(CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Restarted server.");
+        await _controller.RestartAsync(CancellationToken.None);
+        AppendLog(UiStrings.ServerRestarted);
         UpdateStatus();
     }
 
     private async Task RefreshPermissionsAsync()
     {
-        IReadOnlyList<IdeBridgeWorkspacePermissionEntry> entries = await _permissions.GetPermissionsAsync(CancellationToken.None).ConfigureAwait(false);
+        IReadOnlyList<IdeBridgeWorkspacePermissionEntry> entries = await _permissions.GetPermissionsAsync(CancellationToken.None);
         _permissionEntries.Clear();
         foreach (IdeBridgeWorkspacePermissionEntry entry in entries.OrderBy(e => e.WorkspaceId, StringComparer.OrdinalIgnoreCase))
         {
             _permissionEntries.Add(new IdeBridgePermissionEntryViewModel(entry));
         }
-
-        UpdateSessionToken();
     }
 
     private async Task RevokeSelectedAsync()
@@ -223,32 +216,22 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
             return;
         }
 
-        await _permissions.ClearPermissionAsync(SelectedPermission.WorkspaceId, CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Revoked permission for " + SelectedPermission.WorkspaceId + ".");
-        await RefreshPermissionsAsync().ConfigureAwait(false);
+        string workspaceId = SelectedPermission.WorkspaceId;
+        await _permissions.ClearPermissionAsync(workspaceId, CancellationToken.None);
+        AppendLog(UiStrings.PermissionRevokedPrefix + workspaceId + ".");
+        await RefreshPermissionsAsync();
     }
 
     private async Task ClearPermissionsAsync()
     {
-        await _permissions.ClearAllAsync(CancellationToken.None).ConfigureAwait(false);
-        AppendLog("Cleared all permissions.");
-        await RefreshPermissionsAsync().ConfigureAwait(false);
-    }
-
-    private async Task CopyTokenAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionToken))
-        {
-            return;
-        }
-
-        await CopyToClipboardInteraction.Handle(SessionToken).ConfigureAwait(false);
-        AppendLog("Copied session token.");
+        await _permissions.ClearAllAsync(CancellationToken.None);
+        AppendLog(UiStrings.PermissionsCleared);
+        await RefreshPermissionsAsync();
     }
 
     private void UpdateStatus()
     {
-        StatusText = _controller.IsRunning ? "Running" : "Stopped";
+        StatusText = _controller.IsRunning ? UiStrings.Running : UiStrings.Stopped;
         EndpointText = _controller.EndpointSummary;
         ConnectionCount = _controller.ConnectionCount;
         LastConnectionAt = _controller.LastConnectionAt?.ToLocalTime().ToString("u");
@@ -263,19 +246,6 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
     private void UpdateWorkspaceId()
     {
         WorkspaceId = NormalizeWorkspaceId(_workspaceInfo.WorkspacePath);
-        UpdateSessionToken();
-    }
-
-    private void UpdateSessionToken()
-    {
-        if (string.IsNullOrWhiteSpace(WorkspaceId))
-        {
-            SessionToken = null;
-            return;
-        }
-
-        IdeBridgePermissionEntryViewModel? entry = _permissionEntries.FirstOrDefault(p => string.Equals(p.WorkspaceId, WorkspaceId, StringComparison.OrdinalIgnoreCase));
-        SessionToken = entry?.SessionToken;
     }
 
     private void UpdateEndpointPreview()
@@ -306,13 +276,18 @@ public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposabl
         }
     }
 
+    // Workspace and controller events arrive on background threads; bound state changes on the UI thread.
     private void OnWorkspaceChanged(object? sender, WorkspaceChangedEventArgs e)
     {
-        WorkspaceId = NormalizeWorkspaceId(e.WorkspacePath);
-        UpdateSessionToken();
+        RxSchedulers.MainThreadScheduler.Schedule(UpdateWorkspaceId);
     }
 
     private void OnStatusChanged(object? sender, EventArgs e)
+    {
+        RxSchedulers.MainThreadScheduler.Schedule(ApplyControllerState);
+    }
+
+    private void ApplyControllerState()
     {
         IdeBridgeSettings settings = _controller.CurrentSettings;
         IsEnabled = settings.Enabled;

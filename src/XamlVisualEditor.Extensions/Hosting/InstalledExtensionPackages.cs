@@ -1,61 +1,35 @@
 using System.IO;
-using System.IO.Compression;
 using System.Reflection;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
 /// <summary>
-/// File and assembly plumbing for activating installed extension packages: the store
-/// keeps the .nupkg archives only, so activation extracts the content next to the
-/// archive and resolves the manifest's main assembly inside it.
+/// Assembly plumbing for activating installed extension packages whose manifest names a
+/// main assembly. The package store extracts every package into its installation
+/// directory, so activation only resolves and inspects the main assembly there.
 /// </summary>
 public static class InstalledExtensionPackages
 {
     /// <summary>
-    /// Extracts the package content into a version-specific content directory next to
-    /// the archive. An existing directory is reused; a stale partial extraction is
-    /// replaced when the archive is newer than the directory.
+    /// Resolves the manifest's main assembly inside the package installation directory.
+    /// Returns null when the package has no main entry, is not installed, or the file does
+    /// not exist; throws when the entry is not a DLL or escapes the installation directory.
     /// </summary>
-    public static string ExtractContent(string packagePath)
+    public static string? ResolveMainAssemblyPath(ExtensionPackageInfo package)
     {
-        string packageDirectory = Path.GetDirectoryName(Path.GetFullPath(packagePath))
-            ?? throw new InvalidOperationException("Package path has no directory: " + packagePath);
-        string contentDirectory = Path.Combine(packageDirectory, "content");
-
-        if (Directory.Exists(contentDirectory)
-            && File.GetLastWriteTimeUtc(packagePath) > Directory.GetLastWriteTimeUtc(contentDirectory))
-        {
-            Directory.Delete(contentDirectory, recursive: true);
-        }
-
-        if (!Directory.Exists(contentDirectory))
-        {
-            ZipFile.ExtractToDirectory(packagePath, contentDirectory);
-        }
-
-        return contentDirectory;
-    }
-
-    /// <summary>
-    /// Resolves the manifest's main assembly inside the extracted content directory.
-    /// Returns null when the entry is missing, escapes the directory, or does not exist.
-    /// </summary>
-    public static string? ResolveMainAssemblyPath(string contentDirectory, string? mainRelativePath)
-    {
-        if (string.IsNullOrWhiteSpace(mainRelativePath))
+        ArgumentNullException.ThrowIfNull(package);
+        if (string.IsNullOrWhiteSpace(package.Manifest.Main) || package.InstallationDirectory is not { } directory)
         {
             return null;
         }
 
-        string normalizedRoot = Path.GetFullPath(contentDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        string fullPath = Path.GetFullPath(Path.Combine(normalizedRoot, mainRelativePath.Trim()));
-        if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+        string path = DesignerThemePackageContributions.ResolvePackagePath(directory, package.Manifest.Main.Trim());
+        if (!string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            throw new InvalidDataException("The main entry of an extension package must name a managed DLL.");
         }
 
-        return File.Exists(fullPath) ? fullPath : null;
+        return File.Exists(path) ? path : null;
     }
 
     /// <summary>
@@ -64,20 +38,19 @@ public static class InstalledExtensionPackages
     /// </summary>
     public static IReadOnlyList<Type> FindExtensionTypes(Assembly assembly)
     {
+        ArgumentNullException.ThrowIfNull(assembly);
         Type[] types;
         try
         {
             types = assembly.GetTypes();
         }
-        catch (ReflectionTypeLoadException ex)
+        catch (ReflectionTypeLoadException exception)
         {
-            types = ex.Types.Where(type => type is not null).Cast<Type>().ToArray();
+            types = exception.Types.OfType<Type>().ToArray();
         }
 
         return types
-            .Where(type => type.IsClass
-                && !type.IsAbstract
-                && type.IsPublic
+            .Where(type => type is { IsClass: true, IsAbstract: false, IsPublic: true }
                 && typeof(IXveExtension).IsAssignableFrom(type)
                 && type.GetConstructor(Type.EmptyTypes) is not null)
             .ToArray();

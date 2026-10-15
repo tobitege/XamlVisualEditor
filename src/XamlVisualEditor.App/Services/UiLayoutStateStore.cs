@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Serilog;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.App.Services;
 
@@ -97,7 +98,7 @@ internal static class UiLayoutStateStore
                 return new UiLayoutState();
             }
 
-            return Deserialize(File.ReadAllText(path));
+            return Deserialize(SharedFileReader.ReadAllText(path));
         }
         catch (Exception ex)
         {

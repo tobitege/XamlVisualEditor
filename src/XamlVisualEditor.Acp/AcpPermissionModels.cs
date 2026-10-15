@@ -27,7 +27,8 @@ public sealed class AcpPermissionRequest
         string? toolCallId,
         string? toolTitle,
         string? toolKind,
-        JsonElement? rawToolCall)
+        JsonElement? rawToolCall,
+        System.Threading.CancellationToken cancellationToken = default)
     {
         SessionId = sessionId;
         Options = options;
@@ -35,6 +36,7 @@ public sealed class AcpPermissionRequest
         ToolTitle = toolTitle;
         ToolKind = toolKind;
         RawToolCall = rawToolCall;
+        CancellationToken = cancellationToken;
     }
 
     public string SessionId { get; }
@@ -48,6 +50,8 @@ public sealed class AcpPermissionRequest
     public string? ToolKind { get; }
 
     public JsonElement? RawToolCall { get; }
+
+    public System.Threading.CancellationToken CancellationToken { get; internal set; }
 
     public static AcpPermissionRequest Parse(JsonElement? parameters)
     {

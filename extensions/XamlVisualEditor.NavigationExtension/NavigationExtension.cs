@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.NavigationExtension;
@@ -20,6 +21,9 @@ public sealed class NavigationExtension : IXveExtension
     private const string NavigateBackCommandId = "navigation.history.back";
     private const string NavigateForwardCommandId = "navigation.history.forward";
     private const string ToggleReferencesCommandId = "navigation.references.toggleView";
+
+    // The number places the group in the edit menu between the workspace editing groups and the options.
+    private const string EDIT_MENU_GROUP = "5.navigation";
     private const int FindInFilesMaxFiles = 2500;
     private const int FindInFilesMaxMatches = 500;
     private const int FindInFilesMaxFileBytes = 1_048_576;
@@ -69,6 +73,7 @@ public sealed class NavigationExtension : IXveExtension
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
         ReferencesPanelViewModel viewModel = new(context.Navigation, context.Editor, context.Window);
+        context.Subscriptions.Add(viewModel);
 
         context.Subscriptions.Add(context.Commands.Register(
             FindReferencesCommandId,
@@ -98,77 +103,77 @@ public sealed class NavigationExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             FindReferencesCommandId,
             new CommandMetadata(
-                Title: "Navigation: Find References",
-                Category: "Navigation",
+                Title: UiStrings.NavigationFindReferencesCommand,
+                Category: UiStrings.Navigation,
                 When: "hasTextDocument",
                 Keybinding: "Shift+F12",
                 Priority: 50)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             FindInFilesCommandId,
             new CommandMetadata(
-                Title: "Navigation: Find In Files",
-                Category: "Navigation",
+                Title: UiStrings.NavigationFindFilesCommand,
+                Category: UiStrings.Navigation,
                 When: "hasWorkspace",
                 Keybinding: "Ctrl+Shift+F",
                 Priority: 55)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             GoToDefinitionCommandId,
             new CommandMetadata(
-                Title: "Navigation: Go To Definition",
-                Category: "Navigation",
+                Title: UiStrings.NavigationDefinitionCommand,
+                Category: UiStrings.Navigation,
                 When: "hasTextDocument",
                 Keybinding: "F12",
                 Priority: 40)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             QuickOpenCommandId,
             new CommandMetadata(
-                Title: "Navigation: Quick Open",
-                Category: "Navigation",
+                Title: UiStrings.NavigationQuickOpenCommand,
+                Category: UiStrings.Navigation,
                 When: "hasWorkspace",
                 Keybinding: "Ctrl+P",
                 Priority: 12)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             GoToLineCommandId,
             new CommandMetadata(
-                Title: "Navigation: Go To Line",
-                Category: "Navigation",
+                Title: UiStrings.NavigationGoToLineCommand,
+                Category: UiStrings.Navigation,
                 When: "hasTextDocument",
                 Keybinding: "Ctrl+G",
                 Priority: 13)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             NavigateBackCommandId,
             new CommandMetadata(
-                Title: "Navigation: Back",
-                Category: "Navigation",
+                Title: UiStrings.NavigationBackCommand,
+                Category: UiStrings.Navigation,
                 When: "canNavigateBack",
                 Keybinding: "Alt+Left",
                 Priority: 10)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             NavigateForwardCommandId,
             new CommandMetadata(
-                Title: "Navigation: Forward",
-                Category: "Navigation",
+                Title: UiStrings.NavigationForwardCommand,
+                Category: UiStrings.Navigation,
                 When: "canNavigateForward",
                 Keybinding: "Alt+Right",
                 Priority: 20)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ToggleReferencesCommandId,
             new CommandMetadata(
-                Title: "View: Toggle References",
-                Category: "View",
+                Title: UiStrings.ToggleReferencesCommand,
+                Category: UiStrings.View,
                 Priority: 60)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
             new[]
             {
-                new ExtensionCommandPaletteContribution(NavigateBackCommandId, "Navigate Back", "Navigation"),
-                new ExtensionCommandPaletteContribution(NavigateForwardCommandId, "Navigate Forward", "Navigation"),
-                new ExtensionCommandPaletteContribution(QuickOpenCommandId, "Quick Open File", "Navigation"),
-                new ExtensionCommandPaletteContribution(FindInFilesCommandId, "Find In Files", "Navigation"),
-                new ExtensionCommandPaletteContribution(GoToLineCommandId, "Go To Line", "Navigation"),
-                new ExtensionCommandPaletteContribution(GoToDefinitionCommandId, "Go To Definition", "Navigation"),
-                new ExtensionCommandPaletteContribution(FindReferencesCommandId, "Find References", "Navigation")
+                new ExtensionCommandPaletteContribution(NavigateBackCommandId, UiStrings.NavigateBack, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(NavigateForwardCommandId, UiStrings.NavigateForward, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(QuickOpenCommandId, UiStrings.QuickOpenFile, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(FindInFilesCommandId, UiStrings.FindInFiles, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(GoToLineCommandId, UiStrings.GoToLine, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(GoToDefinitionCommandId, UiStrings.GoToDefinition, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(FindReferencesCommandId, UiStrings.FindReferences, UiStrings.Navigation)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
@@ -177,49 +182,49 @@ public sealed class NavigationExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     NavigateBackCommandId,
-                    "Navigate Back",
+                    UiStrings.NavigateBack,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     60),
                 new ExtensionMenuContribution(
                     NavigateForwardCommandId,
-                    "Navigate Forward",
+                    UiStrings.NavigateForward,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     65),
                 new ExtensionMenuContribution(
                     QuickOpenCommandId,
-                    "Quick Open...",
+                    UiStrings.QuickOpenDialog,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     66),
                 new ExtensionMenuContribution(
                     GoToLineCommandId,
-                    "Go To Line...",
+                    UiStrings.GoToLineDialog,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     67),
                 new ExtensionMenuContribution(
                     FindInFilesCommandId,
-                    "Find In Files...",
+                    UiStrings.FindInFilesDialog,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     68),
                 new ExtensionMenuContribution(
                     GoToDefinitionCommandId,
-                    "Go To Definition",
+                    UiStrings.GoToDefinition,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     70),
                 new ExtensionMenuContribution(
                     FindReferencesCommandId,
-                    "Find References",
+                    UiStrings.FindReferences,
                     ExtensionMenuLocations.Edit,
-                    "navigation",
+                    EDIT_MENU_GROUP,
                     75),
                 new ExtensionMenuContribution(
                     ToggleReferencesCommandId,
-                    "References",
+                    UiStrings.References,
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     40)
@@ -231,7 +236,7 @@ public sealed class NavigationExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     ReferencesViewId,
-                    "References",
+                    UiStrings.References,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     30,
@@ -253,15 +258,15 @@ public sealed class NavigationExtension : IXveExtension
         string? workspacePath = context.WorkspaceInfo.WorkspacePath;
         if (string.IsNullOrWhiteSpace(workspacePath))
         {
-            await context.Window.ShowWarningMessageAsync("No workspace loaded.", cancellationToken);
+            await context.Window.ShowWarningMessageAsync(UiStrings.NoWorkspaceLoaded, cancellationToken);
             return;
         }
 
         string? defaultQuery = await GetSelectedTextAsync(context.Editor, cancellationToken).ConfigureAwait(false);
         string? query = await context.Window.ShowInputBoxAsync(
             new InputBoxOptions(
-                "Find In Files",
-                "Enter text to search in workspace files",
+                UiStrings.FindInFiles,
+                UiStrings.WorkspaceSearchPrompt,
                 defaultQuery),
             cancellationToken).ConfigureAwait(false);
 
@@ -337,13 +342,13 @@ public sealed class NavigationExtension : IXveExtension
         if (matches.Count == 0)
         {
             await context.Window.ShowInformationMessageAsync(
-                $"No matches found for '{trimmedQuery}'.",
+                string.Format(UiStrings.SearchNoMatches, trimmedQuery),
                 cancellationToken).ConfigureAwait(false);
         }
         else if (matches.Count >= FindInFilesMaxMatches)
         {
             await context.Window.ShowInformationMessageAsync(
-                $"Showing first {FindInFilesMaxMatches} matches for '{trimmedQuery}'.",
+                string.Format(UiStrings.SearchFirstMatches, FindInFilesMaxMatches, trimmedQuery),
                 cancellationToken).ConfigureAwait(false);
         }
     }
@@ -353,7 +358,7 @@ public sealed class NavigationExtension : IXveExtension
         string? workspacePath = context.WorkspaceInfo.WorkspacePath;
         if (string.IsNullOrWhiteSpace(workspacePath))
         {
-            await context.Window.ShowWarningMessageAsync("No workspace loaded.", cancellationToken);
+            await context.Window.ShowWarningMessageAsync(UiStrings.NoWorkspaceLoaded, cancellationToken);
             return;
         }
 
@@ -371,7 +376,7 @@ public sealed class NavigationExtension : IXveExtension
 
         if (candidates.Count == 0)
         {
-            await context.Window.ShowInformationMessageAsync("No workspace files available for quick open.", cancellationToken);
+            await context.Window.ShowInformationMessageAsync(UiStrings.QuickOpenNoFiles, cancellationToken);
             return;
         }
 
@@ -388,7 +393,7 @@ public sealed class NavigationExtension : IXveExtension
 
         QuickPickItem? selected = await context.Window.ShowQuickPickAsync(
             items,
-            new QuickPickOptions("Quick Open", false),
+            new QuickPickOptions(UiStrings.QuickOpen, false),
             cancellationToken);
 
         if (selected is null || string.IsNullOrWhiteSpace(selected.Detail))
@@ -407,7 +412,7 @@ public sealed class NavigationExtension : IXveExtension
         IEditorDocument? activeDocument = context.Editor.ActiveDocument;
         if (activeDocument is null)
         {
-            await context.Window.ShowWarningMessageAsync("No active text document.", cancellationToken);
+            await context.Window.ShowWarningMessageAsync(UiStrings.NoActiveTextDocument, cancellationToken);
             return;
         }
 
@@ -415,8 +420,8 @@ public sealed class NavigationExtension : IXveExtension
         int currentLine = GetLineForOffset(text, activeDocument.CaretOffset);
         string? input = await context.Window.ShowInputBoxAsync(
             new InputBoxOptions(
-                "Go To Line",
-                "Enter line or line:column",
+                UiStrings.GoToLine,
+                UiStrings.GoToLinePrompt,
                 currentLine.ToString(CultureInfo.InvariantCulture)),
             cancellationToken);
 
@@ -427,7 +432,7 @@ public sealed class NavigationExtension : IXveExtension
 
         if (!TryParseLineAndColumn(input, out int line, out int column))
         {
-            await context.Window.ShowWarningMessageAsync("Invalid location format. Use line or line:column.", cancellationToken);
+            await context.Window.ShowWarningMessageAsync(UiStrings.InvalidTextLocation, cancellationToken);
             return;
         }
 
@@ -443,7 +448,7 @@ public sealed class NavigationExtension : IXveExtension
 
         if (!opened)
         {
-            await context.Window.ShowWarningMessageAsync("Unable to navigate to the requested location.", cancellationToken);
+            await context.Window.ShowWarningMessageAsync(UiStrings.NavigationLocationUnavailable, cancellationToken);
         }
     }
 

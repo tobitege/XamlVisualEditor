@@ -1,14 +1,15 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.DebugSettingsView"
              x:DataType="vm:DebugSettingsViewModel">
   <DockPanel Margin="8">
     <StackPanel Spacing="8">
-      <TextBlock Text="Debug Settings" FontWeight="SemiBold" FontSize="14" />
+      <TextBlock Text="{x:Static loc:UiStrings.DebugSettings}" FontWeight="SemiBold" FontSize="14" />
 
       <StackPanel Spacing="4">
-        <TextBlock Text="Debugger service" />
+        <TextBlock Text="{x:Static loc:UiStrings.DebuggerService}" />
         <ComboBox ItemsSource="{CompiledBinding DebuggerServices}"
                   SelectedItem="{CompiledBinding SelectedDebuggerService, Mode=TwoWay}">
           <ComboBox.ItemTemplate>
@@ -20,16 +21,16 @@
       </StackPanel>
 
       <StackPanel Spacing="4">
-        <TextBlock Text="Debugger adapter path" />
+        <TextBlock Text="{x:Static loc:UiStrings.DebuggerAdapterPath}" />
         <TextBox Text="{CompiledBinding AdapterPath, Mode=TwoWay}" />
       </StackPanel>
 
-      <CheckBox Content="Auto-download netcoredbg"
+      <CheckBox Content="{x:Static loc:UiStrings.AutoDownloadNetcoredbg}"
                 IsChecked="{CompiledBinding AutoDownloadTools, Mode=TwoWay}"
                 IsEnabled="{CompiledBinding IsNetcoredbgSelected}" />
 
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Content="Download netcoredbg"
+        <Button Content="{x:Static loc:UiStrings.DownloadNetcoredbg}"
                 Command="{CompiledBinding DownloadNetcoredbgCommand}" />
         <TextBlock Text="{CompiledBinding StatusText}" VerticalAlignment="Center" />
       </StackPanel>

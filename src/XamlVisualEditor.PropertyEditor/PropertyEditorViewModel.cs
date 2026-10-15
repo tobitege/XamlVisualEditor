@@ -17,6 +17,7 @@ using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Xaml.Ast;
 
@@ -169,7 +170,7 @@ public sealed partial class PropertyRowGroupDescription : DataGridGroupDescripti
     {
         if (item is PropertyRowViewModel row)
         {
-            return row.GroupName;
+            return UiLabels.Category(row.GroupName);
         }
 
         return string.Empty;
@@ -235,7 +236,7 @@ public sealed partial class PropertyEditorViewModel : ReactiveObject, IDisposabl
     private readonly ILogger<PropertyEditorViewModel> _logger;
     private readonly CompositeDisposable _propertySubscriptions = new();
     private readonly CompositeDisposable _disposables = new();
-    private const string LocalValuesGroupName = "Local Values";
+    private static string LocalValuesGroupName => UiStrings.LocalValues;
     private DataGridCollectionView? _groupedCollectionView;
     private bool _isDisposed;
 
@@ -470,7 +471,7 @@ public sealed partial class PropertyEditorViewModel : ReactiveObject, IDisposabl
                 groupDescription.GroupKeys.Add(LocalValuesGroupName);
                 foreach (PropertyCategoryViewModel category in Categories.OrderBy(c => c.Name))
                 {
-                    groupDescription.GroupKeys.Add(category.Name);
+                    groupDescription.GroupKeys.Add(UiLabels.Category(category.Name));
                 }
 
                 view.GroupDescriptions.Add(groupDescription);

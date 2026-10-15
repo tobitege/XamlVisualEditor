@@ -1,11 +1,16 @@
+using System.Reactive.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ReactiveUI;
 using Serilog;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Core.Logging;
 using XamlVisualEditor.CSharp.Language;
@@ -55,6 +60,8 @@ namespace XamlVisualEditor.App;
 /// </summary>
 public sealed class App : Application
 {
+    private readonly EditorOptionsStore _editorOptions = new(System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XamlVisualEditor", "editor-options.json"));
     /// <summary>
     /// Gets the service provider for DI.
     /// </summary>
@@ -62,53 +69,116 @@ public sealed class App : Application
 
     public override void Initialize()
     {
+        var culture = System.Globalization.CultureInfo.GetCultureInfo(_editorOptions.Current.Language);
+        XamlVisualEditor.Core.Localization.UiStrings.Culture = culture;
+        System.Globalization.CultureInfo.CurrentUICulture = culture;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
         AvaloniaXamlLoader.Load(this);
+        LocalizedResources.Apply(this);
+        Views.DocumentTabContextMenus.Extend(this);
+        DialogAppearance.Initialize();
+        DataGridColumnSizing.Initialize();
+        DockSplitterAppearance.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()
     {
         // Build the DI container
+        Log.Information("Configuring application services");
         ServiceCollection services = new();
-        ConfigureServices(services);
+        ConfigureServices(services, _editorOptions);
         Services = services.BuildServiceProvider();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            BuiltInExtensionHost extensionHost = Services.GetRequiredService<BuiltInExtensionHost>();
-            extensionHost.ActivateAsync(CancellationToken.None).GetAwaiter().GetResult();
-
+            // Begun before the main view model exists, so the status bar starts with the startup text instead of "Ready".
+            IDisposable startupActivity = Services.GetRequiredService<IBackgroundActivities>().Begin(UiStrings.StartingStatus);
+            Log.Information("Creating the main window");
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
+            Resources[TextEditorViewHost.RESOURCE_KEY] = Services.GetRequiredService<TextEditorViewHost>();
             MainWindow mainWindow = new(mainVm);
             desktop.MainWindow = mainWindow;
 
             MainWindowProvider windowProvider = Services.GetRequiredService<MainWindowProvider>();
             windowProvider.MainWindow = mainWindow;
-            if (Services.GetService<IWindow>() is AppWindow appWindow)
-            {
-                appWindow.SyncStatusBarItems();
-            }
-
             string? startupPath = StartupArgs.GetWorkspacePath(desktop.Args);
-            if (!string.IsNullOrWhiteSpace(startupPath))
-            {
-                Dispatcher.UIThread.Post(() => _ = mainVm.OpenFileAsync(startupPath));
-            }
+            CancellationTokenSource startupCancellation = new();
+            CancellationToken startupToken = startupCancellation.Token;
+            IServiceProvider serviceProvider = Services;
 
-            desktop.ShutdownRequested += (_, _) =>
+            desktop.Exit += (_, _) =>
             {
-                mainVm.Dispose();
+                startupCancellation.Cancel();
                 mainWindow.DataContext = null;
                 mainWindow.Content = null;
-                extensionHost.Dispose();
-                (Services as IDisposable)?.Dispose();
+                (serviceProvider as IDisposable)?.Dispose();
+                startupCancellation.Dispose();
             };
+
+            Dispatcher.UIThread.Post(() =>
+                _ = InitializeExtensionsAsync(serviceProvider, mainVm, startupPath, startupActivity, startupToken));
+            Log.Information("Main window created; extension activation scheduled");
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static void ConfigureServices(ServiceCollection services)
+    private static async Task InitializeExtensionsAsync(
+        IServiceProvider services,
+        MainWindowViewModel mainVm,
+        string? startupPath,
+        IDisposable startupActivity,
+        CancellationToken cancellationToken)
     {
+        using IDisposable activity = startupActivity;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Log.Information("Activating built-in extensions");
+            BuiltInExtensionHost extensionHost = services.GetRequiredService<BuiltInExtensionHost>();
+            await extensionHost.ActivateAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await services.GetRequiredService<IExtensionManager>().GetInstalledAsync(cancellationToken);
+
+            if (services.GetService<IWindow>() is AppWindow appWindow)
+            {
+                appWindow.SyncStatusBarItems();
+            }
+
+            Log.Information("Built-in extensions activated; editor ready");
+#if CDP_DIAGNOSTICS
+            services.GetRequiredService<CdpDiagnostics>().StartFromEnvironment();
+#endif
+            if (!string.IsNullOrWhiteSpace(startupPath))
+            {
+                await mainVm.OpenFileAsync(startupPath);
+            }
+            else if (services.GetRequiredService<EditorOptionsStore>().Current.RestoreLastWorkspace)
+            {
+                await mainVm.RestoreLastWorkspaceAsync();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Log.Information("Application startup canceled during shutdown");
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Application startup failed");
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                await services.GetRequiredService<IWindow>().ShowErrorMessageAsync(
+                    string.Format(UiStrings.ApplicationStartupFailed, exception.Message), cancellationToken);
+            }
+        }
+    }
+
+    private static void ConfigureServices(ServiceCollection services, EditorOptionsStore editorOptions)
+    {
+        services.AddSingleton(editorOptions);
+#if CDP_DIAGNOSTICS
+        services.AddSingleton<CdpDiagnostics>();
+#endif
         OutputLogSinkAccessor outputLogSinkAccessor = new();
         FileLoggingSetup.ReplaceGlobalLogger(
             FileLoggingSetup.CreateLogger(new OutputPanelLogSink(outputLogSinkAccessor)));
@@ -124,6 +194,10 @@ public sealed class App : Application
         services.AddSingleton<IXamlParsingService, XamlParsingService>();
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
+        services.AddSingleton(_ => new MetadataControlCatalog(TypeMetadataService.ReadControlTypes));
+        services.AddSingleton<IControlCatalog>(provider => provider.GetRequiredService<MetadataControlCatalog>());
+        services.AddSingleton<IControlCatalogUpdater>(provider => provider.GetRequiredService<MetadataControlCatalog>());
+        services.AddSingleton<IClipboardService, DesktopClipboardService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
         services.AddSingleton<IDotNetCli, DotNetCliRunner>();
         services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();
@@ -154,6 +228,13 @@ public sealed class App : Application
         services.AddSingleton<IFolderPicker, AppFolderPicker>();
         services.AddSingleton<IDialogHost, AppDialogHost>();
         services.AddSingleton<IWorkspaceHost, AppWorkspaceHost>();
+        services.AddSingleton<IUserLayoutStore>(_ => UserLayoutStore.CreateDefault());
+        services.AddSingleton<BackgroundActivityTracker>();
+        services.AddSingleton<IBackgroundActivities>(sp => sp.GetRequiredService<BackgroundActivityTracker>());
+        services.AddSingleton<IBackgroundActivityMonitor>(sp => sp.GetRequiredService<BackgroundActivityTracker>());
+        services.AddSingleton<DocumentOpenInterceptorRegistry>();
+        services.AddSingleton<IDocumentOpenInterceptors>(sp => sp.GetRequiredService<DocumentOpenInterceptorRegistry>());
+        services.AddSingleton<IDocumentOpenResolver>(sp => sp.GetRequiredService<DocumentOpenInterceptorRegistry>());
 
         // LSP services
         services.AddSingleton<ILspSettingsStore, LspSettingsStore>();
@@ -192,6 +273,14 @@ public sealed class App : Application
         services.AddSingleton<IDebugSettingsHost, DebugSettingsHostAdapter>();
         services.AddSingleton<ILspSettingsHost, LspSettingsHostAdapter>();
         services.AddSingleton<IEditorServices, EditorServicesAdapter>();
+        services.AddSingleton(sp =>
+        {
+            MainWindowViewModel mainViewModel = sp.GetRequiredService<MainWindowViewModel>();
+            IObservable<object?> activeDocument = mainViewModel.WhenAnyValue(x => x.ActiveTextEditorDocument);
+            return new TextEditorViewHost(mainViewModel.EditorContextMenuItems, activeDocument, sp.GetRequiredService<IContextKeys>());
+        });
+        services.AddSingleton<ITextEditorViewHost>(sp => sp.GetRequiredService<TextEditorViewHost>());
+        services.AddSingleton<IContextKeys, ContextKeyRegistry>();
         services.AddSingleton<IDesignerHost, ShellDesignerHost>();
         services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();
@@ -200,7 +289,8 @@ public sealed class App : Application
         services.AddSingleton<ExtensionPackageLoader>();
         services.AddSingleton<IExtensionPackageStore>(sp => new ExtensionPackageStore(
             ExtensionPackagePaths.GetInstalledRoot(),
-            sp.GetRequiredService<ExtensionPackageLoader>()));
+            sp.GetRequiredService<ExtensionPackageLoader>(),
+            sp.GetService<ILogger<ExtensionPackageStore>>()));
         services.AddSingleton<IExtensionPackageCatalog>(sp => new LocalExtensionPackageCatalog(
             ExtensionPackagePaths.GetCatalogRoot(),
             sp.GetRequiredService<ExtensionPackageLoader>()));
@@ -208,6 +298,10 @@ public sealed class App : Application
             ExtensionPackagePaths.GetStateFilePath()));
         services.AddSingleton<IExtensionUpdateService, ExtensionUpdateService>();
         services.AddSingleton<IExtensionManager, ExtensionManager>();
+        services.AddSingleton<EditorThemeService>();
+        services.AddSingleton<IEditorThemeService>(sp => sp.GetRequiredService<EditorThemeService>());
+        services.AddSingleton<Func<string, IExtensionStorage>>(_ =>
+            extensionId => new FileExtensionStorage(extensionId));
         services.AddSingleton<BuiltInExtensionHost>();
         services.AddSingleton<IXveExtension, AcpExtensionEntry>();
         services.AddSingleton<IXveExtension, GitExtensionEntry>();
@@ -232,6 +326,13 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
-        services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton(sp =>
+        {
+            string profileDirectory = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XamlVisualEditor");
+            System.IO.Directory.CreateDirectory(profileDirectory);
+            string recentFilesPath = System.IO.Path.Combine(profileDirectory, "recent-files.json");
+            return ActivatorUtilities.CreateInstance<MainWindowViewModel>(sp, recentFilesPath);
+        });
     }
 }

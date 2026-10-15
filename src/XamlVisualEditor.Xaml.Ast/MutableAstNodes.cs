@@ -12,10 +12,16 @@ namespace XamlVisualEditor.Xaml.Ast;
 /// </summary>
 public abstract class MutableAstNode : INotifyPropertyChanged
 {
+    /// <summary>Gets comments and processing instructions immediately preceding this node.</summary>
+    public List<XmlTrivia> LeadingTrivia { get; } = new();
+
+    /// <summary>Gets comments and processing instructions at the end of this node's content.</summary>
+    public List<XmlTrivia> TrailingTrivia { get; } = new();
+
     /// <summary>
     /// Gets the unique identifier for this node.
     /// </summary>
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; internal set; } = Guid.NewGuid();
 
     /// <summary>
     /// Gets or sets the parent node. Null for the root.
@@ -84,6 +90,8 @@ public abstract class MutableAstNode : INotifyPropertyChanged
 public sealed class MutableAstDocument : IXamlDocumentModel
 {
     private MutableAstObjectNode? _root;
+    private readonly Dictionary<string, string> _detachedNamespaceAliases = new();
+    public List<XmlTrivia> TrailingTrivia { get; } = new();
 
     /// <summary>
     /// Gets the unique document identifier.
@@ -114,14 +122,21 @@ public sealed class MutableAstDocument : IXamlDocumentModel
             {
                 _root.Parent = null;
                 _root.ChangeEmitted += OnChildChangeEmitted;
+                foreach (KeyValuePair<string, string> alias in _detachedNamespaceAliases)
+                {
+                    _root.NamespaceAliases.TryAdd(alias.Key, alias.Value);
+                }
+
+                _detachedNamespaceAliases.Clear();
             }
         }
     }
 
     /// <summary>
-    /// Gets the namespace aliases declared at the document level.
+    /// Gets the namespace declarations of the root element. Without a root, declarations are held
+    /// until a root is assigned, which then adopts them without overriding its own.
     /// </summary>
-    public Dictionary<string, string> NamespaceAliases { get; } = new();
+    public Dictionary<string, string> NamespaceAliases => _root?.NamespaceAliases ?? _detachedNamespaceAliases;
 
     /// <inheritdoc />
     public event Action<AstChange>? Changed;
@@ -144,6 +159,9 @@ public sealed class MutableAstObjectNode : MutableAstNode
 {
     private string _typeName = string.Empty;
     private string _xmlNamespace = string.Empty;
+
+    /// <summary>Gets namespace declarations local to this element.</summary>
+    public Dictionary<string, string> NamespaceAliases { get; } = new();
 
     /// <inheritdoc />
     public override string NodeKindName => "ObjectNode";
@@ -181,12 +199,12 @@ public sealed class MutableAstObjectNode : MutableAstNode
     /// <summary>
     /// Gets the properties (attributes and property elements) of this element.
     /// </summary>
-    public ObservableCollection<MutableAstPropertyNode> Properties { get; } = new();
+    public ObservableCollection<MutableAstPropertyNode> Properties { get; } = new AstNodeCollection<MutableAstPropertyNode>();
 
     /// <summary>
     /// Gets the child element nodes.
     /// </summary>
-    public ObservableCollection<MutableAstNode> Children { get; } = new();
+    public ObservableCollection<MutableAstNode> Children { get; } = new AstNodeCollection<MutableAstNode>();
 
     public MutableAstObjectNode()
     {
@@ -196,6 +214,7 @@ public sealed class MutableAstObjectNode : MutableAstNode
 
     private void OnPropertiesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (e.Action == NotifyCollectionChangedAction.Move) return;
         if (e.NewItems is not null)
         {
             foreach (MutableAstPropertyNode item in e.NewItems)
@@ -217,6 +236,14 @@ public sealed class MutableAstObjectNode : MutableAstNode
 
     private void OnChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (e.Action == NotifyCollectionChangedAction.Move && e.NewItems is not null)
+        {
+            foreach (MutableAstNode item in e.NewItems)
+            {
+                EmitChange(new NodeMoved(item.Id, Id, e.OldStartingIndex, Id, e.NewStartingIndex));
+            }
+            return;
+        }
         if (e.NewItems is not null)
         {
             foreach (MutableAstNode item in e.NewItems)
@@ -248,16 +275,21 @@ public sealed class MutableAstObjectNode : MutableAstNode
     /// </summary>
     public string? GetPropertyValue(string propertyName)
     {
-        MutableAstPropertyNode? prop = Properties.FirstOrDefault(p => p.PropertyName == propertyName);
+        MutableAstPropertyNode? prop = FindProperty(propertyName);
         return prop?.Value is MutableAstTextNode textNode ? textNode.Text : null;
     }
+
+    /// <summary>Finds a local property, including its explicit Owner.Property element spelling.</summary>
+    public MutableAstPropertyNode? FindProperty(string propertyName) =>
+        Properties.FirstOrDefault(property => property.PropertyName == propertyName)
+        ?? Properties.FirstOrDefault(property => property.IsPropertyElement && property.PropertyName == TypeName + "." + propertyName);
 
     /// <summary>
     /// Sets a property value by name, creating the property if needed.
     /// </summary>
     public void SetPropertyValue(string propertyName, string? value)
     {
-        MutableAstPropertyNode? existing = Properties.FirstOrDefault(p => p.PropertyName == propertyName);
+        MutableAstPropertyNode? existing = FindProperty(propertyName);
 
         if (value is null)
         {
@@ -319,6 +351,16 @@ public sealed class MutableAstPropertyNode : MutableAstNode
 {
     private string _propertyName = string.Empty;
     private MutableAstNode? _value;
+    public bool IsPropertyElement { get; set; }
+
+    /// <summary>Gets or sets the local xml:space directive of a property element.</summary>
+    public string? XmlSpace { get; set; }
+
+    /// <summary>Gets or sets the XML namespace of an attribute or property element.</summary>
+    public string XmlNamespace { get; set; } = string.Empty;
+
+    /// <summary>Gets namespace declarations local to a property element.</summary>
+    public Dictionary<string, string> NamespaceAliases { get; } = new();
 
     /// <inheritdoc />
     public override string NodeKindName => "PropertyNode";
@@ -477,5 +519,14 @@ public sealed class MutableAstDirectiveNode : MutableAstNode
     public override MutableAstNode Accept(IAstTransformer transformer)
     {
         return transformer.TransformDirectiveNode(this);
+    }
+}
+
+// Clear has to raise the regular remove notifications so parents and event subscriptions are released.
+internal sealed class AstNodeCollection<T> : ObservableCollection<T>
+{
+    protected override void ClearItems()
+    {
+        while (Count > 0) RemoveAt(Count - 1);
     }
 }

@@ -1,50 +1,75 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.Xaml.Ast;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class DiagnosticsServiceAdapterTests
 {
-    [AvaloniaFact]
+    private const string EmptyUserControl = "<UserControl xmlns=\"https://github.com/avaloniaui\" />";
+
+    [AvaloniaFact(Timeout = 30000)]
     public async Task GetDiagnosticsAsync_MapsDesignerDocumentDiagnostics()
     {
-        const string filePath = @"C:\work\Sample.axaml";
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        using DesignerDocumentViewModel designer = new("AdapterDesigner.axaml");
+        await designer.SyncEngine.LoadAsync(EmptyUserControl).WaitAsync(cancellationToken);
+        await FlushAsync().WaitAsync(cancellationToken);
+        designer.SetRuntimeRenderFailure(new InvalidOperationException("Broken element"));
         using MainWindowViewModel viewModel = new();
-        using DesignerDocumentViewModel designer = new(filePath);
-        designer.CodeEditor.Diagnostics.Add(new XamlDiagnostic
-        {
-            Severity = DiagnosticSeverity.Error,
-            Message = "Broken element",
-            Line = 4,
-            Column = 3,
-            Length = 2
-        });
         viewModel.Documents.Add(designer);
-
         using DiagnosticsServiceAdapter adapter = new(viewModel);
-        IReadOnlyList<LanguageDiagnostic> diagnostics =
-            await adapter.GetDiagnosticsAsync(filePath, CancellationToken.None);
 
-        LanguageDiagnostic diagnostic = Assert.Single(diagnostics);
+        IReadOnlyList<LanguageDiagnostic> diagnostics =
+            await adapter.GetDiagnosticsAsync(designer.FilePath, cancellationToken).WaitAsync(cancellationToken);
+
+        LanguageDiagnostic diagnostic = Assert.Single(diagnostics, item => item.Source == "Designer");
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Equal("Broken element", diagnostic.Message);
-        Assert.Equal(filePath, diagnostic.FilePath);
-        Assert.Equal(4, diagnostic.Range.Start.Line);
-        Assert.Equal(3, diagnostic.Range.Start.Column);
-        Assert.Equal(5, diagnostic.Range.End.Column);
-        Assert.Equal("XAML", diagnostic.Source);
+        Assert.Equal(designer.FilePath, diagnostic.FilePath);
+        MutableAstObjectNode root = designer.SyncEngine.CurrentDocument!.Root!;
+        Assert.Equal(root.Line, diagnostic.Range.Start.Line);
+        Assert.Equal(root.Column, diagnostic.Range.Start.Column);
+        Assert.Equal(root.Column + 1, diagnostic.Range.End.Column);
     }
 
-    [AvaloniaFact]
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task DesignerDiagnosticsChange_PublishesSnapshot()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        using DesignerDocumentViewModel designer = new("AdapterSnapshot.axaml");
+        await designer.SyncEngine.LoadAsync(EmptyUserControl).WaitAsync(cancellationToken);
+        await FlushAsync().WaitAsync(cancellationToken);
+        using MainWindowViewModel viewModel = new();
+        viewModel.Documents.Add(designer);
+        using DiagnosticsServiceAdapter adapter = new(viewModel);
+        List<DiagnosticsSnapshotPublishedEventArgs> published = new();
+        adapter.DiagnosticsSnapshotPublished += (_, args) => published.Add(args);
+
+        designer.SetRuntimeRenderFailure(new InvalidOperationException("Late failure"));
+
+        DiagnosticsDocumentSnapshot snapshot = Assert.Single(published.Last().Snapshots,
+            item => string.Equals(item.FilePath, designer.FilePath, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(snapshot.Diagnostics, item => item.Message == "Late failure");
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
     public async Task GetDiagnosticsAsync_FindsOpenTextDocumentByPath()
     {
-        const string filePath = @"C:\work\Sample.xml";
-        using MainWindowViewModel viewModel = new();
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        const string filePath = "AdapterText.xml";
         using TextDocumentViewModel text = new(filePath);
         text.Diagnostics.Add(new LanguageDiagnostic
         {
@@ -53,14 +78,32 @@ public sealed class DiagnosticsServiceAdapterTests
             FilePath = filePath,
             Range = new LanguageTextRange(new LanguageTextPosition(1, 2), new LanguageTextPosition(1, 5))
         });
+        using MainWindowViewModel viewModel = new();
         viewModel.Documents.Add(text);
-
         using DiagnosticsServiceAdapter adapter = new(viewModel);
+
         IReadOnlyList<LanguageDiagnostic> diagnostics =
-            await adapter.GetDiagnosticsAsync(filePath, CancellationToken.None);
+            await adapter.GetDiagnosticsAsync(filePath, cancellationToken).WaitAsync(cancellationToken);
 
         LanguageDiagnostic diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
         Assert.Equal("Suspicious attribute", diagnostic.Message);
     }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task GetDiagnosticsAsync_ReturnsNothingForUnknownPath()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        using MainWindowViewModel viewModel = new();
+        using DiagnosticsServiceAdapter adapter = new(viewModel);
+
+        IReadOnlyList<LanguageDiagnostic> diagnostics =
+            await adapter.GetDiagnosticsAsync("NotOpen.axaml", cancellationToken).WaitAsync(cancellationToken);
+
+        Assert.Empty(diagnostics);
+    }
+
+    private static async Task FlushAsync() =>
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 }

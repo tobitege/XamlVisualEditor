@@ -217,6 +217,42 @@ public sealed class SpacingGuideAdorner
     private static readonly IBrush LabelBrush = new SolidColorBrush(Color.Parse("#FF4BD8"));
     private static readonly IBrush LabelBackground = new SolidColorBrush(Color.FromArgb(180, 30, 30, 30));
 
+    public static IReadOnlyList<SpacingGuide> Calculate(Rect selection, IEnumerable<Rect> candidates)
+    {
+        SpacingGuide?[] nearest = new SpacingGuide?[4];
+        double[] distances = { double.PositiveInfinity, double.PositiveInfinity, double.PositiveInfinity, double.PositiveInfinity };
+        void Add(int side, double distance, Point start, Point end)
+        {
+            if (distance >= distances[side]) return;
+            distances[side] = distance;
+            nearest[side] = new SpacingGuide(start, end, distance.ToString("0"));
+        }
+        foreach (Rect bounds in candidates)
+        {
+            if (bounds.Width <= 0 || bounds.Height <= 0 || !double.IsFinite(bounds.X) ||
+                !double.IsFinite(bounds.Y) || !double.IsFinite(bounds.Width) || !double.IsFinite(bounds.Height)) continue;
+            double top = Math.Max(selection.Top, bounds.Top), bottom = Math.Min(selection.Bottom, bounds.Bottom);
+            if (bottom > top)
+            {
+                double y = (top + bottom) / 2;
+                if (bounds.Right <= selection.Left)
+                    Add(0, selection.Left - bounds.Right, new Point(bounds.Right, y), new Point(selection.Left, y));
+                if (bounds.Left >= selection.Right)
+                    Add(1, bounds.Left - selection.Right, new Point(selection.Right, y), new Point(bounds.Left, y));
+            }
+            double left = Math.Max(selection.Left, bounds.Left), right = Math.Min(selection.Right, bounds.Right);
+            if (right > left)
+            {
+                double x = (left + right) / 2;
+                if (bounds.Bottom <= selection.Top)
+                    Add(2, selection.Top - bounds.Bottom, new Point(x, bounds.Bottom), new Point(x, selection.Top));
+                if (bounds.Top >= selection.Bottom)
+                    Add(3, bounds.Top - selection.Bottom, new Point(x, selection.Bottom), new Point(x, bounds.Top));
+            }
+        }
+        return nearest.OfType<SpacingGuide>().ToArray();
+    }
+
     public void Render(DrawingContext context, IReadOnlyList<SpacingGuide> guides)
     {
         foreach (SpacingGuide guide in guides)
@@ -331,6 +367,14 @@ public sealed class DropTargetAdorner
 {
     private static readonly IPen DropIndicatorPen = new Pen(Brushes.Green, 3);
     private static readonly IBrush DropOverlayBrush = new SolidColorBrush(Color.FromArgb(30, 0, 128, 0));
+
+    /// <summary>Renders a measured cell or insertion line.</summary>
+    public void Render(DrawingContext context, XamlVisualEditor.Designer.Core.LayoutDropIndicator indicator)
+    {
+        if (indicator.LineStart is { } start && indicator.LineEnd is { } end)
+            context.DrawLine(DropIndicatorPen, start, end);
+        else context.DrawRectangle(DropOverlayBrush, DropIndicatorPen, indicator.Bounds);
+    }
 
     /// <summary>
     /// Renders a drop indicator at the specified position.

@@ -32,7 +32,7 @@ public static class Program
         Log.Information("XamlVisualEditor starting; log directory: {LogDirectory}", FileLoggingSetup.LogDirectory);
 
         Trace.AutoFlush = true;
-        Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
+        Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));
         try
         {
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
@@ -80,6 +80,6 @@ public static class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace()
-            .UseReactiveUI(_ => { });
+            .UseReactiveUI(builder => builder.WithExceptionHandler(new ReactiveErrorLogger()));
     }
 }

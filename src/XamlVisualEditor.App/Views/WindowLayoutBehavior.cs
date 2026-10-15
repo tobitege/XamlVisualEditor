@@ -1,11 +1,15 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using XamlVisualEditor.App.Services;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Persists and restores the size, position and maximized state of an Avalonia window.</summary>
+/// <summary>
+/// Persists the size, position and maximized state of an Avalonia window and restores
+/// them before the window is shown.
+/// </summary>
 public sealed class WindowLayoutBehavior
 {
     /// <summary>Identifies the attached property that enables window layout persistence.</summary>
@@ -39,36 +43,39 @@ public sealed class WindowLayoutBehavior
 
         if (enabled && !attached)
         {
-            window.Opened += OnOpened;
+            window.Initialized += OnInitialized;
             window.Closing += OnClosing;
             window.SetValue(HandlersAttachedProperty, true);
+            if (window.IsInitialized) RestoreLayout(window);
         }
         else if (!enabled && attached)
         {
-            window.Opened -= OnOpened;
+            window.Initialized -= OnInitialized;
             window.Closing -= OnClosing;
             window.SetValue(HandlersAttachedProperty, false);
         }
     }
 
-    private static void OnOpened(object? sender, System.EventArgs e)
+    private static void OnInitialized(object? sender, System.EventArgs e)
     {
         if (sender is not Window window)
         {
             return;
         }
 
+        RestoreLayout(window);
+    }
+
+    private static void RestoreLayout(Window window)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime) return;
         UiLayoutState state = UiLayoutStateStore.Load();
         window.Width = state.WindowWidth;
         window.Height = state.WindowHeight;
-
-        if (state.WindowX is int x && state.WindowY is int y)
+        if (state.WindowX is { } x && state.WindowY is { } y && IsOnAnyScreen(window, new PixelPoint(x, y)))
         {
-            PixelPoint position = new(x, y);
-            if (IsOnAnyScreen(window, position))
-            {
-                window.Position = position;
-            }
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Position = new PixelPoint(x, y);
         }
 
         if (state.WindowMaximized)
@@ -83,7 +90,8 @@ public sealed class WindowLayoutBehavior
 
     private static void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (sender is not Window window || window.WindowState == WindowState.Minimized)
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime
+            || sender is not Window window || window.WindowState == WindowState.Minimized)
         {
             return;
         }

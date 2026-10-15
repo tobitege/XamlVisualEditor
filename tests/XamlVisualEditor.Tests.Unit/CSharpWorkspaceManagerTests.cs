@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using XamlVisualEditor.CSharp.Language;
@@ -33,6 +34,44 @@ public sealed class CSharpWorkspaceManagerTests
 
         Assert.NotNull(document);
         Assert.Contains(logger.Messages, message => message.Contains("Failed to load MSBuild workspace", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetOrAddDocumentAsync_KeepsProjectDocumentTextInMemory()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "XamlVisualEditor-InMemory-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string projectPath = Path.Combine(root, "Sample.csproj");
+        string sourcePath = Path.Combine(root, "Sample.cs");
+        const string diskText = "internal sealed class Sample { }";
+        const string bufferText = "internal sealed class Sample { private int _value; }";
+        File.WriteAllText(
+            projectPath,
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(sourcePath, diskText);
+        try
+        {
+            // The application registers MSBuild when it loads a workspace; the test process has to do it itself.
+            if (!MSBuildLocator.IsRegistered)
+            {
+                MSBuildLocator.RegisterDefaults();
+            }
+
+            RecordingLogger<CSharpWorkspaceManager> logger = new();
+            using CSharpWorkspaceManager manager = new(logger);
+            await manager.InitializeWorkspaceAsync(projectPath, CancellationToken.None);
+
+            Document? document = await manager.GetOrAddDocumentAsync(sourcePath, bufferText, CancellationToken.None);
+
+            Assert.NotNull(document);
+            Assert.True(manager.IsProjectDocument(document), string.Join(Environment.NewLine, logger.Messages));
+            Assert.Equal(bufferText, (await document.GetTextAsync()).ToString());
+            Assert.Equal(diskText, File.ReadAllText(sourcePath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

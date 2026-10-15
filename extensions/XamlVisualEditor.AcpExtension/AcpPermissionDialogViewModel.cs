@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Threading.Tasks;
 using ReactiveUI;
 using XamlVisualEditor.Acp;
+using XamlVisualEditor.Core.Localization;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.AcpExtension;
@@ -12,7 +13,7 @@ namespace XamlVisualEditor.AcpExtension;
 /// </summary>
 public sealed class AcpPermissionDialogViewModel : ReactiveObject
 {
-    public string Title { get; } = "Permission Required";
+    public string Title { get; } = UiStrings.PermissionRequired;
     public string Message { get; }
     public string SessionId { get; }
     public string? ToolTitle { get; }
@@ -32,9 +33,9 @@ public sealed class AcpPermissionDialogViewModel : ReactiveObject
         ToolKind = request.ToolKind;
         ToolCallId = request.ToolCallId;
 
-        string toolLabel = !string.IsNullOrWhiteSpace(ToolTitle) ? ToolTitle : "an operation";
-        string kindLabel = !string.IsNullOrWhiteSpace(ToolKind) ? ToolKind : "tool";
-        Message = $"The agent requests permission to run {kindLabel}: {toolLabel}.";
+        string toolLabel = !string.IsNullOrWhiteSpace(ToolTitle) ? ToolTitle : UiStrings.OperationFallback;
+        string kindLabel = !string.IsNullOrWhiteSpace(ToolKind) ? ToolKind : UiStrings.ToolFallback;
+        Message = string.Format(UiStrings.AgentPermissionRequest, kindLabel, toolLabel);
 
         foreach (AcpPermissionOption option in request.Options)
         {

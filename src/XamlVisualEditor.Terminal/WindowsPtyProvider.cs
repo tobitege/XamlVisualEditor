@@ -1,14 +1,35 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
 namespace XamlVisualEditor.Terminal;
 
 public sealed class WindowsPtyProvider : IPtyProvider
 {
+    internal static int StartExternalProcess(TerminalSessionOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.Command)) throw new ArgumentException("A shell executable is required.", nameof(options));
+        WindowsNative.STARTUPINFOEX startup = new();
+        startup.StartupInfo.cb = Marshal.SizeOf<WindowsNative.STARTUPINFO>();
+        startup.StartupInfo.dwFlags = 1; // STARTF_USESHOWWINDOW
+        startup.StartupInfo.wShowWindow = 1; // SW_SHOWNORMAL
+        IntPtr environment = WindowsNative.CreateEnvironmentBlock(options.Environment);
+        try
+        {
+            WindowsNative.PROCESS_INFORMATION process = WindowsNative.CreateProcess(
+                BuildCommandLine(options.Command, options.Arguments), options.WorkingDirectory, environment, ref startup, newConsole: true);
+            using SafeFileHandle processHandle = new(process.hProcess, ownsHandle: true);
+            using SafeFileHandle threadHandle = new(process.hThread, ownsHandle: true);
+            return process.dwProcessId;
+        }
+        finally { WindowsNative.DestroyEnvironmentBlock(environment); }
+    }
+
     public IPtyProcess StartProcess(TerminalSessionOptions options)
     {
         string command = options.Command ?? Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
@@ -23,18 +44,22 @@ public sealed class WindowsPtyProvider : IPtyProvider
             inputRead,
             outputWrite);
 
+        WindowsNative.STARTUPINFOEX startup = default;
+        IntPtr envBlock = IntPtr.Zero;
         try
         {
-            WindowsNative.STARTUPINFOEX startup = WindowsNative.CreateStartupInfo(ptyHandle);
-            IntPtr envBlock = WindowsNative.CreateEnvironmentBlock(options.Environment);
+            startup = WindowsNative.CreateStartupInfo(ptyHandle);
+            envBlock = WindowsNative.CreateEnvironmentBlock(options.Environment);
             WindowsNative.PROCESS_INFORMATION process = WindowsNative.CreateProcess(commandLine, options.WorkingDirectory, envBlock, ref startup);
-            WindowsNative.DestroyEnvironmentBlock(envBlock);
+            SafeWaitHandle processHandle = new(process.hProcess, ownsHandle: true);
+            using SafeFileHandle threadHandle = new(process.hThread, ownsHandle: true);
 
             inputRead.Dispose();
             outputWrite.Dispose();
 
             return new WindowsPtyProcess(
                 process.dwProcessId,
+                processHandle,
                 ptyHandle,
                 inputWrite,
                 outputRead,
@@ -42,13 +67,15 @@ public sealed class WindowsPtyProvider : IPtyProvider
         }
         catch
         {
-            WindowsNative.ClosePseudoConsoleHandle(ptyHandle);
             inputRead.Dispose();
             inputWrite.Dispose();
             outputRead.Dispose();
             outputWrite.Dispose();
+            WindowsNative.ClosePseudoConsoleHandle(ptyHandle);
+            WindowsNative.DisposeStartupInfo(ref startup);
             throw;
         }
+        finally { WindowsNative.DestroyEnvironmentBlock(envBlock); }
     }
 
     private static string BuildCommandLine(string command, IReadOnlyList<string> args)
@@ -97,7 +124,12 @@ internal sealed class WindowsPtyProcess : IPtyProcess
     private readonly FileStream _inputStream;
     private readonly FileStream _outputStream;
     private readonly IntPtr _pseudoConsole;
+    private readonly ManualResetEvent _processExited;
+    private readonly RegisteredWaitHandle _exitWait;
+    private readonly object _pseudoConsoleLock = new();
     private WindowsNative.STARTUPINFOEX _startupInfo;
+    private bool _pseudoConsoleClosed;
+    private int _disposed;
 
     public Stream Input => _inputStream;
     public Stream Output => _outputStream;
@@ -105,6 +137,7 @@ internal sealed class WindowsPtyProcess : IPtyProcess
 
     internal WindowsPtyProcess(
         int pid,
+        SafeWaitHandle processHandle,
         IntPtr pseudoConsole,
         SafeFileHandle inputWrite,
         SafeFileHandle outputRead,
@@ -114,23 +147,53 @@ internal sealed class WindowsPtyProcess : IPtyProcess
         _pseudoConsole = pseudoConsole;
         _inputWrite = inputWrite;
         _outputRead = outputRead;
-        _inputStream = new FileStream(_inputWrite, FileAccess.Write, 4096, isAsync: true);
-        _outputStream = new FileStream(_outputRead, FileAccess.Read, 4096, isAsync: true);
+        _inputStream = new FileStream(_inputWrite, FileAccess.Write, 4096, isAsync: false);
+        _outputStream = new FileStream(_outputRead, FileAccess.Read, 4096, isAsync: false);
         _startupInfo = startupInfo;
+        _processExited = new ManualResetEvent(false) { SafeWaitHandle = processHandle };
+        // ConPTY keeps the output pipe open after the process ended; only ClosePseudoConsole lets the reader see EOF.
+        _exitWait = ThreadPool.RegisterWaitForSingleObject(_processExited, OnProcessExited, null, Timeout.Infinite, executeOnlyOnce: true);
     }
 
     public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
     {
-        WindowsNative.ResizePseudoConsole(_pseudoConsole, (short)columns, (short)rows);
+        // The exit callback closes the pseudo console on a thread pool thread; the handle is freed afterwards.
+        lock (_pseudoConsoleLock)
+        {
+            if (_pseudoConsoleClosed) return;
+            WindowsNative.ResizePseudoConsole(_pseudoConsole, (short)columns, (short)rows);
+        }
+    }
+
+    private void OnProcessExited(object? state, bool timedOut)
+    {
+        ClosePseudoConsoleOnce();
+    }
+
+    private void ClosePseudoConsoleOnce()
+    {
+        lock (_pseudoConsoleLock)
+        {
+            if (_pseudoConsoleClosed) return;
+            _pseudoConsoleClosed = true;
+        }
+
+        // Closing outside the lock: ClosePseudoConsole can wait for the output reader, and no resize
+        // can start once the flag is set.
+        WindowsNative.ClosePseudoConsoleHandle(_pseudoConsole);
     }
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _exitWait.Unregister(null);
+        // The reader stays active until ConPTY has written its last output.
+        ClosePseudoConsoleOnce();
         _inputStream.Dispose();
         _outputStream.Dispose();
         _inputWrite.Dispose();
         _outputRead.Dispose();
-        WindowsNative.ClosePseudoConsoleHandle(_pseudoConsole);
+        _processExited.Dispose();
         WindowsNative.DisposeStartupInfo(ref _startupInfo);
     }
 }
@@ -138,7 +201,10 @@ internal sealed class WindowsPtyProcess : IPtyProcess
 internal static class WindowsNative
 {
     private const int PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = 0x00020016;
+    private const int STARTF_USESTDHANDLES = 0x00000100;
     private const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
+    private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+    private const uint CREATE_NEW_CONSOLE = 0x00000010;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct COORD
@@ -255,33 +321,32 @@ internal static class WindowsNative
     {
         STARTUPINFOEX info = new();
         info.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
+        // ConPTY gets its own standard handles instead of the redirected editor input and output.
+        info.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
 
         IntPtr size = IntPtr.Zero;
         InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
         info.lpAttributeList = Marshal.AllocHGlobal(size);
         if (!InitializeProcThreadAttributeList(info.lpAttributeList, 1, 0, ref size))
         {
-            throw new InvalidOperationException("InitializeProcThreadAttributeList failed.");
+            int error = Marshal.GetLastWin32Error();
+            Marshal.FreeHGlobal(info.lpAttributeList);
+            throw new Win32Exception(error, "InitializeProcThreadAttributeList failed.");
         }
 
-        IntPtr ptr = Marshal.AllocHGlobal(IntPtr.Size);
-        try
+        if (!UpdateProcThreadAttribute(info.lpAttributeList, 0, (IntPtr)PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+            pseudoConsole, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero))
         {
-            Marshal.WriteIntPtr(ptr, pseudoConsole);
-            if (!UpdateProcThreadAttribute(info.lpAttributeList, 0, (IntPtr)PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, ptr, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero))
-            {
-                throw new InvalidOperationException("UpdateProcThreadAttribute failed.");
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(ptr);
+            int error = Marshal.GetLastWin32Error();
+            DisposeStartupInfo(ref info);
+            throw new Win32Exception(error, "UpdateProcThreadAttribute failed.");
         }
 
         return info;
     }
 
-    public static PROCESS_INFORMATION CreateProcess(string commandLine, string? workingDirectory, IntPtr envBlock, ref STARTUPINFOEX startup)
+    public static PROCESS_INFORMATION CreateProcess(string commandLine, string? workingDirectory, IntPtr envBlock,
+        ref STARTUPINFOEX startup, bool newConsole = false)
     {
         if (!CreateProcessW(
             null,
@@ -289,13 +354,13 @@ internal static class WindowsNative
             IntPtr.Zero,
             IntPtr.Zero,
             false,
-            EXTENDED_STARTUPINFO_PRESENT,
+            (newConsole ? CREATE_NEW_CONSOLE : EXTENDED_STARTUPINFO_PRESENT) | CREATE_UNICODE_ENVIRONMENT,
             envBlock,
             workingDirectory,
             ref startup,
             out PROCESS_INFORMATION process))
         {
-            throw new InvalidOperationException("CreateProcess failed.");
+            throw new Win32Exception(Marshal.GetLastWin32Error());
         }
 
         return process;

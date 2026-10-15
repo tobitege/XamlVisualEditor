@@ -12,6 +12,7 @@ using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Xml.Linq;
 using System.Diagnostics;
@@ -20,6 +21,7 @@ using Avalonia.Controls.DataGridFiltering;
 using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
 using Avalonia.Controls.DataGridSorting;
+using XamlVisualEditor.Core.Localization;
 using AvOrientation = Avalonia.Layout.Orientation;
 using Avalonia.Threading;
 using Dock.Model.Controls;
@@ -66,6 +68,8 @@ public interface IEditorDocumentViewModel : IDisposable
     string FilePath { get; }
     string FileName { get; }
     bool IsModified { get; }
+    /// <summary>Gets whether the file on disk carries the read-only attribute.</summary>
+    bool IsReadOnlyFile { get; }
     int CurrentLine { get; }
     int CurrentColumn { get; }
     ReactiveCommand<RxVoid, RxVoid> SaveCommand { get; }
@@ -77,7 +81,14 @@ public interface IEditorDocumentViewModel : IDisposable
 public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
 {
     private readonly CompositeDisposable _disposables = new();
+    private readonly CancellationTokenSource _loadCancellation = new();
     public bool IsDisposed { get; private set; }
+    [Reactive]
+    public partial bool IsLoaded { get; private set; }
+    [Reactive]
+    public partial bool IsLoading { get; private set; }
+    [Reactive]
+    public partial string? LoadingStatus { get; private set; }
     private SyncSource _selectionSource = SyncSource.DesignSurface;
     private readonly ITypeMetadataService? _metadataService;
     private readonly Func<WorkspaceModel?>? _workspaceProvider;
@@ -85,7 +96,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     private BreakpointsViewModel? _breakpointsSource;
     private readonly ILogger<DesignerDocumentViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
-    private readonly Dictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
         = new(FileSystemPathComparison.Comparer);
 
     /// <summary>
@@ -121,9 +132,15 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     public partial bool IsModified { get; set; }
 
     /// <summary>
-    /// Gets the title for display (includes dirty indicator).
+    /// Gets or sets whether the file on disk carries the read-only attribute.
     /// </summary>
-    public string Title => IsModified ? $"{FileName}*" : FileName;
+    [Reactive]
+    public partial bool IsReadOnlyFile { get; set; }
+
+    /// <summary>
+    /// Gets the title for display (includes dirty and read-only indicators).
+    /// </summary>
+    public string Title => DocumentTitle.Format(FileName, IsModified, IsReadOnlyFile);
 
     // Sub-ViewModels
     public DesignSurfaceViewModel DesignSurface { get; }
@@ -155,10 +172,10 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     public partial AvOrientation SplitOrientation { get; set; } = AvOrientation.Vertical;
 
     /// <summary>
-    /// Gets or sets the selected AST node ID (synced between editor, tree, and designer).
+    /// Gets the selected AST node ID (synced between editor, tree, and designer).
     /// </summary>
     [Reactive]
-    public partial Guid? SelectedNodeId { get; set; }
+    public partial Guid? SelectedNodeId { get; private set; }
 
     /// <summary>
     /// Gets the source of the most recent selection change.
@@ -170,8 +187,22 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// </summary>
     public void SetSelectedNode(Guid? nodeId, SyncSource source)
     {
+        // The source is set first, so observers of either property see the new node together with its source.
+        bool sourceChanged = _selectionSource != source;
         _selectionSource = source;
         SelectedNodeId = nodeId;
+        if (sourceChanged)
+        {
+            this.RaisePropertyChanged(nameof(SelectionSource));
+        }
+    }
+
+    private void UpdateSelectedElementLines()
+    {
+        CodeEditor.SelectedElementLines = CodeEditor.FollowDesignerSelection
+            && SelectedNodeId is { } id && NodeMap.FindById(id) is MutableAstObjectNode node
+            ? CodeEditor.GetLineRangeForNode(node)
+            : null;
     }
 
     /// <summary>
@@ -183,6 +214,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// Command to close the document.
     /// </summary>
     public ReactiveCommand<RxVoid, RxVoid> CloseCommand { get; }
+    public event Action<DesignerDocumentViewModel>? CloseRequested;
 
     /// <summary>
     /// Command to switch to design view.
@@ -223,7 +255,9 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         Func<string, System.Threading.Tasks.Task>? openFileAsync = null,
         ILogger<DesignerDocumentViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null,
-        ILanguageIntellisenseRegistry? languageRegistry = null)
+        ILanguageIntellisenseRegistry? languageRegistry = null,
+        Func<DesignerDocumentViewModel, System.Threading.Tasks.Task>? startPreviewerAsync = null,
+        Func<DesignerDocumentViewModel, System.Threading.Tasks.Task>? updatePreviewerAsync = null)
     {
         FilePath = filePath;
         _metadataService = metadataService;
@@ -237,6 +271,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         XamlSerializationService serializationService = new();
         NodeMap = new AstNodeMap();
         SyncEngine = new SyncEngine(parsingService, serializationService, NodeMap);
+        InitializeDesignerDiagnostics();
         // Create sub-ViewModels
         DesignSurface = new DesignSurfaceViewModel();
         SelectionManager = DesignSurface.Selection;
@@ -251,14 +286,38 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         ControlFactory = new ControlFactory(
             metadataService,
             _loggerFactory?.CreateLogger<ControlFactory>());
+        InitializeDesignerThemes();
+        InitializePreviewerUpdates(updatePreviewerAsync);
+
+        if (startPreviewerAsync is not null)
+        {
+            ReactiveCommand<RxVoid, RxVoid> start = ReactiveCommand.CreateFromTask(
+                () => startPreviewerAsync(this), this.WhenAnyValue(document => document.IsLoaded));
+            StartPreviewerCommand = start;
+            _disposables.Add(start);
+            _disposables.Add(start.ThrownExceptions.WitnessOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(error => SetPreviewerLaunchError(error.Message)));
+            UseExternalPreviewer = _workspaceProvider?.Invoke() is { Projects.Count: > 0 };
+        }
 
         // Track modification state
+        InitializeDesignerFileState();
         IDisposable isModifiedSubscription = this.WhenAnyValue(x => x.CodeEditor.IsModified)
-            .Subscribe(m => IsModified = m);
+            .Subscribe(_ => UpdateFileModifiedState());
         _disposables.Add(isModifiedSubscription);
 
+        // CurrentLine and CurrentColumn forward the code editor caret; the status bar observes this document.
+        IDisposable caretPositionSubscription = this.WhenAnyValue(x => x.CodeEditor.CurrentLine, x => x.CodeEditor.CurrentColumn)
+            .Skip(1)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(CurrentLine));
+                this.RaisePropertyChanged(nameof(CurrentColumn));
+            });
+        _disposables.Add(caretPositionSubscription);
+
         // Watch for property changes to raise Title notification
-        IDisposable titleSubscription = this.WhenAnyValue(x => x.IsModified)
+        IDisposable titleSubscription = this.WhenAnyValue(x => x.IsModified, x => x.IsReadOnlyFile)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(Title)));
         _disposables.Add(titleSubscription);
 
@@ -279,6 +338,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             .Subscribe(id =>
             {
                 SyncSource source = SelectionSource;
+                UpdateSelectedElementLines();
                 if (id is null)
                 {
                     if (source != SyncSource.DesignSurface)
@@ -294,9 +354,11 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                     int? offset = CodeEditor.GetOffsetForNode(objNode);
                     if (offset is not null)
                     {
-                        if (source != SyncSource.CodeEditor)
+                        if (source != SyncSource.CodeEditor && CodeEditor.FollowDesignerSelection)
                         {
                             CodeEditor.SetCaretOffsetFromSync(offset.Value);
+                            // Keeps the element start clear of the viewport edge instead of scrolling it just into view.
+                            CodeEditor.RevealLine(objNode.Line);
                         }
                     }
 
@@ -307,6 +369,16 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 }
             });
         _disposables.Add(selectedNodeSyncSubscription);
+
+        // A text change moves the lines of the selected element; the gutter marker follows the reparsed tree.
+        IDisposable selectedElementLinesSubscription = SyncEngine.SyncEvents
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => UpdateSelectedElementLines());
+        _disposables.Add(selectedElementLinesSubscription);
+        IDisposable followDesignerSelectionSubscription = this.WhenAnyValue(x => x.CodeEditor.FollowDesignerSelection)
+            .Skip(1)
+            .Subscribe(_ => UpdateSelectedElementLines());
+        _disposables.Add(followDesignerSelectionSubscription);
 
         void OnDesignSurfaceSelectionChanged(IReadOnlyList<IDesignItem> _)
         {
@@ -331,23 +403,17 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 // After any sync, commit pending changes as an undo batch
                 SyncEngine.CommitUndoBatch("Sync");
 
-                // Rebuild the design surface from the updated AST
-                DesignSurface.RequestRebuild();
+                // Layout changes can keep the existing control instances.
+                DesignSurface.RequestRebuild(allowLayoutUpdate: true);
             });
         _disposables.Add(syncEventsSubscription);
 
-        SaveCommand = ReactiveCommand.CreateFromTask(async () =>
-        {
-            string? text = SyncEngine.CurrentText;
-            if (text is not null)
-            {
-                await System.IO.File.WriteAllTextAsync(FilePath, text);
-                IsModified = false;
-                CodeEditor.IsModified = false;
-            }
-        });
+        SaveCommand = ReactiveCommand.CreateFromTask(SaveDocumentFileAsync,
+            this.WhenAnyValue(document => document.IsLoading).Select(loading => !loading));
+        // A failed save reaches the caller of Execute, which reports it; without a subscriber ReactiveUI would end the application.
+        _disposables.Add(SaveCommand.ThrownExceptions.Subscribe(_ => { }));
 
-        CloseCommand = ReactiveCommand.Create(() => { /* Handled by MainWindowViewModel.CloseDocument */ });
+        CloseCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(this));
 
         DesignViewCommand = ReactiveCommand.Create(() => { ViewMode = DocumentViewMode.Design; });
         CodeViewCommand = ReactiveCommand.Create(() => { ViewMode = DocumentViewMode.Code; });
@@ -359,11 +425,19 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 Observable.Return(_metadataService is not null && _workspaceProvider is not null && _openFileAsync is not null),
                 (hasSelection, servicesAvailable) => hasSelection && servicesAvailable);
         NavigateToDefinitionCommand = ReactiveCommand.CreateFromTask(NavigateToDefinitionAsync, canNavigate);
+        _disposables.Add(NavigateToDefinitionCommand.ThrownExceptions
+            .Subscribe(error => _logger.LogWarning("Navigate to definition failed: {Message}", error.Message)));
 
-        IDisposable previewerToggleSubscription = this.WhenAnyValue(x => x.UseExternalPreviewer)
-            .Where(usePreviewer => usePreviewer)
+        IDisposable previewerToggleSubscription = this.WhenAnyValue(
+                x => x.UseExternalPreviewer, x => x.IsLoaded, x => x.StartPreviewerCommand)
+            .Where(state => state.Property1 && state.Property2 && state.Property3 is not null)
             .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => StartPreviewerCommand?.Execute(null));
+            .Subscribe(state =>
+            {
+                if (!IsDisposed && IsLoaded && UseExternalPreviewer &&
+                    ReferenceEquals(state.Property3, StartPreviewerCommand) && state.Property3!.CanExecute(null))
+                    state.Property3.Execute(null);
+            });
         _disposables.Add(previewerToggleSubscription);
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
@@ -450,7 +524,10 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             return;
         }
 
-        string? targetPath = FindXamlFileForType(project, type.FullName);
+        // Reading every XAML file of the project would block the UI thread.
+        string[] xamlFiles = project.XamlFiles.Select(file => file.FilePath).ToArray();
+        string fullTypeName = type.FullName;
+        string? targetPath = await Task.Run(() => FindXamlFileForType(xamlFiles, fullTypeName));
         if (string.IsNullOrWhiteSpace(targetPath))
         {
             return;
@@ -459,11 +536,11 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         await _openFileAsync(targetPath);
     }
 
-    private string? FindXamlFileForType(ProjectModel project, string fullTypeName)
+    private string? FindXamlFileForType(IEnumerable<string> xamlFiles, string fullTypeName)
     {
-        foreach (XamlFileModel file in project.XamlFiles)
+        foreach (string filePath in xamlFiles)
         {
-            string? className = TryGetXamlClassName(file.FilePath);
+            string? className = TryGetXamlClassName(filePath);
             if (string.IsNullOrWhiteSpace(className))
             {
                 continue;
@@ -471,7 +548,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 
             if (string.Equals(className, fullTypeName, StringComparison.Ordinal))
             {
-                return file.FilePath;
+                return filePath;
             }
         }
 
@@ -494,7 +571,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             _xamlClassCache[filePath] = (lastWrite, className);
             return className;
         }
-        catch
+        catch (Exception ex) when (ex is System.IO.IOException or System.Xml.XmlException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -505,16 +582,37 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// </summary>
     public async System.Threading.Tasks.Task LoadAsync()
     {
-        if (System.IO.File.Exists(FilePath))
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        CancellationToken cancellationToken = _loadCancellation.Token;
+        IsLoaded = false;
+        IsLoading = true;
+        LoadingStatus = UiStrings.ReadingXaml;
+        try
         {
-            string text = await System.IO.File.ReadAllTextAsync(FilePath);
-            await SyncEngine.LoadAsync(text);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!System.IO.File.Exists(FilePath)) return;
+            string text = await _fileState.ReadAsync(FilePath, cancellationToken);
+            LoadingStatus = UiStrings.ParsingXaml;
+            await Task.Run(() => SyncEngine.LoadAsync(text, cancellationToken), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             CodeEditor.SetTextSilently(text);
+            UpdateFileModifiedState();
 
-            await CodeEditor.InitializeLanguageServicesAsync();
+            LoadingStatus = UiStrings.InitializingLanguageServices;
+            await CodeEditor.InitializeLanguageServicesAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            // Ensure the design surface rebuilds after loading
+            IsLoaded = true;
             DesignSurface.RequestRebuild();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            IsLoading = false;
+            LoadingStatus = null;
         }
     }
 
@@ -526,6 +624,9 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         }
 
         IsDisposed = true;
+        IsLoaded = false;
+        _loadCancellation.Cancel();
+        CloseRequested = null;
         if (_breakpointsSource is not null)
         {
             _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
@@ -533,13 +634,14 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         _disposables.Dispose();
         CodeEditor.Dispose();
         SyncEngine.Dispose();
+        _loadCancellation.Dispose();
     }
 }
 
 /// <summary>
 /// ViewModel for a non-XAML text document.
 /// </summary>
-public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
+public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel, ITextEditorDisplayState
 {
     private readonly CompositeDisposable _disposables = new();
     public bool IsDisposed { get; private set; }
@@ -573,6 +675,10 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
     [Reactive]
     public partial bool IsModified { get; set; }
 
+    /// <summary>Gets or sets whether the file on disk carries the read-only attribute.</summary>
+    [Reactive]
+    public partial bool IsReadOnlyFile { get; set; }
+
     [Reactive]
     public partial bool WordWrap { get; set; }
 
@@ -584,7 +690,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
     public string? LanguageId { get; }
 
-    public ObservableCollection<LanguageDiagnostic> Diagnostics { get; } = new();
+    public BatchObservableCollection<LanguageDiagnostic> Diagnostics { get; } = new();
 
     public XamlVisualEditor.CodeEditor.LanguageDiagnosticColorizer DiagnosticColorizer { get; } = new();
 
@@ -614,6 +720,8 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
     public TextDocumentViewModel(string filePath, ILanguageIntellisenseRegistry? languageRegistry = null)
     {
         FilePath = filePath;
+        TrackDocumentHistory();
+        InitializeReadOnlyState();
         LanguageId = GetLanguageIdForFile(filePath);
         _languageService = languageRegistry?.GetService(filePath, LanguageId);
         _documentSyncService = _languageService as ILanguageDocumentSync;
@@ -623,7 +731,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             h => Document.TextChanged += h,
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
-            .Subscribe(_ => IsModified = true);
+            .Subscribe(_ => UpdateFileModifiedState());
         _disposables.Add(textChangedSubscription);
 
         IDisposable diagnosticsSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
@@ -653,6 +761,8 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         _disposables.Add(syncSubscription);
 
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
+        // A failed save reaches the caller of Execute, which reports it; without a subscriber ReactiveUI would end the application.
+        _disposables.Add(SaveCommand.ThrownExceptions.Subscribe(_ => { }));
 
         if (_diagnosticsSource is not null)
         {
@@ -722,7 +832,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             return;
         }
 
-        string text = await System.IO.File.ReadAllTextAsync(FilePath);
+        string text = await ReadDocumentFileAsync();
         _suppressTextChanged = true;
         try
         {
@@ -741,8 +851,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
     private async System.Threading.Tasks.Task SaveAsync()
     {
-        await System.IO.File.WriteAllTextAsync(FilePath, Document.Text);
-        IsModified = false;
+        await SaveDocumentFileAsync();
     }
 
     public void Dispose()
@@ -965,22 +1074,46 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
             return;
         }
 
+        TextEdit[] orderedEdits = edits.OrderByDescending(edit => edit.Offset).ToArray();
+        int previousOffset = -1;
+        foreach (TextEdit edit in orderedEdits)
+        {
+            ArgumentNullException.ThrowIfNull(edit.NewText);
+            if (edit.Offset < 0 || edit.Length < 0 || edit.Offset > Document.TextLength - edit.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(edits), "A text edit is outside the document.");
+            }
+
+            if (previousOffset >= 0 && (edit.Offset == previousOffset || edit.Offset + edit.Length > previousOffset))
+            {
+                throw new ArgumentException("Text edits must not overlap or share a starting offset.", nameof(edits));
+            }
+
+            previousOffset = edit.Offset;
+        }
+
         _suppressTextChanged = true;
         try
         {
-            foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
+            Document.BeginUpdate();
+            try
             {
-                int offset = Math.Clamp(edit.Offset, 0, Document.TextLength);
-                int length = Math.Clamp(edit.Length, 0, Document.TextLength - offset);
-                Document.Replace(offset, length, edit.NewText);
+                foreach (TextEdit edit in orderedEdits)
+                {
+                    Document.Replace(edit.Offset, edit.Length, edit.NewText);
+                }
+            }
+            finally
+            {
+                Document.EndUpdate();
             }
         }
         finally
         {
             _suppressTextChanged = false;
+            UpdateFileModifiedState();
         }
 
-        IsModified = true;
         _ = RefreshDiagnosticsAsync();
         _ = NotifyDocumentChangedAsync();
     }
@@ -995,6 +1128,19 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
         int clamped = Math.Clamp(offset, 0, Document.TextLength);
         CaretOffset = clamped;
+    }
+
+    /// <summary>Sets selection and caret; observers see the change only after all three values are set.</summary>
+    public void SetSelection(int start, int length, int caretOffset)
+    {
+        int textLength = Document.TextLength;
+        int clampedStart = Math.Clamp(start, 0, textLength);
+        using (DelayChangeNotifications())
+        {
+            SelectionStart = clampedStart;
+            SelectionLength = Math.Clamp(length, 0, textLength - clampedStart);
+            CaretOffset = Math.Clamp(caretOffset, 0, textLength);
+        }
     }
 
     public int GetOffsetForLineColumn(int line, int column)
@@ -1022,14 +1168,10 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         IReadOnlyList<LanguageDiagnostic> diagnostics =
             await _languageService.GetDiagnosticsAsync(context).ConfigureAwait(false);
 
+        // One notification for the whole result: each added item would publish all diagnostics again.
         RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
-            Diagnostics.Clear();
-            foreach (LanguageDiagnostic diagnostic in diagnostics)
-            {
-                Diagnostics.Add(diagnostic);
-            }
-
+            Diagnostics.ReplaceAll(diagnostics);
             DiagnosticColorizer.UpdateDiagnostics(diagnostics);
         });
     }
@@ -1596,7 +1738,7 @@ public sealed partial class ReferencesGroupViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the references panel.
 /// </summary>
-public sealed partial class ReferencesViewModel : ReactiveObject
+public sealed partial class ReferencesViewModel : ReactiveObject, IDisposable
 {
     private readonly Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> _navigateAsync;
     private readonly CompositeDisposable _groupDisposables = new();
@@ -1813,6 +1955,16 @@ public sealed partial class ReferencesViewModel : ReactiveObject
 
         return false;
     }
+
+    /// <summary>
+    /// Ends the filter and expansion subscriptions. The throttled filter would otherwise still reach the UI
+    /// dispatcher after the shell is gone.
+    /// </summary>
+    public void Dispose()
+    {
+        _lifetimeDisposables.Dispose();
+        _groupDisposables.Dispose();
+    }
 }
 
 public sealed partial record DefinitionPickerRequest(
@@ -2000,7 +2152,7 @@ public sealed partial class PreviewerTrustDialogViewModel : ReactiveObject
 /// </summary>
 public sealed partial class DebugToolConsentDialogViewModel : ReactiveObject
 {
-    public string Title { get; } = "Download Debug Tool";
+    public string Title { get; } = UiStrings.DownloadDebugTool;
     public string Message { get; }
     public string ToolId { get; }
     public string Version { get; }
@@ -2043,15 +2195,31 @@ public sealed partial record OutputMessage(
 /// </summary>
 public sealed partial class RecentFileEntry
 {
-    public RecentFileEntry(string filePath)
+    public RecentFileEntry(string filePath, RecentEntryKind kind = RecentEntryKind.File)
     {
         FilePath = filePath;
+        Kind = kind;
     }
 
     public string FilePath { get; }
+    public RecentEntryKind Kind { get; }
 
-    public string DisplayName => System.IO.Path.GetFileName(FilePath);
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DisplayName => System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(FilePath)) is { Length: > 0 } name
+        ? name : FilePath;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string KindDisplayName => Kind switch
+    {
+        RecentEntryKind.Workspace => UiStrings.MenuRecentProjects,
+        RecentEntryKind.Folder => UiStrings.MenuRecentFolders,
+        _ => UiStrings.MenuRecentFiles
+    };
 }
+
+/// <summary>Determines how an entry of the history opens.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<RecentEntryKind>))]
+public enum RecentEntryKind { File, Workspace, Folder }
 
 /// <summary>
 /// Specifies how XAML changes are saved to disk.
@@ -2087,7 +2255,23 @@ internal sealed partial class WorkspaceAssemblySet
 public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspaceCommands
 {
     private const int RecentFilesLimit = 10;
+    private readonly string? _recentFilesPath;
+    private readonly EditorOptionsStore _editorOptions;
+    private bool _applyingDesignerViewport;
+    private readonly WorkspaceSessionStore _workspaceSessions;
+    private bool _isRestoringWorkspaceSession;
+    private readonly IContextKeys? _contextKeys;
+    private readonly IEditorThemeService? _editorThemes;
+
+    public ReactiveCommand<RxVoid, RxVoid> OpenOptionsCommand { get; }
+    public Interaction<OptionsDialogViewModel, bool> OptionsInteraction { get; } = new();
     private readonly CompositeDisposable _disposables = new();
+    private readonly SerialDisposable _statusTextExpiration = new();
+    private string _statusText = UiStrings.Ready;
+    private long _statusTextGeneration;
+    private readonly IBackgroundActivityMonitor? _backgroundActivities;
+    private readonly IDocumentOpenResolver? _documentOpenResolver;
+    private string? _activityStatusText;
     private bool _suppressTreeSelectionSync;
     private string? _clipboard;
     private readonly HashSet<Guid> _visualExpandedIds = new();
@@ -2095,9 +2279,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly IWorkspaceService? _workspaceService;
     private readonly IWorkspaceInfoUpdater? _workspaceInfoUpdater;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly IControlCatalogUpdater? _controlCatalogUpdater;
+    private readonly IClipboardService? _clipboardService;
     private readonly IDotNetCli _dotNetCli;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
+
+    /// <summary>The number of designer documents that keep a previewer host: the active one and the most recently active ones.</summary>
+    internal const int MaxLivePreviewers = 4;
+
+    // Designer documents, most recently activated first.
+    private readonly List<DesignerDocumentViewModel> _previewerActivationOrder = new();
+
+    internal PreviewerLaunchService PreviewerLaunchService => _previewerLaunchService;
     private readonly IDebuggerServiceRegistry _debuggerRegistry;
     private const string NetcoredbgServiceId = "debugger.netcoredbg";
     private readonly Dictionary<string, string?> _adapterPathsByService = new(StringComparer.OrdinalIgnoreCase);
@@ -2121,6 +2315,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private bool _isClosingFromDock;
     private readonly ObservableAsPropertyHelper<int> _activeLine;
     private readonly ObservableAsPropertyHelper<int> _activeColumn;
+    private readonly ObservableAsPropertyHelper<object?> _activeTextEditorDocument;
     private bool _isLoadingRecentFiles;
     private InfiniteCanvasDocument? _canvasDocument;
     private readonly Dictionary<Guid, TerminalTool> _terminalTools = new();
@@ -2131,6 +2326,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly ICommands? _extensionCommands;
     private readonly ICommandMetadataRegistry? _commandMetadata;
     private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _placedExtensionViews = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlySet<string>? _presetPanels;
+    private readonly IUserLayoutStore _userLayoutStore;
+    private readonly IReadOnlyList<LayoutPreset> _layoutPresets = LayoutPresetCatalog.Create();
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ICommand> _extensionCommandsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IDisposable> _extensionCommandSubscriptionsById = new(StringComparer.Ordinal);
@@ -2159,6 +2358,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     public int ActiveColumn => _activeColumn.Value;
 
+    /// <summary>The document whose text editor is on screen: a text document, or the code editor of a designer
+    /// document outside the design-only view; null when no text editor shows.</summary>
+    public object? ActiveTextEditorDocument => _activeTextEditorDocument.Value;
+
+    /// <summary>Tells whether a text editor shows, which the line and column of the status bar refer to.</summary>
+    public bool HasVisibleTextEditor => ActiveTextEditorDocument is not null;
+
     [Reactive]
     public partial DesignerDocumentViewModel? ActiveDesignerDocument { get; private set; }
 
@@ -2174,6 +2380,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// Gets the solution explorer ViewModel.
     /// </summary>
     public SolutionExplorerViewModel SolutionExplorer { get; }
+
+    /// <summary>Gets the commands of the context menu of a file document tab.</summary>
+    public DocumentTabCommands DocumentTabCommands { get; }
 
     /// <summary>
     /// Gets the workspace projects.
@@ -2211,14 +2420,40 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public ObservableCollection<ExtensionMenuItemViewModel> FileNewMenuEntries { get; } = new();
 
     /// <summary>
-    /// Gets extension-provided Tools menu items.
-    /// </summary>
-    public ObservableCollection<ExtensionMenuItemViewModel> ToolsMenuItems { get; } = new();
-
-    /// <summary>
     /// Gets extension-provided View menu items.
     /// </summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ViewMenuItems { get; } = new();
+
+    /// <summary>Gets the extension-provided items of the text and code editor context menu.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> EditorContextMenuItems { get; } = new();
+
+    /// <summary>Holds the entries under View → Server.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> ServerMenuItems { get; } = new();
+
+    /// <summary>Gets the ready-made layouts offered under View → Layout → Load.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> LayoutPresetMenuItems { get; } = new();
+
+    /// <summary>Gets the user-saved layouts offered under View → Layout → Load.</summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> SavedLayoutMenuItems { get; } = new();
+
+    /// <summary>Gets whether at least one user-saved layout exists.</summary>
+    public bool HasSavedLayouts => SavedLayoutMenuItems.Count > 0;
+
+    /// <summary>Gets the name of the user layout that was loaded or saved last; null for presets and the default layout.</summary>
+    [Reactive]
+    public partial string? CurrentLayoutName { get; private set; }
+
+    /// <summary>
+    /// Gets the status bar text for the active layout: null while no layout was loaded explicitly,
+    /// "unnamed" for presets and unsaved layouts, otherwise the saved layout name.
+    /// </summary>
+    [Reactive]
+    public partial string? LayoutStatusText { get; private set; }
+
+    /// <summary>Gets the header of the "delete layout" menu entry; names the active user layout when there is one.</summary>
+    public string DeleteLayoutMenuHeader => CurrentLayoutName is null
+        ? UiStrings.MenuLayoutDelete
+        : string.Format(UiStrings.MenuLayoutDeleteNamed, CurrentLayoutName);
 
     /// <summary>
     /// Gets extension-provided Debug menu items.
@@ -2285,7 +2520,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// </summary>
     public event EventHandler<ExtensionViewFocusChangedEventArgs>? ExtensionViewFocusChanged;
 
-    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0 || MainToolbarItems.Count > 0;
+    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0;
 
     /// <summary>
     /// Gets the debugger ViewModel.
@@ -2395,7 +2630,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public partial IRootDock DockLayout { get; private set; } = new RootDock
     {
         Id = "Root",
-        Title = "Root",
+        Title = UiStrings.RootArea,
         VisibleDockables = new ObservableCollection<IDockable>(),
         LeftPinnedDockables = new ObservableCollection<IDockable>(),
         RightPinnedDockables = new ObservableCollection<IDockable>(),
@@ -2407,24 +2642,109 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// Gets or sets the application title.
     /// </summary>
     [Reactive]
-    public partial string Title { get; set; } = "XAML Visual Editor";
+    public partial string Title { get; set; } = UiStrings.ApplicationName;
 
     /// <summary>
     /// Gets or sets the status bar text.
     /// </summary>
-    [Reactive]
-    public partial string StatusText { get; set; } = "Ready";
+    public string StatusText
+    {
+        get => _statusText;
+        set => SetStatusText(value, persistent: false);
+    }
 
     /// <summary>
-    /// Gets the collaboration status text for the status bar.
+    /// Gets whether the background activities that ran when the view model was created have not all ended yet.
     /// </summary>
     [Reactive]
-    public partial string CollaborationStatusText { get; set; } = string.Empty;
+    public partial bool IsStarting { get; private set; }
+
+    private void SetPersistentStatus(string message) => SetStatusText(message, persistent: true);
+
+    // Without a subscriber to ThrownExceptions ReactiveUI ends the application when a command fails.
+    private void ReportCommandFailures(string messageFormat, params IHandleObservableErrors[] commands)
+    {
+        foreach (IHandleObservableErrors command in commands)
+        {
+            _disposables.Add(command.ThrownExceptions
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(error =>
+                {
+                    _logger.LogWarning(error, "Command failed: {Message}", error.Message);
+                    SetPersistentStatus(string.Format(messageFormat, (object?)error.Message));
+                }));
+        }
+    }
+
+    private void SetStatusText(string message, bool persistent)
+    {
+        long generation = Interlocked.Increment(ref _statusTextGeneration);
+        this.RaiseAndSetIfChanged(ref _statusText, message, nameof(StatusText));
+        _statusTextExpiration.Disposable = null;
+        if (persistent || string.IsNullOrWhiteSpace(message) || string.Equals(message, UiStrings.Ready, StringComparison.Ordinal))
+            return;
+
+        _statusTextExpiration.Disposable = Observable.Timer(TimeSpan.FromSeconds(30))
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ =>
+            {
+                if (Interlocked.Read(ref _statusTextGeneration) == generation)
+                    ShowIdleStatus();
+            });
+    }
+
+    // "Ready" is the idle text only after startup; until then a running activity or the startup text stands in.
+    private void ShowIdleStatus()
+    {
+        string? activity = _backgroundActivities?.CurrentDescription;
+        _activityStatusText = activity;
+        SetPersistentStatus(activity ?? (IsStarting ? UiStrings.StartingStatus : UiStrings.Ready));
+    }
+
+    // An activity replaces only an activity text or the idle text; any other message, such as the progress of a
+    // workspace load, stays until it expires and the idle text follows.
+    private void OnBackgroundActivitiesChanged()
+    {
+        string? activity = _backgroundActivities!.CurrentDescription;
+        bool showsActivityOrIdle = string.IsNullOrWhiteSpace(_statusText)
+            || string.Equals(_statusText, _activityStatusText, StringComparison.Ordinal)
+            || string.Equals(_statusText, UiStrings.Ready, StringComparison.Ordinal)
+            || string.Equals(_statusText, UiStrings.StartingStatus, StringComparison.Ordinal);
+        if (activity is not null)
+        {
+            if (showsActivityOrIdle)
+            {
+                _activityStatusText = activity;
+                SetPersistentStatus(activity);
+            }
+
+            return;
+        }
+
+        _activityStatusText = null;
+        IsStarting = false;
+        if (showsActivityOrIdle)
+            SetPersistentStatus(UiStrings.Ready);
+    }
 
     /// <summary>
     /// Gets the recent files list.
     /// </summary>
     public ObservableCollection<RecentFileEntry> RecentFiles { get; } = new();
+
+    /// <summary>The ten most recent entries of each open kind.</summary>
+    public IEnumerable<RecentFileEntry> RecentWorkspaces => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.Workspace).Take(RecentFilesLimit);
+    public IEnumerable<RecentFileEntry> RecentDocuments => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.File).Take(RecentFilesLimit);
+    public IEnumerable<RecentFileEntry> RecentFolders => RecentFiles.Where(entry => entry.Kind == RecentEntryKind.Folder).Take(RecentFilesLimit);
+    public bool HasRecentWorkspaces => RecentWorkspaces.Any();
+    public bool HasRecentDocuments => RecentDocuments.Any();
+    public bool HasRecentFolders => RecentFolders.Any();
+
+    public bool HasRecentFiles => RecentFiles.Count > 0;
+    public ReactiveCommand<RecentFileEntry, RxVoid> OpenRecentCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearRecentFilesCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ManageRecentFilesCommand { get; }
+    public Interaction<RecentFilesDialogViewModel, RxVoid> RecentFilesInteraction { get; } = new();
 
     /// <summary>
     /// Gets whether a workspace is currently loaded.
@@ -2450,9 +2770,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public Interaction<RxVoid, string?> OpenFileInteraction { get; } = new();
 
     /// <summary>
+    /// Selects a project or solution file as the workspace.
+    /// </summary>
+    public Interaction<RxVoid, WorkspaceOpenRequest?> OpenWorkspaceInteraction { get; } = new();
+
+    /// <summary>
     /// Interaction for selecting an extension package.
     /// </summary>
     public Interaction<RxVoid, string?> ExtensionPackageOpenInteraction { get; } = new();
+
+    public Interaction<RxVoid, RxVoid> ExtensionManagerInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for saving a file dialog.
@@ -2480,6 +2807,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public Interaction<string, string?> WorkspaceSymbolQueryInteraction { get; } = new();
 
     /// <summary>
+    /// Interaction for prompting the name of a layout to save. Input is the suggested name, output the chosen name or null.
+    /// </summary>
+    public Interaction<string, string?> LayoutNameInteraction { get; } = new();
+
+    /// <summary>Asks the user to confirm deleting the named layout; the output is true when confirmed.</summary>
+    public Interaction<string, bool> ConfirmLayoutDeleteInteraction { get; } = new();
+
+    /// <summary>Shows the modal dialog that renames and deletes saved layouts.</summary>
+    public Interaction<ManageLayoutsDialogViewModel, RxVoid> ManageLayoutsInteraction { get; } = new();
+
+    /// <summary>
     /// Interaction for command palette selection.
     /// </summary>
     public Interaction<CommandPaletteRequest, ExtensionCommandPaletteItemViewModel?> CommandPaletteInteraction { get; } = new();
@@ -2492,7 +2830,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     /// <summary>
     /// Interaction for applying theme variants.
     /// </summary>
-    public Interaction<ThemeVariantOption, RxVoid> ThemeVariantInteraction { get; } = new();
 
     /// <summary>
     /// Interaction for debug tool download consent.
@@ -2513,7 +2850,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     [Reactive] public partial bool IsCallStackVisible { get; set; } = true;
     [Reactive] public partial bool IsLocalsVisible { get; set; } = true;
     [Reactive] public partial bool IsWatchesVisible { get; set; } = true;
-    [Reactive] public partial bool IsExtensionsManagerVisible { get; set; }
 
     /// <summary>
     /// Gets or sets the debugger adapter path.
@@ -2545,6 +2881,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // File Commands
     public ReactiveCommand<RxVoid, RxVoid> NewDocumentCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> OpenDocumentCommand { get; }
+    /// <summary>Opens the workspace selection dialog.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> OpenWorkspaceCommand { get; }
+    /// <summary>Closes the active file.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CloseActiveDocumentCommand { get; }
+    /// <summary>Closes all files and unloads the workspace.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CloseWorkspaceCommand { get; }
     public ReactiveCommand<string, RxVoid> OpenPathCommand { get; }
     public ReactiveCommand<IReadOnlyList<string>, RxVoid> OpenPathsCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> SaveDocumentCommand { get; }
@@ -2567,6 +2909,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private ReactiveCommand<RxVoid, RxVoid> CutCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> CopyCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> PasteCommand { get; }
+    private ReactiveCommand<RxVoid, RxVoid> DuplicateCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> DeleteCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> SelectAllCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> RenameSymbolCommand { get; }
@@ -2580,8 +2923,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private ReactiveCommand<RxVoid, RxVoid> ToggleCallStackCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> ToggleLocalsCommand { get; }
     private ReactiveCommand<RxVoid, RxVoid> ToggleWatchesCommand { get; }
-    public ReactiveCommand<RxVoid, RxVoid> ToggleExtensionsManagerCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> OpenExtensionManagerCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> ResetLayoutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveLayoutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SaveLayoutAsCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DeleteLayoutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ManageLayoutsCommand { get; }
     public ReactiveCommand<RxVoid, RxVoid> OpenCanvasCommand { get; }
 
     // Help Commands
@@ -2633,11 +2980,80 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null,
         ISystemIconService? systemIconService = null,
-        IDotNetCli? dotNetCli = null)
+        IDotNetCli? dotNetCli = null,
+        IControlCatalogUpdater? controlCatalogUpdater = null,
+        IClipboardService? clipboardService = null,
+        IWorkspaceInfo? themeWorkspaceInfo = null,
+        Func<string, IExtensionStorage>? extensionStorageFactory = null,
+        string? recentFilesPath = null,
+        EditorOptionsStore? editorOptions = null,
+        IUserLayoutStore? userLayoutStore = null,
+        IEditorThemeService? editorThemes = null,
+        IContextKeys? contextKeys = null,
+        IBackgroundActivityMonitor? backgroundActivities = null,
+        IDocumentOpenResolver? documentOpenResolver = null,
+        WorkspaceSessionStore? workspaceSessions = null)
     {
+        _recentFilesPath = recentFilesPath;
+        _workspaceSessions = workspaceSessions
+            ?? new WorkspaceSessionStore(System.IO.Path.Combine(ShellSettingsPaths.GetRoot(), "workspace-sessions.json"));
+        _backgroundActivities = backgroundActivities;
+        _documentOpenResolver = documentOpenResolver;
+        if (_backgroundActivities is not null)
+        {
+            // Subscribe first: an activity that ends before the state is read below still raises a re-evaluation.
+            IDisposable activitySubscription = Observable.FromEventPattern(
+                    handler => _backgroundActivities.Changed += handler,
+                    handler => _backgroundActivities.Changed -= handler)
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(_ => OnBackgroundActivitiesChanged());
+            _disposables.Add(activitySubscription);
+            if (_backgroundActivities.CurrentDescription is { } startupActivity)
+            {
+                IsStarting = true;
+                _activityStatusText = startupActivity;
+                _statusText = startupActivity;
+            }
+        }
+        _contextKeys = contextKeys;
+        if (_contextKeys is not null)
+        {
+            _contextKeys.Changed += OnContextKeysChanged;
+            _disposables.Add(System.Reactive.Disposables.Disposable.Create(() => _contextKeys.Changed -= OnContextKeysChanged));
+        }
+        _editorOptions = editorOptions ?? new EditorOptionsStore();
+        _editorThemes = editorThemes;
+        if (_editorThemes is not null)
+        {
+            string? themeStatusError = null;
+            EventHandler themeChanged = (_, _) =>
+            {
+                if (_editorThemes.Error is { } error)
+                {
+                    SetPersistentStatus(error);
+                    themeStatusError = error;
+                }
+                else
+                {
+                    if (themeStatusError is not null && StatusText == themeStatusError)
+                        ShowIdleStatus();
+                    themeStatusError = null;
+                }
+                if (_editorThemes.Selection.ProviderId == "builtin")
+                    SelectedThemeVariant = _editorThemes.Selection.ThemeId switch
+                    {
+                        "light" => ThemeVariantOption.Light, "dark" => ThemeVariantOption.Dark, _ => ThemeVariantOption.Default
+                    };
+            };
+            _editorThemes.Changed += themeChanged;
+            _disposables.Add(System.Reactive.Disposables.Disposable.Create(() => _editorThemes.Changed -= themeChanged));
+        }
+        _userLayoutStore = userLayoutStore ?? UserLayoutStore.CreateDefault();
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
         _metadataService = metadataService;
+        _controlCatalogUpdater = controlCatalogUpdater;
+        _clipboardService = clipboardService;
         _dotNetCli = dotNetCli ?? new DotNetCliRunner();
         _languageRegistry = languageRegistry;
         _debuggerRegistry = debuggerRegistry ?? new DebuggerServiceRegistry();
@@ -2655,7 +3071,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ExtensionManager = new ExtensionManagerViewModel(
             extensionManager ?? new NullExtensionManager(),
             () => ExtensionPackageOpenInteraction.Handle(RxVoid.Default));
+        InitializeThemePackages(extensionManager);
         SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
+        DocumentTabCommands = new DocumentTabCommands(RevealInFileExplorerAsync, RevealInSolutionExplorer,
+            text => RunClipboardEditAsync(() => WriteClipboardAsync(text)));
 
         if (_extensionContributions is not null)
         {
@@ -2717,13 +3136,21 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         DockFactory = new XamlEditorDockFactory(
             this,
             _loggerFactory?.CreateLogger<XamlEditorDockFactory>());
-        IRootDock layout = DockFactory.LoadLayout() ?? DockFactory.CreateDefaultLayout();
+        IRootDock? persistedLayout = DockFactory.LoadLayout(out string? persistedLayoutName);
+        LayoutPreset defaultPreset = FindLayoutPreset(LayoutPresetCatalog.DefaultId)!;
+        IRootDock layout = persistedLayout ?? DockFactory.CreateDefaultLayout(defaultPreset.IsVisible);
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
         DockFactory.EnsureOwnerReferences(layout);
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+        BeginExtensionViewPlacement(persistedLayout is null ? defaultPreset.VisiblePanelIds : null);
+        if (persistedLayout is not null && persistedLayoutName is not null && _userLayoutStore.Exists(persistedLayoutName))
+        {
+            SetCurrentLayout(persistedLayoutName, isLoaded: true);
+        }
+
         WireDockEvents();
 
 
@@ -2743,6 +3170,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _activeColumn = activeColumn.ToProperty(this, x => x.ActiveColumn);
         _disposables.Add(_activeColumn);
 
+        // A designer document shows its code editor except in the design-only view.
+        IObservable<object?> activeTextEditorDocument = Observable.Switch(this.WhenAnyValue(x => x.ActiveDocument)
+            .Select(document => document is DesignerDocumentViewModel designer
+                ? designer.WhenAnyValue(x => x.ViewMode)
+                    .Select(mode => mode == DocumentViewMode.Design ? null : (object?)designer.CodeEditor)
+                : Observable.Return<object?>(document))
+            );
+        _activeTextEditorDocument = activeTextEditorDocument.ToProperty(this, x => x.ActiveTextEditorDocument);
+        _disposables.Add(_activeTextEditorDocument);
+        IDisposable textEditorVisibility = this.WhenAnyValue(x => x.ActiveTextEditorDocument)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(HasVisibleTextEditor)));
+        _disposables.Add(textEditorVisibility);
+
         _dockDocuments.Clear();
         foreach (IEditorDocumentViewModel doc in Documents)
         {
@@ -2751,34 +3191,86 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         InfiniteCanvas.UpdateOpenDocuments(Documents);
         Documents.CollectionChanged += (_, _) => InfiniteCanvas.UpdateOpenDocuments(Documents);
+        Documents.CollectionChanged += (_, _) => SaveWorkspaceSession();
+        _disposables.Add(this.WhenAnyValue(x => x.ActiveDocument).Skip(1).Subscribe(_ => SaveWorkspaceSession()));
 
         // File commands
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
-        OpenDocumentCommand = ReactiveCommand.CreateFromTask(OpenDocumentAsync);
+        OpenDocumentCommand = ReactiveCommand.CreateFromTask(() => OpenDocumentAsync(openWorkspace: false));
+        OpenWorkspaceCommand = ReactiveCommand.CreateFromTask(() => OpenDocumentAsync(openWorkspace: true));
+        CloseActiveDocumentCommand = ReactiveCommand.CreateFromTask(
+            async () => { if (ActiveDocument is { } document) await ConfirmAndCloseDocumentAsync(document); },
+            this.WhenAnyValue(x => x.ActiveDocument).Select(document => document is not null));
+        CloseWorkspaceCommand = ReactiveCommand.CreateFromTask(CloseWorkspaceAsync,
+            this.WhenAnyValue(x => x.HasWorkspace, x => x.IsWorkspaceLoading, x => x.IsWorkspaceCommandRunning,
+                (hasWorkspace, loading, running) => hasWorkspace && !loading && !running));
+        _disposables.Add(OpenWorkspaceCommand);
+        _disposables.Add(CloseActiveDocumentCommand);
+        _disposables.Add(CloseWorkspaceCommand);
         OpenPathCommand = ReactiveCommand.CreateFromTask<string>(OpenFileAsync);
         OpenPathsCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>>(OpenDroppedPathsAsync);
+        OpenRecentCommand = ReactiveCommand.CreateFromTask<RecentFileEntry>(OpenRecentAsync);
+        _disposables.Add(OpenRecentCommand);
 
+        OpenExtensionManagerCommand = ReactiveCommand.CreateFromTask(
+            () => ExtensionManagerInteraction.Handle(RxVoid.Default));
         RefreshExtensionContributions();
         UpdateFileNewMenuEntries();
         SyncExtensionDockables();
-        DockFactory.CollapseBottomToolDock(DockLayout);
+        if (persistedLayout is null) ArrangePresetLayout(DockLayout, defaultPreset);
 
         LoadRecentFiles();
-        RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
+        RecentFiles.CollectionChanged += (_, _) =>
+        {
+            this.RaisePropertyChanged(nameof(RecentWorkspaces));
+            this.RaisePropertyChanged(nameof(RecentDocuments));
+            this.RaisePropertyChanged(nameof(RecentFolders));
+            this.RaisePropertyChanged(nameof(HasRecentWorkspaces));
+            this.RaisePropertyChanged(nameof(HasRecentDocuments));
+            this.RaisePropertyChanged(nameof(HasRecentFolders));
+            this.RaisePropertyChanged(nameof(HasRecentFiles));
+            SaveRecentFiles();
+        };
+        ClearRecentFilesCommand = ReactiveCommand.Create(RecentFiles.Clear, this.WhenAnyValue(x => x.HasRecentFiles));
+        ManageRecentFilesCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            using RecentFilesDialogViewModel dialog = new(RecentFiles);
+            await RecentFilesInteraction.Handle(dialog);
+        });
+        _disposables.Add(ClearRecentFilesCommand);
+        _disposables.Add(ManageRecentFilesCommand);
+        OpenOptionsCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            using OptionsDialogViewModel dialog = new(_editorOptions, _editorThemes);
+            if (await OptionsInteraction.Handle(dialog))
+            {
+                foreach (ExtensionTreeViewModel tree in ExtensionViews.OfType<ExtensionTreeViewModel>())
+                    tree.SetFoldersBeforeFiles(_editorOptions.Current.FileExplorerFoldersBeforeFiles);
+                UpdateWindowTitle();
+                StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
+            }
+        });
+        _disposables.Add(OpenOptionsCommand);
 
         IObservable<bool> hasActiveDoc = this.WhenAnyValue(x => x.ActiveDocument).Select(d => d is not null);
         IObservable<bool> hasDesignerDoc = this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(d => d is not null);
         IObservable<bool> hasTextDoc = this.WhenAnyValue(x => x.ActiveTextDocument).Select(d => d is not null);
         IObservable<bool> hasEditableDoc = hasDesignerDoc.CombineLatest(hasTextDoc, (designer, text) => designer || text);
         IObservable<bool> hasDesignerSelection = ObserveDesignerDocumentState(
-            doc => doc.SelectedNodeId is not null,
-            doc => doc.WhenAnyValue(x => x.SelectedNodeId).Select(_ => Unit.Default));
+            doc => doc.SelectionSource == SyncSource.CodeEditor
+                ? doc.CodeEditor.SelectionLength > 0 : doc.SelectedNodeId is not null,
+            doc => doc.WhenAnyValue(x => x.SelectedNodeId, x => x.SelectionSource).Select(_ => Unit.Default),
+            doc => doc.CodeEditor.WhenAnyValue(x => x.SelectionLength).Select(_ => Unit.Default));
         IObservable<bool> canUndoDesigner = ObserveDesignerDocumentState(
             doc => doc.SyncEngine.UndoRedo.CanUndo,
-            doc => doc.SyncEngine.SyncEvents.Select(_ => Unit.Default));
+            doc => Observable.FromEvent(
+                handler => doc.SyncEngine.UndoRedo.StateChanged += handler,
+                handler => doc.SyncEngine.UndoRedo.StateChanged -= handler));
         IObservable<bool> canRedoDesigner = ObserveDesignerDocumentState(
             doc => doc.SyncEngine.UndoRedo.CanRedo,
-            doc => doc.SyncEngine.SyncEvents.Select(_ => Unit.Default));
+            doc => Observable.FromEvent(
+                handler => doc.SyncEngine.UndoRedo.StateChanged += handler,
+                handler => doc.SyncEngine.UndoRedo.StateChanged -= handler));
         IObservable<bool> hasTextSelection = ObserveTextDocumentState(
             doc => GetTextSelectionLength(doc) > 0,
             doc => doc.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength).Select(_ => Unit.Default));
@@ -2810,13 +3302,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IObservable<bool> canRedoEdit = canRedoDesigner.CombineLatest(canRedoText, (designer, text) => designer || text);
         IObservable<bool> canCutOrCopy = hasDesignerSelection.CombineLatest(hasTextSelection, (designer, text) => designer || text);
         IObservable<bool> canDeleteEdit = hasDesignerSelection.CombineLatest(canDeleteText, (designer, text) => designer || text);
-        IObservable<bool> canPasteEdit = hasEditableDoc.CombineLatest(hasClipboardText, (editable, clipboard) => editable && clipboard);
+        IObservable<bool> canPasteEdit = hasEditableDoc.CombineLatest(hasClipboardText,
+            (editable, clipboard) => editable && (_clipboardService is not null || clipboard));
         SaveDocumentCommand = ReactiveCommand.CreateFromTask(SaveActiveDocumentAsync, hasActiveDoc);
         SaveAllCommand = ReactiveCommand.CreateFromTask(SaveAllAsync);
-        ExitCommand = ReactiveCommand.Create(() =>
+        ExitCommand = ReactiveCommand.CreateFromTask(async () =>
         {
             if (Avalonia.Application.Current?.ApplicationLifetime
-                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                && await ConfirmShutdownAsync())
             {
                 desktop.Shutdown();
             }
@@ -2825,33 +3319,30 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         SetAutoSaveCommand = ReactiveCommand.Create(() =>
         {
             SaveBehavior = SaveBehavior.AutoSave;
-            StatusText = "Save mode: Auto Save";
+            StatusText = UiStrings.SaveModeAutoStatus;
         });
         SetManualSaveCommand = ReactiveCommand.Create(() =>
         {
             SaveBehavior = SaveBehavior.SaveManually;
-            StatusText = "Save mode: Save Manually";
+            StatusText = UiStrings.SaveModeManualStatus;
         });
         SetNoSaveCommand = ReactiveCommand.Create(() =>
         {
             SaveBehavior = SaveBehavior.NoSaving;
-            StatusText = "Save mode: No Saving";
+            StatusText = UiStrings.SaveModeDisabledStatus;
         });
 
         SetThemeDefaultCommand = ReactiveCommand.Create(() =>
         {
-            SelectedThemeVariant = ThemeVariantOption.Default;
-            StatusText = "Theme variant: Default";
+            ApplyEditorThemeVariant(ThemeVariantOption.Default);
         });
         SetThemeLightCommand = ReactiveCommand.Create(() =>
         {
-            SelectedThemeVariant = ThemeVariantOption.Light;
-            StatusText = "Theme variant: Light";
+            ApplyEditorThemeVariant(ThemeVariantOption.Light);
         });
         SetThemeDarkCommand = ReactiveCommand.Create(() =>
         {
-            SelectedThemeVariant = ThemeVariantOption.Dark;
-            StatusText = "Theme variant: Dark";
+            ApplyEditorThemeVariant(ThemeVariantOption.Dark);
         });
 
         RenameSymbolCommand = ReactiveCommand.CreateFromTask(RenameSymbolAsync, hasTextDoc);
@@ -2861,7 +3352,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         WorkspaceSymbolsCommand = ReactiveCommand.CreateFromTask(ShowWorkspaceSymbolsAsync, hasTextDoc);
 
         // Edit commands
-        UndoCommand = ReactiveCommand.Create(() =>
+        UndoCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
             if (ActiveDesignerDocument is not null)
             {
@@ -2869,10 +3360,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            ActiveTextDocument?.Document.UndoStack.Undo();
-        }, canUndoEdit);
+                ActiveTextDocument?.Undo();
+        }), canUndoEdit);
 
-        RedoCommand = ReactiveCommand.Create(() =>
+        RedoCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
             if (ActiveDesignerDocument is not null)
             {
@@ -2880,158 +3371,108 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            ActiveTextDocument?.Document.UndoStack.Redo();
-        }, canRedoEdit);
+                ActiveTextDocument?.Redo();
+        }), canRedoEdit);
 
-        CutCommand = ReactiveCommand.Create(() =>
+        CutCommand = ReactiveCommand.CreateFromTask(
+            () => RunClipboardEditAsync(() => CopySelectionAsync(cut: true)), canCutOrCopy);
+        CopyCommand = ReactiveCommand.CreateFromTask(
+            () => RunClipboardEditAsync(() => CopySelectionAsync(cut: false)), canCutOrCopy);
+        PasteCommand = ReactiveCommand.CreateFromTask(
+            () => RunClipboardEditAsync(PasteSelectionAsync), canPasteEdit);
+        DuplicateCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
-            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument is not { } document) return;
+            DesignerSelectionEditor editor = new(document.SyncEngine, _metadataService, document.DesignSurface.AutoGenerateAutomationIds);
+            ApplyDesignerSelection(document, editor.Duplicate(GetSelectedObjects(document)));
+        }), hasDesignerSelection);
+        DeleteCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
+        {
+            if (ActiveDesignerDocument is { } document)
             {
-                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
-                if (node?.Parent is MutableAstObjectNode parent)
+                if (document.SelectionSource == SyncSource.CodeEditor)
                 {
-                    XamlSerializationService ser = new();
-                    MutableAstDocument tempDoc = new() { Root = node };
-                    SetClipboardText(ser.Serialize(tempDoc));
-                    parent.Children.Remove(node);
-                    ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
-                    ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
-                        ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                    int start = Math.Clamp(document.CodeEditor.SelectionStart, 0, document.CodeEditor.Document.TextLength);
+                    int length = Math.Clamp(document.CodeEditor.SelectionLength, 0, document.CodeEditor.Document.TextLength - start);
+                    if (length > 0) document.CodeEditor.Document.Remove(start, length);
+                    document.CodeEditor.SetSelection(start, 0, start);
                     return;
                 }
+                new DesignerSelectionEditor(document.SyncEngine, _metadataService).Delete(GetSelectedObjects(document));
+                ApplyDesignerSelection(document, Array.Empty<MutableAstObjectNode>());
+                return;
             }
-
-            if (ActiveTextDocument is not null && TryGetSelectedText(ActiveTextDocument, out string selectedText))
-            {
-                SetClipboardText(selectedText);
-                ReplaceTextSelection(ActiveTextDocument, string.Empty);
-            }
-        }, canCutOrCopy);
-
-        CopyCommand = ReactiveCommand.Create(() =>
+            if (ActiveTextDocument is { } textDocument) DeleteTextSelectionOrCharacter(textDocument);
+        }), canDeleteEdit);
+        SelectAllCommand = ReactiveCommand.Create(() => RunDesignerEdit(() =>
         {
-            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument is { } document)
             {
-                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
-                if (node is not null)
+                if (document.SelectionSource == SyncSource.CodeEditor)
                 {
-                    XamlSerializationService ser = new();
-                    MutableAstDocument tempDoc = new() { Root = node };
-                    SetClipboardText(ser.Serialize(tempDoc));
+                    document.CodeEditor.SelectAll();
                     return;
                 }
-            }
-
-            if (ActiveTextDocument is not null && TryGetSelectedText(ActiveTextDocument, out string selectedText))
-            {
-                SetClipboardText(selectedText);
-            }
-        }, canCutOrCopy);
-
-        PasteCommand = ReactiveCommand.Create(() =>
-        {
-            if (string.IsNullOrEmpty(_clipboard))
-            {
-                return;
-            }
-
-            if (ActiveDesignerDocument is not null)
-            {
-                // Parse the clipboard XAML and add to selected parent or root
-                XamlParsingService parser = new();
-                ParseResult result = parser.Parse(_clipboard);
-                if (result.Document is MutableAstDocument pastedDoc && pastedDoc.Root is not null)
+                MutableAstObjectNode? selected = GetSelectedObjects(document).FirstOrDefault();
+                MutableAstObjectNode? parent = selected is null ? null : LayoutEditService.GetParent(selected);
+                parent ??= document.SyncEngine.CurrentDocument?.Root;
+                if (parent is not null)
                 {
-                    MutableAstObjectNode? parent = null;
-                    if (ActiveDesignerDocument.SelectedNodeId is { } selId)
-                    {
-                        parent = ActiveDesignerDocument.NodeMap.FindById(selId) as MutableAstObjectNode;
-                    }
-
-                    parent ??= ActiveDesignerDocument.SyncEngine.CurrentDocument?.Root;
-
-                    if (parent is not null)
-                    {
-                        parent.Children.Add(pastedDoc.Root);
-                        ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
-                            ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
-                    }
+                    MutableAstObjectNode[] children = new LayoutEditService(_metadataService).GetChildren(parent).OfType<MutableAstObjectNode>().ToArray();
+                    document.SetSelectedNode(children.FirstOrDefault()?.Id, SyncSource.DesignSurface);
+                    document.DesignSurface.SelectNodesFromSync(children.Select(node => node.Id));
                 }
-
                 return;
             }
-
-            if (ActiveTextDocument is not null)
-            {
-                ReplaceTextSelection(ActiveTextDocument, _clipboard);
-            }
-        }, canPasteEdit);
-
-        DeleteCommand = ReactiveCommand.Create(() =>
-        {
-            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
-            {
-                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
-                if (node?.Parent is MutableAstObjectNode parent)
-                {
-                    parent.Children.Remove(node);
-                    ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
-                    ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
-                        ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
-                    return;
-                }
-            }
-
-            if (ActiveTextDocument is not null)
-            {
-                DeleteTextSelectionOrCharacter(ActiveTextDocument);
-            }
-        }, canDeleteEdit);
-
-        SelectAllCommand = ReactiveCommand.Create(() =>
-        {
-            if (ActiveDesignerDocument is not null)
-            {
-                ActiveDesignerDocument.CodeEditor.SelectAll();
-                return;
-            }
-
             SelectAllText(ActiveTextDocument);
-        }, hasEditableDoc);
+        }), hasEditableDoc);
 
         // View commands
         ToggleBreakpointsCommand = ReactiveCommand.Create(() =>
         {
-            IsBreakpointsVisible = !IsBreakpointsVisible;
+            IsBreakpointsVisible = !IsDockableShown("Breakpoints");
             SetDockableVisibility("Breakpoints", IsBreakpointsVisible);
         });
         ToggleCallStackCommand = ReactiveCommand.Create(() =>
         {
-            IsCallStackVisible = !IsCallStackVisible;
+            IsCallStackVisible = !IsDockableShown("CallStack");
             SetDockableVisibility("CallStack", IsCallStackVisible);
         });
         ToggleLocalsCommand = ReactiveCommand.Create(() =>
         {
-            IsLocalsVisible = !IsLocalsVisible;
+            IsLocalsVisible = !IsDockableShown("Locals");
             SetDockableVisibility("Locals", IsLocalsVisible);
         });
         ToggleWatchesCommand = ReactiveCommand.Create(() =>
         {
-            IsWatchesVisible = !IsWatchesVisible;
+            IsWatchesVisible = !IsDockableShown("Watches");
             SetDockableVisibility("Watches", IsWatchesVisible);
         });
-        ToggleExtensionsManagerCommand = ReactiveCommand.Create(() =>
-        {
-            IsExtensionsManagerVisible = !IsExtensionsManagerVisible;
-            SetDockableVisibility("ExtensionsManager", IsExtensionsManagerVisible);
-        });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
+        SaveLayoutCommand = ReactiveCommand.CreateFromTask(() => SaveUserLayoutAsync(promptForName: false));
+        SaveLayoutAsCommand = ReactiveCommand.CreateFromTask(() => SaveUserLayoutAsync(promptForName: true));
+        DeleteLayoutCommand = ReactiveCommand.CreateFromTask(
+            DeleteCurrentLayoutAsync,
+            this.WhenAnyValue(x => x.CurrentLayoutName).Select(name => name is not null));
+        ManageLayoutsCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            using ManageLayoutsDialogViewModel dialog = new(_userLayoutStore, OnUserLayoutRenamed, OnUserLayoutDeleted);
+            await ManageLayoutsInteraction.Handle(dialog);
+        });
+        _disposables.Add(ManageLayoutsCommand);
+        IDisposable deleteLayoutHeaderSubscription = this.WhenAnyValue(x => x.CurrentLayoutName)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(DeleteLayoutMenuHeader)));
+        _disposables.Add(deleteLayoutHeaderSubscription);
+        SavedLayoutMenuItems.CollectionChanged += (_, _) =>
+            this.RaisePropertyChanged(nameof(HasSavedLayouts));
+        InitializeLayoutPresetMenuItems();
+        RefreshSavedLayoutMenuItems();
         OpenCanvasCommand = ReactiveCommand.Create(ShowCanvasDocument);
 
         // Help commands
         AboutCommand = ReactiveCommand.Create(() =>
         {
-            StatusText = "XAML Visual Editor — Avalonia-based WYSIWYG XAML Editor";
+            StatusText = UiStrings.AboutSummary;
         });
 
         IObservable<bool> hasWorkspace = this.WhenAnyValue(x => x.HasWorkspace);
@@ -3051,7 +3492,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         StartPreviewerCommand = ReactiveCommand.CreateFromTask(
             StartPreviewerForActiveDocumentAsync,
-            hasDesignerDoc.CombineLatest(hasWorkspace, (hasDoc, hasWs) => hasDoc && hasWs));
+            Observable.Switch(this.WhenAnyValue(viewModel => viewModel.ActiveDesignerDocument)
+                .Select(document => document is null ? Observable.Return(false) : document.WhenAnyValue(value => value.IsLoaded))
+                ).CombineLatest(hasWorkspace, (loaded, hasWs) => loaded && hasWs));
 
         StartDebugCommand = ReactiveCommand.CreateFromTask(StartDebuggingAsync, canStartDebug);
         StopDebugCommand = ReactiveCommand.CreateFromTask(StopDebuggingAsync, canStopDebug);
@@ -3085,15 +3528,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _disposables.Add(extensionCommandEnablementSubscription);
 
         // Close document command (used by tab close buttons)
-        CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
-        {
-            CloseDocument(doc);
-        });
+        CloseDocumentCommand = ReactiveCommand.CreateFromTask<IEditorDocumentViewModel>(ConfirmAndCloseDocumentAsync);
+        ReportCommandFailures(UiStrings.DocumentOpenFailed,
+            OpenDocumentCommand, OpenWorkspaceCommand, OpenPathCommand, OpenPathsCommand, OpenRecentCommand);
+        ReportCommandFailures(UiStrings.CommandFailed,
+            NewDocumentCommand, CloseActiveDocumentCommand, CloseWorkspaceCommand, CloseDocumentCommand,
+            SaveDocumentCommand, SaveAllCommand, ExitCommand, OpenExtensionManagerCommand, ClearRecentFilesCommand,
+            ManageRecentFilesCommand, OpenOptionsCommand, SetThemeDefaultCommand, SetThemeLightCommand,
+            SetThemeDarkCommand, RenameSymbolCommand, FormatDocumentCommand, CodeActionsCommand,
+            DocumentSymbolsCommand, WorkspaceSymbolsCommand, UndoCommand, RedoCommand, CutCommand, CopyCommand,
+            PasteCommand, DuplicateCommand, DeleteCommand, SelectAllCommand, ToggleBreakpointsCommand,
+            ToggleCallStackCommand, ToggleLocalsCommand, ToggleWatchesCommand, ResetLayoutCommand, SaveLayoutCommand,
+            SaveLayoutAsCommand, DeleteLayoutCommand, ManageLayoutsCommand, OpenCanvasCommand, StartPreviewerCommand,
+            StartDebugCommand, StopDebugCommand, ContinueDebugCommand, StepOverCommand, StepInCommand,
+            StepOutCommand, PauseDebugCommand, ToggleBreakpointCommand, StartRunCommand, StopRunCommand,
+            NewTerminalCommand, ShowCommandPaletteCommand);
 
         // Update trees when active document changes
         IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Where(doc => doc is null || !doc.IsDisposed)
-            .Subscribe(doc => UpdateTrees(doc));
+            .Subscribe(doc =>
+            {
+                ConfigurePreviewThemes(doc);
+                if (!IsWorkspaceLoading) RefreshControlCatalog();
+                UpdateTrees(doc);
+            });
         _disposables.Add(activeDocumentTreesSubscription);
 
         IDisposable activeDocumentDockSubscription = this.WhenAnyValue(x => x.ActiveDocument)
@@ -3110,32 +3569,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
 
-        IDisposable previewerUpdateSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .Where(d => d is not null && !d.IsDisposed)
-            .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
-            )
-            .Throttle(TimeSpan.FromMilliseconds(250))
-            .WitnessOn(RxSchedulers.TaskpoolScheduler)
-            .Subscribe(d =>
-            {
-                if (_workspace is null)
-                {
-                    return;
-                }
-
-                string? xamlText = d.SyncEngine.CurrentText;
-                if (string.IsNullOrWhiteSpace(xamlText))
-                {
-                    return;
-                }
-
-                _ = _previewerLaunchService.SendUpdateXamlAsync(
-                    d.FilePath,
-                    xamlText,
-                    _workspace,
-                    (level, message) => LogOutput(level, message));
-            });
-        _disposables.Add(previewerUpdateSubscription);
+        InitializeThemePreferences(themeWorkspaceInfo ?? workspaceInfoUpdater as IWorkspaceInfo,
+            extensionStorageFactory?.Invoke("xve.designerThemes"));
 
         IDisposable previewerSessionSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Subscribe(doc =>
@@ -3148,6 +3583,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 doc.PreviewerSession = _previewerLaunchService.TryGetSession(doc.FilePath, out PreviewerTcpSession? session)
                     ? session
                     : null;
+                TrackPreviewerActivation(doc);
             });
         _disposables.Add(previewerSessionSubscription);
 
@@ -3224,12 +3660,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             });
         _disposables.Add(themeVariantSubscription);
 
-        IDisposable themeVariantInteractionSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
-            .Skip(1)
-            .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(option => _ = ThemeVariantInteraction.Handle(option));
-        _disposables.Add(themeVariantInteractionSubscription);
-
         // Sync tree selection when active document selection changes
         IDisposable selectionSyncSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null || doc.IsDisposed
@@ -3257,17 +3687,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
 
-        // Update title when active document changes
-        IDisposable titleUpdateSubscription = this.WhenAnyValue(x => x.ActiveDocument)
-            .Select(doc => doc is not null ? $"XAML Visual Editor — {doc.FileName}" : "XAML Visual Editor")
-            .Subscribe(t => Title = t);
+        // The window title follows the active document and its path, which changes with "Save As".
+        IDisposable titleUpdateSubscription = Observable.Switch(this.WhenAnyValue(x => x.ActiveDocument)
+            .Select(doc => doc is INotifyPropertyChanged notifying
+                ? Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                        handler => notifying.PropertyChanged += handler,
+                        handler => notifying.PropertyChanged -= handler)
+                    .Where(change => change.EventArgs.PropertyName is nameof(IEditorDocumentViewModel.FilePath)
+                        or nameof(IEditorDocumentViewModel.FileName))
+                    .Select(_ => Unit.Default)
+                    .StartWith(Unit.Default)
+                : Observable.Return(Unit.Default))
+            )
+            .Subscribe(_ => UpdateWindowTitle());
         _disposables.Add(titleUpdateSubscription);
-
-        // Update collaboration status
-        IDisposable collaborationStatusSubscription = this.WhenAnyValue(x => x.Collaboration.IsSessionActive)
-            .Select(active => active ? "● Collab Connected" : string.Empty)
-            .Subscribe(s => CollaborationStatusText = s);
-        _disposables.Add(collaborationStatusSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFromSolutionExplorerAsync(path); };
 
@@ -3389,6 +3822,208 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .Select(_ => Unit.Default);
     }
 
+    private void ConfigureDesignerCommands(DesignerDocumentViewModel document)
+    {
+        document.DesignSurface.EditorThemeService = _editorThemes;
+        document.DesignSurface.ClipboardService = _clipboardService;
+        _editorOptions.Current.DesignerViewport.ApplyTo(document.DesignSurface);
+        document.DesignSurface.PropertyChanged += (_, args) => OnDesignerViewportChanged(document, args.PropertyName);
+        document.DesignSurface.CutCommand = CutCommand;
+        document.DesignSurface.CopyCommand = CopyCommand;
+        document.DesignSurface.PasteCommand = PasteCommand;
+        document.DesignSurface.DuplicateCommand = DuplicateCommand;
+        document.DesignSurface.DeleteSelectedCommand = DeleteCommand;
+        document.DesignSurface.SelectAllCommand = SelectAllCommand;
+        IObservable<bool> hasMultipleSelection = Observable.FromEvent<IReadOnlyList<IDesignItem>>(
+            handler => document.DesignSurface.Selection.SelectionChanged += handler,
+            handler => document.DesignSurface.Selection.SelectionChanged -= handler)
+            .Select(items => items.Count >= 2).StartWith(false);
+        foreach (DesignerLayoutOperation operation in Enum.GetValues<DesignerLayoutOperation>())
+        {
+            string title = DesignerLayoutEditor.Title(operation);
+            ReactiveCommand<RxVoid, RxVoid> command = ReactiveCommand.Create(() => RunDesignerEdit(() =>
+            {
+                new DesignerLayoutEditor(document).Apply(operation);
+                StatusText = title;
+            }), hasMultipleSelection);
+            document.DesignSurface.LayoutActions.Add(new DesignerLayoutAction(title,
+                "Canvas uses the primary selection or selection extent. Grid uses its cells; existing definitions remain unchanged. StackPanel distribution changes shared spacing and requires all children.", command)
+            {
+                Icon = Avalonia.Media.Geometry.Parse(DesignerLayoutEditor.IconData(operation))
+            });
+        }
+    }
+
+    // Stores a changed grid, ruler or coordinate strip setting and applies it to the other designer documents.
+    private void OnDesignerViewportChanged(DesignerDocumentViewModel source, string? propertyName)
+    {
+        if (_applyingDesignerViewport || propertyName is not (nameof(DesignSurfaceViewModel.ShowGrid)
+            or nameof(DesignSurfaceViewModel.SnapToGrid) or nameof(DesignSurfaceViewModel.GridSnapSize)
+            or nameof(DesignSurfaceViewModel.ShowRulers) or nameof(DesignSurfaceViewModel.ShowCoordinateStrip)))
+        {
+            return;
+        }
+
+        DesignerViewportOptions options = DesignerViewportOptions.Normalize(DesignerViewportOptions.From(source.DesignSurface));
+        if (options == _editorOptions.Current.DesignerViewport)
+        {
+            return;
+        }
+
+        _applyingDesignerViewport = true;
+        try
+        {
+            foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())
+            {
+                if (!ReferenceEquals(document, source)) options.ApplyTo(document.DesignSurface);
+            }
+
+            _editorOptions.Save(_editorOptions.Current with { DesignerViewport = options });
+        }
+        catch (Exception error) { SetPersistentStatus(string.Format(UiStrings.OptionsSaveError, error.Message)); }
+        finally { _applyingDesignerViewport = false; }
+    }
+
+    private static IReadOnlyList<MutableAstObjectNode> GetSelectedObjects(DesignerDocumentViewModel document)
+    {
+        MutableAstObjectNode[] selected = document.DesignSurface.Selection.SelectedItems.OfType<DesignItem>()
+            .Select(item => document.NodeMap.FindById(item.AstNodeId)).OfType<MutableAstObjectNode>().ToArray();
+        if (selected.Length > 0) return selected;
+        return document.SelectedNodeId is { } id && document.NodeMap.FindById(id) is MutableAstObjectNode node
+            ? new[] { node } : Array.Empty<MutableAstObjectNode>();
+    }
+
+    private static void ApplyDesignerSelection(DesignerDocumentViewModel document, IReadOnlyList<MutableAstObjectNode> nodes)
+    {
+        document.SetSelectedNode(nodes.FirstOrDefault()?.Id, SyncSource.DesignSurface);
+        document.DesignSurface.RequestSelection(nodes.Select(node => node.Id));
+    }
+
+    private void RunDesignerEdit(Action action)
+    {
+        try { action(); }
+        catch (Exception exception)
+        {
+            SetPersistentStatus(exception.Message);
+            _logger.LogWarning(exception, "Designer edit failed");
+        }
+    }
+
+    private async Task RevealInFileExplorerAsync(string filePath)
+    {
+        const string fileExplorerViewId = "fileExplorer.panel";
+        ActivateExtensionView(fileExplorerViewId);
+        ExtensionTreeViewModel? fileExplorer = ExtensionViews.OfType<ExtensionTreeViewModel>()
+            .FirstOrDefault(view => view.ViewId == fileExplorerViewId);
+        if (fileExplorer is null || !await fileExplorer.RevealPathAsync(filePath, CancellationToken.None))
+            SetPersistentStatus(string.Format(UiStrings.FileNotInFileExplorer, System.IO.Path.GetFileName(filePath)));
+    }
+
+    private void RevealInSolutionExplorer(string filePath)
+    {
+        ActivateExtensionView("solutionExplorer.panel");
+        if (!SolutionExplorer.RevealFile(filePath))
+            SetPersistentStatus(string.Format(UiStrings.FileNotInSolutionExplorer, System.IO.Path.GetFileName(filePath)));
+    }
+
+    private async Task RunClipboardEditAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception exception)
+        {
+            SetPersistentStatus(exception.Message);
+            _logger.LogWarning(exception, "Clipboard edit failed");
+        }
+    }
+
+    private async Task WriteClipboardAsync(string text)
+    {
+        if (_clipboardService is not null) await _clipboardService.SetTextAsync(text);
+        SetClipboardText(text);
+    }
+
+    private async Task CopySelectionAsync(bool cut)
+    {
+        DesignerDocumentViewModel? designer = ActiveDesignerDocument;
+        if (designer is not null && designer.SelectionSource != SyncSource.CodeEditor)
+        {
+            DesignerSelectionEditor editor = new(designer.SyncEngine, _metadataService);
+            IReadOnlyList<MutableAstObjectNode> nodes = editor.SelectionRoots(GetSelectedObjects(designer));
+            if (nodes.Count == 0) return;
+            if (cut && nodes.Any(node => LayoutEditService.GetParent(node) is null))
+                throw new InvalidOperationException(UiStrings.CannotCutRoot);
+            string? source = designer.SyncEngine.CurrentText;
+            await WriteClipboardAsync(editor.Copy(nodes));
+            if (!cut) return;
+            if (!ReferenceEquals(ActiveDesignerDocument, designer) || designer.SyncEngine.CurrentText != source
+                || designer.SelectionSource == SyncSource.CodeEditor
+                || !editor.SelectionRoots(GetSelectedObjects(designer)).Select(node => node.Id).SequenceEqual(nodes.Select(node => node.Id)))
+                throw new InvalidOperationException(UiStrings.CutSelectionChanged);
+            editor.Delete(nodes);
+            ApplyDesignerSelection(designer, Array.Empty<MutableAstObjectNode>());
+            return;
+        }
+
+        TextDocumentViewModel? text = ActiveTextDocument;
+        var buffer = designer?.CodeEditor.Document ?? text?.Document;
+        if (buffer is null) return;
+        int start = Math.Clamp(designer?.CodeEditor.SelectionStart ?? text!.SelectionStart, 0, buffer.TextLength);
+        int length = Math.Clamp(designer?.CodeEditor.SelectionLength ?? text!.SelectionLength, 0, buffer.TextLength - start);
+        if (length == 0) return;
+        string original = buffer.Text;
+        var active = ActiveDocument;
+        await WriteClipboardAsync(buffer.GetText(start, length));
+        if (!cut) return;
+        if (!ReferenceEquals(ActiveDocument, active) || buffer.Text != original
+            || (designer?.CodeEditor.SelectionStart ?? text!.SelectionStart) != start
+            || (designer?.CodeEditor.SelectionLength ?? text!.SelectionLength) != length
+            || designer is not null && designer.SelectionSource != SyncSource.CodeEditor)
+            throw new InvalidOperationException(UiStrings.CutSelectionChanged);
+        buffer.Remove(start, length);
+        if (designer is not null)
+        {
+            designer.CodeEditor.SetSelection(start, 0, start);
+        }
+        else
+        {
+            text!.SetSelection(start, 0, start);
+        }
+    }
+
+    private async Task PasteSelectionAsync()
+    {
+        var active = ActiveDocument;
+        DesignerDocumentViewModel? designer = ActiveDesignerDocument;
+        TextDocumentViewModel? text = ActiveTextDocument;
+        bool visual = designer is not null && designer.SelectionSource != SyncSource.CodeEditor;
+        var buffer = designer?.CodeEditor.Document ?? text?.Document;
+        if (buffer is null) return;
+        string original = buffer.Text;
+        int start = Math.Clamp(designer?.CodeEditor.SelectionStart ?? text!.SelectionStart, 0, buffer.TextLength);
+        int length = Math.Clamp(designer?.CodeEditor.SelectionLength ?? text!.SelectionLength, 0, buffer.TextLength - start);
+        Guid? selectedId = designer?.SelectedNodeId;
+        string? clipboard = _clipboardService is null ? _clipboard : await _clipboardService.GetTextAsync();
+        if (string.IsNullOrEmpty(clipboard)) return;
+        if (!ReferenceEquals(ActiveDocument, active) || buffer.Text != original
+            || visual != (designer is not null && designer.SelectionSource != SyncSource.CodeEditor)
+            || visual && designer!.SelectedNodeId != selectedId
+            || !visual && ((designer?.CodeEditor.SelectionStart ?? text!.SelectionStart) != start
+                || (designer?.CodeEditor.SelectionLength ?? text!.SelectionLength) != length))
+            throw new InvalidOperationException(UiStrings.PasteSelectionChanged);
+        if (visual)
+        {
+            MutableAstObjectNode? selected = selectedId is { } id ? designer!.NodeMap.FindById(id) as MutableAstObjectNode : null;
+            DesignerSelectionEditor editor = new(designer!.SyncEngine, _metadataService, designer.DesignSurface.AutoGenerateAutomationIds);
+            ApplyDesignerSelection(designer, editor.Paste(clipboard, selected));
+        }
+        else if (designer is not null)
+        {
+            buffer.Replace(start, length, clipboard);
+            designer.CodeEditor.SetSelection(start + clipboard.Length, 0, start + clipboard.Length);
+        }
+        else ReplaceTextSelection(text!, clipboard);
+    }
+
     private void SetClipboardText(string? text)
     {
         if (string.Equals(_clipboard, text, StringComparison.Ordinal))
@@ -3433,9 +4068,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         document.Document.Replace(start, length, replacement);
 
         int nextOffset = Math.Clamp(start + replacement.Length, 0, document.Document.TextLength);
-        document.SelectionStart = nextOffset;
-        document.SelectionLength = 0;
-        document.SetCaretOffset(nextOffset);
+        document.SetSelection(nextOffset, 0, nextOffset);
     }
 
     private static void DeleteTextSelectionOrCharacter(TextDocumentViewModel document)
@@ -3454,9 +4087,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         document.Document.Remove(offset, 1);
-        document.SelectionStart = offset;
-        document.SelectionLength = 0;
-        document.SetCaretOffset(offset);
+        document.SetSelection(offset, 0, offset);
     }
 
     private static void SelectAllText(TextDocumentViewModel? document)
@@ -3466,9 +4097,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        document.SelectionStart = 0;
-        document.SelectionLength = document.Document.TextLength;
-        document.SetCaretOffset(document.Document.TextLength);
+        document.SetSelection(0, document.Document.TextLength, document.Document.TextLength);
     }
 
     private async System.Threading.Tasks.Task NewDocumentAsync()
@@ -3494,7 +4123,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                                 Spacing="8"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
-                        <TextBox Width="200" Watermark="Enter text here..." />
+                        <TextBox Width="200" PlaceholderText="Enter text here..." />
                         <Button Content="Click Me"
                                 HorizontalAlignment="Center" />
                     </StackPanel>
@@ -3516,9 +4145,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             OpenFileAsync,
             _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
             _loggerFactory,
-            _languageRegistry);
-        doc.StartPreviewerCommand = StartPreviewerCommand;
+            _languageRegistry,
+            StartPreviewerForDocumentAsync,
+            UpdatePreviewerForDocumentAsync);
         doc.Breakpoints = Breakpoints;
+        ConfigureDesignerCommands(doc);
         Documents.Add(doc);
         ActiveDocument = doc;
         AddDocumentToDock(doc);
@@ -3527,29 +4158,54 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         try
         {
             await doc.LoadAsync();
-            StatusText = $"Created {doc.FileName}";
+            StatusText = string.Format(UiStrings.DocumentCreated, doc.FileName);
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Failed to load new document: {Message}", ex.Message);
-            StatusText = $"Failed to create document: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.DocumentCreateFailed, ex.Message));
         }
     }
 
-    private async System.Threading.Tasks.Task OpenDocumentAsync()
+    private void ApplyEditorThemeVariant(ThemeVariantOption option)
+    {
+        EditorThemeSelection selection = new("builtin", option switch
+        {
+            ThemeVariantOption.Light => "light", ThemeVariantOption.Dark => "dark", _ => "system"
+        });
+        try
+        {
+            _editorThemes?.Apply(selection);
+            _editorOptions.Save(_editorOptions.Current with { EditorTheme = selection });
+            SelectedThemeVariant = option;
+            StatusText = UiStrings.OptionsSaved;
+        }
+        catch (Exception error) { SetPersistentStatus(string.Format(UiStrings.OptionsSaveError, error.Message)); }
+    }
+
+    private async System.Threading.Tasks.Task OpenDocumentAsync(bool openWorkspace)
     {
         try
         {
+            if (openWorkspace)
+            {
+                WorkspaceOpenRequest? request = await OpenWorkspaceInteraction.Handle(RxVoid.Default);
+                if (request is null) return;
+                await LoadWorkspaceAsync(request.FilePath);
+                if (HasWorkspace && FileSystemPathComparison.Equals(_workspacePath, request.FilePath))
+                    AddRecentFile(request.FilePath, RecentEntryKind.Workspace);
+                return;
+            }
             string? filePath = await OpenFileInteraction.Handle(RxVoid.Default);
             if (!string.IsNullOrEmpty(filePath))
             {
-                await OpenFileAsync(filePath);
+                await OpenFileAsync(filePath, allowWorkspaceLoad: openWorkspace);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Open document failed: {Message}", ex.Message);
-            StatusText = $"Open document failed: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.DocumentOpenFailed, ex.Message));
         }
     }
 
@@ -3557,7 +4213,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (SaveBehavior == SaveBehavior.NoSaving)
         {
-            StatusText = "Saving is disabled";
+            StatusText = UiStrings.SavingDisabled;
             return;
         }
 
@@ -3574,8 +4230,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            await ActiveDocument.SaveCommand.Execute().ToTask();
-            StatusText = $"Saved {ActiveDocument.FileName}";
+            if (await TrySaveDocumentAsync(ActiveDocument))
+            {
+                StatusText = string.Format(UiStrings.DocumentSaved, ActiveDocument.FileName);
+            }
         }
     }
 
@@ -3583,10 +4241,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (SaveBehavior == SaveBehavior.NoSaving)
         {
-            StatusText = "Saving is disabled";
+            StatusText = UiStrings.SavingDisabled;
             return;
         }
 
+        bool allSaved = true;
         foreach (IEditorDocumentViewModel doc in Documents.ToList())
         {
             if (doc.IsModified)
@@ -3602,10 +4261,36 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     continue;
                 }
 
-                await doc.SaveCommand.Execute().ToTask();
+                allSaved &= await TrySaveDocumentAsync(doc);
             }
         }
-        StatusText = "All documents saved";
+
+        if (allSaved)
+        {
+            StatusText = UiStrings.AllDocumentsSaved;
+        }
+    }
+
+    /// <summary>
+    /// Saves a document and reports a file that cannot be written, such as a read-only file that source control has
+    /// not checked out. The document stays modified, so no change is lost.
+    /// </summary>
+    private async System.Threading.Tasks.Task<bool> TrySaveDocumentAsync(IEditorDocumentViewModel doc)
+    {
+        try
+        {
+            await doc.SaveCommand.Execute().ToTask();
+            return true;
+        }
+        // InvalidOperationException reports a document that cannot be saved yet, for example during a designer edit.
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _logger.LogWarning("Save document failed: {Message}", ex.Message);
+            SetPersistentStatus(FileSystemErrorMessages.TryGetReadOnlyEntryName(ex, doc.FilePath, out string? readOnlyName)
+                ? string.Format(UiStrings.DocumentSaveReadOnly, (object?)readOnlyName)
+                : string.Format(UiStrings.DocumentSaveFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, doc.FilePath)));
+            return false;
+        }
     }
 
     private static bool IsUntitledDocument(IEditorDocumentViewModel doc)
@@ -3626,14 +4311,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string? targetPath = await SaveFileInteraction.Handle(suggestedName);
         if (string.IsNullOrWhiteSpace(targetPath))
         {
-            StatusText = "Save canceled";
+            StatusText = UiStrings.SaveCanceled;
             return false;
         }
 
         string? text = GetDocumentText(doc);
         if (text is null)
         {
-            StatusText = "Save failed: no document content";
+            StatusText = UiStrings.SaveEmptyDocument;
             return false;
         }
 
@@ -3641,7 +4326,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         await EnsureDocumentOpenAsync(targetPath, addRecent: true, updateStatus: false, allowWorkspaceLoad: true);
         CloseDocument(doc);
-        StatusText = $"Saved {System.IO.Path.GetFileName(targetPath)}";
+        StatusText = string.Format(UiStrings.DocumentSaved, (object?)(System.IO.Path.GetFileName(targetPath)));
         return true;
     }
 
@@ -3665,7 +4350,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         LanguageRenameInfo? info = await ActiveTextDocument.PrepareRenameAsync(ActiveTextDocument.CaretOffset);
         if (info is null)
         {
-            StatusText = "Rename not available";
+            StatusText = UiStrings.RenameUnavailable;
             return;
         }
 
@@ -3679,12 +4364,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .RenameSymbolAsync(ActiveTextDocument.CaretOffset, newName);
         if (edit is null || edit.DocumentEdits.Count == 0)
         {
-            StatusText = "Rename produced no edits";
+            StatusText = UiStrings.RenameNoChanges;
             return;
         }
 
         await ApplyWorkspaceEditAsync(edit);
-        StatusText = $"Renamed {info.Name} to {newName}";
+        StatusText = string.Format(UiStrings.SymbolRenamed, info.Name, newName);
     }
 
     private async System.Threading.Tasks.Task FormatDocumentAsync()
@@ -3697,12 +4382,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IReadOnlyList<TextEdit> edits = await ActiveTextDocument.GetFormattingEditsAsync();
         if (edits.Count == 0)
         {
-            StatusText = "Format: no edits";
+            StatusText = UiStrings.FormatNoChanges;
             return;
         }
 
         ActiveTextDocument.ApplyTextEdits(edits);
-        StatusText = "Format applied";
+        StatusText = UiStrings.FormatApplied;
     }
 
     private async System.Threading.Tasks.Task ShowCodeActionsAsync()
@@ -3716,7 +4401,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .GetCodeActionsAsync(ActiveTextDocument.CaretOffset);
         if (actions.Count == 0)
         {
-            StatusText = "No code actions";
+            StatusText = UiStrings.NoCodeActions;
             return;
         }
 
@@ -3727,7 +4412,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
         else
         {
-            CodeActionPickerRequest request = new("Code Actions", actions);
+            CodeActionPickerRequest request = new(UiStrings.CodeActions, actions);
             selection = await SelectCodeActionInteraction.Handle(request);
         }
 
@@ -3737,7 +4422,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         await ApplyWorkspaceEditAsync(selection.Edit);
-        StatusText = $"Applied: {selection.Title}";
+        StatusText = string.Format(UiStrings.ActionApplied, selection.Title);
     }
 
     private async System.Threading.Tasks.Task ShowDocumentSymbolsAsync()
@@ -3750,7 +4435,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IReadOnlyList<LanguageSymbol> symbols = await ActiveTextDocument.GetDocumentSymbolsAsync();
         if (symbols.Count == 0)
         {
-            StatusText = "No document symbols";
+            StatusText = UiStrings.NoDocumentSymbols;
             return;
         }
 
@@ -3781,7 +4466,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IReadOnlyList<LanguageSymbol> symbols = await ActiveTextDocument.GetWorkspaceSymbolsAsync(query);
         if (symbols.Count == 0)
         {
-            StatusText = "No workspace symbols";
+            StatusText = UiStrings.NoWorkspaceSymbols;
             return;
         }
 
@@ -3796,7 +4481,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         SetDockableVisibility("References", true);
     }
 
-    private async System.Threading.Tasks.Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit)
+    // Edits go through editor documents: a closed file opens with the change pending, so it is saved and checked
+    // out by source control extensions like any other edit instead of being written behind their back.
+    internal async System.Threading.Tasks.Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit)
     {
         foreach (LanguageDocumentEdit docEdit in edit.DocumentEdits)
         {
@@ -3805,48 +4492,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 continue;
             }
 
-            TextDocumentViewModel? openText = Documents
+            TextDocumentViewModel? textDocument = Documents
                 .OfType<TextDocumentViewModel>()
                 .FirstOrDefault(doc =>
                     FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
 
-            if (openText is not null)
+            if (textDocument is null && System.IO.File.Exists(docEdit.FilePath))
             {
-                openText.ApplyTextEdits(docEdit.Edits);
-                continue;
+                textDocument = await EnsureDocumentOpenAsync(
+                    docEdit.FilePath,
+                    addRecent: false,
+                    updateStatus: false,
+                    allowWorkspaceLoad: false) as TextDocumentViewModel;
             }
 
-            if (!System.IO.File.Exists(docEdit.FilePath))
-            {
-                continue;
-            }
-
-            string text = await System.IO.File.ReadAllTextAsync(docEdit.FilePath);
-            string updated = ApplyEditsToText(text, docEdit.Edits);
-            if (!string.Equals(text, updated, StringComparison.Ordinal))
-            {
-                await System.IO.File.WriteAllTextAsync(docEdit.FilePath, updated);
-            }
+            textDocument?.ApplyTextEdits(docEdit.Edits);
         }
-    }
-
-    private static string ApplyEditsToText(string text, IReadOnlyList<TextEdit> edits)
-    {
-        if (edits.Count == 0)
-        {
-            return text;
-        }
-
-        StringBuilder builder = new(text);
-        foreach (TextEdit edit in edits.OrderByDescending(e => e.Offset))
-        {
-            int offset = Math.Clamp(edit.Offset, 0, builder.Length);
-            int length = Math.Clamp(edit.Length, 0, builder.Length - offset);
-            builder.Remove(offset, length);
-            builder.Insert(offset, edit.NewText ?? string.Empty);
-        }
-
-        return builder.ToString();
     }
 
     private async System.Threading.Tasks.Task NavigateToLocationAsync(
@@ -3870,7 +4531,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 location.Range.Start.Line,
                 location.Range.Start.Column);
             textDoc.SetCaretOffset(offset);
-            StatusText = $"Navigated to {System.IO.Path.GetFileName(location.FilePath)}";
+            StatusText = string.Format(UiStrings.NavigatedToFile, (object?)(System.IO.Path.GetFileName(location.FilePath)));
         }
     }
 
@@ -4003,7 +4664,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             RecordNavigation(location);
             int offset = textDoc.GetOffsetForLineColumn(message.Line, message.Column);
             textDoc.SetCaretOffset(offset);
-            StatusText = $"Navigated to {System.IO.Path.GetFileName(message.FilePath)}";
+            StatusText = string.Format(UiStrings.NavigatedToFile, (object?)(System.IO.Path.GetFileName(message.FilePath)));
             return;
         }
 
@@ -4011,7 +4672,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             int offset = designer.CodeEditor.GetOffsetForLineColumn(message.Line, message.Column);
             designer.CodeEditor.SetCaretOffset(offset);
-            StatusText = $"Navigated to {System.IO.Path.GetFileName(message.FilePath)}";
+            StatusText = string.Format(UiStrings.NavigatedToFile, (object?)(System.IO.Path.GetFileName(message.FilePath)));
         }
     }
 
@@ -4027,10 +4688,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
-                _ = AutoSaveAsync(doc);
+                _ = ReportFailureAsync(AutoSaveAsync(doc));
             });
 
         _autoSaveSubscriptions[doc] = subscription;
+    }
+
+    // A task that nobody awaits reports its failure to the user instead of ending unobserved.
+    private async System.Threading.Tasks.Task ReportFailureAsync(System.Threading.Tasks.Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Background operation failed: {Message}", ex.Message);
+            SetPersistentStatus(string.Format(UiStrings.CommandFailed, (object?)ex.Message));
+        }
     }
 
     private void AttachAutoSave(TextDocumentViewModel doc)
@@ -4047,7 +4722,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
-                _ = AutoSaveAsync(doc);
+                _ = ReportFailureAsync(AutoSaveAsync(doc));
             });
 
         _autoSaveSubscriptions[doc] = subscription;
@@ -4073,8 +4748,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await doc.SaveCommand.Execute().ToTask();
-        StatusText = $"Auto-saved {doc.FileName}";
+        if (await TrySaveDocumentAsync(doc))
+        {
+            StatusText = string.Format(UiStrings.DocumentAutoSaved, doc.FileName);
+        }
     }
 
     private async System.Threading.Tasks.Task AutoSaveAsync(TextDocumentViewModel doc)
@@ -4089,8 +4766,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await doc.SaveCommand.Execute().ToTask();
-        StatusText = $"Auto-saved {doc.FileName}";
+        if (await TrySaveDocumentAsync(doc))
+        {
+            StatusText = string.Format(UiStrings.DocumentAutoSaved, doc.FileName);
+        }
     }
 
     public bool TryGetExtensionView(string viewId, out ExtensionViewModel? viewModel)
@@ -4102,11 +4781,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (CommandPaletteItems.Count == 0)
         {
-            StatusText = "No extension commands available.";
+            StatusText = UiStrings.NoExtensionCommands;
             return;
         }
 
-        CommandPaletteRequest request = new("Command Palette", CommandPaletteItems.ToList());
+        CommandPaletteRequest request = new(UiStrings.CommandPalette, CommandPaletteItems.ToList());
         ExtensionCommandPaletteItemViewModel? selected = await CommandPaletteInteraction.Handle(request);
         if (selected is null)
         {
@@ -4124,7 +4803,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        StatusText = $"Extension command unavailable: {commandId}";
+        StatusText = string.Format(UiStrings.ExtensionCommandUnavailable, commandId);
     }
 
     private async System.Threading.Tasks.Task<bool> TryExecuteExtensionCommandAsync(string commandId)
@@ -4147,7 +4826,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Extension command failed: {CommandId}", commandId);
-            StatusText = $"Extension command failed: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.ExtensionCommandFailed, ex.Message));
             return true;
         }
     }
@@ -4169,16 +4848,21 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void RefreshExtensionContributions()
     {
+        ConfigurePreviewThemes(ActiveDesignerDocument);
+        // Registered preview providers decide which theme the editor options supply.
+        if (!_themePreferencesDisposed) ApplyWorkspacePreviewTheme(_workspacePreviewTheme);
         if (_extensionContributions is null)
         {
             DisposeCollectionItems(ExtensionMenuItems);
+            AddExtensionManagerMenuItem();
             DisposeCollectionItems(FileMenuItems);
             DisposeCollectionItems(FileNewMenuItems);
             DisposeCollectionItems(FileNewMenuEntries);
-            DisposeCollectionItems(ToolsMenuItems);
             DisposeCollectionItems(ViewMenuItems);
+            DisposeCollectionItems(ServerMenuItems);
             DisposeCollectionItems(DebugMenuItems);
             DisposeCollectionItems(EditMenuItems);
+            DisposeCollectionItems(EditorContextMenuItems);
             DisposeCollectionItems(WorkspaceMenuItems);
             DisposeCollectionItems(ExtensionToolbarItems);
             DisposeCollectionItems(MainToolbarItems);
@@ -4205,36 +4889,49 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         RefreshExtensionViews();
     }
 
+    // Every contribution change of any extension lands here. Custom views whose contribution is unchanged keep
+    // their view model, so the extension state survives and no second instance keeps working in the background.
+    // Custom view models belong to their extension, which disposes them on deactivation.
     private void RefreshExtensionViews()
     {
-        foreach (IDisposable view in ExtensionViews.OfType<IDisposable>().ToList())
-        {
-            view.Dispose();
-        }
-
+        Dictionary<string, ExtensionViewModel> previous = new(_extensionViews, StringComparer.OrdinalIgnoreCase);
         ExtensionViews.Clear();
         _extensionViews.Clear();
 
-        if (_extensionContributions is null)
+        if (_extensionContributions is not null)
         {
-            SyncExtensionDockables();
-            return;
+            IEnumerable<ExtensionViewContribution> ordered = _extensionContributions.ViewContributions
+                .OrderBy(contribution => contribution.Location)
+                .ThenBy(contribution => contribution.Priority)
+                .ThenBy(contribution => contribution.Title, StringComparer.OrdinalIgnoreCase);
+
+            foreach (ExtensionViewContribution contribution in ordered)
+            {
+                ExtensionViewModel viewModel;
+                if (previous.TryGetValue(contribution.ViewId, out ExtensionViewModel? existing)
+                    && existing is ExtensionCustomViewModel { ViewModel: not null }
+                    && existing.Contribution == contribution)
+                {
+                    previous.Remove(contribution.ViewId);
+                    viewModel = existing;
+                }
+                else
+                {
+                    viewModel = CreateExtensionViewModel(contribution);
+                    if (viewModel is ExtensionTreeViewModel treeView)
+                    {
+                        _ = treeView.LoadAsync(CancellationToken.None);
+                    }
+                }
+
+                _extensionViews[contribution.ViewId] = viewModel;
+                ExtensionViews.Add(viewModel);
+            }
         }
 
-        IEnumerable<ExtensionViewContribution> ordered = _extensionContributions.ViewContributions
-            .OrderBy(contribution => contribution.Location)
-            .ThenBy(contribution => contribution.Priority)
-            .ThenBy(contribution => contribution.Title, StringComparer.OrdinalIgnoreCase);
-
-        foreach (ExtensionViewContribution contribution in ordered)
+        foreach (IDisposable replaced in previous.Values.OfType<IDisposable>())
         {
-            ExtensionViewModel viewModel = CreateExtensionViewModel(contribution);
-            _extensionViews[contribution.ViewId] = viewModel;
-            ExtensionViews.Add(viewModel);
-            if (viewModel is ExtensionTreeViewModel treeView)
-            {
-                _ = treeView.LoadAsync(CancellationToken.None);
-            }
+            replaced.Dispose();
         }
 
         SyncExtensionDockables();
@@ -4246,16 +4943,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             ExtensionViewType.Tree => new ExtensionTreeViewModel(
                 contribution,
-                ResolveTreeProvider(contribution.ViewId)),
+                ResolveTreeProvider(contribution.ViewId),
+                _editorOptions.Current.FileExplorerFoldersBeforeFiles),
             ExtensionViewType.Webview => new ExtensionWebviewViewModel(
                 contribution,
-                "Webview support is not available yet."),
+                UiStrings.WebviewUnavailable),
             ExtensionViewType.Custom => new ExtensionCustomViewModel(
                 contribution,
                 ResolveCustomViewModel(contribution.ViewId)),
             _ => new ExtensionWebviewViewModel(
                 contribution,
-                "Unsupported view type.")
+                UiStrings.ViewTypeUnsupported)
         };
     }
 
@@ -4281,16 +4979,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return null;
     }
 
+    private void AddExtensionManagerMenuItem() => ExtensionMenuItems.Add(new ExtensionMenuItemViewModel(
+        "shell.extensions.manage", XamlVisualEditor.Core.Localization.UiStrings.MenuExtensionsManager, ExtensionMenuLocations.Extensions,
+        "management", int.MinValue, OpenExtensionManagerCommand));
+
     private void UpdateExtensionMenuItems()
     {
         DisposeCollectionItems(ExtensionMenuItems);
         DisposeCollectionItems(FileMenuItems);
         DisposeCollectionItems(FileNewMenuItems);
-        DisposeCollectionItems(ToolsMenuItems);
         DisposeCollectionItems(ViewMenuItems);
+        DisposeCollectionItems(ServerMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
+        DisposeCollectionItems(EditorContextMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);
+        AddExtensionManagerMenuItem();
 
         if (_extensionContributions is null)
         {
@@ -4313,9 +5017,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 ExtensionMenuLocations.FileNew => FileNewMenuItems,
                 ExtensionMenuLocations.Edit => EditMenuItems,
                 ExtensionMenuLocations.View => ViewMenuItems,
+                ExtensionMenuLocations.ViewServers => ServerMenuItems,
                 ExtensionMenuLocations.Debug => DebugMenuItems,
-                ExtensionMenuLocations.Tools => ToolsMenuItems,
+                ExtensionMenuLocations.Tools => ExtensionMenuItems,
                 ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
+                ExtensionMenuLocations.EditorContext => EditorContextMenuItems,
                 _ => ExtensionMenuItems
             };
 
@@ -4326,10 +5032,134 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 item.Group,
                 item.Priority,
                 CreateExtensionCommand(item.CommandId),
-                GetExtensionCommandInputGesture(item.CommandId)));
+                GetExtensionCommandInputGesture(item.CommandId),
+                item.CheckedWhen,
+                item.Submenu,
+                item.SubmenuGroup));
         }
 
+        ArrangeMenuItems(ExtensionMenuItems, ExtensionMenuGroupOrder);
+        ArrangeMenuItems(ViewMenuItems, ViewMenuGroupOrder);
+        ArrangeMenuItems(EditMenuItems, []);
+        ArrangeMenuItems(EditorContextMenuItems, []);
+        RefreshMenuCheckStates();
         UpdateFileNewMenuEntries();
+    }
+
+    private static readonly string[] ViewMenuGroupOrder = ["views.debug", "views.bottom", "views.left", "views.right"];
+
+    private static readonly string[] ExtensionMenuGroupOrder = ["management"];
+
+    // Separates the groups of a menu and nests the items that name a submenu under one header per group and
+    // submenu title; inside a submenu the submenu groups are separated. Groups listed in the order come first, the
+    // others follow alphabetically.
+    private static void ArrangeMenuItems(ObservableCollection<ExtensionMenuItemViewModel> items, string[] groupOrder)
+    {
+        List<ExtensionMenuItemViewModel> arranged = new(items.Count);
+        foreach (IGrouping<string, ExtensionMenuItemViewModel> group in OrderGroups(items, item => item.Group, groupOrder))
+        {
+            AddGroup(arranged, group, NestSubmenus(group));
+        }
+
+        items.Clear();
+        foreach (ExtensionMenuItemViewModel item in arranged)
+        {
+            items.Add(item);
+        }
+    }
+
+    private static List<ExtensionMenuItemViewModel> NestSubmenus(IGrouping<string, ExtensionMenuItemViewModel> group)
+    {
+        List<ExtensionMenuItemViewModel> entries = new();
+        Dictionary<string, (ExtensionMenuItemViewModel Header, List<ExtensionMenuItemViewModel> Children)> submenus =
+            new(StringComparer.OrdinalIgnoreCase);
+        foreach (ExtensionMenuItemViewModel item in group)
+        {
+            if (item.Submenu is not { } title)
+            {
+                entries.Add(item);
+                continue;
+            }
+
+            if (!submenus.TryGetValue(title, out (ExtensionMenuItemViewModel Header, List<ExtensionMenuItemViewModel> Children) submenu))
+            {
+                submenu = (new ExtensionMenuItemViewModel(
+                    "submenu." + group.Key + "." + title, title, item.Location, item.Group, item.Priority, null), new());
+                submenus[title] = submenu;
+                entries.Add(submenu.Header);
+            }
+
+            submenu.Children.Add(item);
+        }
+
+        foreach ((ExtensionMenuItemViewModel header, List<ExtensionMenuItemViewModel> children) in submenus.Values)
+        {
+            foreach (IGrouping<string, ExtensionMenuItemViewModel> subgroup in OrderGroups(children, item => item.SubmenuGroup, []))
+            {
+                AddGroup(header.Children, subgroup, subgroup);
+            }
+        }
+
+        return entries;
+    }
+
+    private static IEnumerable<IGrouping<string, ExtensionMenuItemViewModel>> OrderGroups(
+        IEnumerable<ExtensionMenuItemViewModel> items,
+        Func<ExtensionMenuItemViewModel, string?> groupOf,
+        string[] groupOrder)
+    {
+        return items
+            .GroupBy(item => groupOf(item) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => Array.IndexOf(groupOrder, group.Key) is int index and >= 0 ? index : groupOrder.Length)
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void AddGroup(
+        ICollection<ExtensionMenuItemViewModel> target,
+        IGrouping<string, ExtensionMenuItemViewModel> group,
+        IEnumerable<ExtensionMenuItemViewModel> entries)
+    {
+        if (target.Count > 0)
+        {
+            ExtensionMenuItemViewModel first = group.First();
+            target.Add(ExtensionMenuItemViewModel.CreateSeparator(first.Location, group.Key));
+        }
+
+        foreach (ExtensionMenuItemViewModel entry in entries)
+        {
+            target.Add(entry);
+        }
+    }
+
+    private IEnumerable<ObservableCollection<ExtensionMenuItemViewModel>> GetExtensionMenus()
+    {
+        return
+        [
+            ExtensionMenuItems, FileMenuItems, FileNewMenuItems, ViewMenuItems, ServerMenuItems, DebugMenuItems,
+            EditMenuItems, EditorContextMenuItems, WorkspaceMenuItems
+        ];
+    }
+
+    // Toggle items read their check mark from the context keys, so a changed key updates the menus in place.
+    private void RefreshMenuCheckStates()
+    {
+        foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
+        {
+            RefreshMenuCheckStates(menu);
+        }
+    }
+
+    private void RefreshMenuCheckStates(IEnumerable<ExtensionMenuItemViewModel> items)
+    {
+        foreach (ExtensionMenuItemViewModel item in items)
+        {
+            if (item.CheckedWhen is { } checkedWhen)
+            {
+                item.IsChecked = EvaluateWhenExpressionForContext(checkedWhen);
+            }
+
+            RefreshMenuCheckStates(item.Children);
+        }
     }
 
     private void UpdateFileNewMenuEntries()
@@ -4343,7 +5173,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         FileNewMenuEntries.Add(new ExtensionMenuItemViewModel(
             "builtin.newFile",
-            "_File",
+            XamlVisualEditor.Core.Localization.UiStrings.MenuFile,
             ExtensionMenuLocations.FileNew,
             "builtin",
             -100,
@@ -4448,7 +5278,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ExtensionKeyBindings.Add(new ExtensionKeyBindingViewModel(
                 entry.Key,
                 gesture,
-                CreateExtensionCommand(entry.Key)));
+                CreateExtensionCommand(entry.Key),
+                entry.Value.KeybindingScope));
         }
     }
 
@@ -4575,48 +5406,39 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
+    private void OnContextKeysChanged(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnContextKeysChanged(sender, e));
+            return;
+        }
+
+        RefreshMenuCheckStates();
+        RefreshExtensionCommandEnablement();
+    }
+
+    private static void AddMenuCommandIds(IEnumerable<ExtensionMenuItemViewModel> items, HashSet<string> commandIds)
+    {
+        foreach (ExtensionMenuItemViewModel item in items.Where(item => item.Command is not null))
+        {
+            commandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel submenu in items.Where(item => item.Children.Count > 0))
+        {
+            AddMenuCommandIds(submenu.Children, commandIds);
+        }
+    }
+
     private void PruneExtensionCommandCache()
     {
         HashSet<string> activeCommandIds = new(StringComparer.Ordinal);
 
-        foreach (ExtensionMenuItemViewModel item in ExtensionMenuItems)
+        // Commands inside submenus stay cached, so context key changes keep updating their enablement.
+        foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
         {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in FileMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in FileNewMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in ViewMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in DebugMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in EditMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in ToolsMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
-        }
-
-        foreach (ExtensionMenuItemViewModel item in WorkspaceMenuItems)
-        {
-            activeCommandIds.Add(item.CommandId);
+            AddMenuCommandIds(menu, activeCommandIds);
         }
 
         foreach (ExtensionToolbarItemViewModel item in MainToolbarItems)
@@ -4736,6 +5558,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             "editing.cut" => CutCommand,
             "editing.copy" => CopyCommand,
             "editing.paste" => PasteCommand,
+            "editing.duplicate" => DuplicateCommand,
             "editing.delete" => DeleteCommand,
             "editing.selectAll" => SelectAllCommand,
             "navigation.renameSymbol" => RenameSymbolCommand,
@@ -4870,7 +5693,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return true;
             default:
                 value = false;
-                return false;
+                return _contextKeys?.TryGet(condition, out value) == true;
         }
     }
 
@@ -4897,6 +5720,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         foreach (IDisposable disposable in items.OfType<IDisposable>().ToList())
         {
+            if (disposable is ExtensionMenuItemViewModel { Children.Count: > 0 } submenu)
+            {
+                DisposeCollectionItems(submenu.Children);
+            }
+
             disposable.Dispose();
         }
 
@@ -4919,6 +5747,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _statusBarItemsById.Clear();
     }
 
+    // A panel joins a layout on its own only when the preset of a new layout lists it, and only once: a panel
+    // that a loaded layout does not contain, or that the user closed, stays closed until the view menu opens it.
+    private void BeginExtensionViewPlacement(IReadOnlySet<string>? presetPanels)
+    {
+        _presetPanels = presetPanels;
+        _placedExtensionViews.Clear();
+    }
+
     private void SyncExtensionDockables()
     {
         if (DockLayout is null)
@@ -4931,7 +5767,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         foreach (ExtensionTool tool in XamlEditorDockFactory.FindDockables<ExtensionTool>(DockLayout))
         {
-            if (string.IsNullOrWhiteSpace(tool.ViewId) || !_extensionViews.ContainsKey(tool.ViewId))
+            if (string.IsNullOrWhiteSpace(tool.ViewId))
             {
                 if (tool.Owner is IDock dock && dock.VisibleDockables is not null)
                 {
@@ -4943,6 +5779,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 tool.ExtensionViewModel = viewModel;
                 tool.Title = viewModel.Title;
                 _extensionTools[tool.ViewId] = tool;
+                _placedExtensionViews.Add(tool.ViewId);
             }
         }
 
@@ -4954,17 +5791,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             string toolId = ExtensionTool.BuildId(view.ViewId);
-            if (DockFactory.IsToolClosed(toolId))
-            {
-                continue;
-            }
-
             ExtensionTool? existing = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, toolId);
             if (existing is not null)
             {
                 existing.ExtensionViewModel = view;
                 existing.Title = view.Title;
                 _extensionTools[view.ViewId] = existing;
+                _placedExtensionViews.Add(view.ViewId);
+                continue;
+            }
+
+            if (_presetPanels?.Contains(view.ViewId) != true || !_placedExtensionViews.Add(view.ViewId))
+            {
                 continue;
             }
 
@@ -4990,55 +5828,317 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (outputTool.Owner is IDock dock && dock.VisibleDockables is not null)
-        {
-            dock.VisibleDockables.Remove(outputTool);
-        }
+        DockFactory.CloseDockable(outputTool);
 
         IsOutputVisible = false;
     }
 
     private void ResetLayout()
     {
-        IsToolboxVisible = true;
-        IsPropertiesVisible = true;
-        IsVisualTreeVisible = true;
-        IsLogicalTreeVisible = true;
-        IsOutputVisible = true;
-        IsCollaborationVisible = false;
-        IsAnimationEditorVisible = true;
-        IsBreakpointsVisible = true;
-        IsCallStackVisible = true;
-        IsLocalsVisible = true;
-        IsWatchesVisible = true;
-        IsExtensionsManagerVisible = false;
+        InstallPresetLayout(FindLayoutPreset(LayoutPresetCatalog.DefaultId)!);
+        SetCurrentLayout(null, isLoaded: false);
 
-        DockFactory.ClearClosedTools();
-        IRootDock layout = DockFactory.CreateDefaultLayout();
+        StatusText = UiStrings.LayoutReset;
+    }
+
+    /// <summary>
+    /// Tracks which layout is active. <paramref name="isLoaded"/> is false for the default layout
+    /// (no status bar entry); a null <paramref name="name"/> with a loaded layout shows "unnamed".
+    /// </summary>
+    private void SetCurrentLayout(string? name, bool isLoaded)
+    {
+        CurrentLayoutName = name;
+        LayoutStatusText = isLoaded
+            ? string.Format(UiStrings.StatusLayoutFormat, name ?? UiStrings.LayoutUnnamed)
+            : null;
+    }
+
+    /// <summary>
+    /// Replaces the active dock layout and re-attaches the open documents and running terminals, which a
+    /// serialized layout does not contain. A loaded layout shows the panels it contains; a layout built from a
+    /// preset receives the extension panels that <paramref name="presetPanels"/> lists.
+    /// </summary>
+    private void InstallLayout(IRootDock layout, IReadOnlySet<string>? presetPanels)
+    {
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
+        DockFactory.EnsureOwnerReferences(layout);
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+        BeginExtensionViewPlacement(presetPanels);
         _extensionTools.Clear();
         SyncExtensionDockables();
+        ReattachRuntimeDockables();
+    }
 
-        // Delete persisted layout so it reloads default on next start
-        try
+    private void ReattachRuntimeDockables()
+    {
+        _dockDocuments.Clear();
+        foreach (IEditorDocumentViewModel document in Documents)
         {
-            string appData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
-            string layoutPath = System.IO.Path.Combine(appData, "XamlVisualEditor", "dock-layout.json");
-            if (System.IO.File.Exists(layoutPath))
+            AddDocumentToDock(document);
+        }
+
+        if (ActiveDocument is IEditorDocumentViewModel active)
+        {
+            SetActiveDockDocument(active);
+        }
+
+        _terminalTools.Clear();
+        foreach (TerminalViewModel terminal in Terminals)
+        {
+            AttachTerminalTool(terminal);
+        }
+    }
+
+    /// <summary>
+    /// Applies one of the ready-made layouts: builds a new layout that contains only the panels of the preset.
+    /// </summary>
+    public void ApplyLayoutPreset(string presetId)
+    {
+        LayoutPreset? preset = FindLayoutPreset(presetId);
+        if (preset is null)
+        {
+            return;
+        }
+
+        InstallPresetLayout(preset);
+        SetCurrentLayout(null, isLoaded: true);
+        StatusText = string.Format(UiStrings.LayoutLoaded, preset.Title);
+    }
+
+    private LayoutPreset? FindLayoutPreset(string presetId)
+    {
+        foreach (LayoutPreset candidate in _layoutPresets)
+        {
+            if (string.Equals(candidate.Id, presetId, StringComparison.OrdinalIgnoreCase))
             {
-                System.IO.File.Delete(layoutPath);
+                return candidate;
             }
         }
-        catch (Exception ex)
+
+        return null;
+    }
+
+    private void InstallPresetLayout(LayoutPreset preset)
+    {
+        IRootDock layout = DockFactory.CreateDefaultLayout(preset.IsVisible);
+        InstallLayout(layout, preset.VisiblePanelIds);
+        ArrangePresetLayout(layout, preset);
+        DockFactory.SaveLayout(layout);
+    }
+
+    private void ArrangePresetLayout(IRootDock layout, LayoutPreset preset)
+    {
+        if (preset.ExpandPinnedPanels)
         {
-            _logger.LogWarning("Failed to delete layout file: {Message}", ex.Message);
+            foreach (IDockable tool in XamlEditorDockFactory.FindDockables<Tool>(layout))
+            {
+                if (tool is not TerminalTool && DockFactory.IsDockablePinned(tool, layout))
+                {
+                    DockFactory.UnpinDockable(tool);
+                }
+            }
         }
 
-        StatusText = "Layout reset";
+        EnsureActiveToolDockables(layout);
+        if (preset.CollapseBottomDock)
+        {
+            DockFactory.CollapseBottomToolDock(layout);
+        }
+
+        IsBreakpointsVisible = preset.IsVisible("Breakpoints");
+        IsCallStackVisible = preset.IsVisible("CallStack");
+        IsLocalsVisible = preset.IsVisible("Locals");
+        IsWatchesVisible = preset.IsVisible("Watches");
+        IsOutputVisible = preset.IsVisible("Output") || preset.IsVisible("output.panel");
+    }
+
+    private static void EnsureActiveToolDockables(IRootDock layout)
+    {
+        foreach (ToolDock dock in XamlEditorDockFactory.FindDockables<ToolDock>(layout))
+        {
+            if (dock.VisibleDockables is null || dock.VisibleDockables.Count == 0)
+            {
+                dock.ActiveDockable = null;
+                continue;
+            }
+
+            if (dock.ActiveDockable is null || !dock.VisibleDockables.Contains(dock.ActiveDockable))
+            {
+                dock.ActiveDockable = dock.VisibleDockables[0];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads a layout that the user saved earlier under the given name.
+    /// </summary>
+    public void LoadUserLayout(string name)
+    {
+        if (!_userLayoutStore.Exists(name))
+        {
+            RefreshSavedLayoutMenuItems();
+            StatusText = string.Format(UiStrings.LayoutNotFound, name);
+            return;
+        }
+
+        IRootDock? layout = DockFactory.LoadLayout(_userLayoutStore.GetPath(name));
+        if (layout is null)
+        {
+            SetPersistentStatus(string.Format(UiStrings.LayoutLoadFailed, name));
+            return;
+        }
+
+        InstallLayout(layout, presetPanels: null);
+        SyncPanelVisibilityFlagsFromLayout();
+        DockFactory.SaveLayout(layout, layoutName: name);
+        SetCurrentLayout(name, isLoaded: true);
+        StatusText = string.Format(UiStrings.LayoutLoaded, name);
+    }
+
+    private void SyncPanelVisibilityFlagsFromLayout()
+    {
+        IsBreakpointsVisible = IsToolVisible("Breakpoints");
+        IsCallStackVisible = IsToolVisible("CallStack");
+        IsLocalsVisible = IsToolVisible("Locals");
+        IsWatchesVisible = IsToolVisible("Watches");
+        IsOutputVisible = IsToolVisible("Output") || IsExtensionViewVisible("output.panel");
+    }
+
+    // The view toggles decide from the layout, not from the visibility flags, which a restored layout does not update.
+    private bool IsDockableShown(string id)
+    {
+        IDockable? dockable = DockLayout is null ? null : XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        if (dockable is not null && DockFactory.IsDockablePinned(dockable, DockLayout))
+        {
+            return DockLayout!.PinnedDock?.VisibleDockables?.Contains(dockable) == true;
+        }
+
+        return IsToolVisible(id);
+    }
+
+    private bool IsToolVisible(string id)
+    {
+        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        return dockable?.Owner is IDock dock
+            && dock.VisibleDockables is not null
+            && dock.VisibleDockables.Contains(dockable);
+    }
+
+    private async Task SaveUserLayoutAsync(bool promptForName)
+    {
+        string? name = CurrentLayoutName;
+        if (promptForName || string.IsNullOrWhiteSpace(name))
+        {
+            name = await LayoutNameInteraction.Handle(name ?? string.Empty);
+            if (name is null)
+            {
+                return;
+            }
+
+            name = name.Trim();
+        }
+
+        if (!_userLayoutStore.IsValidName(name))
+        {
+            StatusText = UiStrings.LayoutInvalidName;
+            return;
+        }
+
+        if (!DockFactory.SaveLayout(DockLayout, _userLayoutStore.GetPath(name)))
+        {
+            SetPersistentStatus(string.Format(UiStrings.LayoutSaveFailed, name));
+            return;
+        }
+
+        SetCurrentLayout(name, isLoaded: true);
+        RefreshSavedLayoutMenuItems();
+        StatusText = string.Format(UiStrings.LayoutSaved, name);
+    }
+
+    /// <summary>
+    /// Deletes the saved file of the active user layout after the user confirmed. The dock keeps
+    /// its current arrangement, which becomes an unnamed layout.
+    /// </summary>
+    private async Task DeleteCurrentLayoutAsync()
+    {
+        string? name = CurrentLayoutName;
+        if (name is null)
+        {
+            return;
+        }
+
+        bool confirmed = await ConfirmLayoutDeleteInteraction.Handle(name);
+        if (!confirmed || !string.Equals(CurrentLayoutName, name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        bool deleted = _userLayoutStore.Delete(name);
+        RefreshSavedLayoutMenuItems();
+        SetCurrentLayout(null, isLoaded: true);
+        StatusText = deleted
+            ? string.Format(UiStrings.LayoutDeleted, name)
+            : string.Format(UiStrings.LayoutNotFound, name);
+    }
+
+    private void OnUserLayoutRenamed(string oldName, string newName)
+    {
+        if (string.Equals(CurrentLayoutName, oldName, StringComparison.Ordinal))
+        {
+            SetCurrentLayout(newName, isLoaded: true);
+        }
+
+        RefreshSavedLayoutMenuItems();
+        StatusText = string.Format(UiStrings.LayoutRenamed, oldName, newName);
+    }
+
+    // The dock keeps the arrangement of a deleted active layout, which becomes an unnamed layout.
+    private void OnUserLayoutDeleted(string name)
+    {
+        if (string.Equals(CurrentLayoutName, name, StringComparison.Ordinal))
+        {
+            SetCurrentLayout(null, isLoaded: true);
+        }
+
+        RefreshSavedLayoutMenuItems();
+        StatusText = string.Format(UiStrings.LayoutDeleted, name);
+    }
+
+    private void InitializeLayoutPresetMenuItems()
+    {
+        DisposeCollectionItems(LayoutPresetMenuItems);
+        int priority = 0;
+        foreach (LayoutPreset preset in _layoutPresets)
+        {
+            string presetId = preset.Id;
+            LayoutPresetMenuItems.Add(new ExtensionMenuItemViewModel(
+                "layout.preset." + presetId,
+                preset.Title,
+                ExtensionMenuLocations.View,
+                "layout.presets",
+                priority += 10,
+                ReactiveCommand.Create(() => ApplyLayoutPreset(presetId))));
+        }
+    }
+
+    private void RefreshSavedLayoutMenuItems()
+    {
+        DisposeCollectionItems(SavedLayoutMenuItems);
+        int priority = 0;
+        foreach (string name in _userLayoutStore.ListNames())
+        {
+            string layoutName = name;
+            SavedLayoutMenuItems.Add(new ExtensionMenuItemViewModel(
+                "layout.user." + layoutName,
+                layoutName,
+                ExtensionMenuLocations.View,
+                "layout.saved",
+                priority += 10,
+                ReactiveCommand.Create(() => LoadUserLayout(layoutName))));
+        }
     }
 
     private sealed partial class NullExtensionManager : IExtensionManager
@@ -5050,12 +6150,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         public Task<ExtensionPackageInfo> InstallAsync(string packagePath, CancellationToken ct)
         {
-            throw new InvalidOperationException("Extension manager unavailable.");
+            throw new InvalidOperationException(UiStrings.ExtensionManagerUnavailable);
         }
 
         public Task UninstallAsync(string extensionId, CancellationToken ct)
         {
-            throw new InvalidOperationException("Extension manager unavailable.");
+            throw new InvalidOperationException(UiStrings.ExtensionManagerUnavailable);
         }
 
         public Task<bool> GetEnabledAsync(string extensionId, CancellationToken ct)
@@ -5065,7 +6165,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         public Task SetEnabledAsync(string extensionId, bool enabled, CancellationToken ct)
         {
-            throw new InvalidOperationException("Extension manager unavailable.");
+            throw new InvalidOperationException(UiStrings.ExtensionManagerUnavailable);
         }
 
         public Task<IReadOnlyList<ExtensionUpdateInfo>> CheckForUpdatesAsync(CancellationToken ct)
@@ -5078,7 +6178,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (_terminalService is null)
         {
-            throw new InvalidOperationException("Terminal service unavailable.");
+            throw new InvalidOperationException(UiStrings.TerminalServiceUnavailable);
         }
 
         TerminalSessionOptions resolved = new()
@@ -5087,9 +6187,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             Rows = options.Rows <= 0 ? 40 : options.Rows,
             ScrollbackLimit = options.ScrollbackLimit <= 0 ? 50000 : options.ScrollbackLimit,
             WorkingDirectory = string.IsNullOrWhiteSpace(options.WorkingDirectory)
-                ? (string.IsNullOrWhiteSpace(_workspacePath)
-                    ? Environment.CurrentDirectory
-                    : System.IO.Path.GetDirectoryName(_workspacePath))
+                ? GetTerminalWorkingDirectory()
                 : options.WorkingDirectory,
             Command = options.Command,
             Arguments = options.Arguments ?? Array.Empty<string>(),
@@ -5110,24 +6208,43 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         ITerminalSession session = _terminalService.CreateSession(resolved);
-        TerminalViewModel terminalVm = new(session);
-        terminalVm.Start();
+        TerminalViewModel terminalVm = new(session, resolved.Command);
+        try { terminalVm.Start(); }
+        catch
+        {
+            terminalVm.Dispose();
+            throw;
+        }
         Terminals.Add(terminalVm);
 
-        if (DockLayout is not null)
+        if (DockLayout is not null && AttachTerminalTool(terminalVm) is not null)
         {
-            TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
-            if (tool is not null)
-            {
-                _terminalTools[terminalVm.Id] = tool;
-                IDisposable titleSubscription = terminalVm.WhenAnyValue(x => x.Title)
-                    .Subscribe(title => tool.Title = title);
-                _terminalTitleSubscriptions[terminalVm.Id] = titleSubscription;
-            }
+            Guid terminalId = terminalVm.Id;
+            // Exited arrives on the reader thread of the PTY session.
+            terminalVm.Exited += _ => Dispatcher.UIThread.Post(() => CloseTerminalSession(terminalId));
         }
 
-        StatusText = "Terminal started";
+        StatusText = XamlVisualEditor.Core.Localization.UiStrings.TerminalInternalStarted;
         return terminalVm;
+    }
+
+    private TerminalTool? AttachTerminalTool(TerminalViewModel terminalVm)
+    {
+        TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
+        if (tool is null)
+        {
+            return null;
+        }
+
+        _terminalTools[terminalVm.Id] = tool;
+        if (_terminalTitleSubscriptions.TryGetValue(terminalVm.Id, out IDisposable? previousSubscription))
+        {
+            previousSubscription.Dispose();
+        }
+
+        _terminalTitleSubscriptions[terminalVm.Id] = terminalVm.WhenAnyValue(x => x.Title)
+            .Subscribe(title => tool.Title = title);
+        return tool;
     }
 
     public Guid? GetActiveTerminalId()
@@ -5170,15 +6287,37 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return true;
     }
 
+    private string GetTerminalWorkingDirectory() => string.IsNullOrWhiteSpace(_workspacePath)
+        ? Environment.CurrentDirectory
+        : System.IO.Directory.Exists(_workspacePath) ? _workspacePath
+            : System.IO.Path.GetDirectoryName(_workspacePath) ?? Environment.CurrentDirectory;
+
     private void CreateTerminalSession()
     {
         try
         {
-            CreateTerminalSession(new TerminalSessionOptions());
+            EditorOptions settings = _editorOptions.Current;
+            TerminalSessionOptions options = new() { WorkingDirectory = GetTerminalWorkingDirectory() };
+            if (OperatingSystem.IsWindows())
+            {
+                options.Command = settings.ShellPath;
+                if (!System.IO.File.Exists(options.Command)) throw new FileNotFoundException(
+                    string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                        XamlVisualEditor.Core.Localization.UiStrings.ExecutableNotFound, options.Command));
+            }
+            if (OperatingSystem.IsWindows() && settings.TerminalLocation == TerminalLocation.External)
+            {
+                if (_terminalService is null) throw new InvalidOperationException(UiStrings.TerminalServiceUnavailable);
+                _terminalService.StartExternalSession(options);
+                StatusText = XamlVisualEditor.Core.Localization.UiStrings.TerminalExternalStarted;
+            }
+            else CreateTerminalSession(options);
         }
-        catch (InvalidOperationException)
+        catch (Exception error)
         {
-            StatusText = "Terminal service unavailable.";
+            SetPersistentStatus(string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                XamlVisualEditor.Core.Localization.UiStrings.TerminalStartFailed, error.Message));
+            _logger.LogError(error, "Terminal startup failed");
         }
     }
     private void OnDebugOutputReceived(DebugOutputEvent output)
@@ -5202,16 +6341,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void OnDebugStopped(DebugStoppedEvent stopped)
     {
-        StatusText = stopped.Description is null
-            ? $"Paused ({stopped.Reason})"
-            : $"Paused ({stopped.Reason}): {stopped.Description}";
+        SetPersistentStatus(stopped.Description is null
+            ? string.Format(UiStrings.DebugPausedReason, stopped.Reason)
+            : string.Format(UiStrings.DebugPausedDescription, stopped.Reason, stopped.Description));
 
         UpdateExecutionLocationFromFrame(Debugger.CallStack.SelectedFrame);
     }
 
     private void OnDebugContinued(DebugContinuedEvent continued)
     {
-        StatusText = "Running";
+        SetPersistentStatus(UiStrings.Running);
         ClearExecutionLocation();
     }
 
@@ -5354,27 +6493,27 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (_workspace is null)
         {
-            StatusText = "Debugging requires a loaded workspace.";
+            StatusText = UiStrings.DebugNeedsWorkspace;
             return;
         }
 
         if (!Debugger.HasDebuggerService)
         {
-            StatusText = "No debugger service is configured.";
+            StatusText = UiStrings.DebuggerNotConfigured;
             return;
         }
 
         ProjectModel? project = ResolveActiveProject();
         if (project is null)
         {
-            StatusText = "No project selected for debugging.";
+            StatusText = UiStrings.NoDebugProject;
             return;
         }
 
         SetActiveProject(project);
         if (!project.IsExecutable)
         {
-            StatusText = "Debug start failed: selected project is not executable.";
+            StatusText = UiStrings.DebugProjectNotExecutable;
             LogOutput("Error", $"Debug start failed: {project.Name} is not an executable project.");
             return;
         }
@@ -5385,13 +6524,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string? assemblyPath = ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(assemblyPath))
         {
-            StatusText = "Unable to resolve the output assembly for debugging.";
+            StatusText = UiStrings.DebugAssemblyUnresolved;
             return;
         }
 
         if (!TryValidateDebugTarget(assemblyPath, out string? failureReason))
         {
-            StatusText = "Debug start failed: selected output is not runnable.";
+            StatusText = UiStrings.DebugOutputNotRunnable;
             LogOutput("Error", failureReason ?? $"Debug start failed: '{assemblyPath}' is not runnable.");
             return;
         }
@@ -5402,7 +6541,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             DebuggerServiceRegistration? activeRegistration = _debuggerRegistry.GetActiveRegistration();
             string serviceName = activeRegistration?.DisplayName ?? "debugger adapter";
-            StatusText = $"Debug start failed: {serviceName} not found.";
+            StatusText = string.Format(UiStrings.DebugServiceMissing, serviceName);
             if (string.Equals(activeRegistration?.Id, NetcoredbgServiceId, StringComparison.Ordinal))
             {
                 LogOutput("Error", AutoDownloadTools
@@ -5439,11 +6578,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         try
         {
             await Debugger.StartAsync(options);
-            StatusText = $"Debugging {System.IO.Path.GetFileName(assemblyPath)}";
+            SetPersistentStatus(string.Format(UiStrings.DebuggingFile, (object?)(System.IO.Path.GetFileName(assemblyPath))));
         }
         catch (Exception ex)
         {
-            StatusText = $"Debug start failed: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.DebugStartFailed, ex.Message));
             LogOutput("Error", $"Debug start failed: {ex.Message}");
         }
     }
@@ -5533,7 +6672,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         try
         {
-            LogOutput("Info", "netcoredbg not found. Attempting to download...");
+            LogOutput("Info", UiStrings.NetcoredbgDownloadStarting);
             string? downloaded = await _debugToolInstaller.EnsureNetcoredbgAsync(ConfirmDebugToolConsentAsync);
             if (!string.IsNullOrWhiteSpace(downloaded))
             {
@@ -5541,12 +6680,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return downloaded;
             }
 
-            LogOutput("Info", "netcoredbg download cancelled.");
+            LogOutput("Info", UiStrings.NetcoredbgDownloadCanceled);
         }
         catch (Exception ex)
         {
             LogOutput("Error", $"netcoredbg download failed: {ex.Message}");
-            StatusText = $"netcoredbg download failed: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.DebuggerDownloadFailed, ex.Message));
         }
 
         return null;
@@ -5603,11 +6742,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ActiveProjectPath = null;
             this.RaisePropertyChanged(nameof(ActiveProjectName));
             SolutionExplorer.SetStartupProject(null);
+            if (!IsWorkspaceLoading) RefreshControlCatalog();
             if (previous is not null)
             {
-                StatusText = "Startup project cleared";
+                StatusText = UiStrings.StartupProjectCleared;
                 LogOutput("Info", $"Startup project cleared (was {previous.Name}).");
             }
+            SaveWorkspaceSession();
             return;
         }
 
@@ -5617,8 +6758,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         ActiveProject = project;
         ActiveProjectPath = project.ProjectPath;
+        if (changed && !IsWorkspaceLoading) RefreshControlCatalog();
         this.RaisePropertyChanged(nameof(ActiveProjectName));
-        StatusText = $"Startup project: {project.Name}";
+        StatusText = string.Format(UiStrings.StartupProjectStatus, project.Name);
         if (changed)
         {
             string previousName = previous?.Name ?? "(none)";
@@ -5629,6 +6771,68 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 $"Startup project changed: {previousName} ({previousTfm}) -> {project.Name} ({currentTfm}) [{project.ProjectPath}]");
         }
         SolutionExplorer.SetStartupProject(project);
+        SaveWorkspaceSession();
+    }
+
+    // Saves the startup project and the open documents of the loaded workspace. Loading, closing and restoring a
+    // workspace change both on their own and must not overwrite the saved session.
+    private void SaveWorkspaceSession()
+    {
+        if (!HasWorkspace || _workspacePath is not { } workspacePath || IsWorkspaceLoading || _isRestoringWorkspaceSession)
+        {
+            return;
+        }
+
+        string[] openDocuments = Documents
+            .Select(document => document.FilePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+            .ToArray();
+        _workspaceSessions.Save(workspacePath, new WorkspaceSession
+        {
+            StartupProjectPath = ActiveProject?.ProjectPath,
+            StartupTargetFramework = ActiveProject?.TargetFramework,
+            OpenDocuments = openDocuments,
+            ActiveDocument = ActiveDocument?.FilePath is { } active && openDocuments.Contains(active, FileSystemPathComparison.Comparer)
+                ? active : null
+        });
+    }
+
+    // Reopens the documents of the previous session in their order and restores the startup project. The documents
+    // open without the open interceptors: the user asked for them in the earlier session.
+    private async System.Threading.Tasks.Task RestoreWorkspaceSessionAsync(string workspacePath, WorkspaceSession? session)
+    {
+        if (session is null || !FileSystemPathComparison.Equals(_workspacePath, workspacePath))
+        {
+            return;
+        }
+
+        _isRestoringWorkspaceSession = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(session.StartupProjectPath)
+                && ResolveProjectByPath(session.StartupProjectPath, session.StartupTargetFramework) is { } startup)
+            {
+                SetActiveProject(startup);
+            }
+
+            IEditorDocumentViewModel? active = null;
+            foreach (string path in session.OpenDocuments)
+            {
+                if (!FileSystemPathValidation.IsAccepted(path) || !System.IO.File.Exists(path)) continue;
+                IEditorDocumentViewModel? document = await EnsureDocumentOpenAsync(path, addRecent: false, updateStatus: false,
+                    allowWorkspaceLoad: false);
+                if (!FileSystemPathComparison.Equals(_workspacePath, workspacePath)) return;
+                if (document is not null && FileSystemPathComparison.Equals(path, session.ActiveDocument)) active = document;
+            }
+
+            if (active is not null && Documents.Contains(active)) ActiveDocument = active;
+        }
+        finally
+        {
+            _isRestoringWorkspaceSession = false;
+        }
+
+        SaveWorkspaceSession();
     }
 
     private void SetActiveProjectByPath(string projectPath)
@@ -5716,12 +6920,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         try
         {
             await Debugger.StopAsync();
-            StatusText = "Debugging stopped";
+            StatusText = UiStrings.DebuggingStopped;
             ClearExecutionLocation();
         }
         catch (Exception ex)
         {
-            StatusText = $"Debug stop failed: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.DebugStopFailed, ex.Message));
         }
     }
 
@@ -5729,27 +6933,27 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (_workspace is null)
         {
-            StatusText = "Running requires a loaded workspace.";
+            StatusText = UiStrings.RunNeedsWorkspace;
             return;
         }
 
         ProjectModel? project = ResolveActiveProject();
         if (project is null)
         {
-            StatusText = "No project selected to run.";
+            StatusText = UiStrings.NoRunProject;
             return;
         }
 
         if (_runProcess is not null && !_runProcess.HasExited)
         {
-            StatusText = "A program is already running.";
+            StatusText = UiStrings.ProgramAlreadyRunning;
             return;
         }
 
         SetActiveProject(project);
         if (!project.IsExecutable)
         {
-            StatusText = "Run failed: selected project is not executable.";
+            StatusText = UiStrings.RunProjectNotExecutable;
             LogOutput("Error", $"Run failed: {project.Name} is not an executable project.");
             return;
         }
@@ -5760,21 +6964,21 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string? runAssemblyPath = ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(runAssemblyPath))
         {
-            StatusText = "Unable to resolve the output assembly for run.";
+            StatusText = UiStrings.RunAssemblyUnresolved;
             return;
         }
 
         if (!TryValidateDebugTarget(runAssemblyPath, out string? runFailure))
         {
-            StatusText = "Run failed: selected output is not runnable.";
-            LogOutput("Error", runFailure ?? "Run failed: selected output is not runnable.");
+            StatusText = UiStrings.RunOutputNotRunnable;
+            LogOutput("Error", runFailure ?? UiStrings.RunOutputNotRunnable);
             return;
         }
 
         string? workingDirectory = System.IO.Path.GetDirectoryName(project.ProjectPath);
         if (string.IsNullOrWhiteSpace(workingDirectory))
         {
-            StatusText = "Unable to resolve working directory for run.";
+            StatusText = UiStrings.RunDirectoryUnresolved;
             return;
         }
 
@@ -5808,7 +7012,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         process.Exited += (_, _) =>
         {
             IsRunActive = false;
-            StatusText = "Program exited";
+            StatusText = UiStrings.ProgramExited;
         };
 
         try
@@ -5818,12 +7022,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             process.BeginErrorReadLine();
             _runProcess = process;
             IsRunActive = true;
-            StatusText = $"Running {project.Name}";
+            SetPersistentStatus(string.Format(UiStrings.RunningProject, project.Name));
             LogOutput("Info", $"Run command: dotnet {args}");
         }
         catch (Exception ex)
         {
-            StatusText = $"Run failed: {ex.Message}";
+            SetPersistentStatus(string.Format(UiStrings.RunFailed, ex.Message));
             LogOutput("Error", ex.Message);
         }
     }
@@ -5851,7 +7055,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             _runProcess.Dispose();
             _runProcess = null;
             IsRunActive = false;
-            StatusText = "Program stopped";
+            StatusText = UiStrings.ProgramStopped;
         }
 
         return System.Threading.Tasks.Task.CompletedTask;
@@ -6037,6 +7241,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             TextDocumentViewModel text => DockFactory.AddTextDocument(DockLayout, text),
             _ => null
         };
+        if (dockDoc is DesignerDocument designerDock) designerDock.TabCommands = DocumentTabCommands;
+        else if (dockDoc is TextDocument textDock) textDock.TabCommands = DocumentTabCommands;
 
         if (dockDoc is not null)
         {
@@ -6045,6 +7251,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             SubscribeDockTitleUpdates(document, dockDoc);
         }
     }
+
+    private void UpdateWindowTitle() =>
+        Title = DocumentTitle.FormatWindow(ActiveDocument?.FileName, ActiveDocument?.FilePath,
+            _editorOptions.Current.ShowFullPathInTitle);
 
     private void UpdateDockTitle(IEditorDocumentViewModel document, IDockable dockDoc)
     {
@@ -6056,8 +7266,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return document switch
         {
             DesignerDocumentViewModel designer => designer.Title,
-            TextDocumentViewModel text => text.IsModified ? $"{text.FileName}*" : text.FileName,
-            _ => document.IsModified ? $"{document.FileName}*" : document.FileName
+            _ => DocumentTitle.Format(document.FileName, document.IsModified, document.IsReadOnlyFile)
         };
     }
 
@@ -6077,7 +7286,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 h => notifying.PropertyChanged += h,
                 h => notifying.PropertyChanged -= h)
             .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) ||
-                        e.EventArgs.PropertyName == nameof(IEditorDocumentViewModel.IsModified))
+                        e.EventArgs.PropertyName is nameof(IEditorDocumentViewModel.IsModified)
+                            or nameof(IEditorDocumentViewModel.IsReadOnlyFile))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateDockTitle(document, dockDoc));
 
@@ -6114,6 +7324,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private void WireDockEvents()
     {
         DockFactory.ActiveDockableChanged += OnActiveDockableChanged;
+        DockFactory.DockableClosing += OnDockableClosing;
         DockFactory.DockableClosed += OnDockableClosed;
     }
 
@@ -6194,25 +7405,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 _activeExtensionViewId = null;
             }
         }
-
-        // The shell recreates missing tools on every start, so a closed tool must
-        // be remembered or it reappears on the next run. Closing a pinned tool
-        // also has to leave the pinned lists, or the pin strip keeps showing it.
-        if (e.Dockable is Tool closedTool
-            && closedTool is not TerminalTool
-            && !string.IsNullOrWhiteSpace(closedTool.Id))
-        {
-            DockFactory.MarkToolClosed(closedTool.Id);
-
-            if (DockLayout is not null)
-            {
-                DockLayout.HiddenDockables?.Remove(closedTool);
-                DockLayout.LeftPinnedDockables?.Remove(closedTool);
-                DockLayout.RightPinnedDockables?.Remove(closedTool);
-                DockLayout.TopPinnedDockables?.Remove(closedTool);
-                DockLayout.BottomPinnedDockables?.Remove(closedTool);
-            }
-        }
     }
 
     private void RemoveTerminalSession(TerminalViewModel terminalVm)
@@ -6233,7 +7425,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id)
+            ?? (isVisible ? RecreateDebuggerTool(id) : null);
         if (dockable is null)
         {
             string? extensionViewId = MapLegacyToolToExtensionView(id);
@@ -6242,31 +7435,127 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             {
                 return;
             }
+            return;
+        }
 
-            // A closed built-in tool was removed from the layout; showing it again
-            // means recreating it.
-            if (isVisible && DockFactory.ReopenBuiltInTool(DockLayout, id) is { } reopened)
-            {
-                DockFactory.SetActiveDockable(reopened);
-            }
+        SetToolVisibility(dockable, isVisible);
+        if (isVisible && !IsDockableShown(id))
+        {
+            FloatTool(dockable);
+        }
+    }
 
+    // Closing a debugger tool in the dock removes it from the layout. The view menu opens a new one, which joins the
+    // hidden tools, so SetToolVisibility moves it into its home dock like a hidden tool of a restored layout.
+    private IDockable? RecreateDebuggerTool(string id)
+    {
+        Tool? tool = id switch
+        {
+            "Breakpoints" => new BreakpointsTool(Breakpoints),
+            "CallStack" => new CallStackTool(CallStack),
+            "Locals" => new LocalsTool(Locals),
+            "Watches" => new WatchesTool(Watches),
+            _ => null
+        };
+        if (tool is null || DockLayout is null)
+        {
+            return null;
+        }
+
+        DockLayout.HiddenDockables ??= DockFactory.CreateList<IDockable>();
+        tool.Owner = DockLayout;
+        DockLayout.HiddenDockables.Add(tool);
+        return tool;
+    }
+
+    private void SetToolVisibility(IDockable dockable, bool isVisible)
+    {
+        if (isVisible)
+        {
+            PlaceHiddenToolWithoutDock(dockable);
+        }
+
+        if (DockFactory.IsDockablePinned(dockable, DockLayout))
+        {
+            if (isVisible)
+                DockFactory.PreviewPinnedDockable(dockable);
+            else if (DockLayout.PinnedDock?.VisibleDockables?.Contains(dockable) == true)
+                DockFactory.HidePreviewingDockables(DockLayout);
             return;
         }
 
         if (isVisible)
         {
-            DockFactory.MarkToolReopened(id);
-        }
-
-        if (isVisible)
-        {
             DockFactory.RestoreDockable(dockable);
+            XamlEditorDockFactory.RestoreSideDockWidth(dockable);
             DockFactory.SetActiveDockable(dockable);
+            if (dockable.Owner is IDock owner && owner is not IRootDock)
+                DockFactory.SetFocusedDockable(owner, dockable);
         }
         else
         {
             DockFactory.HideDockable(dockable);
         }
+    }
+
+    // A restored layout stores hidden tools with the root dock as owner, so restoring them would put them into the
+    // root where nothing renders them. Such a tool moves into its home tool dock instead: the dock of its extension
+    // location, or the bottom dock for the debugger tools. A collapsed bottom dock keeps its tools pinned, so the
+    // tool joins them there.
+    private void PlaceHiddenToolWithoutDock(IDockable dockable)
+    {
+        if (DockLayout?.HiddenDockables is not { } hidden
+            || !hidden.Contains(dockable)
+            || dockable.Owner is not (null or IRootDock))
+        {
+            return;
+        }
+
+        string dockId = dockable is ExtensionTool { ExtensionViewModel: { } view }
+            ? view.Location switch
+            {
+                ExtensionViewLocation.Left => "LeftToolDock",
+                ExtensionViewLocation.Bottom => "BottomToolDock",
+                _ => "RightToolDock"
+            }
+            : "BottomToolDock";
+        IDock? home = XamlEditorDockFactory.FindDockable<IToolDock>(DockLayout, dockId)
+            ?? XamlEditorDockFactory.FindDockables<IToolDock>(DockLayout).FirstOrDefault(dock => dock is not IRootDock);
+        hidden.Remove(dockable);
+        if (home is null)
+        {
+            FloatTool(dockable);
+            return;
+        }
+
+        DockFactory.AddDockable(home, dockable);
+        dockable.Owner = home;
+        if (home is ToolDock { Proportion: 0 } && string.Equals(home.Id, "BottomToolDock", StringComparison.Ordinal))
+        {
+            DockFactory.PinDockable(dockable);
+            dockable.GetPinnedBounds(out _, out _, out double width, out double height);
+            if (!double.IsFinite(width) || width <= 0 || !double.IsFinite(height) || height <= 0)
+            {
+                dockable.SetPinnedBounds(0, 0, 400, 300);
+            }
+        }
+    }
+
+    // Last resort of the view menu: a tool that no dock can show opens in its own window.
+    private void FloatTool(IDockable dockable)
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        DockLayout.HiddenDockables?.Remove(dockable);
+        if (dockable.Owner is IDock owner && owner.VisibleDockables?.Contains(dockable) == true)
+        {
+            owner.VisibleDockables.Remove(dockable);
+        }
+
+        DockFactory.SplitToWindow(DockLayout, dockable, 200, 200, 600, 400);
     }
 
     private static string? MapLegacyToolToExtensionView(string id)
@@ -6296,13 +7585,51 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
+    // A view that is open behind another tab of its dock is brought to the front; only the active tab is hidden.
     public void ToggleExtensionView(string viewId)
     {
         if (TryResolveExtensionViewId(viewId, out string resolved))
         {
             bool isVisible = IsExtensionViewVisible(resolved);
+            if (isVisible && !IsExtensionViewFrontmost(resolved))
+            {
+                ActivateExtensionView(resolved);
+                return;
+            }
+
             TrySetExtensionDockableVisibility(resolved, !isVisible);
         }
+    }
+
+    // A tool closed with its tab button leaves the layout but stays in the lookup; it counts as missing, so
+    // showing the view creates a new tool instead of restoring one that no dock contains.
+    private ExtensionTool? FindExtensionTool(string viewId)
+    {
+        if (DockLayout is null)
+        {
+            return null;
+        }
+
+        ExtensionTool? tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
+        if (tool is null)
+        {
+            _extensionTools.Remove(viewId);
+        }
+
+        return tool;
+    }
+
+    private bool IsExtensionViewFrontmost(string viewId)
+    {
+        if (DockLayout is null)
+        {
+            return false;
+        }
+
+        ExtensionTool? tool = FindExtensionTool(viewId);
+
+        return tool is not null
+            && (DockFactory.IsDockablePinned(tool, DockLayout) || (tool.Owner is IDock dock && ReferenceEquals(dock.ActiveDockable, tool)));
     }
 
     public bool IsExtensionViewVisible(string viewId)
@@ -6317,9 +7644,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
-        if (!_extensionTools.TryGetValue(resolved, out ExtensionTool? tool))
+        ExtensionTool? tool = FindExtensionTool(resolved);
+
+        if (tool is not null && DockFactory.IsDockablePinned(tool, DockLayout))
         {
-            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(resolved));
+            return DockLayout.PinnedDock?.VisibleDockables?.Contains(tool) == true;
         }
 
         if (tool?.Owner is not IDock dock || dock.VisibleDockables is null)
@@ -6342,9 +7671,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (!_extensionTools.TryGetValue(resolved, out ExtensionTool? tool))
+        ExtensionTool? tool = FindExtensionTool(resolved);
+
+        if (tool is null && TrySetExtensionDockableVisibility(resolved, true))
         {
-            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(resolved));
+            _extensionTools.TryGetValue(resolved, out tool);
         }
 
         if (tool is null)
@@ -6353,11 +7684,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         bool wasVisible = IsExtensionViewVisible(resolved);
-        DockFactory.SetActiveDockable(tool);
-        if (tool.Owner is IDock owner)
-        {
-            DockFactory.SetFocusedDockable(owner, tool);
-        }
+        SetToolVisibility(tool, true);
         if (!wasVisible)
         {
             RaiseExtensionViewVisibilityChanged(resolved, true);
@@ -6372,64 +7699,45 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
-        if (isVisible)
-        {
-            DockFactory.MarkToolReopened(ExtensionTool.BuildId(viewId));
-        }
+        ExtensionTool? tool = FindExtensionTool(viewId);
 
-        if (!_extensionTools.TryGetValue(viewId, out ExtensionTool? tool))
+        bool wasVisible = IsExtensionViewVisible(viewId);
+        if (tool is null && isVisible && _extensionViews.TryGetValue(viewId, out ExtensionViewModel? viewModel))
         {
-            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
+            tool = DockFactory.AddExtensionTool(DockLayout, viewModel);
+            if (tool is null)
+            {
+                tool = new ExtensionTool(viewModel);
+                FloatTool(tool);
+            }
+
+            _extensionTools[viewId] = tool;
         }
 
         if (tool is null)
         {
-            // A closed tool was removed from the layout; showing it again means
-            // recreating it.
-            if (!isVisible || !_extensionViews.TryGetValue(viewId, out ExtensionViewModel? viewModel))
-            {
-                return false;
-            }
-
-            tool = DockFactory.AddExtensionTool(DockLayout, viewModel);
-            if (tool is null)
-            {
-                return false;
-            }
-
-            _extensionTools[viewId] = tool;
-            DockFactory.SetActiveDockable(tool);
-            UpdateActiveExtensionViewFocus(viewId);
-            RaiseExtensionViewVisibilityChanged(viewId, true);
-            return true;
+            return false;
         }
 
-        bool wasVisible = tool.Owner is IDock beforeDock
-            && beforeDock.VisibleDockables is not null
-            && beforeDock.VisibleDockables.Contains(tool);
-
+        SetToolVisibility(tool, isVisible);
         if (isVisible)
         {
-            DockFactory.RestoreDockable(tool);
-            DockFactory.SetActiveDockable(tool);
-            if (tool.Owner is IDock owner)
+            if (!IsExtensionViewVisible(viewId))
             {
-                DockFactory.SetFocusedDockable(owner, tool);
+                FloatTool(tool);
             }
+
             UpdateActiveExtensionViewFocus(viewId);
         }
         else
         {
-            DockFactory.HideDockable(tool);
             if (string.Equals(_activeExtensionViewId, viewId, StringComparison.OrdinalIgnoreCase))
             {
                 UpdateActiveExtensionViewFocus(null);
             }
         }
 
-        bool isVisibleNow = tool.Owner is IDock afterDock
-            && afterDock.VisibleDockables is not null
-            && afterDock.VisibleDockables.Contains(tool);
+        bool isVisibleNow = IsExtensionViewVisible(viewId);
         if (wasVisible != isVisibleNow)
         {
             RaiseExtensionViewVisibilityChanged(viewId, isVisibleNow);
@@ -6498,7 +7806,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         if (!_isClosingFromDock)
         {
-            CloseDockDocument(doc);
+            _isClosingDocument = true;
+            try
+            {
+                CloseDockDocument(doc);
+            }
+            finally
+            {
+                _isClosingDocument = false;
+            }
         }
 
         if (_dockTitleSubscriptions.Remove(doc, out IDisposable? subscription))
@@ -6513,8 +7829,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ActiveDocument = Documents.FirstOrDefault();
         }
         DetachAutoSave(doc);
+        if (doc is DesignerDocumentViewModel designer)
+        {
+            designer.CloseRequested -= CloseDocument;
+            designer.PreviewerSession = null;
+            _previewerActivationOrder.Remove(designer);
+            _previewerLaunchService.StopPreviewer(designer.FilePath);
+        }
         doc.Dispose();
-        StatusText = $"Closed {doc.FileName}";
+        StatusText = string.Format(UiStrings.DocumentClosed, doc.FileName);
     }
 
     /// <summary>
@@ -6525,41 +7848,123 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return OpenFileAsync(filePath, allowWorkspaceLoad: true);
     }
 
-    internal System.Threading.Tasks.Task OpenFileAsync(string filePath, bool allowWorkspaceLoad)
+    internal async System.Threading.Tasks.Task<IEditorDocumentViewModel?> OpenFileAsync(string filePath, bool allowWorkspaceLoad)
     {
-        return EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
+        if (await ResolveUserOpenPathAsync(filePath) is not { } resolvedPath)
+            return null;
+        return await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
     }
 
-    public System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
+    // Only opens the user asked for consult the interceptors; navigation into a file keeps the file itself.
+    // Returns null when an interceptor cancelled the open.
+    private async System.Threading.Tasks.Task<string?> ResolveUserOpenPathAsync(string filePath)
     {
-        if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
+        if (FileSystemPathValidation.IsAccepted(filePath))
         {
-            StatusText = "Folder not found";
-            return System.Threading.Tasks.Task.CompletedTask;
+            filePath = NormalizeDocumentPath(filePath);
         }
 
-        _workspace = null;
-        _workspacePath = folderPath;
-        _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
-        HasWorkspace = false;
+        if (_documentOpenResolver is null
+            || !FileSystemPathValidation.IsAccepted(filePath)
+            || !System.IO.File.Exists(filePath)
+            || Documents.Any(document => FileSystemPathComparison.Equals(document.FilePath, filePath)))
+        {
+            return filePath;
+        }
 
+        try
+        {
+            return await _documentOpenResolver.ResolveAsync(filePath, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = string.Format(UiStrings.OpenCanceled, (object?)(System.IO.Path.GetFileName(filePath)));
+            return null;
+        }
+    }
+
+    private async Task CloseWorkspaceAsync()
+    {
+        if (!await ConfirmCloseAsync(Documents.ToArray()))
+        {
+            return;
+        }
+
+        IsWorkspaceLoading = true;
+        try
+        {
+            foreach (IEditorDocumentViewModel document in Documents.ToArray()) CloseDocument(document);
+            _backNavigation.Clear();
+            _forwardNavigation.Clear();
+            UpdateNavigationState();
+            await ResetWorkspaceStateAsync(workspacePath: null);
+            StatusText = UiStrings.WorkspaceClosed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Workspace close failed: {Message}", ex.Message);
+            SetPersistentStatus(string.Format(UiStrings.WorkspaceCloseFailed, ex.Message));
+        }
+        finally
+        {
+            IsWorkspaceLoading = false;
+        }
+    }
+
+    public async System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
+    {
+        if (RejectInvalidPath(folderPath))
+        {
+            RemoveRecentFile(folderPath, RecentEntryKind.Folder);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
+        {
+            RemoveRecentFile(folderPath, RecentEntryKind.Folder);
+            StatusText = UiStrings.FolderNotFound;
+            return;
+        }
+
+        StopDocumentPreviewers();
+        await ResetWorkspaceStateAsync(folderPath);
+
+        string name = System.IO.Path.GetFileName(folderPath.TrimEnd(
+            System.IO.Path.DirectorySeparatorChar,
+            System.IO.Path.AltDirectorySeparatorChar));
+        StatusText = string.Format(UiStrings.FolderOpened, name);
+        LogOutput("Info", $"Opened folder: {folderPath}");
+        AddRecentFile(System.IO.Path.TrimEndingDirectorySeparator(folderPath), RecentEntryKind.Folder);
+    }
+
+    // Drops everything that belongs to the previous solution: projects, assemblies, design themes and language state.
+    private async System.Threading.Tasks.Task ResetWorkspaceStateAsync(string? workspacePath)
+    {
+        _workspace = null;
+        _workspacePath = workspacePath;
+        _workspaceInfoUpdater?.UpdateWorkspacePath(workspacePath);
+        HasWorkspace = false;
+        _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
         WorkspaceProjects.Clear();
         _projectLookup.Clear();
         SetActiveProject(null);
         SolutionExplorer.Clear();
         SolutionExplorer.IsVisible = false;
+        _assemblyResolver?.Dispose();
+        _assemblyResolver = null;
+        WorkspaceDesignThemeRegistry.Clear();
 
-        string name = System.IO.Path.GetFileName(folderPath.TrimEnd(
-            System.IO.Path.DirectorySeparatorChar,
-            System.IO.Path.AltDirectorySeparatorChar));
-        StatusText = $"Opened folder {name}";
-        LogOutput("Info", $"Opened folder: {folderPath}");
-        return System.Threading.Tasks.Task.CompletedTask;
+        if (_languageRegistry is not null)
+        {
+            foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+                await service.ClearWorkspaceAsync();
+        }
     }
 
     private async System.Threading.Tasks.Task OpenFromSolutionExplorerAsync(string filePath)
     {
-        await EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
+        if (await ResolveUserOpenPathAsync(filePath) is { } resolvedPath)
+            await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
     }
 
     private async System.Threading.Tasks.Task OpenDroppedPathsAsync(IReadOnlyList<string> paths)
@@ -6577,10 +7982,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         foreach (string path in paths.Distinct(FileSystemPathComparison.Comparer))
         {
-            await EnsureDocumentOpenAsync(path, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
+            if (await ResolveUserOpenPathAsync(path) is { } resolvedPath)
+                await EnsureDocumentOpenAsync(resolvedPath, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
         }
 
-        StatusText = $"Opened {paths.Count} files";
+        StatusText = string.Format(UiStrings.FilesOpened, paths.Count);
     }
 
     private async System.Threading.Tasks.Task<IEditorDocumentViewModel?> EnsureDocumentOpenAsync(
@@ -6589,10 +7995,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         bool updateStatus,
         bool allowWorkspaceLoad)
     {
+        if (RejectInvalidPath(filePath))
+        {
+            RemoveRecentFile(filePath);
+            return null;
+        }
+
+        filePath = NormalizeDocumentPath(filePath);
         if (!System.IO.File.Exists(filePath))
         {
             RemoveRecentFile(filePath);
-            StatusText = $"File not found: {System.IO.Path.GetFileName(filePath)}";
+            StatusText = string.Format(UiStrings.FileNotFoundStatus, (object?)(System.IO.Path.GetFileName(filePath)));
             return null;
         }
 
@@ -6602,9 +8015,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)))
         {
             await LoadWorkspaceAsync(filePath);
-            if (addRecent)
+            if (addRecent && HasWorkspace && FileSystemPathComparison.Equals(_workspacePath, filePath))
             {
-                AddRecentFile(filePath);
+                AddRecentFile(filePath, RecentEntryKind.Workspace);
             }
             return null;
         }
@@ -6615,11 +8028,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             await TryLoadWorkspaceForXamlAsync(filePath);
         }
 
-        IEditorDocumentViewModel? existing = Documents.FirstOrDefault(d => d.FilePath == filePath);
+        IEditorDocumentViewModel? existing = Documents.FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
         if (existing is not null)
         {
             ActiveDocument = existing;
             SetActiveDockDocument(existing);
+            if (addRecent) AddRecentFile(filePath);
             return existing;
         }
 
@@ -6633,14 +8047,26 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 OpenFileAsync,
                 _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
                 _loggerFactory,
-                _languageRegistry);
-            designer.StartPreviewerCommand = StartPreviewerCommand;
+                _languageRegistry,
+                StartPreviewerForDocumentAsync,
+                UpdatePreviewerForDocumentAsync);
             designer.Breakpoints = Breakpoints;
+            designer.CloseRequested += CloseDocument;
+            ConfigureDesignerCommands(designer);
             Documents.Add(designer);
             ActiveDocument = designer;
             AddDocumentToDock(designer);
             AttachAutoSave(designer);
-            await designer.LoadAsync();
+            try
+            {
+                await designer.LoadAsync();
+            }
+            catch (Exception ex) when (IsDocumentReadFailure(ex))
+            {
+                DiscardUnreadableDocument(designer, ex);
+                return null;
+            }
+            if (designer.IsDisposed || !Documents.Contains(designer)) return null;
             UpdateTrees(designer);
             doc = designer;
         }
@@ -6652,7 +8078,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ActiveDocument = textDoc;
             AddDocumentToDock(textDoc);
             AttachAutoSave(textDoc);
-            await textDoc.LoadAsync();
+            try
+            {
+                await textDoc.LoadAsync();
+            }
+            catch (Exception ex) when (IsDocumentReadFailure(ex))
+            {
+                DiscardUnreadableDocument(textDoc, ex);
+                return null;
+            }
             UpdateTrees(null);
             doc = textDoc;
         }
@@ -6664,53 +8098,109 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         if (updateStatus)
         {
-            StatusText = $"Opened {System.IO.Path.GetFileName(filePath)}";
+            StatusText = string.Format(UiStrings.FileOpened, (object?)(System.IO.Path.GetFileName(filePath)));
         }
 
         return doc;
     }
 
+    // Document identity uses the full path, so one file reached through different spellings maps to one document.
+    private static string NormalizeDocumentPath(string filePath)
+    {
+        try
+        {
+            return System.IO.Path.GetFullPath(filePath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or System.IO.PathTooLongException)
+        {
+            return filePath;
+        }
+    }
+
+    private static bool IsDocumentReadFailure(Exception error) =>
+        error is DecoderFallbackException or System.IO.IOException or UnauthorizedAccessException;
+
+    // The tab is added before the file is read; a file that cannot be read must not leave an empty tab behind.
+    private void DiscardUnreadableDocument(IEditorDocumentViewModel document, Exception error)
+    {
+        _logger.LogWarning("Open document failed: {Path}: {Message}", document.FilePath, error.Message);
+        string fileName = document.FileName;
+        string reason = error is DecoderFallbackException
+            ? UiStrings.DocumentNotUtf8Reason
+            : FileSystemErrorMessages.DescribeReason(error, document.FilePath);
+        CloseDocument(document);
+        SetPersistentStatus(string.Format(UiStrings.DocumentOpenFailedNamed, fileName, reason));
+    }
+
+    private async Task OpenRecentAsync(RecentFileEntry entry)
+    {
+        if (entry.Kind == RecentEntryKind.Folder)
+        {
+            await OpenFolderAsync(entry.FilePath);
+        }
+        else if (entry.Kind == RecentEntryKind.Workspace)
+        {
+            if (!System.IO.File.Exists(entry.FilePath))
+            {
+                RemoveRecentFile(entry.FilePath);
+                StatusText = string.Format(UiStrings.FileNotFoundStatus, entry.DisplayName);
+                return;
+            }
+            await LoadWorkspaceAsync(entry.FilePath);
+            if (HasWorkspace && FileSystemPathComparison.Equals(_workspacePath, entry.FilePath))
+                AddRecentFile(entry.FilePath, entry.Kind);
+        }
+        else
+        {
+            await OpenFileAsync(entry.FilePath, allowWorkspaceLoad: false);
+        }
+    }
+
     private void LoadRecentFiles()
     {
         _isLoadingRecentFiles = true;
+        int rejectedEntries = 0;
         try
         {
-            string path = GetRecentFilesPath();
-            if (!System.IO.File.Exists(path))
+            if (_recentFilesPath is not { } path || !System.IO.File.Exists(path))
             {
                 return;
             }
 
             string json = ReadRecentFilesText(path);
-            List<string>? recent = JsonSerializer.Deserialize<List<string>>(json);
-            if (recent is null)
-            {
-                return;
-            }
+            using JsonDocument recent = JsonDocument.Parse(json);
+            if (recent.RootElement.ValueKind != JsonValueKind.Array) return;
 
             HashSet<string> seen = new(FileSystemPathComparison.Comparer);
-            foreach (string filePath in recent)
+            foreach (JsonElement element in recent.RootElement.EnumerateArray())
             {
-                if (string.IsNullOrWhiteSpace(filePath))
+                RecentFileEntry? entry;
+                if (element.ValueKind == JsonValueKind.String)
                 {
+                    // An older history holds paths only, so classify the entry once by its target.
+                    string? filePath = element.GetString();
+                    if (string.IsNullOrWhiteSpace(filePath)) continue;
+                    string extension = System.IO.Path.GetExtension(filePath);
+                    RecentEntryKind kind = System.IO.Directory.Exists(filePath) ? RecentEntryKind.Folder
+                        : extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)
+                          || extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+                          || extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
+                            ? RecentEntryKind.Workspace : RecentEntryKind.File;
+                    entry = new RecentFileEntry(filePath, kind);
+                }
+                else
+                {
+                    entry = element.Deserialize<RecentFileEntry>();
+                }
+                if (entry is null || string.IsNullOrWhiteSpace(entry.FilePath) || !Enum.IsDefined(entry.Kind)) continue;
+                if (!FileSystemPathValidation.IsAccepted(entry.FilePath))
+                {
+                    _logger.LogWarning("Rejected recent entry with an invalid path: {Path}", entry.FilePath);
+                    rejectedEntries++;
                     continue;
                 }
-
-                if (!System.IO.File.Exists(filePath))
-                {
-                    continue;
-                }
-
-                if (!seen.Add(filePath))
-                {
-                    continue;
-                }
-
-                RecentFiles.Add(new RecentFileEntry(filePath));
-                if (RecentFiles.Count >= RecentFilesLimit)
-                {
-                    break;
-                }
+                if (!seen.Add(entry.Kind + "\0" + entry.FilePath)) continue;
+                RecentFiles.Add(entry);
             }
         }
         catch (Exception ex)
@@ -6721,34 +8211,38 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             _isLoadingRecentFiles = false;
         }
+
+        // Rewriting the list removes rejected entries from the stored history as well.
+        if (rejectedEntries > 0)
+            SaveRecentFiles();
+    }
+
+    private bool RejectInvalidPath(string path)
+    {
+        if (FileSystemPathValidation.IsAccepted(path))
+            return false;
+
+        _logger.LogWarning("Rejected invalid path: {Path}", path);
+        SetPersistentStatus(string.Format(UiStrings.InvalidPathRejected, path));
+        return true;
     }
 
     private void SaveRecentFiles()
     {
-        if (_isLoadingRecentFiles)
+        if (_isLoadingRecentFiles || _recentFilesPath is null)
         {
             return;
         }
 
         try
         {
-            string path = GetRecentFilesPath();
-            List<string> recent = RecentFiles.Select(entry => entry.FilePath).ToList();
-            string json = JsonSerializer.Serialize(recent, new JsonSerializerOptions { WriteIndented = true });
-            WriteRecentFilesText(path, json);
+            string json = JsonSerializer.Serialize(RecentFiles, new JsonSerializerOptions { WriteIndented = true });
+            WriteRecentFilesText(_recentFilesPath, json);
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Failed to save recent files: {Message}", ex.Message);
         }
-    }
-
-    private static string GetRecentFilesPath()
-    {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = System.IO.Path.Combine(appData, "XamlVisualEditor");
-        System.IO.Directory.CreateDirectory(dir);
-        return System.IO.Path.Combine(dir, "recent-files.json");
     }
 
     private static string ReadRecentFilesText(string path)
@@ -6768,7 +8262,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
         }
 
-        return System.IO.File.ReadAllText(path);
+        return SharedFileReader.ReadAllText(path);
     }
 
     private static void WriteRecentFilesText(string path, string content)
@@ -6792,11 +8286,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         System.IO.File.WriteAllText(path, content);
     }
 
-    private int IndexOfRecentFile(string filePath)
+    private int IndexOfRecentFile(string filePath, RecentEntryKind kind)
     {
         for (int i = 0; i < RecentFiles.Count; i++)
         {
-            if (FileSystemPathComparison.Equals(RecentFiles[i].FilePath, filePath))
+            if (RecentFiles[i].Kind == kind && FileSystemPathComparison.Equals(RecentFiles[i].FilePath, filePath))
             {
                 return i;
             }
@@ -6805,27 +8299,27 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return -1;
     }
 
-    private void AddRecentFile(string filePath)
+    private void AddRecentFile(string filePath, RecentEntryKind kind = RecentEntryKind.File)
     {
-        int existingIndex = IndexOfRecentFile(filePath);
+        if (!FileSystemPathValidation.IsAccepted(filePath))
+            return;
+
+        int existingIndex = IndexOfRecentFile(filePath, kind);
         if (existingIndex >= 0)
         {
             RecentFiles.RemoveAt(existingIndex);
         }
 
-        RecentFiles.Insert(0, new RecentFileEntry(filePath));
-        while (RecentFiles.Count > RecentFilesLimit)
-        {
-            RecentFiles.RemoveAt(RecentFiles.Count - 1);
-        }
+        RecentFiles.Insert(0, new RecentFileEntry(filePath, kind));
     }
 
-    private void RemoveRecentFile(string filePath)
+    private void RemoveRecentFile(string filePath, RecentEntryKind? kind = null)
     {
-        int index = IndexOfRecentFile(filePath);
-        if (index >= 0)
+        for (int index = RecentFiles.Count - 1; index >= 0; index--)
         {
-            RecentFiles.RemoveAt(index);
+            RecentFileEntry entry = RecentFiles[index];
+            if ((kind is null || entry.Kind == kind) && FileSystemPathComparison.Equals(entry.FilePath, filePath))
+                RecentFiles.RemoveAt(index);
         }
     }
 
@@ -6833,15 +8327,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string workspacePath,
         CancellationToken cancellationToken = default)
     {
+        if (RejectInvalidPath(workspacePath))
+            return;
+
         if (_workspaceService is null || _metadataService is null)
         {
-            StatusText = "Workspace services are unavailable";
+            SetPersistentStatus(UiStrings.WorkspaceServicesUnavailable);
             return;
         }
 
         if (IsWorkspaceLoading || IsWorkspaceCommandRunning)
         {
-            StatusText = "A workspace operation is already running";
+            StatusText = UiStrings.WorkspaceBusy;
             return;
         }
 
@@ -6849,9 +8346,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         string extension = System.IO.Path.GetExtension(workspacePath);
         string workspaceName = System.IO.Path.GetFileName(workspacePath);
-        StatusText = $"Loading workspace {workspaceName}";
+        SetPersistentStatus(string.Format(UiStrings.WorkspaceLoadingStatus, workspaceName));
         LogOutput("Info", $"Loading workspace: {workspacePath}");
         IsWorkspaceLoading = true;
+        WorkspaceSession? session = _workspaceSessions.Load(workspacePath);
+        bool loaded = false;
 
         try
         {
@@ -6868,12 +8367,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 _logger.LogWarning("Workspace load failed: {Message}", ex.Message);
                 LogOutput("Error", $"Workspace load failed: {ex.Message}");
                 LogWorkspaceEnvironment(workspacePath);
-                StatusText = $"Workspace load failed: {ex.Message}";
+                SetPersistentStatus(string.Format(UiStrings.WorkspaceLoadFailed, ex.Message));
                 HasWorkspace = false;
                 return;
             }
 
+            StopDocumentPreviewers();
             _workspace = workspace;
+            _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
             _workspacePath = workspacePath;
             _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
             HasWorkspace = true;
@@ -6903,12 +8404,26 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
             if (assemblySet.All.Count > 0)
             {
-                StatusText = $"Loading workspace {workspaceName}: reading assemblies...";
+                SetPersistentStatus(string.Format(UiStrings.WorkspaceAssembliesLoading, workspaceName));
                 ApplyAssemblyResolver(assemblySet);
-                _metadataService.LoadAssemblies(assemblySet.All);
+                await Task.Run(() =>
+                {
+                    _metadataService.LoadAssemblies(assemblySet.All);
+                }, cancellationToken);
                 UpdateWorkspaceDesignThemes(workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
             }
+
+            foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>().ToArray())
+            {
+                if (document.UseExternalPreviewer)
+                    await StartPreviewerForDocumentAsync(document);
+                else
+                    document.UseExternalPreviewer = true;
+            }
+
+            if (assemblySet.All.Count > 0) ShowExtensionView("toolbox.panel");
+            RefreshControlCatalog();
 
             if (_languageRegistry is not null)
             {
@@ -6918,13 +8433,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 }
             }
 
-            StatusText = $"Loaded workspace {name}";
+            StatusText = string.Format(UiStrings.WorkspaceLoadedStatus, name);
             LogOutput("Info", $"Loaded workspace: {name}");
             StartLanguageWorkspaceWarmup();
+            loaded = true;
         }
         finally
         {
             IsWorkspaceLoading = false;
+        }
+
+        if (loaded)
+        {
+            await RestoreWorkspaceSessionAsync(workspacePath, session);
         }
     }
 
@@ -6944,9 +8465,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async Task WarmLanguageWorkspaceAsync(ILanguageWorkspaceWarmup warmup, string workspacePath)
     {
+        using IDisposable? activity = _backgroundActivities?.Begin(
+            string.Format(UiStrings.LanguageWorkspaceWarmupStatus, (object?)(System.IO.Path.GetFileName(workspacePath))));
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            if (!FileSystemPathComparison.Equals(_workspacePath, workspacePath)) return;
             await warmup.WarmWorkspaceAsync().ConfigureAwait(false);
             LogOutput("Info", $"Language workspace ready: {System.IO.Path.GetFileName(workspacePath)}");
         }
@@ -7171,7 +8695,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 ? result.StandardError
                 : result.StandardOutput;
             _logger.LogWarning("dotnet {Command} failed: {Error}", displayCommand, error);
-            StatusText = $"dotnet {displayCommand} failed";
+            SetPersistentStatus(string.Format(UiStrings.DotnetCommandFailed, displayCommand));
             if (!string.IsNullOrWhiteSpace(error))
             {
                 LogOutput("Error", error.Trim());
@@ -7221,40 +8745,122 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return DebugToolConsentInteraction.Handle(request);
     }
 
-    private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
+    private void ConfigurePreviewThemes(DesignerDocumentViewModel? document) =>
+        document?.SetPreviewThemeProviders(_extensionContributions?.DesignerThemeProviders
+            ?? Array.Empty<DesignerThemeProviderRegistration>());
+
+    private async System.Threading.Tasks.Task UpdatePreviewerForDocumentAsync(DesignerDocumentViewModel document)
     {
-        if (ActiveDesignerDocument is null || _workspace is null)
+        WorkspaceModel? workspace = _workspace;
+        string? workspacePath = _workspacePath;
+        if (workspace is null || document.IsDisposed || !Documents.Contains(document)
+            || !_previewerLaunchService.TryGetSession(document.FilePath, out _)) return;
+        string? xaml = GetPreviewerXaml(document);
+        if (string.IsNullOrWhiteSpace(xaml)) return;
+        try
         {
+            await _previewerLaunchService.SendUpdateXamlAsync(document.FilePath, xaml, workspace,
+                (level, message) => LogOutput(level, message), workspacePath, document.PreviewThemeRequest);
+            if (!document.IsDisposed && ReferenceEquals(workspace, _workspace)) document.SetPreviewerLaunchError(null);
+        }
+        catch (Exception) when (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(workspace, _workspace))
+        {
+            // Closing a document or replacing its workspace invalidates pending transport work.
+        }
+    }
+
+    private static string? GetPreviewerXaml(DesignerDocumentViewModel document)
+    {
+        if (document.MetadataService is { } metadata && document.SyncEngine.CanEditAst
+            && document.SyncEngine.CurrentDocument is { Root: not null } ast)
+            return new XamlVisualEditor.Designer.Rendering.RuntimeDesignRenderer(metadata)
+                .PrepareXaml(ast, themeVariant: document.DesignSurface.PreviewThemeVariant, themeRequest: document.PreviewThemeRequest);
+        return document.SyncEngine.CurrentText;
+    }
+
+    private bool IsWithinLivePreviewers(DesignerDocumentViewModel document)
+    {
+        int index = _previewerActivationOrder.IndexOf(document);
+        return index >= 0 && index < MaxLivePreviewers;
+    }
+
+    // Every previewer is a separate host process; only the recently active documents keep theirs.
+    private void TrackPreviewerActivation(DesignerDocumentViewModel document)
+    {
+        _previewerActivationOrder.Remove(document);
+        _previewerActivationOrder.Insert(0, document);
+        _previewerActivationOrder.RemoveAll(item => item.IsDisposed || !Documents.Contains(item));
+        foreach (DesignerDocumentViewModel inactive in _previewerActivationOrder.Skip(MaxLivePreviewers))
+        {
+            inactive.PreviewerSession = null;
+            _previewerLaunchService.StopPreviewer(inactive.FilePath);
+        }
+
+        if (document.UseExternalPreviewer && document.IsLoaded && document.PreviewerSession is null
+            && document.StartPreviewerCommand is { } start && start.CanExecute(null))
+        {
+            start.Execute(null);
+        }
+    }
+
+    private System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync() =>
+        ActiveDesignerDocument is { } document
+            ? StartPreviewerForDocumentAsync(document)
+            : System.Threading.Tasks.Task.CompletedTask;
+
+    private async System.Threading.Tasks.Task StartPreviewerForDocumentAsync(DesignerDocumentViewModel document)
+    {
+        WorkspaceModel? workspace = _workspace;
+        string? workspacePath = _workspacePath;
+        if (document.IsDisposed || !document.IsLoaded || !Documents.Contains(document)) return;
+        if (_changingThemePackages.Any(id => UsesThemePackage(document, id))) return;
+        // A document outside the live set starts its previewer when it becomes active again.
+        if (!IsWithinLivePreviewers(document)) return;
+        ConfigurePreviewThemes(document);
+        document.SetPreviewerLaunchError(null);
+        if (workspace is null)
+        {
+            document.SetPreviewerLaunchError(UiStrings.PreviewerNeedsProject);
             return;
         }
 
-        if (!await EnsurePreviewerTrustAsync(ActiveDesignerDocument.FilePath))
+        if (!await EnsurePreviewerTrustAsync(document.FilePath))
         {
-            StatusText = "Previewer start cancelled";
+            if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = UiStrings.PreviewerStartCanceled;
             return;
         }
 
-        string? xamlText = ActiveDesignerDocument.SyncEngine.CurrentText;
+        if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace)) return;
+        string? xamlText = GetPreviewerXaml(document);
         PreviewerLaunchResult result = await _previewerLaunchService.StartPreviewerAsync(
-            ActiveDesignerDocument.FilePath,
+            document.FilePath,
             xamlText,
-            _workspace,
-            _workspacePath,
-            command => RunWorkspaceCommandAsync(command),
-            (level, message) => LogOutput(level, message));
+            workspace,
+            workspacePath,
+            command => ReferenceEquals(_workspace, workspace)
+                ? RunWorkspaceCommandAsync(command) : System.Threading.Tasks.Task.CompletedTask,
+            (level, message) => LogOutput(level, message),
+            document.PreviewThemeRequest);
+
+        if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace))
+        {
+            if (result.Process is not null) _previewerLaunchService.StopPreviewer(document.FilePath, result.Process);
+            return;
+        }
 
         if (result.Success)
         {
-            StatusText = "Previewer started";
-            if (_previewerLaunchService.TryGetSession(ActiveDesignerDocument.FilePath, out PreviewerTcpSession? session))
+            if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = UiStrings.PreviewerStarted;
+            if (_previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session))
             {
-                ActiveDesignerDocument.PreviewerSession = session;
+                document.PreviewerSession = session;
             }
             return;
         }
 
-        StatusText = "Previewer start failed";
-        ActiveDesignerDocument.PreviewerSession = null;
+        if (ReferenceEquals(ActiveDesignerDocument, document)) SetPersistentStatus(UiStrings.PreviewerStartFailed);
+        document.PreviewerSession = null;
+        document.SetPreviewerLaunchError(result.ErrorMessage ?? UiStrings.PreviewerStartFailedText);
         if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
         {
             LogOutput("Error", result.ErrorMessage);
@@ -7263,8 +8869,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task<bool> EnsurePreviewerTrustAsync(string xamlFilePath)
     {
-        // Kopflose Bridge-Laeufe koennen den Trust-Dialog nicht bedienen; der Schalter gewaehrt
-        // den Start analog zu XVE_IDEBRIDGE_AUTOCONSENT.
+        // Headless bridge runs cannot answer the trust dialog; the switch grants the start,
+        // like XVE_IDEBRIDGE_AUTOCONSENT does for the bridge.
         string? autoTrust = System.Environment.GetEnvironmentVariable("XVE_PREVIEWER_AUTOTRUST");
         if (string.Equals(autoTrust, "1", StringComparison.Ordinal)
             || string.Equals(autoTrust, "true", StringComparison.OrdinalIgnoreCase))
@@ -7279,8 +8885,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         PreviewerTrustRequest request = new(
-            "Start Previewer",
-            "The previewer will run project code out of process. Only continue if you trust this workspace.",
+            UiStrings.StartPreviewer,
+            UiStrings.PreviewerTrustExplanation,
             root);
 
         PreviewerTrustDecision decision = await PreviewerTrustInteraction.Handle(request);
@@ -7295,9 +8901,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     }
 
     /// <summary>
-    /// Startet den Previewer fuer eine geoeffnete XAML-Datei, wartet auf einen stabilen Frame
-    /// und speichert ihn als PNG. Der Previewer-Prozess wird danach beendet, damit sich bei
-    /// Serienlaeufen keine Host-Prozesse ansammeln.
+    /// Starts the previewer for an open XAML file, waits for a stable frame and saves it as
+    /// PNG. A previewer process started for the export ends afterwards, so batch runs do not accumulate host
+    /// processes; the live previewer of a document keeps running.
     /// </summary>
     public async System.Threading.Tasks.Task<XamlVisualEditor.Extensions.PreviewExportResult> ExportPreviewAsync(
         string filePath,
@@ -7309,20 +8915,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
         if (doc is null)
         {
-            return new(false, "Document is not open as a designer document.", 0, 0, outputPath);
+            return new(false, UiStrings.DesignerDocumentNotOpen, 0, 0, outputPath);
         }
 
         if (_workspace is null)
         {
-            return new(false, "No workspace loaded.", 0, 0, outputPath);
+            return new(false, UiStrings.NoWorkspaceLoaded, 0, 0, outputPath);
         }
 
         if (!await EnsurePreviewerTrustAsync(filePath))
         {
-            return new(false, "Previewer trust not granted.", 0, 0, outputPath);
+            return new(false, UiStrings.PreviewerTrustDenied, 0, 0, outputPath);
         }
 
         ActiveDocument = doc;
+        // A document that shows its live previewer keeps it after the export; only a host started for the export ends.
+        bool usesLivePreviewer = doc.UseExternalPreviewer || _previewerLaunchService.TryGetSession(filePath, out _);
         PreviewerLaunchResult launch = await _previewerLaunchService.StartPreviewerAsync(
             filePath,
             doc.SyncEngine.CurrentText,
@@ -7332,12 +8940,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             (level, message) => LogOutput(level, message));
         if (!launch.Success)
         {
-            return new(false, launch.ErrorMessage ?? "Previewer start failed.", 0, 0, outputPath);
+            return new(false, launch.ErrorMessage ?? UiStrings.PreviewerStartFailedText, 0, 0, outputPath);
         }
 
         if (!_previewerLaunchService.TryGetSession(filePath, out PreviewerTcpSession? session) || session is null)
         {
-            return new(false, "No previewer session available.", 0, 0, outputPath);
+            return new(false, UiStrings.NoPreviewerSession, 0, 0, outputPath);
         }
 
         doc.PreviewerSession = session;
@@ -7346,7 +8954,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await WaitForStableFrameAsync(session, timeoutMs);
             if (frame is null)
             {
-                return new(false, "No previewer frame received within timeout.", 0, 0, outputPath);
+                return new(false, UiStrings.PreviewerFrameTimeout, 0, 0, outputPath);
             }
 
             if (frame.Format != Avalonia.Remote.Protocol.Viewport.PixelFormat.Bgra8888)
@@ -7359,14 +8967,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
         finally
         {
-            doc.PreviewerSession = null;
-            _previewerLaunchService.StopPreviewer(filePath);
+            if (!usesLivePreviewer)
+            {
+                doc.PreviewerSession = null;
+                _previewerLaunchService.StopPreviewer(filePath, launch.Process);
+            }
         }
     }
 
-    // Frames treffen waehrend des Aufbaus mehrfach ein (Viewport-Verhandlung); als stabil gilt
-    // der letzte Frame, wenn 1,5 s lang weder Groessenwechsel noch Resize-Anforderung kamen.
-    private static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
+    // Frames arrive several times while the preview builds up (viewport negotiation); the last
+    // frame counts as stable once 1.5 s passed without a size change or resize request.
+    internal static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
         PreviewerTcpSession session,
         int timeoutMs)
     {
@@ -7478,7 +9089,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            string json = File.ReadAllText(path);
+            string json = SharedFileReader.ReadAllText(path);
             List<string>? roots = JsonSerializer.Deserialize<List<string>>(json);
             if (roots is null)
             {
@@ -7516,10 +9127,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private static string GetTrustedPreviewerRootsPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "previewer-trust.json");
+        return Path.Combine(ShellSettingsPaths.GetRoot(), "previewer-trust.json");
     }
 
     private void LogDiagnosticsSummary(IReadOnlyList<XamlDiagnostic> diagnostics)
@@ -7539,7 +9147,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         LogOutput("Info", $"XAML diagnostics: {errorCount} error(s), {warningCount} warning(s)");
     }
 
-    private void OnPreviewerErrorReceived(PreviewerErrorInfo error)
+    internal void OnPreviewerErrorReceived(PreviewerErrorInfo error)
     {
         Dispatcher.UIThread.Post(() =>
         {
@@ -7549,8 +9157,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            int line = error.Line is > 0 ? error.Line.Value : 1;
-            int column = error.Column is > 0 ? error.Column.Value : 1;
+            // The previewer reports positions in its preview copy; the output names the position in the source.
+            DesignerDocumentViewModel? document = Documents.OfType<DesignerDocumentViewModel>()
+                .FirstOrDefault(candidate => FileSystemPathComparison.Equals(candidate.FilePath, error.FilePath));
+            (int line, int column) = DesignerDocumentViewModel.ResolvePreviewerErrorPosition(error, document?.SyncEngine.CurrentText);
             Output.AddDiagnostic(new XamlDiagnostic
             {
                 Severity = DiagnosticSeverity.Error,
@@ -7571,19 +9181,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         if (string.IsNullOrWhiteSpace(_workspacePath))
         {
-            StatusText = "No workspace loaded";
+            StatusText = UiStrings.NoWorkspaceLoadedStatus;
             return Task.CompletedTask;
         }
 
         if (System.IO.Directory.Exists(_workspacePath))
         {
-            StatusText = "Workspace reload requires a solution or project file";
+            StatusText = UiStrings.ReloadWorkspaceFileRequired;
             return Task.CompletedTask;
         }
 
         if (!System.IO.File.Exists(_workspacePath))
         {
-            StatusText = $"Workspace file not found: {System.IO.Path.GetFileName(_workspacePath)}";
+            SetPersistentStatus(string.Format(UiStrings.WorkspaceFileNotFound, (object?)(System.IO.Path.GetFileName(_workspacePath))));
             return Task.CompletedTask;
         }
 
@@ -7747,13 +9357,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         if (IsWorkspaceLoading || IsWorkspaceCommandRunning)
         {
-            StatusText = "A workspace operation is already running";
+            StatusText = UiStrings.WorkspaceBusy;
             return;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         string displayCommand = string.IsNullOrWhiteSpace(option) ? command : $"{command} {option}";
-        StatusText = $"Running dotnet {displayCommand}...";
+        SetPersistentStatus(string.Format(UiStrings.DotnetCommandRunning, displayCommand));
         IsWorkspaceCommandRunning = true;
 
         try
@@ -7778,12 +9388,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             if (assemblySet.All.Count > 0)
             {
                 ApplyAssemblyResolver(assemblySet);
-                _metadataService.LoadAssemblies(assemblySet.All);
+                await Task.Run(() =>
+                {
+                    _metadataService.LoadAssemblies(assemblySet.All);
+                }, cancellationToken);
                 UpdateWorkspaceDesignThemes(_workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
             }
+            RefreshControlCatalog();
             LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
-            StatusText = $"dotnet {displayCommand} completed";
+            StatusText = string.Format(UiStrings.DotnetCommandCompleted, displayCommand);
         }
         finally
         {
@@ -7802,23 +9416,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (appXamlPath is null)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace"
-                + $" (set {WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable} to use another application's themes)");
+            LogOutput("Info", string.Format(UiStrings.DesignThemesNoAppXaml, WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable));
             return;
         }
 
         try
         {
-            IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(appXamlPath);
+            IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(
+                appXamlPath, message => LogOutput("Warning", message));
             string sourceLabel = overridePath is null
                 ? appXamlPath
                 : $"{appXamlPath} ({WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable})";
-            LogOutput("Info", $"Design themes from {sourceLabel}: {string.Join("; ", details)}");
+            LogOutput("Info", string.Format(UiStrings.DesignThemesLoaded, sourceLabel, string.Join("; ", details)));
         }
         catch (Exception ex)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Warning", $"Design themes failed for {appXamlPath}: {ex.Message}");
+            LogOutput("Warning", string.Format(UiStrings.DesignThemesFailed, appXamlPath, ex.Message));
         }
     }
 
@@ -7858,6 +9472,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return null;
     }
 
+    private void StopDocumentPreviewers()
+    {
+        foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>())
+        {
+            document.PreviewerSession = null;
+            _previewerLaunchService.StopPreviewer(document.FilePath);
+        }
+    }
+
     private void RefreshOpenDocumentsAfterMetadataLoad()
     {
         foreach (IEditorDocumentViewModel doc in Documents)
@@ -7867,6 +9490,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 designer.DesignSurface.RequestRebuild();
             }
         }
+    }
+
+    private void RefreshControlCatalog()
+    {
+        if (_controlCatalogUpdater is null || _workspace is null) return;
+        ProjectModel? project = ActiveDesignerDocument?.FilePath is { } filePath
+            ? ProjectSelection.FindProjectForFile(_workspace, filePath) : null;
+        if (project is not null && ActiveProject is { } active
+            && FileSystemPathComparison.Equals(project.ProjectPath, active.ProjectPath))
+            project = active;
+        project ??= ActiveProject ?? ProjectSelection.SelectPreferredProject(_workspace.Projects);
+        _controlCatalogUpdater.SetWorkspaceAssemblies(
+            project is null ? Array.Empty<string>() : WorkspaceAssemblyDiscovery.FindCatalogAssemblies(project));
     }
 
     private WorkspaceAssemblySet CollectWorkspaceAssemblies(
@@ -8039,11 +9675,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         int preferredCount = assemblySet.Preferred.Count;
         string outputSummary = hasAnyProjectOutputs
-            ? $"Project outputs: {preferredCount}"
-            : "Project outputs: none";
+            ? string.Format(UiStrings.ProjectOutputsCount, preferredCount)
+            : UiStrings.ProjectOutputsNone;
         if (hasMissingProjectOutputs)
         {
-            outputSummary += " (missing outputs detected)";
+            outputSummary += UiStrings.MissingOutputsSuffix;
         }
 
         LogOutput("Info", $"Assembly resolution: {assemblySet.All.Count} assemblies. {outputSummary}.");
@@ -8094,7 +9730,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         _outputChannel?.Dispose();
 
+        _statusTextExpiration.Dispose();
         _disposables.Dispose();
+        Toolbox.Dispose();
+        SolutionExplorer.Dispose();
+        References.Dispose();
+        ExtensionManager.Dispose();
+        foreach (IDisposable view in ExtensionViews.OfType<IDisposable>())
+        {
+            view.Dispose();
+        }
+
         Collaboration.Dispose();
         AnimationEditor.Dispose();
         Debugger.Dispose();
@@ -8121,21 +9767,25 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         _autoSaveSubscriptions.Clear();
 
         DockFactory.ActiveDockableChanged -= OnActiveDockableChanged;
+        DockFactory.DockableClosing -= OnDockableClosing;
         DockFactory.DockableClosed -= OnDockableClosed;
 
         if (DockLayout is not null)
         {
-            DockFactory.SaveLayout(DockLayout);
+            DockFactory.SaveLayout(DockLayout, layoutName: CurrentLayoutName);
         }
 
         DisposeCollectionItems(ExtensionMenuItems);
         DisposeCollectionItems(FileMenuItems);
         DisposeCollectionItems(FileNewMenuItems);
         DisposeCollectionItems(FileNewMenuEntries);
-        DisposeCollectionItems(ToolsMenuItems);
         DisposeCollectionItems(ViewMenuItems);
+        DisposeCollectionItems(ServerMenuItems);
+        DisposeCollectionItems(LayoutPresetMenuItems);
+        DisposeCollectionItems(SavedLayoutMenuItems);
         DisposeCollectionItems(DebugMenuItems);
         DisposeCollectionItems(EditMenuItems);
+        DisposeCollectionItems(EditorContextMenuItems);
         DisposeCollectionItems(WorkspaceMenuItems);
         DisposeCollectionItems(ExtensionToolbarItems);
         DisposeCollectionItems(MainToolbarItems);
@@ -8192,7 +9842,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         {
             if (this.RaiseAndSetIfChanged(ref _isStartupProject, value))
             {
-                this.RaisePropertyChanged(nameof(IsRunnableButNotStartup));
+                this.RaisePropertyChanged(nameof(ProjectToolTip));
             }
         }
     }
@@ -8200,8 +9850,14 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
     /// <summary>Gets whether this project is runnable.</summary>
     public bool IsRunnableProject => Project?.IsExecutable == true;
 
-    /// <summary>Gets whether this project is runnable but not selected as startup.</summary>
-    public bool IsRunnableButNotStartup => IsRunnableProject && !IsStartupProject;
+    /// <summary>
+    /// Gets the tooltip of a project node: whether it is the startup project or an executable project that can
+    /// become one; null for libraries and other nodes.
+    /// </summary>
+    public string? ProjectToolTip => Kind != SolutionExplorerNodeKind.Project ? null
+        : IsStartupProject ? UiStrings.StartupProjectToolTip
+        : IsRunnableProject ? UiStrings.ExecutableProjectToolTip
+        : null;
 
     /// <summary>Raised when a file node is double-clicked (opened).</summary>
     public event Action<string>? FileOpened;
@@ -8260,12 +9916,13 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
             }
 
             AddProjectFiles(projectNode, project.Files, systemIcons);
+            SortProjectItems(projectNode);
 
-            // References folder
+            // The references folder is the first child of the project, whatever the sort option.
             if (project.References.Count > 0)
             {
                 object referencesFolderIcon = GetIconWithFallback(systemIcons, null, isDirectory: true, fallbackIcon: "📚");
-                SolutionExplorerNodeViewModel refsFolder = new("References", referencesFolderIcon, SolutionExplorerNodeKind.Folder);
+                SolutionExplorerNodeViewModel refsFolder = new(UiStrings.References, referencesFolderIcon, SolutionExplorerNodeKind.Folder);
 
                 foreach (AssemblyReference asmRef in project.References)
                 {
@@ -8275,7 +9932,7 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
                     refsFolder.Children.Add(refNode);
                 }
 
-                projectNode.Children.Add(refsFolder);
+                projectNode.Children.Insert(0, refsFolder);
             }
 
             projectParent.Children.Add(projectNode);
@@ -8297,7 +9954,9 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         {
             string relative = file.RelativePath.Replace('\\', '/');
             string[] parts = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0)
+            // Files outside the project folder, such as generated sources in a redirected intermediate folder or
+            // references to another folder, have no place in the project tree.
+            if (parts.Length == 0 || Path.IsPathRooted(file.RelativePath) || parts[0] == "..")
             {
                 continue;
             }
@@ -8326,6 +9985,26 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
             SolutionExplorerNodeViewModel fileNode = new(
                 fileName, GetFileIcon(file.FilePath, systemIcons), kind, file.FilePath);
             current.Children.Add(fileNode);
+        }
+    }
+
+    // Like Visual Studio, folders come before files.
+    private static void SortProjectItems(SolutionExplorerNodeViewModel node)
+    {
+        if (node.Children.Count == 0)
+        {
+            return;
+        }
+
+        SolutionExplorerNodeViewModel[] ordered = node.Children
+            .OrderBy(child => child.Kind == SolutionExplorerNodeKind.Folder ? 0 : 1)
+            .ThenBy(child => child.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        node.Children.Clear();
+        foreach (SolutionExplorerNodeViewModel child in ordered)
+        {
+            node.Children.Add(child);
+            SortProjectItems(child);
         }
     }
 
@@ -8433,12 +10112,14 @@ public enum SolutionExplorerNodeKind
 /// <summary>
 /// ViewModel for the Solution Explorer tool panel.
 /// </summary>
-public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel
+public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel, IDisposable
 {
     private const string FilterPropertyPath = "Item.Name";
     private const string SetStartupProjectCommandId = "workspace.setStartupProject";
+    private readonly System.Reactive.Subjects.Subject<object> _revealRequests = new();
     private readonly ISystemIconService? _systemIcons;
     private readonly ICommands? _extensionCommands;
+    private readonly IDisposable _filterSubscription;
 
     public SolutionExplorerNodeViewModel? Root { get; set; }
 
@@ -8493,7 +10174,8 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             IsLeafSelector = item => ((SolutionExplorerNodeViewModel)item).Children.Count == 0,
             IsExpandedSelector = item => ((SolutionExplorerNodeViewModel)item).IsExpanded,
             IsExpandedSetter = (item, value) => ((SolutionExplorerNodeViewModel)item).IsExpanded = value,
-            VirtualizeChildren = true
+            VirtualizeChildren = true,
+            AllowExpandToItemSearch = true
         };
 
         Model = new HierarchicalModel(options);
@@ -8508,7 +10190,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
                 _ => null
             });
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
@@ -8520,7 +10202,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         IObservable<bool> canSetStartup = this.WhenAnyValue(x => x.SelectedNode)
             .Select(node => _extensionCommands is not null
                             && node?.Kind == SolutionExplorerNodeKind.Project
-                            && node.Project is not null);
+                            && node.Project?.IsExecutable == true);
 
         OpenSelectedCommand = ReactiveCommand.Create(() =>
         {
@@ -8593,6 +10275,33 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         SetStartupProject(match);
     }
 
+    /// <summary>
+    /// Expands the tree down to the node of a file and selects it; returns false when no node shows the file, for
+    /// example because it lies outside the workspace or the filter hides it.
+    /// </summary>
+    public bool RevealFile(string filePath)
+    {
+        SolutionExplorerNodeViewModel? match = RootItems.SelectMany(EnumerateNodes)
+            .FirstOrDefault(node => node.Kind is SolutionExplorerNodeKind.File or SolutionExplorerNodeKind.XamlFile
+                && node.FullPath is not null && FileSystemPathComparison.Equals(node.FullPath, filePath));
+        if (match is null)
+        {
+            return false;
+        }
+
+        if (!Model.TryExpandToItem(match, out HierarchicalNode? row) || row is null)
+        {
+            return false;
+        }
+
+        SelectedRow = row;
+        _revealRequests.OnNext(row);
+        return true;
+    }
+
+    /// <summary>Gets the rows that <see cref="RevealFile"/> selected and the view scrolls into view.</summary>
+    public IObservable<object> RevealRequests => _revealRequests;
+
     private static IEnumerable<SolutionExplorerNodeViewModel> EnumerateNodes(SolutionExplorerNodeViewModel root)
     {
         Queue<SolutionExplorerNodeViewModel> queue = new();
@@ -8613,6 +10322,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
     /// </summary>
     public void LoadWorkspace(WorkspaceModel workspace, string? solutionName = null)
     {
+        _expandedBeforeFilter = null;
         Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName, _systemIcons);
         CollapseAll(Root);
         WireFileOpen(Root);
@@ -8621,6 +10331,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
 
     public void Clear()
     {
+        _expandedBeforeFilter = null;
         Root = null;
         RootItems.Clear();
         Model.Refresh();
@@ -8658,28 +10369,42 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         }
     }
 
-    private void ApplyFilterAndSearch(string? text)
+    internal void ApplyFilterAndSearch(string? text)
     {
         ApplyFiltering(text);
         ApplySearch(text);
     }
 
+    // The grid filters only the rows of expanded folders, so the folders above every match are expanded while a filter
+    // is set; clearing the filter restores the folders the user had expanded.
     private void ApplyFiltering(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             FilteringModel.Remove(FilterPropertyPath);
+            if (_expandedBeforeFilter is { } expanded)
+            {
+                _expandedBeforeFilter = null;
+                foreach (SolutionExplorerNodeViewModel node in RootItems.SelectMany(EnumerateNodes))
+                    node.IsExpanded = expanded.Contains(node);
+                Model.Refresh();
+            }
+
             return;
         }
 
+        _expandedBeforeFilter ??= RootItems.SelectMany(EnumerateNodes).Where(node => node.IsExpanded).ToHashSet();
         string query = text.Trim();
         HashSet<object> matches = BuildMatchSet(RootItems, query);
+        Model.Refresh();
         FilteringModel.SetOrUpdate(new FilteringDescriptor(
             columnId: FilterPropertyPath,
             @operator: FilteringOperator.Custom,
             propertyPath: FilterPropertyPath,
             predicate: item => MatchesFilter(item, matches)));
     }
+
+    private HashSet<SolutionExplorerNodeViewModel>? _expandedBeforeFilter;
 
     private void ApplySearch(string? text)
     {
@@ -8698,9 +10423,11 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             comparison: StringComparison.OrdinalIgnoreCase));
     }
 
+    // The grid hands over its rows, which wrap the tree nodes.
     private static bool MatchesFilter(object? item, HashSet<object> matches)
     {
-        return item is not null && matches.Contains(item);
+        object? node = item is HierarchicalNode row ? row.Item : item;
+        return node is not null && matches.Contains(node);
     }
 
     private static HashSet<object> BuildMatchSet(
@@ -8732,6 +10459,12 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             }
         }
 
+        // An ancestor of a match opens, so the match becomes a visible row.
+        if (childMatch)
+        {
+            node.IsExpanded = true;
+        }
+
         if (isMatch)
         {
             matches.Add(node);
@@ -8758,4 +10491,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             }
         }
     }
+
+    /// <summary>Stops the pending filter timer.</summary>
+    public void Dispose() => _filterSubscription.Dispose();
 }

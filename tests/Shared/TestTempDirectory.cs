@@ -4,7 +4,8 @@ using System.IO;
 namespace XamlVisualEditor.Tests.Shared;
 
 /// <summary>
-/// Gives each test process its own temporary folder below <c>%TEMP%\xve-tests</c> and removes it when the
+/// Gives each test process its own temporary folder in the <c>xve-tests</c> folder below the system temporary
+/// folder (<see cref="Path.GetTempPath"/>) and removes it when the
 /// process ends. <see cref="Path.GetTempPath"/> reads TMP, TEMP and TMPDIR on every call, so files that tests
 /// and the processes they start create in the temporary folder no longer accumulate in the user's one.
 /// </summary>

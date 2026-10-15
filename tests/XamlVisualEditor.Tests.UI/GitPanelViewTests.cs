@@ -71,7 +71,7 @@ public sealed class GitPanelViewTests
     }
 
     [AvaloniaFact]
-    public async Task Unstage_requires_confirmation_with_affected_file_count()
+    public async Task Unstage_runs_without_confirmation_because_it_keeps_the_working_files()
     {
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
         RecordingDialogHost dialogs = new();
@@ -82,19 +82,13 @@ public sealed class GitPanelViewTests
 
         vm.SelectedStagedChange = Assert.Single(vm.StagedItems, item => item.Path == "a.cs");
         await vm.UnstageCommand.Execute().ToTask();
-        Assert.Equal(0, gitService.UnstageCalls);
-        Assert.Equal(string.Format(UiStrings.GitUnstageOnePrompt, "a.cs"), dialogs.Requests[^1].Message);
-        Assert.False(dialogs.Requests[^1].IsDestructive);
-
-        dialogs.Confirm = true;
-        await vm.UnstageCommand.Execute().ToTask();
         Assert.Equal(1, gitService.UnstageCalls);
         Assert.Equal("a.cs", Assert.Single(gitService.LastUnstagedPaths));
 
         await vm.UnstageAllCommand.Execute().ToTask();
         Assert.Equal(2, gitService.UnstageCalls);
         Assert.Equal(2, gitService.LastUnstagedPaths.Count);
-        Assert.Equal(string.Format(UiStrings.GitUnstageManyPrompt, 2), dialogs.Requests[^1].Message);
+        Assert.Empty(dialogs.Requests);
     }
 
     [AvaloniaFact]
@@ -113,7 +107,7 @@ public sealed class GitPanelViewTests
         vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
         await vm.DiscardCommand.Execute().ToTask();
         Assert.Equal(0, gitService.DiscardCalls);
-        Assert.Equal(string.Format(UiStrings.GitDiscardOnePrompt, "c.cs"), dialogs.Requests[^1].Message);
+        Assert.Equal(string.Format(UiStrings.GitDiscardWorkingChangesPrompt, "c.cs"), dialogs.Requests[^1].Message);
         Assert.True(dialogs.Requests[^1].IsDestructive);
 
         dialogs.Confirm = true;

@@ -24,6 +24,8 @@
                     <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
                     <SolidColorBrush x:Key="EditorSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
                     <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
+                    <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#1E1E1E" />
+                    <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D01E1E1E" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#F4F4F4" />
@@ -40,6 +42,8 @@
                     <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
                     <SolidColorBrush x:Key="EditorSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#E8E8E8" />
+                    <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D0F3F3F3" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <!-- The DataGrid theme brightens the accent of a selected row under the mouse; with a light accent the
@@ -74,6 +78,12 @@
     <Style Selector="Window">
         <Setter Property="Background" Value="{DynamicResource EditorWindowBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EditorWindowForegroundBrush}" />
+    </Style>
+
+    <!-- Owned windows get the class from DialogAppearance; the frame stays visible without focus. -->
+    <Style Selector="Window.editor-dialog-frame /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
     </Style>
 
     <!-- A tool dock without tools (the collapsed bottom dock, the idle pinned-tool dock) is not built at all: its

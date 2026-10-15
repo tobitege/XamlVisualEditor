@@ -34,8 +34,7 @@ public sealed class DataGridResizeTests
         try
         {
             // Mirrors Application.Styles from App.axaml. App.Initialize() is not used here because it
-            // also installs the process-wide DialogAppearance handler, which would re-wrap every owned
-            // dialog opened by later tests.
+            // also installs process-wide class handlers that would affect the windows of later tests.
             Uri baseUri = new("avares://XamlVisualEditor.App/");
             styles =
             [
@@ -164,6 +163,55 @@ public sealed class DataGridResizeTests
             Assert.Equal(90, grid.Columns[2].ActualWidth, 3);
             Assert.True(grid.Columns.Sum(column => column.ActualWidth) > window.Bounds.Width,
                 $"Columns end at {grid.Columns.Sum(column => column.ActualWidth)} within a {window.Bounds.Width} wide window.");
+        }
+        finally
+        {
+            window?.Close();
+            foreach (IStyle style in styles)
+                Application.Current!.Styles.Remove(style);
+        }
+    }
+
+    [AvaloniaFact]
+    public void StarColumnsOfAGridInTheDesignSurfaceAreNotFrozen()
+    {
+        IStyle[] styles =
+        [
+            new Avalonia.Themes.Fluent.FluentTheme(),
+            new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://XamlVisualEditor.App/"))
+                { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml") },
+        ];
+        Application.Current!.Styles.AddRange(styles);
+        Window? window = null;
+        try
+        {
+            static DataGrid CreateGrid()
+            {
+                DataGrid grid = new() { AutoGenerateColumns = false, ItemsSource = new[] { "A" }, Height = 100 };
+                grid.Columns.Add(new DataGridTemplateColumn
+                {
+                    Header = "Name",
+                    Width = new DataGridLength(1, DataGridLengthUnitType.Star),
+                    CellTemplate = new FuncDataTemplate<string>((value, _) => new TextBlock { Text = value })
+                });
+                return grid;
+            }
+
+            DataGrid editorGrid = CreateGrid();
+            DataGrid designedGrid = CreateGrid();
+            XamlVisualEditor.App.Views.DesignSurfaceView surface = new() { Height = 300 };
+            Panel canvas = surface.FindControl<Panel>("DesignCanvas")!;
+            canvas.Children.Add(designedGrid);
+            window = new Window { Content = new StackPanel { Children = { editorGrid, surface } }, Width = 600, Height = 500 };
+            window.Show();
+            window.UpdateLayout();
+            Assert.NotNull(designedGrid.FindAncestorOfType<XamlVisualEditor.App.Views.DesignSurfaceView>());
+
+            XamlVisualEditor.App.Services.DataGridColumnSizing.FreezeStarColumns(editorGrid);
+            XamlVisualEditor.App.Services.DataGridColumnSizing.FreezeStarColumns(designedGrid);
+
+            Assert.False(editorGrid.Columns[0].Width.IsStar);
+            Assert.True(designedGrid.Columns[0].Width.IsStar);
         }
         finally
         {

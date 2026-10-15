@@ -44,6 +44,8 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
     private static readonly AttachedProperty<ITextEditorDisplayState?> DisplayStateProperty =
         AvaloniaProperty.RegisterAttached<TextEditorViewHost, TextEditor, ITextEditorDisplayState?>("DisplayState");
 
+    private static readonly object ManualFoldingTag = new();
+
     private readonly List<WeakReference<TextEditor>> _editors = new();
     private readonly IContextKeys? _contextKeys;
     private readonly IDisposable _activeDocumentSubscription;
@@ -334,9 +336,15 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
         return true;
     }
 
+    /// <summary>Marks a folding created from a selection, which folding strategies keep when they update.</summary>
+    internal static void MarkManualFolding(FoldingSection section) => section.Tag = ManualFoldingTag;
+
+    /// <summary>Gets whether the folding was created from a selection.</summary>
+    internal static bool IsManualFolding(FoldingSection section) => ReferenceEquals(section.Tag, ManualFoldingTag);
+
     // Without a selection the innermost region at the caret folds; a selection folds the regions it touches, or
     // becomes a folded region of its own when it touches none.
-    private static bool CollapseSelection(TextEditor editor)
+    internal static bool CollapseSelection(TextEditor editor)
     {
         if (GetFoldingManager(editor) is not { } manager || editor.Document is not { LineCount: > 0 } document)
         {
@@ -365,6 +373,7 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
         {
             FoldingSection created = manager.CreateFolding(startOffset, endOffset);
             created.Title = "...";
+            MarkManualFolding(created);
             touched.Add(created);
         }
 

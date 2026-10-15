@@ -55,7 +55,7 @@ public sealed partial class MainWindowViewModel
         WorkspaceModel? workspace = _workspace;
         string originalXaml = document.SyncEngine.CurrentText
             ?? throw new InvalidOperationException("Wait for the AXAML document to finish synchronizing before renaming a control.");
-        StringComparer pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        StringComparer pathComparer = FileSystemPathComparison.Comparer;
         Dictionary<string, string> openTexts = Documents.OfType<TextDocumentViewModel>()
             .Where(item => !item.IsDisposed)
             .ToDictionary(item => item.FilePath, item => item.Document.Text, pathComparer);

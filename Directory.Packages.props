@@ -43,6 +43,7 @@
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
     <!-- DI -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <!-- Logging -->

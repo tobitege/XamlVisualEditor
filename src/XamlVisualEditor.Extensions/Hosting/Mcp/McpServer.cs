@@ -279,7 +279,7 @@ public sealed class McpServer : IAsyncDisposable
                     return;
                 }
                 string? protocolVersion = request.Headers["MCP-Protocol-Version"];
-                if (protocolVersion is not null && protocolVersion != McpProtocol.ProtocolVersion)
+                if (protocolVersion is not null && !McpProtocol.HttpProtocolVersions.Contains(protocolVersion, StringComparer.Ordinal))
                 {
                     response.StatusCode = (int)HttpStatusCode.BadRequest;
                     return;
@@ -287,58 +287,61 @@ public sealed class McpServer : IAsyncDisposable
 
                 using JsonDocument message = await JsonDocument.ParseAsync(request.InputStream, cancellationToken: ct).ConfigureAwait(false);
                 JsonElement root = message.RootElement;
-                if (root.ValueKind != JsonValueKind.Object
-                    || !root.TryGetProperty("jsonrpc", out JsonElement version)
-                    || version.ValueKind != JsonValueKind.String || version.GetString() != "2.0")
+                // A 2025-03-26 client may send a batch: an array of requests and notifications.
+                bool isBatch = root.ValueKind == JsonValueKind.Array;
+                JsonElement[] messages = isBatch ? root.EnumerateArray().ToArray() : [root];
+                if (messages.Length == 0 || !messages.All(IsValidMessage))
                 {
                     response.StatusCode = (int)HttpStatusCode.BadRequest;
                     return;
                 }
-                string? method = root.TryGetProperty("method", out JsonElement methodElement)
-                    && methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
-                bool hasId = root.TryGetProperty("id", out JsonElement idElement);
                 McpRequestContext ctx = new(null, sessionToken);
-                if (method != McpProtocol.InitializeMethod && _sessions.Resolve(ctx) is null)
+                if (messages.Any(item => GetMethod(item) == McpProtocol.InitializeMethod))
                 {
-                    response.StatusCode = string.IsNullOrEmpty(sessionToken)
-                        ? (int)HttpStatusCode.BadRequest : (int)HttpStatusCode.NotFound;
-                    return;
-                }
-                JsonElement? parameters = root.TryGetProperty("params", out JsonElement paramsElement) ? paramsElement.Clone() : null;
-                if (!hasId && !string.IsNullOrEmpty(method))
-                {
-                    if (method == McpProtocol.InitializeMethod)
+                    if (isBatch || !root.TryGetProperty("id", out _))
                     {
                         response.StatusCode = (int)HttpStatusCode.BadRequest;
                         return;
                     }
-                    if (method == McpProtocol.InitializedNotification)
-                        await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    McpSessionInfo? session = _sessions.Resolve(ctx);
+                    if (session is null)
+                    {
+                        response.StatusCode = string.IsNullOrEmpty(sessionToken)
+                            ? (int)HttpStatusCode.BadRequest : (int)HttpStatusCode.NotFound;
+                        return;
+                    }
+                    // Without the header the version negotiated at initialization applies.
+                    if (protocolVersion is not null && protocolVersion != session.ProtocolVersion)
+                    {
+                        response.StatusCode = (int)HttpStatusCode.BadRequest;
+                        return;
+                    }
+                }
+
+                List<object> payloads = new();
+                foreach (JsonElement item in messages)
+                {
+                    string method = GetMethod(item)!;
+                    JsonElement? parameters = item.TryGetProperty("params", out JsonElement paramsElement) ? paramsElement.Clone() : null;
+                    if (!item.TryGetProperty("id", out JsonElement idElement))
+                    {
+                        if (method == McpProtocol.InitializedNotification)
+                            await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
+                        continue;
+                    }
+                    TryGetIdValue(idElement, out object? idValue);
+                    payloads.Add(await DispatchRequestAsync(method, ctx, parameters, idValue!, response, ct).ConfigureAwait(false));
+                }
+                if (payloads.Count == 0)
+                {
                     response.StatusCode = (int)HttpStatusCode.Accepted;
                     return;
                 }
-                if (string.IsNullOrEmpty(method) || !hasId || !TryGetIdValue(idElement, out object? idValue) || idValue is null)
-                {
-                    response.StatusCode = (int)HttpStatusCode.BadRequest;
-                    return;
-                }
 
-                object payload;
-                try
-                {
-                    object? result = await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
-                    if (result is McpInitializeResult initialized)
-                        response.Headers["Mcp-Session-Id"] = initialized.SessionToken;
-                    payload = new { jsonrpc = "2.0", id = idValue, result = result ?? new { } };
-                }
-                catch (McpJsonRpcException ex)
-                {
-                    payload = new { jsonrpc = "2.0", id = idValue, error = new { code = ex.Code, message = ex.Message } };
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    payload = new { jsonrpc = "2.0", id = idValue, error = new { code = -32603, message = ex.Message } };
-                }
+                object payload = isBatch ? payloads : payloads[0];
                 byte[] body = JsonSerializer.SerializeToUtf8Bytes(payload, McpMessageFraming.SerializerOptions);
                 response.ContentType = "application/json";
                 response.ContentLength64 = body.Length;
@@ -354,6 +357,38 @@ public sealed class McpServer : IAsyncDisposable
             catch (HttpListenerException) { }
             finally { response.Close(); }
         }
+
+        private async Task<object> DispatchRequestAsync(string method, McpRequestContext ctx, JsonElement? parameters, object idValue,
+            HttpListenerResponse response, CancellationToken ct)
+        {
+            try
+            {
+                object? result = await _router.DispatchAsync(method, ctx, parameters, ct).ConfigureAwait(false);
+                if (result is McpInitializeResult initialized)
+                    response.Headers["Mcp-Session-Id"] = initialized.SessionToken;
+                return new { jsonrpc = "2.0", id = idValue, result = result ?? new { } };
+            }
+            catch (McpJsonRpcException ex)
+            {
+                return new { jsonrpc = "2.0", id = idValue, error = new { code = ex.Code, message = ex.Message } };
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return new { jsonrpc = "2.0", id = idValue, error = new { code = -32603, message = ex.Message } };
+            }
+        }
+
+        // A JSON-RPC 2.0 request with a string or integer id, or a notification.
+        private static bool IsValidMessage(JsonElement element) =>
+            element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("jsonrpc", out JsonElement version)
+            && version.ValueKind == JsonValueKind.String && version.GetString() == "2.0"
+            && !string.IsNullOrEmpty(GetMethod(element))
+            && (!element.TryGetProperty("id", out JsonElement id) || TryGetIdValue(id, out object? idValue) && idValue is not null);
+
+        private static string? GetMethod(JsonElement element) =>
+            element.ValueKind == JsonValueKind.Object && element.TryGetProperty("method", out JsonElement methodElement)
+            && methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
 
         private static bool TryGetIdValue(JsonElement element, out object? id)
         {

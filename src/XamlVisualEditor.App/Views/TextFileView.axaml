@@ -7,6 +7,7 @@
              x:Class="XamlVisualEditor.App.Views.TextFileView"
              x:DataType="vm:TextDocumentViewModel">
   <DockPanel>
+    <!-- Icon path data from Google Material Icons (Apache 2.0); see THIRD-PARTY-NOTICES.md. -->
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="4,2">
       <ToggleButton IsChecked="{CompiledBinding WordWrap, Mode=TwoWay}" ToolTip.Tip="{x:Static loc:UiStrings.WordWrap}" Padding="6,2">
         <StackPanel Orientation="Horizontal" Spacing="4">

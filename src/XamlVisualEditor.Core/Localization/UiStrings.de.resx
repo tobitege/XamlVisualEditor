@@ -159,7 +159,6 @@
   <data name="ApiKeyEnvironmentVariable" xml:space="preserve"><value>API-Schlüssel-Umgebungsvariable</value></data>
   <data name="ApiKey" xml:space="preserve"><value>API-Schlüssel</value></data>
   <data name="Clear" xml:space="preserve"><value>Leeren</value></data>
-  <data name="OpenAiWebAuthentication" xml:space="preserve"><value>OpenAI-Webanmeldung</value></data>
   <data name="ClientId" xml:space="preserve"><value>Client-ID</value></data>
   <data name="Scopes" xml:space="preserve"><value>Berechtigungsbereiche</value></data>
   <data name="SignIn" xml:space="preserve"><value>Anmelden</value></data>
@@ -207,7 +206,6 @@
   <data name="TcpPort" xml:space="preserve"><value>TCP-Port</value></data>
   <data name="UnixPath" xml:space="preserve"><value>Unix-Pfad</value></data>
   <data name="Workspace" xml:space="preserve"><value>Arbeitsbereich</value></data>
-  <data name="Token" xml:space="preserve"><value>Token</value></data>
   <data name="Clients" xml:space="preserve"><value>Clients</value></data>
   <data name="Last" xml:space="preserve"><value>Zuletzt</value></data>
   <data name="Allowlist" xml:space="preserve"><value>Freigabeliste</value></data>
@@ -568,9 +566,6 @@
   <data name="SaveModeAutoStatus" xml:space="preserve"><value>Speichermodus: Automatisch speichern</value></data>
   <data name="SaveModeManualStatus" xml:space="preserve"><value>Speichermodus: Manuell speichern</value></data>
   <data name="SaveModeDisabledStatus" xml:space="preserve"><value>Speichermodus: Nicht speichern</value></data>
-  <data name="ThemeDefaultStatus" xml:space="preserve"><value>Theme-Variante: Standard</value></data>
-  <data name="ThemeLightStatus" xml:space="preserve"><value>Theme-Variante: Hell</value></data>
-  <data name="ThemeDarkStatus" xml:space="preserve"><value>Theme-Variante: Dunkel</value></data>
   <data name="AboutSummary" xml:space="preserve"><value>XAML Visual Editor – WYSIWYG-XAML-Editor auf Avalonia-Basis</value></data>
   <data name="DocumentCreated" xml:space="preserve"><value>{0} erstellt</value></data>
   <data name="DocumentCreateFailed" xml:space="preserve"><value>Dokument konnte nicht erstellt werden: {0}</value></data>
@@ -694,8 +689,6 @@
   <data name="ParticipantPrompt" xml:space="preserve"><value>Name oder E-Mail-Adresse des Teilnehmers eingeben</value></data>
   <data name="InviteSessionRequired" xml:space="preserve"><value>Einladung nicht möglich. Starte zunächst eine Sitzung oder tritt einer Sitzung bei.</value></data>
   <data name="InvitePreparedPrefix" xml:space="preserve"><value>Einladung vorbereitet für </value></data>
-  <data name="CollaborationOffline" xml:space="preserve"><value>Zusammenarbeit: Offline</value></data>
-  <data name="NoCollaborationSession" xml:space="preserve"><value>Keine aktive Sitzung zur Zusammenarbeit</value></data>
   <data name="CollaborationCount" xml:space="preserve"><value>Zusammenarbeit: {0}</value></data>
   <data name="SessionOneParticipant" xml:space="preserve"><value>Sitzung {0} (1 Teilnehmer)</value></data>
   <data name="SessionParticipants" xml:space="preserve"><value>Sitzung {0} ({1} Teilnehmer)</value></data>
@@ -751,7 +744,6 @@
   <data name="TemplateCreationFailed" xml:space="preserve"><value>Template-Erstellung fehlgeschlagen.</value></data>
   <data name="TemplateOutputPathMissing" xml:space="preserve"><value>Die Template-Erstellung war erfolgreich, hat aber keinen Ausgabepfad zurückgegeben.</value></data>
   <data name="OpenWorkspaceNow" xml:space="preserve"><value>&apos;{0}&apos; jetzt öffnen?</value></data>
-  <data name="OpenXamlProjectSolution" xml:space="preserve"><value>XAML, Projekt oder Solution öffnen</value></data>
   <data name="AllSupportedFiles" xml:space="preserve"><value>Alle unterstützten Dateien</value></data>
   <data name="XamlFiles" xml:space="preserve"><value>XAML-Dateien</value></data>
   <data name="Projects" xml:space="preserve"><value>Projekte</value></data>
@@ -830,7 +822,6 @@
   <data name="LoadingProjectControls" xml:space="preserve"><value>Projekt-Controls werden geladen...</value></data>
   <data name="ControlsAvailable" xml:space="preserve"><value>{0} Controls verfügbar.</value></data>
   <data name="ControlDiscoveryCanceled" xml:space="preserve"><value>Control-Ermittlung abgebrochen.</value></data>
-  <data name="ControlLoadingFailedPrefix" xml:space="preserve"><value>Projekt-Controls können nicht geladen werden: </value></data>
   <data name="ToggleAnimationViewCommand" xml:space="preserve"><value>Ansicht: Animationseditor ein-/ausblenden</value></data>
   <data name="RefreshAnimationPreviewCommand" xml:space="preserve"><value>Animation: Vorschau aktualisieren</value></data>
   <data name="Animation" xml:space="preserve"><value>Animation</value></data>
@@ -924,11 +915,7 @@
   <data name="LspStoreUnavailable" xml:space="preserve"><value>Speicher für LSP-Einstellungen nicht verfügbar.</value></data>
   <data name="Stopped" xml:space="preserve"><value>Gestoppt</value></data>
   <data name="GitUnavailable" xml:space="preserve"><value>Git-Dienst nicht verfügbar</value></data>
-  <data name="GitUnstageConfirmTitle" xml:space="preserve"><value>Unstage bestätigen</value></data>
-  <data name="GitUnstageOnePrompt" xml:space="preserve"><value>1 Datei aus dem Git-Index nehmen: {0}? Änderungen in der Arbeitsdatei bleiben erhalten.</value></data>
-  <data name="GitUnstageManyPrompt" xml:space="preserve"><value>{0} Dateien aus dem Git-Index nehmen? Änderungen in den Arbeitsdateien bleiben erhalten.</value></data>
   <data name="GitDiscardConfirmTitle" xml:space="preserve"><value>Änderungen verwerfen?</value></data>
-  <data name="GitDiscardOnePrompt" xml:space="preserve"><value>Änderungen an 1 Datei verwerfen: {0}? Änderungen im Git-Index und in der Arbeitsdatei gehen verloren.</value></data>
   <data name="GitDiscardTooltip" xml:space="preserve"><value>Discard fragt vor dem Verwerfen nach. Untracked-Dateien können hier nicht entfernt werden.</value></data>
   <data name="GitShowDiff" xml:space="preserve"><value>Diff anzeigen</value></data>
   <data name="GitHideDiff" xml:space="preserve"><value>Diff ausblenden</value></data>
@@ -1066,7 +1053,6 @@
   <data name="LspSettingsListExpected" xml:space="preserve"><value>Eine Liste mit LSP-Servereinstellungen wird erwartet.</value></data>
   <data name="LanguageIdRequired" xml:space="preserve"><value>LanguageId darf nicht leer sein.</value></data>
   <data name="ServerPathRequired" xml:space="preserve"><value>ServerPath darf nicht leer sein.</value></data>
-  <data name="CollaborationConnectedBadge" xml:space="preserve"><value>● Zusammenarbeit verbunden</value></data>
   <data name="CannotCutRoot" xml:space="preserve"><value>Das Dokumentwurzelelement kann nicht ausgeschnitten werden.</value></data>
   <data name="CutSelectionChanged" xml:space="preserve"><value>Ausschneiden wurde abgebrochen, weil sich das Dokument oder die Auswahl geändert hat.</value></data>
   <data name="PasteSelectionChanged" xml:space="preserve"><value>Einfügen wurde abgebrochen, weil sich das Dokument oder die Auswahl geändert hat.</value></data>
@@ -1091,7 +1077,6 @@
   <data name="ServerRestarted" xml:space="preserve"><value>Server neu gestartet.</value></data>
   <data name="PermissionRevokedPrefix" xml:space="preserve"><value>Berechtigung widerrufen für </value></data>
   <data name="PermissionsCleared" xml:space="preserve"><value>Alle Berechtigungen entfernt.</value></data>
-  <data name="SessionTokenCopied" xml:space="preserve"><value>Sitzungstoken kopiert.</value></data>
   <data name="HttpEndpointCopied" xml:space="preserve"><value>HTTP-Endpunkt kopiert.</value></data>
   <data name="MarkupParameterHints" xml:space="preserve"><value>Parameterhinweise für Markup-Erweiterungen</value></data>
   <data name="BuildingDesignSurface" xml:space="preserve"><value>Designer-Oberfläche wird aufgebaut...</value></data>
@@ -1280,4 +1265,18 @@
   <data name="EventHandlerMappingFailed" xml:space="preserve"><value>Der Handler konnte dem ursprünglichen Projekt nicht zugeordnet werden.</value></data>
   <data name="DropTargetUnavailable" xml:space="preserve"><value>Das Ablageziel gehört nicht zur Entwurfsoberfläche.</value></data>
   <data name="DropPositionUnavailable" xml:space="preserve"><value>Das Element kann nicht neben dem Ablageziel platziert werden.</value></data>
+  <data name="GitDiscardWorkingChangesPrompt" xml:space="preserve"><value>Änderungen in der Arbeitsdatei verwerfen: {0}? Die Datei wird auf den Stand im Git-Index oder im letzten Commit zurückgesetzt; Änderungen im Git-Index bleiben erhalten.</value></data>
+  <data name="OAuthTokenExpired" xml:space="preserve"><value>Die OAuth-Anmeldung ist abgelaufen und konnte nicht erneuert werden. Melden Sie sich erneut an oder hinterlegen Sie die URL des Token-Endpunkts.</value></data>
+  <data name="DocumentOpenFailedNamed" xml:space="preserve"><value>„{0}“ konnte nicht geöffnet werden: {1}</value></data>
+  <data name="DocumentNotUtf8Reason" xml:space="preserve"><value>Die Datei ist kein gültiger UTF-8-Text.</value></data>
+  <data name="CommandFailed" xml:space="preserve"><value>Der Befehl ist fehlgeschlagen: {0}</value></data>
+  <data name="LayoutSaveFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gespeichert werden</value></data>
+  <data name="PreviewThemeLoadHint" xml:space="preserve"><value>Starte oder aktualisiere die Vorschau, um die Themes der Bibliothek zu laden.</value></data>
+  <data name="PreviewThemeProviderError" xml:space="preserve"><value>Theme-Provider '{0}': {1}</value></data>
+  <data name="PreviewThemeUnavailable" xml:space="preserve"><value>Nicht verfügbar: {0}</value></data>
+  <data name="PreviewThemePreviewOnly" xml:space="preserve"><value>{0} (nur Vorschau)</value></data>
+  <data name="Duplicate" xml:space="preserve"><value>Duplizieren</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
+  <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
 </root>

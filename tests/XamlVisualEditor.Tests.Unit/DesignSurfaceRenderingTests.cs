@@ -70,7 +70,44 @@ public sealed class DesignSurfaceRenderingTests
         Assert.DoesNotContain(failing, DesignPreviewHookRegistry.Hooks);
     }
 
-    private static async Task RenderAsync(string xaml, Action<DesignerDocumentViewModel> verify)
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Unrelated_layout_passes_do_not_walk_the_rendered_tree()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        string xaml = """
+            <UserControl xmlns="https://github.com/avaloniaui">
+              <StackPanel>
+                <Button Content="One" />
+                <TextBox Text="Two" />
+              </StackPanel>
+            </UserControl>
+            """;
+        Border unrelated = new() { Width = 10, Height = 10 };
+
+        await RenderAsync(xaml, (_, view) =>
+        {
+            // The reconciliation after the rebuild is posted at background priority.
+            for (int attempt = 0; attempt < 20 && view.RuntimeReconciliationCount == 0; attempt++)
+                Dispatcher.UIThread.RunJobs();
+            int afterRender = view.RuntimeReconciliationCount;
+            Assert.True(afterRender > 0);
+            for (int i = 0; i < 5; i++)
+            {
+                unrelated.Width = 20 + i;
+                TopLevel.GetTopLevel(view)!.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Equal(afterRender, view.RuntimeReconciliationCount);
+        }, unrelated);
+    }
+
+    private static Task RenderAsync(string xaml, Action<DesignerDocumentViewModel> verify) =>
+        RenderAsync(xaml, (document, _) => verify(document));
+
+    private static async Task RenderAsync(string xaml, Action<DesignerDocumentViewModel, DesignSurfaceView> verify,
+        Control? sibling = null)
     {
         string path = Path.Combine(Path.GetTempPath(), "xve-render-" + Guid.NewGuid().ToString("N") + ".axaml");
         await File.WriteAllTextAsync(path, xaml);
@@ -80,14 +117,22 @@ public sealed class DesignSurfaceRenderingTests
         using DesignerDocumentViewModel document = new(path, metadata);
         await document.LoadAsync();
         DesignSurfaceView view = new() { DataContext = document.DesignSurface };
-        Window host = new() { Content = new Border { DataContext = document, Child = view }, Width = 800, Height = 600 };
+        DockPanel content = new() { DataContext = document };
+        if (sibling is not null)
+        {
+            DockPanel.SetDock(sibling, Avalonia.Controls.Dock.Top);
+            content.Children.Add(sibling);
+        }
+
+        content.Children.Add(view);
+        Window host = new() { Content = content, Width = 800, Height = 600 };
         try
         {
             host.Show();
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             host.UpdateLayout();
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            verify(document);
+            verify(document, view);
         }
         finally
         {

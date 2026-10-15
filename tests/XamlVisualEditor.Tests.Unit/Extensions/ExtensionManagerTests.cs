@@ -66,6 +66,25 @@ public sealed class ExtensionManagerTests
         Assert.True(enabled);
     }
 
+    [Fact]
+    public async Task BuiltInPackagesReportTheirDeclaredCapabilities()
+    {
+        using ServiceProvider services = new ServiceCollection()
+            .AddSingleton<IXveExtension, CapabilityDeclaringExtension>()
+            .BuildServiceProvider();
+        ExtensionManager manager = new(new FakeStore(), new FakeStateStore(), new FakeUpdateService(), services);
+
+        ExtensionPackageInfo package = Assert.Single(await manager.GetInstalledAsync(CancellationToken.None));
+
+        Assert.Equal(new[] { ExtensionHostCapabilities.DocumentOpenInterceptors }, package.Manifest.Capabilities);
+    }
+
+    [ExtensionCapabilities(ExtensionHostCapabilities.DocumentOpenInterceptors)]
+    private sealed class CapabilityDeclaringExtension : IXveExtension
+    {
+        public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
     private sealed class FakeStore : IExtensionPackageStore
     {
         public bool InstallCalled { get; private set; }

@@ -24,6 +24,7 @@ public sealed class FixedSideDockWidthsBehavior : Behavior<DockControl>
     private IDockable? _left;
     private IDockable? _right;
     private IDockable? _center;
+    private ProportionalStackPanel? _mainPanel;
     private double _width;
     private double _leftWidth;
     private double _rightWidth;
@@ -46,12 +47,14 @@ public sealed class FixedSideDockWidthsBehavior : Behavior<DockControl>
         _layoutSubscription = null;
         _proportionSubscription = null;
         _left = _right = _center = null;
+        _mainPanel = null;
         base.OnDetaching();
     }
 
     private void BindLayout(IRootDock? root)
     {
         _proportionSubscription?.Dispose();
+        _mainPanel = null;
         _left = root is null ? null : XamlEditorDockFactory.FindDockable<IDockable>(root, "LeftToolDock");
         _right = root is null ? null : XamlEditorDockFactory.FindDockable<IDockable>(root, "RightToolDock");
         _center = root is null ? null : XamlEditorDockFactory.FindDockable<IDockable>(root, "CenterAndBottom");
@@ -102,14 +105,26 @@ public sealed class FixedSideDockWidthsBehavior : Behavior<DockControl>
         finally { _updating = false; }
     }
 
-    private void ApplyVisualProportions(double left, double center, double right)
+    // The panel of the main layout is searched once and kept while it still belongs to the main layout of this dock.
+    private ProportionalStackPanel? FindMainPanel()
     {
+        if (_mainPanel is { } cached
+            && cached.FindAncestorOfType<ProportionalDockControl>() is { DataContext: IDockable { Id: "MainLayout" } } owner
+            && ReferenceEquals(owner.FindAncestorOfType<DockControl>(), AssociatedObject))
+        {
+            return cached;
+        }
+
         ProportionalDockControl? main = AssociatedObject?.GetVisualDescendants()
             .OfType<ProportionalDockControl>()
             .FirstOrDefault(control => control.DataContext is IDockable { Id: "MainLayout" });
-        ProportionalStackPanel? panel = main?.GetVisualDescendants()
-            .OfType<ProportionalStackPanel>().FirstOrDefault();
-        if (panel is null) return;
+        _mainPanel = main?.GetVisualDescendants().OfType<ProportionalStackPanel>().FirstOrDefault();
+        return _mainPanel;
+    }
+
+    private void ApplyVisualProportions(double left, double center, double right)
+    {
+        if (FindMainPanel() is not { } panel) return;
 
         foreach (Control child in panel.Children)
         {

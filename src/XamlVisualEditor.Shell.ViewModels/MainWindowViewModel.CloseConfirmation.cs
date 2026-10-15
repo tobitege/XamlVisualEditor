@@ -100,7 +100,7 @@ public sealed partial class MainWindowViewModel
         }
 
         e.Cancel = true;
-        _ = ConfirmDockCloseAsync(document, e.Dockable!);
+        _ = ReportFailureAsync(ConfirmDockCloseAsync(document, e.Dockable!));
     }
 
     private async Task ConfirmDockCloseAsync(IEditorDocumentViewModel document, IDockable dockable)

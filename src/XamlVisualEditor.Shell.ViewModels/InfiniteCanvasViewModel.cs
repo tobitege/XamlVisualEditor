@@ -81,6 +81,9 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
         Documents.CollectionChanged += OnDocumentsChanged;
 
         DropFilesCommand = ReactiveCommand.CreateFromTask<CanvasDropInfo>(HandleDropAsync);
+        // Without a subscriber ReactiveUI ends the application when a dropped file cannot be added.
+        _disposables.Add(DropFilesCommand.ThrownExceptions
+            .Subscribe(error => _logger.LogWarning("Failed to add dropped files: {Message}", error.Message)));
         AddOpenDocumentCommand = ReactiveCommand.Create<OpenDocumentEntry?>(AddOpenDocument);
         AddAllOpenDocumentsCommand = ReactiveCommand.Create(AddAllOpenDocuments);
 

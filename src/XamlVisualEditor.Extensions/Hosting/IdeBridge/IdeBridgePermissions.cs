@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
@@ -9,18 +8,27 @@ using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Extensions.Hosting.IdeBridge;
 
-/// <summary>Stores a workspace permission decision.</summary>
+/// <summary>Access granted to the IDE bridge clients of a workspace.</summary>
+public enum IdeBridgeAccessLevel
+{
+    ReadOnly,
+    Full
+}
+
+/// <summary>Stores a workspace permission decision. Session tokens are issued per session and never persisted.</summary>
 public sealed record IdeBridgeWorkspacePermissionState(
-    string SessionToken,
-    IdeBridgeCapabilities Capabilities,
+    IdeBridgeAccessLevel AccessLevel,
     DateTimeOffset GrantedAt);
 
 /// <summary>Allowlist entry for UI.</summary>
 public sealed record IdeBridgeWorkspacePermissionEntry(
     string WorkspaceId,
-    string SessionToken,
-    IdeBridgeCapabilities Capabilities,
-    DateTimeOffset GrantedAt);
+    IdeBridgeAccessLevel AccessLevel,
+    DateTimeOffset GrantedAt)
+{
+    /// <summary>Gets the features granted by <see cref="AccessLevel"/>.</summary>
+    public IdeBridgeCapabilities Capabilities => IdeBridgePermissionService.GetCapabilities(AccessLevel);
+}
 
 /// <summary>Resolves permissions for IDE bridge sessions.</summary>
 public sealed class IdeBridgePermissionService
@@ -30,6 +38,9 @@ public sealed class IdeBridgePermissionService
     private readonly IWindow _window;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Raised after the consent of one workspace, or of all workspaces (<c>null</c>), was removed.</summary>
+    public event Action<string?>? PermissionsRevoked;
+
     /// <summary>Creates the permission service.</summary>
     public IdeBridgePermissionService(ISettings settings, IWindow window)
     {
@@ -37,8 +48,12 @@ public sealed class IdeBridgePermissionService
         _window = window ?? throw new ArgumentNullException(nameof(window));
     }
 
-    /// <summary>Authorizes a session token or prompts for consent.</summary>
-    public async Task<IdeBridgeWorkspacePermissionState?> AuthorizeAsync(string workspaceId, string? sessionToken, CancellationToken ct)
+    /// <summary>Gets the features granted by <paramref name="accessLevel"/>.</summary>
+    public static IdeBridgeCapabilities GetCapabilities(IdeBridgeAccessLevel accessLevel) =>
+        accessLevel == IdeBridgeAccessLevel.Full ? CreateFullCapabilities() : CreateReadOnlyCapabilities();
+
+    /// <summary>Returns the stored consent of the workspace or prompts for and persists a new one.</summary>
+    public async Task<IdeBridgeWorkspacePermissionState?> AuthorizeAsync(string workspaceId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(workspaceId))
         {
@@ -51,12 +66,7 @@ public sealed class IdeBridgePermissionService
             Dictionary<string, IdeBridgeWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
             if (states.TryGetValue(workspaceId, out IdeBridgeWorkspacePermissionState? existing))
             {
-                if (!string.IsNullOrWhiteSpace(sessionToken) && string.Equals(existing.SessionToken, sessionToken, StringComparison.Ordinal))
-                {
-                    return existing;
-                }
-
-                return null;
+                return existing;
             }
 
             IdeBridgeWorkspacePermissionState? granted = await PromptForConsentAsync(ct).ConfigureAwait(false);
@@ -83,7 +93,7 @@ public sealed class IdeBridgePermissionService
         foreach (KeyValuePair<string, IdeBridgeWorkspacePermissionState> entry in states)
         {
             IdeBridgeWorkspacePermissionState state = entry.Value;
-            results.Add(new IdeBridgeWorkspacePermissionEntry(entry.Key, state.SessionToken, state.Capabilities, state.GrantedAt));
+            results.Add(new IdeBridgeWorkspacePermissionEntry(entry.Key, state.AccessLevel, state.GrantedAt));
         }
 
         return results;
@@ -97,17 +107,36 @@ public sealed class IdeBridgePermissionService
             return;
         }
 
-        Dictionary<string, IdeBridgeWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
-        if (states.Remove(workspaceId))
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            Dictionary<string, IdeBridgeWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
+            if (states.Remove(workspaceId))
+            {
+                await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            }
+
+            PermissionsRevoked?.Invoke(workspaceId);
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 
     /// <summary>Clears all allowlist entries.</summary>
-    public Task ClearAllAsync(CancellationToken ct)
+    public async Task ClearAllAsync(CancellationToken ct)
     {
-        return SaveStatesAsync(new Dictionary<string, IdeBridgeWorkspacePermissionState>(StringComparer.Ordinal), ct);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await SaveStatesAsync(new Dictionary<string, IdeBridgeWorkspacePermissionState>(StringComparer.Ordinal), ct).ConfigureAwait(false);
+            PermissionsRevoked?.Invoke(null);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private async Task<IdeBridgeWorkspacePermissionState?> PromptForConsentAsync(CancellationToken ct)
@@ -119,14 +148,14 @@ public sealed class IdeBridgePermissionService
         {
             if (string.Equals(autoConsent, "full", StringComparison.OrdinalIgnoreCase))
             {
-                return new IdeBridgeWorkspacePermissionState(CreateToken(), CreateFullCapabilities(), DateTimeOffset.UtcNow);
+                return new IdeBridgeWorkspacePermissionState(IdeBridgeAccessLevel.Full, DateTimeOffset.UtcNow);
             }
 
             if (string.Equals(autoConsent, "readonly", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(autoConsent, "1", StringComparison.Ordinal)
                 || string.Equals(autoConsent, "true", StringComparison.OrdinalIgnoreCase))
             {
-                return new IdeBridgeWorkspacePermissionState(CreateToken(), CreateReadOnlyCapabilities(), DateTimeOffset.UtcNow);
+                return new IdeBridgeWorkspacePermissionState(IdeBridgeAccessLevel.ReadOnly, DateTimeOffset.UtcNow);
             }
         }
 
@@ -150,11 +179,11 @@ public sealed class IdeBridgePermissionService
             return null;
         }
 
-        IdeBridgeCapabilities caps = fullAccess
-            ? CreateFullCapabilities()
-            : CreateReadOnlyCapabilities();
+        IdeBridgeAccessLevel accessLevel = fullAccess
+            ? IdeBridgeAccessLevel.Full
+            : IdeBridgeAccessLevel.ReadOnly;
 
-        return new IdeBridgeWorkspacePermissionState(CreateToken(), caps, DateTimeOffset.UtcNow);
+        return new IdeBridgeWorkspacePermissionState(accessLevel, DateTimeOffset.UtcNow);
     }
 
     private static IdeBridgeCapabilities CreateReadOnlyCapabilities()
@@ -196,11 +225,5 @@ public sealed class IdeBridgePermissionService
     private Task SaveStatesAsync(Dictionary<string, IdeBridgeWorkspacePermissionState> states, CancellationToken ct)
     {
         return _settings.UpdateAsync(SettingsSection, states, SettingsTarget.Workspace, ct);
-    }
-
-    private static string CreateToken()
-    {
-        byte[] bytes = RandomNumberGenerator.GetBytes(32);
-        return Convert.ToBase64String(bytes);
     }
 }

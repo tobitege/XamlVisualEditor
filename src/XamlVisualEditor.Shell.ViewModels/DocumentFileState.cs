@@ -22,11 +22,11 @@ internal sealed class DocumentFileState
         try
         {
             byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
-            using MemoryStream stream = new(bytes, writable: false);
-            using StreamReader reader = new(stream, new UTF8Encoding(false, true), detectEncodingFromByteOrderMarks: true);
-            string text = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            Encoding encoding = DetectStrictEncoding(bytes);
+            int preambleLength = encoding.GetPreamble().Length;
+            string text = encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength);
             cancellationToken.ThrowIfCancellationRequested();
-            _encoding = reader.CurrentEncoding;
+            _encoding = encoding;
             _persistedBytes = bytes;
             _persistedText = text;
             return text;
@@ -36,6 +36,18 @@ internal sealed class DocumentFileState
             _fileGate.Release();
         }
     }
+
+    // Every decoder throws on invalid bytes, also behind a byte order mark, so a file is never
+    // opened with replaced characters that a later save would write back.
+    private static Encoding DetectStrictEncoding(byte[] bytes) => bytes switch
+    {
+        [0xEF, 0xBB, 0xBF, ..] => new UTF8Encoding(true, true),
+        [0xFF, 0xFE, 0x00, 0x00, ..] => new UTF32Encoding(false, true, true),
+        [0x00, 0x00, 0xFE, 0xFF, ..] => new UTF32Encoding(true, true, true),
+        [0xFF, 0xFE, ..] => new UnicodeEncoding(false, true, true),
+        [0xFE, 0xFF, ..] => new UnicodeEncoding(true, true, true),
+        _ => new UTF8Encoding(false, true)
+    };
 
     public async Task SaveAsync(string filePath, string text)
     {

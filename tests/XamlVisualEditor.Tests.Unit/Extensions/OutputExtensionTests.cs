@@ -2,6 +2,7 @@ using System.Reactive.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Controls.DataGridHierarchical;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.OutputExtension;
 using Xunit;
@@ -12,6 +13,24 @@ namespace XamlVisualEditor.Tests.Unit.Extensions;
 
 public sealed class OutputExtensionTests
 {
+    [Fact]
+    public void Location_of_a_diagnostic_without_a_file_uses_the_localized_workspace_label()
+    {
+        System.Globalization.CultureInfo? previousCulture = UiStrings.Culture;
+        try
+        {
+            UiStrings.Culture = System.Globalization.CultureInfo.GetCultureInfo("de");
+            DiagnosticEntryViewModel entry = new(CreateDiagnostic(string.Empty, 0, 0, "Workspace error"),
+                DateTimeOffset.UnixEpoch);
+
+            Assert.Equal("Arbeitsbereich", entry.Location);
+        }
+        finally
+        {
+            UiStrings.Culture = previousCulture;
+        }
+    }
+
     [Fact]
     public async Task NavigateToRelativeAsync_ReturnsFalse_WhenNoDiagnostics()
     {
@@ -71,7 +90,7 @@ public sealed class OutputExtensionTests
         HierarchicalNode workspaceRow = viewModel.Model.Flattened.OfType<HierarchicalNode>()
             .Single(row => row.Item is DiagnosticEntryViewModel { FilePath: "" });
         viewModel.SelectedRow = workspaceRow;
-        Assert.Equal("Workspace", viewModel.SelectedDiagnostic!.Location);
+        Assert.Equal(UiStrings.Workspace, viewModel.SelectedDiagnostic!.Location);
         Assert.False(((ICommand)viewModel.OpenLocationCommand).CanExecute(null));
         Assert.True(((ICommand)viewModel.CopySelectedCommand).CanExecute(null));
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using RemoteInput = Avalonia.Remote.Protocol.Input;
 
 namespace XamlVisualEditor.App.Views;
@@ -102,6 +103,8 @@ public sealed partial class PreviewerSurfaceControl
     private bool ForwardPreviewKey(KeyEventArgs args, bool isDown)
     {
         if (!CanPreviewInput) return false;
+        // A key whose press stayed outside the preview is released outside as well.
+        if (!isDown && !_previewKeys.ContainsKey(args.Key)) return false;
         RemoteInput.KeyEventMessage message = new()
         {
             IsDown = isDown, Key = (RemoteInput.Key)args.Key,
@@ -113,6 +116,22 @@ public sealed partial class PreviewerSurfaceControl
         SendPreviewInput(message);
         args.Handled = true;
         return true;
+    }
+
+    // While the preview receives the keyboard, Ctrl+Tab and Ctrl+Shift+Tab are left to the keyboard navigation of the
+    // window, so the focus can leave the preview, and the gestures of key bindings and menu hot keys of the
+    // surrounding elements keep working.
+    private bool KeepsKeyOutsidePreview(KeyEventArgs args)
+    {
+        if (!CanPreviewInput) return false;
+        if (args.Key == Key.Tab && args.KeyModifiers.HasFlag(KeyModifiers.Control)) return true;
+        for (Visual? visual = this.GetVisualParent(); visual is not null; visual = visual.GetVisualParent())
+        {
+            if (visual is InputElement element && element.KeyBindings.Any(binding => binding.Gesture?.Matches(args) == true))
+                return true;
+        }
+
+        return false;
     }
 
     protected override void OnKeyUp(KeyEventArgs args)

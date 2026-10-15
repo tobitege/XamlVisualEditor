@@ -9,6 +9,11 @@ using XamlVisualEditor.Core.Localization;
 namespace XamlVisualEditor.App.Views;
 
 /// <summary>Resizes the window relative to the clicked point, without jumping to the window corner.</summary>
+/// <remarks>
+/// The grip sets the window size itself instead of calling <see cref="Window.BeginResizeDrag"/>: the native resize
+/// moves the window corner to the pointer, so the window jumps by the distance between the clicked point and the
+/// corner. The macOS backend of Avalonia also implements that method as a no-op.
+/// </remarks>
 public sealed class WindowResizeGrip : Control
 {
     public static readonly StyledProperty<IBrush?> GripBrushProperty =

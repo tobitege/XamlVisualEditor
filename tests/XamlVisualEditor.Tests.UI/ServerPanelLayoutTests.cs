@@ -24,8 +24,7 @@ public sealed class ServerPanelLayoutTests
     {
         ["Status"] = "Running: http listener bound on all interfaces, 3 clients connected, waiting for the next workspace handshake",
         ["Endpoint"] = "http://127.0.0.1:47120/xaml-visual-editor/mcp/very/long/path/segment/that/keeps/going/for/layout",
-        ["Workspace"] = @"D:\github\XamlVisualEditor\extensions\XamlVisualEditor.IdeBridgeExtension\Views\SubFolder\AnotherFolder\Deep",
-        ["Token"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ["Workspace"] = @"C:\Work\Sample\XamlVisualEditor\extensions\XamlVisualEditor.IdeBridgeExtension\Views\SubFolder\AnotherFolder\Deep",
         ["AgentName"] = "very-long-agent-name-with-many-segments/vendor/product/preview-build-2026.09.22"
     };
 
@@ -36,7 +35,8 @@ public sealed class ServerPanelLayoutTests
     public async Task IdeBridgePanelKeepsControlsInsideAndDisjoint(double width)
     {
         IdeBridgePanelView view = new();
-        await AssertPanelLayoutAsync(view, width, UiStrings.IdeBridge, "IdeBridgeStatus", "IdeBridgeEndpoint", "IdeBridgeWorkspace", "IdeBridgeToken");
+        await AssertPanelLayoutAsync(view, width, UiStrings.IdeBridge, "IdeBridgeStatus", "IdeBridgeEndpoint", "IdeBridgeWorkspace");
+        Assert.Null(view.FindControl<Control>("IdeBridgeToken"));
     }
 
     [AvaloniaTheory]

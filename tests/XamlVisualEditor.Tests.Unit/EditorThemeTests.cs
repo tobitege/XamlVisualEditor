@@ -200,6 +200,38 @@ public sealed class EditorThemeTests
         finally { window.Close(); }
     }
 
+    [AvaloniaTheory]
+    [InlineData("light", true)]
+    [InlineData("dark", false)]
+    public void CanvasAndBusyBackdropsFollowTheBuiltInTheme(string theme, bool expectLight)
+    {
+        using ThemeHost host = new();
+        using EditorThemeService themes = new(host.Registry, host.Manager, host.Options);
+        themes.Apply(new("builtin", theme));
+
+        foreach (string key in new[] { "EditorCanvasBackdropBrush", "EditorBusyBackdropBrush" })
+        {
+            Assert.True(host.Application.TryGetResource(key, host.Application.ActualThemeVariant, out object? value));
+            Color color = Assert.IsAssignableFrom<ISolidColorBrush>(value).Color;
+            Assert.Equal(expectLight, (color.R + color.G + color.B) / 3 > 128);
+        }
+    }
+
+    [AvaloniaFact]
+    public void ProviderPaletteOverridesTheBuiltInBackdrops()
+    {
+        using ThemeHost host = new();
+        EditorThemePalette palette = new FloweryEditorThemeProvider().GetPalette("cupcake");
+        host.Application.RequestedThemeVariant = ThemeVariant.Light;
+        host.Application.Resources = EditorThemeResources.Create(palette);
+        Color background = Color.Parse(palette.Colors[EditorThemeColor.Background]);
+
+        Assert.True(host.Application.TryGetResource("EditorCanvasBackdropBrush", ThemeVariant.Light, out object? canvas));
+        Assert.True(host.Application.TryGetResource("EditorBusyBackdropBrush", ThemeVariant.Light, out object? busy));
+        Assert.Equal(background, Assert.IsAssignableFrom<ISolidColorBrush>(canvas).Color);
+        Assert.Equal(Color.FromArgb(208, background.R, background.G, background.B), Assert.IsAssignableFrom<ISolidColorBrush>(busy).Color);
+    }
+
     [AvaloniaFact]
     public void FloweryEditorPalettesDoNotChangeApplicationOrPreviewThemeState()
     {

@@ -6,6 +6,8 @@ using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using AvaloniaEdit;
+using AvaloniaEdit.Folding;
+using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Shell.ViewModels;
@@ -62,6 +64,69 @@ public sealed class TextEditorViewBindingTests
             Assert.Equal((9, 6), (document.SelectionStart, document.SelectionLength));
         });
     }
+
+    [AvaloniaFact]
+    public async Task ManualFoldingSurvivesTheFoldingUpdateAfterATextChange()
+    {
+        using CodeEditorViewModel document = CreateCodeDocument("one\ntwo\nthree\nfour\n");
+
+        await WithViewAsync(new XamlCodeEditorView { DataContext = document }, async editor =>
+        {
+            FoldingManager manager = GetFoldingManager(editor);
+            editor.Select(4, 9);
+            Assert.True(TextEditorViewHost.CollapseSelection(editor));
+            FoldingSection created = Assert.Single(manager.AllFoldings);
+            int start = created.StartOffset;
+
+            document.Document.Insert(0, "zero\n");
+            await Task.Delay(500, TestContext.Current.CancellationToken);
+            await Flush();
+
+            FoldingSection kept = Assert.Single(manager.AllFoldings);
+            Assert.Equal(start + 5, kept.StartOffset);
+            Assert.True(kept.IsFolded);
+            Assert.True(TextEditorViewHost.IsManualFolding(kept));
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task FoldStateSurvivesDetachAndAttach()
+    {
+        using CodeEditorViewModel document = CreateCodeDocument("<Grid>\n  <Button />\n</Grid>\n");
+        XamlCodeEditorView view = new() { DataContext = document };
+        ContentControl host = new() { Content = view };
+
+        await WithViewAsync(host, async editor =>
+        {
+            FoldingManager manager = GetFoldingManager(editor);
+            FoldingSection grid = Assert.Single(manager.AllFoldings);
+            grid.IsFolded = true;
+
+            host.Content = null;
+            await Flush();
+            host.Content = view;
+            await Flush();
+
+            Assert.Same(editor, view.GetLogicalDescendants().OfType<TextEditor>().Single());
+            Assert.Same(manager, GetFoldingManager(editor));
+            Assert.True(Assert.Single(manager.AllFoldings).IsFolded);
+        });
+
+        view.Dispose();
+    }
+
+    private static CodeEditorViewModel CreateCodeDocument(string text)
+    {
+        CodeEditorViewModel document = new(
+            Path.Combine(Path.GetTempPath(), "folding.axaml"),
+            new SyncEngine(new XamlParsingService(), new XamlSerializationService()),
+            CompletionProviderRegistry.CreateDefault());
+        document.Document.Text = text;
+        return document;
+    }
+
+    private static FoldingManager GetFoldingManager(TextEditor editor) =>
+        Assert.IsAssignableFrom<FoldingManager>(editor.TextArea.TextView.GetService(typeof(FoldingManager)));
 
     private static async Task WithViewAsync(Control view, Func<TextEditor, Task> test)
     {

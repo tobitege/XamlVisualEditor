@@ -20,6 +20,9 @@ namespace XamlVisualEditor.Shell.ViewModels;
 public sealed class PreviewerTcpSession : IDisposable
 {
     internal const string DesignTreeMessagePrefix = "XVE-DESIGN-TREE ";
+    /// <summary>Largest frame width and height accepted from the previewer process.</summary>
+    internal const int MaxFrameDimension = 16384;
+    private bool _invalidFrameLogged;
     private Guid? _expectedRenderId;
     private DesignerHostSnapshot? _lastDesignTree;
     private Guid? _expectedThemeRequestId;
@@ -357,6 +360,28 @@ public sealed class PreviewerTcpSession : IDisposable
         TrySendPendingUpdate(connection);
     }
 
+    /// <summary>
+    /// Checks that a frame from the previewer process has a supported format, dimensions up to
+    /// <see cref="MaxFrameDimension"/> and pixel data for every row its stride describes. A frame without size is
+    /// valid and shows no image.
+    /// </summary>
+    internal static bool IsValidFrame(FrameMessage frame)
+    {
+        if (frame.Width == 0 && frame.Height == 0) return true;
+        if (frame.Width <= 0 || frame.Height <= 0 || frame.Width > MaxFrameDimension || frame.Height > MaxFrameDimension)
+            return false;
+        int bytesPerPixel = frame.Format switch
+        {
+            PixelFormat.Rgb565 => 2,
+            PixelFormat.Bgra8888 or PixelFormat.Rgba8888 => 4,
+            _ => 0
+        };
+        if (bytesPerPixel == 0 || frame.Data is null || frame.Stride < 0) return false;
+        long rowBytes = (long)frame.Width * bytesPerPixel;
+        long stride = frame.Stride > 0 ? frame.Stride : rowBytes;
+        return stride >= rowBytes && frame.Data.LongLength >= stride * (frame.Height - 1) + rowBytes;
+    }
+
     private void OnMessage(IAvaloniaRemoteTransportConnection connection, object message)
     {
         lock (_gate)
@@ -372,16 +397,30 @@ public sealed class PreviewerTcpSession : IDisposable
 
         if (message is FrameMessage frame)
         {
+            bool valid = IsValidFrame(frame);
             lock (_gate)
             {
                 if (!ReferenceEquals(connection, _connection)) return;
-                _lastFrame = frame;
+                if (valid) _lastFrame = frame;
             }
 
+            // An invalid frame is acknowledged as well, so the previewer goes on sending frames.
             connection.Send(new FrameReceivedMessage
             {
                 SequenceId = frame.SequenceId
             });
+
+            if (!valid)
+            {
+                if (!_invalidFrameLogged)
+                {
+                    _invalidFrameLogged = true;
+                    _log?.Invoke("Warning",
+                        $"Previewer frame dropped: {frame.Width}x{frame.Height}, stride {frame.Stride}, format {frame.Format}, {frame.Data?.Length ?? 0} bytes");
+                }
+
+                return;
+            }
 
             FrameReceived?.Invoke(frame);
             return;

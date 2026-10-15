@@ -63,6 +63,12 @@ uses Semantic Versioning.
 - MCP consent is stored per workspace as an access level: a client that reconnects to a workspace with stored consent is granted without a new prompt, and revoking the consent ends the running sessions of that workspace. Session tokens are created per session and are no longer stored or shown in the MCP panel. HTTP sessions end after one hour without requests.
 - An extension package that registers document open interceptors has to declare `"capabilities": ["documentOpenInterceptors"]` in `xve.extension.json`.
 - The undo history keeps the newest 100 steps.
+- The MCP server negotiates the protocol version with the client (2025-11-25, 2025-06-18 and 2025-03-26 over HTTP, additionally 2024-11-05 over stdio) and accepts JSON-RPC batches.
+- The IDE bridge binds sessions to the open workspace and stores consent per workspace as an access level; session tokens are no longer stored or shown in the IDE bridge panel. Consent stored by an earlier version is read as read-only access.
+- Discarding changes in the Git panel restores the working file from the index and keeps staged changes and staged new files; unstaging no longer asks for confirmation.
+- The extension manager shows the capabilities an extension declares.
+- The CDP debug diagnostics are enabled with the MSBuild property `EnableCdpDiagnostics=true` instead of the Debug configuration and require the token written to the log at startup.
+- At most four external previewer hosts run at the same time: the active document and the three most recently active ones.
 
 ### Fixed
 

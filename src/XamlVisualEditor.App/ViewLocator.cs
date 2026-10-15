@@ -92,6 +92,7 @@ public sealed class ViewLocator : IDataTemplate
             CallStackViewModel => new CallStackView(),
             LocalsViewModel => new LocalsView(),
             WatchesViewModel => new WatchesView(),
+            ReferencesViewModel => new ReferencesView(),
             CodeEditorViewModel => new XamlCodeEditorView(),
             TextDocumentViewModel => new TextFileView(),
             InfiniteCanvasViewModel => new InfiniteCanvasView(),

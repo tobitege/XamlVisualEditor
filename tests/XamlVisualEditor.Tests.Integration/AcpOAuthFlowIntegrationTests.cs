@@ -51,8 +51,39 @@ public sealed class AcpOAuthFlowIntegrationTests
         Assert.Equal("token-123", token);
     }
 
+    [Fact]
+    public async Task ExpiredTokenWithoutTokenEndpointIsNotPassedToTheAgent()
+    {
+        FakeOAuthService oauth = new();
+        FakeSecretStore secrets = new();
+        FakeAcpService service = new();
+
+        AcpProfile profile = AcpProfile.CreateCodexProfile();
+        profile.OAuthClientId = "client-id";
+        profile.OAuthDeviceCodeUrl = null;
+        profile.OAuthTokenUrl = null;
+        secrets.Stored["acp.profile." + profile.Id + ".oauth"] = JsonSerializer.Serialize(new
+        {
+            AccessToken = "expired-token",
+            RefreshToken = "refresh-123",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(-1)
+        });
+        secrets.Stored["acp.profile." + profile.Id + ".apiKey"] = "expired-token";
+
+        AcpToolViewModel vm = new(service, null, secrets, oauth, () => "/tmp");
+        vm.SelectedProfile = new AcpProfileViewModel(profile);
+
+        await vm.ConnectProfileCommand.Execute().ToTask();
+
+        Assert.Null(service.ConnectedOptions);
+        Assert.Equal(0, oauth.RefreshCalls);
+        Assert.Equal(XamlVisualEditor.Core.Localization.UiStrings.OAuthEndpointsRequired, vm.WebAuthStatus);
+    }
+
     private sealed class FakeOAuthService : IAcpOAuthDeviceFlowService
     {
+        public int RefreshCalls { get; private set; }
+
         public Task<AcpDeviceCodeResponse> StartDeviceFlowAsync(string clientId, string scope, string deviceCodeUrl, CancellationToken ct)
         {
             return Task.FromResult(new AcpDeviceCodeResponse(
@@ -71,6 +102,7 @@ public sealed class AcpOAuthFlowIntegrationTests
 
         public Task<AcpTokenResponse> RefreshTokenAsync(string clientId, string refreshToken, string tokenUrl, CancellationToken ct)
         {
+            RefreshCalls++;
             return Task.FromResult(new AcpTokenResponse("token-456", "refresh-456", 3600, "bearer"));
         }
     }
@@ -106,7 +138,12 @@ public sealed class AcpOAuthFlowIntegrationTests
         public event Action<string>? StderrReceived { add { } remove { } }
         public event Action<string, JsonElement?>? NotificationReceived { add { } remove { } }
 
-        public Task ConnectAsync(AcpAgentProcessOptions options, CancellationToken ct) => Task.CompletedTask;
+        public AcpAgentProcessOptions? ConnectedOptions { get; private set; }
+        public Task ConnectAsync(AcpAgentProcessOptions options, CancellationToken ct)
+        {
+            ConnectedOptions = options;
+            return Task.CompletedTask;
+        }
         public Task ConnectMockAgentAsync(CancellationToken ct) => Task.CompletedTask;
         public Task DisconnectAsync() => Task.CompletedTask;
         public Task<JsonElement> InitializeAsync(object? parameters, CancellationToken ct) => Task.FromResult(default(JsonElement));

@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Serilog;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -22,6 +23,7 @@ public sealed partial class DesignSurfaceView
     private RuntimeDesignRenderResult? _runtimeRenderedDocument;
     private DesignerDocumentViewModel? _runtimeDocumentOwner;
     private bool _runtimeRenderFailed;
+    private bool _runtimeReconciliationPending;
 
     private static RuntimeDesignRenderResult RenderRuntimeDocument(DesignerDocumentViewModel document, MutableAstDocument source)
     {
@@ -77,7 +79,6 @@ public sealed partial class DesignSurfaceView
             && _rootControl is not null && _runtimeRenderedDocument is not null;
         if (!keepPrevious)
         {
-            if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
             canvas.Children.Clear();
             _rootControl = null;
             _runtimeRenderedDocument = null;
@@ -102,11 +103,30 @@ public sealed partial class DesignSurfaceView
         strip.StatusText = string.IsNullOrWhiteSpace(message) ? null : message;
     }
 
-    private void OnRuntimeLayoutUpdated(object? sender, EventArgs args)
+    /// <summary>Number of design tree walks that compared the rendered controls with the control map.</summary>
+    internal int RuntimeReconciliationCount { get; private set; }
+
+    /// <summary>
+    /// Compares the control map with the rendered tree once after pending layout and Loaded handlers have run,
+    /// which realize templates and items that the synchronous rebuild has not seen yet.
+    /// </summary>
+    private void ScheduleRuntimeReconciliation()
+    {
+        if (_runtimeReconciliationPending) return;
+        _runtimeReconciliationPending = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _runtimeReconciliationPending = false;
+            ReconcileRuntimeDesignTree();
+        }, DispatcherPriority.Background);
+    }
+
+    private void ReconcileRuntimeDesignTree()
     {
         if (_runtimeDocumentOwner?.UseExternalPreviewer == true || _runtimeRenderFailed || _currentVm is null || _rootControl is null
             || _runtimeRenderedDocument is null || _runtimeDocumentOwner?.SyncEngine.CurrentDocument?.Root is not { } root
             || !ReferenceEquals(_runtimeDocumentOwner.DesignSurface, _currentVm)) return;
+        RuntimeReconciliationCount++;
         IReadOnlyDictionary<Control, Guid> identities = _runtimeRenderedDocument.GetControlNodeIds(_rootControl);
         int expectedCount = identities.Count + (identities.ContainsKey(_rootControl) ? 0 : 1);
         if (expectedCount == _currentVm.ControlMap.Count && identities.All(pair =>

@@ -4,6 +4,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -25,7 +26,7 @@ public sealed partial class DesignerDocumentViewModel
         PreviewThemeRequest = new(Guid.NewGuid(), providers.ToArray(), PreviewThemeRequest?.Selection);
         DesignSurface.HasPreviewThemeProviders = providers.Count > 0 || PreviewThemeRequest.Selection is not null;
         DesignSurface.HasPreviewThemeCatalog = false;
-        DesignSurface.PreviewThemeStatus = "Start or refresh the previewer to load library themes.";
+        DesignSurface.PreviewThemeStatus = UiStrings.PreviewThemeLoadHint;
         _previewThemeDiagnostics = Array.Empty<LanguageDiagnostic>();
         PublishDesignerDiagnostics();
     }
@@ -78,7 +79,7 @@ public sealed partial class DesignerDocumentViewModel
         if (catalog.RequestId != PreviewThemeRequest?.RequestId) return;
         DesignerThemeSelection? selection = PreviewThemeRequest.Selection;
         _previewThemeDiagnostics = catalog.Providers.Where(provider => provider.Error is not null && provider.Id != selection?.ProviderId)
-            .Select(provider => CreateDesignerDiagnostic($"Theme provider '{provider.Name}': {provider.Error}",
+            .Select(provider => CreateDesignerDiagnostic(string.Format(UiStrings.PreviewThemeProviderError, provider.Name, provider.Error),
                 DiagnosticSeverity.Warning, "Themes", "XVE_PREVIEW_THEME", 1, 1, 1)).ToArray();
         PublishDesignerDiagnostics();
         List<DesignerThemeChoice> choices = new() { DesignerThemeChoice.ProjectDefault };
@@ -88,7 +89,7 @@ public sealed partial class DesignerDocumentViewModel
         DesignerThemeChoice? selected = choices.FirstOrDefault(choice => choice.Selection == selection);
         if (selected is null)
         {
-            selected = new(selection, $"Unavailable: {selection!.ProviderId}/{selection.ThemeId}");
+            selected = new(selection, string.Format(UiStrings.PreviewThemeUnavailable, $"{selection!.ProviderId}/{selection.ThemeId}"));
             choices.Add(selected);
         }
         _updatingThemeChoices = true;
@@ -100,6 +101,6 @@ public sealed partial class DesignerDocumentViewModel
         }
         finally { _updatingThemeChoices = false; }
         DesignSurface.HasPreviewThemeCatalog = true;
-        DesignSurface.PreviewThemeStatus = selected.DisplayName + " (preview only)";
+        DesignSurface.PreviewThemeStatus = string.Format(UiStrings.PreviewThemePreviewOnly, selected.DisplayName);
     }
 }

@@ -22,6 +22,8 @@ namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class McpIntegrationTests
 {
+    private const int PortAttempts = 5;
+
     [Fact]
     public async Task FirstConnectPersistsConsentAndReconnectIsGrantedWithoutPrompt()
     {
@@ -136,9 +138,6 @@ public sealed class McpIntegrationTests
     public async Task RuntimeControllerKeepsHttpServerAliveAfterStartupTokenCancellation()
     {
         InMemorySettingsStore settings = new();
-        int port = GetAvailablePort();
-        await settings.UpdateAsync("mcp", new McpSettings(true, "http", port, "/mcp/"), SettingsTarget.User, CancellationToken.None);
-
         StubWorkspaceInfo workspaceInfo = new("/tmp/xve");
         StubWindow window = new();
         StubCommands commands = new();
@@ -160,7 +159,7 @@ public sealed class McpIntegrationTests
             terminal);
 
         using CancellationTokenSource startupToken = new();
-        await controller.InitializeAsync(startupToken.Token);
+        int port = await InitializeOnAvailablePortAsync(controller, settings, candidate => new McpSettings(true, "http", candidate, "/mcp/"), startupToken.Token);
         startupToken.Cancel();
 
         using HttpClient client = new() { Timeout = TimeSpan.FromSeconds(2) };
@@ -240,13 +239,11 @@ public sealed class McpIntegrationTests
     public async Task HttpLifecycleUsesSessionHeaderAndHonorsRevocationAndOrigin()
     {
         InMemorySettingsStore settings = new();
-        int port = GetAvailablePort();
-        await settings.UpdateAsync("mcp", new McpSettings(true, "http", port), SettingsTarget.User, CancellationToken.None);
         StubWorkspaceInfo workspaceInfo = new("/tmp/xve");
         McpPermissionService permissions = new(settings, new InMemoryWindow());
         await using McpRuntimeController controller = new(settings, permissions, new StubCommands(), new InMemoryWorkspace(),
             workspaceInfo, new StubWindow(), new StubEditorServices(), new StubDiagnostics(), new StubTerminalBridge());
-        await controller.InitializeAsync(CancellationToken.None);
+        int port = await InitializeOnAvailablePortAsync(controller, settings, candidate => new McpSettings(true, "http", candidate), CancellationToken.None);
         using HttpClient client = new() { BaseAddress = new Uri($"http://127.0.0.1:{port}/mcp/"), Timeout = TimeSpan.FromSeconds(5) };
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/event-stream");
         using HttpResponseMessage initialize = await PostAsync(client, """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"test","version":"1"},"capabilities":{}}}""");
@@ -279,10 +276,8 @@ public sealed class McpIntegrationTests
     public async Task OccupiedPortLeavesTheControllerStoppedAndCanBeRetried()
     {
         InMemorySettingsStore settings = new();
-        int port = GetAvailablePort();
-        using HttpListener occupied = new();
-        occupied.Prefixes.Add($"http://127.0.0.1:{port}/mcp/");
-        occupied.Start();
+        (HttpListener occupiedListener, int port) = OccupyAvailablePort();
+        using HttpListener occupied = occupiedListener;
         await settings.UpdateAsync("mcp", new McpSettings(true, "http", port), SettingsTarget.User, CancellationToken.None);
         StubWorkspaceInfo workspaceInfo = new("/tmp/xve");
         McpPermissionService permissions = new(settings, new InMemoryWindow());
@@ -299,6 +294,45 @@ public sealed class McpIntegrationTests
 
     private static Task<HttpResponseMessage> PostAsync(HttpClient client, string json) =>
         client.PostAsync(string.Empty, new StringContent(json, Encoding.UTF8, "application/json"));
+
+    /// <summary>
+    /// Starts the controller on a free loopback port. Another process can take the probed port before the
+    /// server binds it, so a failed start is retried on a newly probed port.
+    /// </summary>
+    private static async Task<int> InitializeOnAvailablePortAsync(McpRuntimeController controller, InMemorySettingsStore settings,
+        Func<int, McpSettings> createSettings, CancellationToken ct)
+    {
+        int port = GetAvailablePort();
+        await settings.UpdateAsync("mcp", createSettings(port), SettingsTarget.User, CancellationToken.None);
+        await controller.InitializeAsync(ct);
+        for (int attempt = 1; !controller.IsRunning && attempt < PortAttempts; attempt++)
+        {
+            port = GetAvailablePort();
+            await controller.ApplySettingsAsync(createSettings(port), ct);
+        }
+
+        return port;
+    }
+
+    /// <summary>Binds an HTTP listener to a free loopback port, retrying when the probed port was taken meanwhile.</summary>
+    private static (HttpListener Listener, int Port) OccupyAvailablePort()
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            int port = GetAvailablePort();
+            HttpListener listener = new();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/mcp/");
+            try
+            {
+                listener.Start();
+                return (listener, port);
+            }
+            catch (HttpListenerException) when (attempt < PortAttempts)
+            {
+                listener.Close();
+            }
+        }
+    }
 
     private static int GetAvailablePort()
     {

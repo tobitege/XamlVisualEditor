@@ -149,7 +149,7 @@ public sealed class App : Application
             }
 
             Log.Information("Built-in extensions activated; editor ready");
-#if DEBUG
+#if CDP_DIAGNOSTICS
             services.GetRequiredService<CdpDiagnostics>().StartFromEnvironment();
 #endif
             if (!string.IsNullOrWhiteSpace(startupPath))
@@ -179,7 +179,7 @@ public sealed class App : Application
     private static void ConfigureServices(ServiceCollection services, EditorOptionsStore editorOptions)
     {
         services.AddSingleton(editorOptions);
-#if DEBUG
+#if CDP_DIAGNOSTICS
         services.AddSingleton<CdpDiagnostics>();
 #endif
         OutputLogSinkAccessor outputLogSinkAccessor = new();

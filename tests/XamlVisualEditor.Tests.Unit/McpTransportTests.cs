@@ -19,6 +19,9 @@ public sealed class McpTransportTests
     private const string InitializeJson = """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"test","version":"1"},"capabilities":{}}}""";
     private const string PingJson = """{"jsonrpc":"2.0","id":2,"method":"ping"}""";
 
+    private static string InitializeJsonFor(string protocolVersion) =>
+        InitializeJson.Replace("2025-11-25", protocolVersion, StringComparison.Ordinal);
+
     [Fact]
     public async Task HttpRejectsForeignOriginAndAcceptsOwnOrigin()
     {
@@ -90,6 +93,85 @@ public sealed class McpTransportTests
         supported.Headers.Add("MCP-Protocol-Version", McpProtocol.ProtocolVersion);
         using HttpResponseMessage accepted = await harness.Client.SendAsync(supported);
         Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+    }
+
+    [Fact]
+    public async Task HttpNegotiatesAnOlderSupportedVersionAndValidatesTheHeaderAgainstIt()
+    {
+        await using HttpHarness harness = HttpHarness.Start();
+        using HttpResponseMessage initialized = await harness.Client.SendAsync(harness.Post(InitializeJsonFor("2025-06-18")));
+        Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        using JsonDocument result = JsonDocument.Parse(await initialized.Content.ReadAsStringAsync());
+        Assert.Equal("2025-06-18", result.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString());
+        string sessionId = Assert.Single(initialized.Headers.GetValues("Mcp-Session-Id"));
+
+        using HttpRequestMessage matching = harness.Post(PingJson, sessionId);
+        matching.Headers.Add("MCP-Protocol-Version", "2025-06-18");
+        using HttpResponseMessage accepted = await harness.Client.SendAsync(matching);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        using HttpResponseMessage withoutHeader = await harness.Client.SendAsync(harness.Post(PingJson, sessionId));
+        Assert.Equal(HttpStatusCode.OK, withoutHeader.StatusCode);
+
+        using HttpRequestMessage otherVersion = harness.Post(PingJson, sessionId);
+        otherVersion.Headers.Add("MCP-Protocol-Version", McpProtocol.ProtocolVersion);
+        using HttpResponseMessage rejected = await harness.Client.SendAsync(otherVersion);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+    }
+
+    [Fact]
+    public async Task HttpAnswersAVersionItDoesNotServeWithTheLatestVersion()
+    {
+        await using HttpHarness harness = HttpHarness.Start();
+        using HttpResponseMessage initialized = await harness.Client.SendAsync(harness.Post(InitializeJsonFor("2024-11-05")));
+        Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        using JsonDocument result = JsonDocument.Parse(await initialized.Content.ReadAsStringAsync());
+        Assert.Equal(McpProtocol.ProtocolVersion, result.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString());
+    }
+
+    [Fact]
+    public async Task HttpAnswersABatchFromA20250326Client()
+    {
+        await using HttpHarness harness = HttpHarness.Start();
+        using HttpResponseMessage initialized = await harness.Client.SendAsync(harness.Post(InitializeJsonFor("2025-03-26")));
+        using JsonDocument result = JsonDocument.Parse(await initialized.Content.ReadAsStringAsync());
+        Assert.Equal("2025-03-26", result.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString());
+        string sessionId = Assert.Single(initialized.Headers.GetValues("Mcp-Session-Id"));
+
+        const string batch = """[{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":3,"method":"ping"},{"jsonrpc":"2.0","id":"four","method":"ping"}]""";
+        using HttpResponseMessage answered = await harness.Client.SendAsync(harness.Post(batch, sessionId));
+
+        Assert.Equal(HttpStatusCode.OK, answered.StatusCode);
+        using JsonDocument body = JsonDocument.Parse(await answered.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, body.RootElement.ValueKind);
+        Assert.Equal(2, body.RootElement.GetArrayLength());
+        Assert.Equal(3, body.RootElement[0].GetProperty("id").GetInt32());
+        Assert.Equal("four", body.RootElement[1].GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task StdioNegotiates20241105AndAnswersABatch()
+    {
+        McpSessionRegistry registry = new();
+        McpRequestRouter router = new(registry);
+        McpPermissionService permissions = new(new InMemorySettingsStore(), new InMemoryWindow());
+        new McpHandshakeHandler(new McpSessionService(permissions, new FixedWorkspaceInfo("/tmp/xve")), registry).Register(router);
+        byte[] input = Encoding.UTF8.GetBytes(InitializeJsonFor("2024-11-05") + "\n"
+            + """[{"jsonrpc":"2.0","id":5,"method":"ping"},{"jsonrpc":"2.0","id":6,"method":"ping"}]""" + "\n");
+        using MemoryStream output = new();
+        await using McpJsonRpcConnection connection = new(new MemoryStream(input), output, router);
+        TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Disconnected += error => { if (error is null) disconnected.TrySetResult(); else disconnected.TrySetException(error); };
+        connection.Start(CancellationToken.None);
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        string[] lines = Encoding.UTF8.GetString(output.ToArray()).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        using JsonDocument initialized = JsonDocument.Parse(lines[0]);
+        Assert.Equal("2024-11-05", initialized.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString());
+        Assert.Equal("2024-11-05", registry.Resolve(new McpRequestContext(connection, null))?.ProtocolVersion);
+        using JsonDocument batch = JsonDocument.Parse(lines[1]);
+        Assert.Equal(new[] { 5, 6 }, batch.RootElement.EnumerateArray().Select(item => item.GetProperty("id").GetInt32()));
     }
 
     [Fact]
@@ -193,6 +275,7 @@ public sealed class McpTransportTests
 
     private sealed class HttpHarness : IAsyncDisposable
     {
+        private const int PortAttempts = 5;
         private readonly McpServer _server;
 
         private HttpHarness(McpServer server, McpSessionRegistry registry, int port)
@@ -212,12 +295,23 @@ public sealed class McpTransportTests
         public static HttpHarness Start(McpSessionRegistry? registry = null)
         {
             registry ??= new McpSessionRegistry();
-            int port = GetAvailablePort();
             McpPermissionService permissions = new(new InMemorySettingsStore(), new InMemoryWindow());
             McpHandshakeHandler handshake = new(new McpSessionService(permissions, new FixedWorkspaceInfo("/tmp/xve")), registry);
-            McpServer server = new(new McpServerOptions { EnableStdio = false, EnableHttp = true, HttpPort = port }, new IMcpRequestHandler[] { handshake }, registry);
-            server.Start(CancellationToken.None);
-            return new HttpHarness(server, registry, port);
+            for (int attempt = 1; ; attempt++)
+            {
+                int port = GetAvailablePort();
+                McpServer server = new(new McpServerOptions { EnableStdio = false, EnableHttp = true, HttpPort = port }, new IMcpRequestHandler[] { handshake }, registry);
+                try
+                {
+                    server.Start(CancellationToken.None);
+                    return new HttpHarness(server, registry, port);
+                }
+                catch (HttpListenerException) when (attempt < PortAttempts)
+                {
+                    // Another process took the probed port before the server bound it.
+                    server.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
+            }
         }
 
         public HttpRequestMessage Post(string json, string? sessionId = null)

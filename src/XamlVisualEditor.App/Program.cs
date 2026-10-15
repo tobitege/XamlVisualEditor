@@ -80,6 +80,6 @@ public static class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace()
-            .UseReactiveUI(_ => { });
+            .UseReactiveUI(builder => builder.WithExceptionHandler(new ReactiveErrorLogger()));
     }
 }

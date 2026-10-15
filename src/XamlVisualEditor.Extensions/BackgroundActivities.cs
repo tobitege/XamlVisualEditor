@@ -4,7 +4,7 @@ namespace XamlVisualEditor.Extensions;
 public interface IBackgroundActivities
 {
     /// <summary>Starts an activity whose description the status bar shows while it runs.</summary>
-    /// <param name="description">A short, localized description, for example "Initializing TFVC...".</param>
+    /// <param name="description">A short, localized description, for example "Indexing workspace...".</param>
     /// <returns>A handle that ends the activity when disposed; disposing it again has no effect.</returns>
     IDisposable Begin(string description);
 }

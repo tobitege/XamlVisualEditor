@@ -207,7 +207,8 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
                 Name = name,
                 Publisher = "builtin",
                 Version = version,
-                DisplayName = name
+                DisplayName = name,
+                Capabilities = ExtensionCapabilitiesAttribute.GetDeclared(type)
             };
 
             string packagePath = "builtin:" + manifest.ExtensionId;

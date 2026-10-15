@@ -17,12 +17,18 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class TerminalWorkflowTests(ITestOutputHelper output)
 {
+    private const string WindowsOnly = "ConPTY is only available on Windows.";
+    private const string PowerShell7Missing = "PowerShell 7 is not installed under %ProgramFiles%\\PowerShell\\7.";
+
+    private static string PowerShell7Path =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
+
     [Fact]
     public async Task WindowsPtyTransportsOutputWithoutTheEditor()
     {
-        if (!OperatingSystem.IsWindows()) return;
-        string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
-        Assert.True(File.Exists(shell));
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        string shell = PowerShell7Path;
+        Assert.SkipUnless(File.Exists(shell), PowerShell7Missing);
         IPtyProcess pty = new WindowsPtyProvider().StartProcess(new TerminalSessionOptions
         {
             Command = shell,
@@ -60,7 +66,7 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
     [Fact]
     public async Task WindowsPtyOutputReachesEndOfStreamAfterTheShellExits()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
         string shell = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
         IPtyProcess pty = new WindowsPtyProvider().StartProcess(new TerminalSessionOptions
         {
@@ -93,7 +99,7 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
     [AvaloniaFact]
     public async Task WindowsTerminalClosesItsDockWhenTheShellExits()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
         string shell = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
         TerminalService service = new(new WindowsPtyProvider(), new ManagedTerminalEmulatorFactory());
         Avalonia.Themes.Fluent.FluentTheme fluent = new();
@@ -135,9 +141,9 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
     [AvaloniaFact]
     public async Task WindowsTerminalOpensCollapsedDockAcceptsInputAndStopsItsProcessWhenClosed()
     {
-        if (!OperatingSystem.IsWindows()) return;
-        string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
-        Assert.True(File.Exists(shell), "PowerShell 7 is required for the Windows terminal test.");
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        string shell = PowerShell7Path;
+        Assert.SkipUnless(File.Exists(shell), PowerShell7Missing);
         string directory = Path.Combine(Path.GetTempPath(), "XVE Terminal " + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(directory);
         RecordingPtyProvider provider = new();

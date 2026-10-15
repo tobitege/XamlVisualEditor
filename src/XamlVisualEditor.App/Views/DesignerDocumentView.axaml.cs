@@ -73,7 +73,8 @@ public sealed partial class DesignerDocumentView : UserControl
 
     private void UpdatePreviewerRulers()
     {
-        if (_rulerDocument?.UseExternalPreviewer != true) return;
+        // Runs after every layout pass of the window; a hidden view is updated by the pass that shows it.
+        if (_rulerDocument?.UseExternalPreviewer != true || !IsEffectivelyVisible) return;
         PreviewerSurfaceControl? surface = this.FindControl<PreviewerSurfaceControl>("ExternalPreviewSurface");
         RulerControl? horizontal = this.FindControl<RulerControl>("ExternalHorizontalRuler");
         RulerControl? vertical = this.FindControl<RulerControl>("ExternalVerticalRuler");

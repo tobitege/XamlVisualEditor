@@ -5,6 +5,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
 using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.OutputExtension.Views;
 
@@ -36,7 +37,7 @@ public sealed partial class OutputPanelView : UserControl
                 await clipboard.SetTextAsync(interaction.Input);
             }
 
-            interaction.SetOutput(Unit.Default);
+            interaction.SetOutput(RxVoid.Default);
         });
     }
 

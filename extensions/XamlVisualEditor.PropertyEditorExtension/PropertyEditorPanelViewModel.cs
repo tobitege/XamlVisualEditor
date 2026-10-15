@@ -12,6 +12,9 @@ using Avalonia.Collections;
 using Avalonia.Media;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
@@ -150,8 +153,8 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     public IReadOnlyList<string>? BrushPresets { get; }
     // Lazily created: the panel builds one entry per property of the selected
     // control, and creating a command per entry up front dominates selection time.
-    private ReactiveCommand<string?, Unit>? _applyPresetCommand;
-    public ReactiveCommand<string?, Unit> ApplyPresetCommand =>
+    private ReactiveCommand<string?, RxVoid>? _applyPresetCommand;
+    public ReactiveCommand<string?, RxVoid> ApplyPresetCommand =>
         _applyPresetCommand ??= ReactiveCommand.Create<string?>(preset => Value = preset);
 
     public string? Value
@@ -960,11 +963,11 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 }
             }));
 
-        _disposables.Add(Observable.Interval(SelectionPollInterval, RxSchedulers.TaskpoolScheduler)
+        _disposables.Add(Signal.Every(SelectionPollInterval, RxSchedulers.TaskpoolScheduler)
             .Where(_ => !string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
             .Where(_ => DateTime.UtcNow - _lastSelectionUpdateUtc >= SelectionPollInterval)
             .SelectMany(_ => Observable.FromAsync(PollSelectedNodesAsync))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(nodes =>
             {
                 string activeDocumentPath = _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;

@@ -15,6 +15,8 @@ using AvaloniaEdit.TextMate;
 using Avalonia.Styling;
 using ReactiveUI;
 using System.Reactive.Disposables;
+using ReactiveUI.Primitives.Concurrency;
+using ReactiveUI.Primitives.Signals;
 using Serilog;
 using System.Reactive.Linq;
 using TextMateSharp.Grammars;
@@ -229,7 +231,7 @@ public sealed partial class XamlCodeEditorView : UserControl
                 h => vm.Document.TextChanged += h,
                 h => vm.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateFoldings());
         _vmSubscriptions.Add(_foldingSubscription);
         UpdateFoldings();

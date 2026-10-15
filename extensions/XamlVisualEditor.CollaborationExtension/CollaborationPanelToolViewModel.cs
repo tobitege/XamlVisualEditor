@@ -3,7 +3,9 @@ using System.Reactive.Disposables;
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Extensions;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.CollaborationExtension;
 
@@ -94,15 +96,15 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
 
     public ObservableCollection<CollaborationParticipantItemViewModel> Participants { get; } = new();
 
-    public ReactiveCommand<Unit, Unit> StartSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> StartSessionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> JoinSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> JoinSessionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> LeaveSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> LeaveSessionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> ShareSessionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ShareSessionCommand { get; }
 
-    public ReactiveCommand<Unit, Unit> InviteParticipantCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> InviteParticipantCommand { get; }
 
     public void Dispose()
     {

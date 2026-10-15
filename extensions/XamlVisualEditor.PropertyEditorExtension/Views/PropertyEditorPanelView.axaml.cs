@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.PropertyEditorExtension.Views;
 

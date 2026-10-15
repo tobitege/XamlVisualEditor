@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
 using XamlVisualEditor.FileExplorerExtension.ViewModels;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.FileExplorerExtension.Views;
 
@@ -34,7 +35,7 @@ public sealed partial class OpenFolderDialog : Window
             _closeHandler = vm.CloseInteraction.RegisterHandler(ctx =>
             {
                 Close(ctx.Input);
-                ctx.SetOutput(Unit.Default);
+                ctx.SetOutput(RxVoid.Default);
             });
 
             _folderHandler = vm.SelectFolderInteraction.RegisterHandler(async ctx =>

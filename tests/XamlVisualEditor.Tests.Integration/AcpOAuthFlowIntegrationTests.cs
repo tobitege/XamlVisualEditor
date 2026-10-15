@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using XamlVisualEditor.Acp;
 using XamlVisualEditor.AcpExtension;
 using Xunit;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Tests.Integration;
 
@@ -30,7 +31,7 @@ public sealed class AcpOAuthFlowIntegrationTests
 
         vm.OpenUrlInteraction.RegisterHandler(ctx =>
         {
-            ctx.SetOutput(Unit.Default);
+            ctx.SetOutput(RxVoid.Default);
             return Task.CompletedTask;
         });
 

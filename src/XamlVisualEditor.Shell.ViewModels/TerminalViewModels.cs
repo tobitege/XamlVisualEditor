@@ -5,6 +5,7 @@ using System.Reactive;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Terminal;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -48,7 +49,7 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
     public event Action<int?>? Exited;
     public event Action<int, int>? DimensionsChanged;
 
-    public ReactiveCommand<Unit, Unit> ClearSelectionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearSelectionCommand { get; }
 
     public TerminalViewModel(ITerminalSession session)
     {

@@ -34,6 +34,12 @@
     <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
 
+  <!-- Source trees without git metadata (for example a copy kept in another version control system) cannot feed SourceLink. -->
+  <PropertyGroup Condition="!Exists('$(MSBuildThisFileDirectory).git')">
+    <EnableSourceLink>false</EnableSourceLink>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Link="README.md" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)src/XamlVisualEditor.App/Assets/app-icon.png" Pack="true" PackagePath="\" Link="app-icon.png" Visible="false" />

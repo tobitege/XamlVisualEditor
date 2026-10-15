@@ -5,6 +5,9 @@ using System.Reactive.Linq;
 using System.Text.Json;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.ToolboxExtension;
 
@@ -66,7 +69,7 @@ public sealed class ToolboxPanelViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _selectedItem, value);
     }
 
-    public ReactiveCommand<Unit, Unit> InsertSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> InsertSelectedCommand { get; }
 
     private async Task InsertSelectedAsync()
     {

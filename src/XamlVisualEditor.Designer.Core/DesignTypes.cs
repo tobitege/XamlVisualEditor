@@ -11,6 +11,7 @@ using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Designer.Core;
 
@@ -432,22 +433,22 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// <summary>
     /// Command to zoom in.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ZoomInCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ZoomInCommand { get; }
 
     /// <summary>
     /// Command to zoom out.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ZoomOutCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ZoomOutCommand { get; }
 
     /// <summary>
     /// Command to reset zoom.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> ResetZoomCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ResetZoomCommand { get; }
 
     /// <summary>
     /// Command to delete the selected items.
     /// </summary>
-    public ReactiveCommand<Unit, Unit> DeleteSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> DeleteSelectedCommand { get; }
 
     /// <summary>
     /// Fires when the design surface needs to rebuild (e.g., after AST changes).

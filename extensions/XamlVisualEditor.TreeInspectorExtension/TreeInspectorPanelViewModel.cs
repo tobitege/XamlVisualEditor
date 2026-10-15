@@ -9,6 +9,9 @@ using System.Threading.Tasks;
 using Avalonia.Controls.DataGridHierarchical;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.TreeInspectorExtension;
 
@@ -162,8 +165,8 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
                 RunBackground(SelectNodeAsync(node.NodeId));
             }));
 
-        _disposables.Add(Observable.Interval(PollInterval, RxSchedulers.TaskpoolScheduler)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
+        _disposables.Add(Signal.Every(PollInterval, RxSchedulers.TaskpoolScheduler)
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => { RunBackground(PollDesignerAsync()); }));
     }
 

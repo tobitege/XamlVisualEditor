@@ -5,6 +5,7 @@ using System.Reactive.Concurrency;
 using ReactiveUI;
 using ReactiveUI.Builder;
 using XamlVisualEditor.Shell;
+using ReactiveUI.Primitives.Concurrency;
 
 namespace XamlVisualEditor.Tests.Integration;
 
@@ -25,7 +26,7 @@ internal static class ReactiveUiBootstrap
 
         // Upstream tests relied on RxApp's inline scheduling; keep that behavior
         // deterministic instead of depending on the platform scheduler.
-        RxSchedulers.MainThreadScheduler = CurrentThreadScheduler.Instance;
+        RxSchedulers.MainThreadScheduler = CurrentThreadSequencer.Instance;
 
         // Tests build real shell view models; without an isolated settings root
         // they read and overwrite the user's persisted layout files.

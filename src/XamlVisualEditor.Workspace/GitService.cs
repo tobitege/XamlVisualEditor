@@ -109,7 +109,9 @@ public sealed class GitService : IGitService
             return;
         }
 
-        List<string> args = new() { "restore", "--worktree", "--staged", "--" };
+        // Restores the working file from the index only: staged content stays, and a file that is
+        // staged but not yet committed is never removed from disk.
+        List<string> args = new() { "restore", "--worktree", "--" };
         args.AddRange(paths);
         await RunGitAsync(repoPath, args, ct);
     }

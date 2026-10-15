@@ -37,6 +37,49 @@ public sealed class AstSourceStateTests
         Assert.Equal(expected, Apply(source, edits));
     }
 
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Replacing_the_last_own_line_attribute_with_trailing_spaces_keeps_the_start_tag_intact(string newline)
+    {
+        string source = "<Button" + newline + "    Foo=\"1\"   " + newline + "    />";
+
+        IReadOnlyList<TextEdit> edits = XamlSerializationService.ComputeMinimalEdits(source, "<Button Bar=\"2\" />");
+
+        string edited = Apply(source, edits);
+        Assert.Equal("<Button Bar=\"2\"" + newline + "    />", edited);
+        XElement element = XElement.Parse(edited);
+        Assert.Equal("Button", element.Name.LocalName);
+        Assert.Null(element.Attribute("Foo"));
+        Assert.Equal("2", (string?)element.Attribute("Bar"));
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Replacing_an_own_line_attribute_through_the_document_keeps_the_start_tag_intact(string newline)
+    {
+        string source = string.Join(newline,
+            "<StackPanel xmlns=\"https://github.com/avaloniaui\">",
+            "    <Button",
+            "        Width=\"80\"   ",
+            "        />",
+            "</StackPanel>");
+        MutableAstDocument document = Parse(source);
+        MutableAstObjectNode button = Assert.IsType<MutableAstObjectNode>(Assert.Single(document.Root!.Children));
+
+        button.SetPropertyValue("Width", null);
+        button.SetPropertyValue("Height", "20");
+        IReadOnlyList<TextEdit> edits = new XamlSerializationService()
+            .ComputeMinimalEdits(document, source, Array.Empty<AstChange>());
+
+        XElement edited = XElement.Parse(Apply(source, edits));
+        XElement editedButton = Assert.Single(edited.Elements());
+        Assert.Equal("Button", editedButton.Name.LocalName);
+        Assert.Null(editedButton.Attribute("Width"));
+        Assert.Equal("20", (string?)editedButton.Attribute("Height"));
+    }
+
     [Fact]
     public void Root_namespace_declarations_edited_through_the_document_or_the_root_round_trip()
     {

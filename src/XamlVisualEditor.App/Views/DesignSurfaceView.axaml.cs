@@ -105,6 +105,9 @@ public sealed partial class DesignSurfaceView : UserControl
         Loaded += OnLoaded;
         LayoutUpdated += (_, _) =>
         {
+            // LayoutUpdated follows every layout pass of the window; a hidden surface becomes visible through a
+            // layout pass that updates the rulers again.
+            if (!IsEffectivelyVisible) return;
             UpdateRulerOffsets();
             // Moves, resizes and property edits change the selection bounds in a later layout pass.
             UpdateRulerSelectionBounds();
@@ -146,7 +149,6 @@ public sealed partial class DesignSurfaceView : UserControl
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)
     {
         CancelDragState();
-        if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
         if (_topLevel is null)
         {
             return;
@@ -238,10 +240,10 @@ public sealed partial class DesignSurfaceView : UserControl
         _currentVm = DataContext as DesignSurfaceViewModel;
 
         _surfaceContextMenu.Items.Clear();
-        AddEditMenuItem("Cut", _currentVm?.CutCommand, Key.X);
-        AddEditMenuItem("Copy", _currentVm?.CopyCommand, Key.C);
-        AddEditMenuItem("Paste", _currentVm?.PasteCommand, Key.V);
-        AddEditMenuItem("Duplicate", _currentVm?.DuplicateCommand, Key.D);
+        AddEditMenuItem(UiStrings.Cut, _currentVm?.CutCommand, Key.X);
+        AddEditMenuItem(UiStrings.Copy, _currentVm?.CopyCommand, Key.C);
+        AddEditMenuItem(UiStrings.Paste, _currentVm?.PasteCommand, Key.V);
+        AddEditMenuItem(UiStrings.Duplicate, _currentVm?.DuplicateCommand, Key.D);
         _surfaceContextMenu.Items.Add(new MenuItem
         {
             Header = UiStrings.Delete, Command = _currentVm?.DeleteSelectedCommand,
@@ -1081,7 +1083,6 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (docVm.UseExternalPreviewer)
         {
-            if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
             canvas.Children.Clear();
             if (_runtimeRenderedDocument?.Root is Window ownedWindow) ownedWindow.Close();
             _rootControl = null;
@@ -1120,6 +1121,7 @@ public sealed partial class DesignSurfaceView : UserControl
             UpdateCanvasSizeFromRoot(docVm, doc.Root, _rootControl);
             if (_currentVm?.TakeRequestedSelection() is { } requested) _currentVm.SelectNodesFromSync(requested);
             RefreshSelectionAdorners();
+            ScheduleRuntimeReconciliation();
             return;
         }
 
@@ -1137,7 +1139,6 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         ClearHover();
-        if (_rootControl is not null) _rootControl.LayoutUpdated -= OnRuntimeLayoutUpdated;
         canvas.Children.Clear();
         _runtimeRenderFailed = false;
         canvas.Children.Add(tree);
@@ -1167,7 +1168,7 @@ public sealed partial class DesignSurfaceView : UserControl
         Dictionary<Control, DesignItem> controlMap = new();
         DesignItem rootItem = BuildDesignItemTree(doc.Root, tree, renderedDocument.GetControlNodeIds(tree), itemMap, controlMap);
         _currentVm?.SetDesignTree(rootItem, itemMap, controlMap);
-        tree.LayoutUpdated += OnRuntimeLayoutUpdated;
+        ScheduleRuntimeReconciliation();
 
         if (_currentVm is not null)
         {
@@ -1227,6 +1228,11 @@ public sealed partial class DesignSurfaceView : UserControl
             _currentVm.Selection.ClearSelection();
             UpdateSelectedNode(null);
             UpdatePanCursor();
+        }
+        else
+        {
+            // Interaction in run mode can realize or replace controls, for example by switching tabs.
+            ScheduleRuntimeReconciliation();
         }
     }
 

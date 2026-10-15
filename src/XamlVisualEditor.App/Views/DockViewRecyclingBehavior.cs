@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls.Recycling;
+using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
 using Dock.Avalonia.Controls;
 using Dock.Model.Core;
@@ -69,6 +70,15 @@ public sealed class DockViewRecyclingBehavior : Behavior<DockControl>
             && AssociatedObject is { } dockControl
             && ControlRecyclingDataTemplate.GetControlRecycling(dockControl) is ControlRecycling recycling)
         {
+            // Cached code editors keep their editor setup across detaches and release it only here.
+            if (recycling.TryGetValue(dockable, out object? cached) && cached is Visual view)
+            {
+                foreach (XamlCodeEditorView editor in view.GetSelfAndVisualDescendants().OfType<XamlCodeEditorView>().ToArray())
+                {
+                    editor.Dispose();
+                }
+            }
+
             recycling.Remove(dockable);
         }
     }

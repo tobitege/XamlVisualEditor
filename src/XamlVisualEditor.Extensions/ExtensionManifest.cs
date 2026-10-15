@@ -30,6 +30,10 @@ public sealed class ExtensionManifest
     public JsonElement? Contributes { get; init; }
 
     /// <summary>Gets the sensitive host capabilities the extension uses, see <see cref="ExtensionHostCapabilities"/>.</summary>
+    /// <remarks>
+    /// The extension declares this list itself. The host hands a capability only to extensions that declare it and
+    /// shows the declaration to the user, but it is not a sandbox: extension code runs with the editor's full rights.
+    /// </remarks>
     public IReadOnlyList<string> Capabilities { get; init; } = Array.Empty<string>();
 
     /// <summary>Gets the computed extension id.</summary>
@@ -46,6 +50,7 @@ public static class ExtensionHostCapabilities
 /// <summary>
 /// Declares the sensitive host capabilities of an extension registered with the editor.
 /// Installed extension packages declare them in the <c>capabilities</c> array of their manifest instead.
+/// Like the manifest list, this is a declaration and not a sandbox.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ExtensionCapabilitiesAttribute : Attribute

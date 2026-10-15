@@ -21,6 +21,7 @@
                 <PathIcon Width="14" Height="14" Data="M18.4 10.6C16.55 9 14.15 8 11.5 8c-3.34 0-6.13 2.73-7.07 6l2.14.7c.6-2.13 2.59-3.7 4.93-3.7 1.4 0 2.67.87 3.31 2.19L12 16h8V8l-1.6 2.6z" />
             </Button>
             <Separator />
+            <!-- Icon path data of the formatting and wrapping buttons from Google Material Icons (Apache 2.0); see THIRD-PARTY-NOTICES.md. -->
             <Button ToolTip.Tip="{x:Static loc:UiStrings.FormatDocument}" Command="{CompiledBinding FormatDocumentCommand}" Padding="6,2">
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <PathIcon Width="14" Height="14" Data="M3 21h18v-2H3v2zm0-4h18v-2H3v2zm0-4h18v-2H3v2zm0-4h18V7H3v2zm0-6v2h18V3H3z" />

@@ -70,7 +70,7 @@ public sealed class DiagnosticEntryViewModel
     public string Message { get; }
     public string Summary => Message.ReplaceLineEndings(" ");
     public string FilePath { get; }
-    public string Location => string.IsNullOrWhiteSpace(FilePath) ? "Workspace" : $"{Path.GetFileName(FilePath)}:{Line}:{Column}";
+    public string Location => string.IsNullOrWhiteSpace(FilePath) ? UiStrings.Workspace : $"{Path.GetFileName(FilePath)}:{Line}:{Column}";
     public int Line { get; }
     public int Column { get; }
     public string? Code { get; }

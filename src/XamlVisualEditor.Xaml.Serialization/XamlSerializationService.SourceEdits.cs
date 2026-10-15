@@ -19,13 +19,35 @@ public sealed partial class XamlSerializationService
 
             List<TextEdit> edits = new();
             if (!CompareContent(source, target, sourceText, lineOffsets, edits)) return false;
-            result = edits.OrderBy(edit => edit.Offset).ToArray();
+            TextEdit[] ordered = edits.OrderBy(edit => edit.Offset).ToArray();
+            if (!EditsReproduceTarget(sourceText, ordered, target)) return false;
+            result = ordered;
             return true;
         }
         catch (XmlException)
         {
             return false;
         }
+    }
+
+    private static bool EditsReproduceTarget(string sourceText, TextEdit[] orderedEdits, XDocument target)
+    {
+        for (int index = 1; index < orderedEdits.Length; index++)
+        {
+            TextEdit previous = orderedEdits[index - 1];
+            if (previous.Offset + previous.Length > orderedEdits[index].Offset) return false;
+        }
+
+        // Edits are applied from the highest offset down, as the editor and the sync engine do.
+        StringBuilder builder = new(sourceText);
+        foreach (TextEdit edit in orderedEdits.OrderByDescending(edit => edit.Offset))
+            builder.Remove(edit.Offset, edit.Length).Insert(edit.Offset, edit.NewText);
+
+        string editedText = builder.ToString();
+        XDocument edited = XDocument.Parse(editedText, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+        List<TextEdit> remaining = new();
+        return CompareContent(edited, target, editedText, GetSourceLineOffsets(editedText), remaining) &&
+            remaining.Count == 0;
     }
 
     private static bool CompareContent(XContainer source, XContainer target, string sourceText,
@@ -91,6 +113,7 @@ public sealed partial class XamlSerializationService
         if ((string?)source.Attribute(XNamespace.Xml + "space") !=
             (string?)target.Attribute(XNamespace.Xml + "space")) return false;
 
+        int firstElementEdit = edits.Count;
         foreach (XAttribute attribute in source.Attributes())
         {
             XAttribute? replacement = target.Attribute(attribute.Name);
@@ -165,6 +188,22 @@ public sealed partial class XamlSerializationService
             {
                 if (sourceText[offset - 1] == '/') offset--;
                 while (offset > 0 && char.IsWhiteSpace(sourceText[offset - 1])) offset--;
+                for (int index = firstElementEdit; index < edits.Count; index++)
+                {
+                    TextEdit removal = edits[index];
+                    // An insertion point inside a removed range would interleave with the removal,
+                    // so the additions replace the removed text instead.
+                    if (removal.NewText.Length != 0 || removal.Offset >= offset ||
+                        offset > removal.Offset + removal.Length) continue;
+                    edits[index] = new TextEdit
+                    {
+                        Offset = removal.Offset,
+                        Length = removal.Length,
+                        NewText = additions.ToString()
+                    };
+                    return true;
+                }
+
                 edits.Add(new TextEdit { Offset = offset, Length = 0, NewText = additions.ToString() });
                 return true;
             }

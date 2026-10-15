@@ -248,6 +248,7 @@ public sealed partial class ExtensionPackageItemViewModel : ReactiveObject
             ? package.Manifest.Name
             : package.Manifest.DisplayName;
         Version = package.Manifest.Version;
+        Capabilities = string.Join(", ", package.Manifest.Capabilities);
         IsEnabled = isEnabled;
     }
 
@@ -258,6 +259,9 @@ public sealed partial class ExtensionPackageItemViewModel : ReactiveObject
     public string DisplayName { get; }
 
     public string Version { get; }
+
+    /// <summary>Gets the host capabilities the package declares in its manifest, comma separated.</summary>
+    public string Capabilities { get; }
 
     public bool IsEnabled
     {

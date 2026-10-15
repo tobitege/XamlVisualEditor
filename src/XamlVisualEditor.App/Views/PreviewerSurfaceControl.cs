@@ -660,7 +660,7 @@ public sealed partial class PreviewerSurfaceControl : Control
     protected override void OnKeyDown(KeyEventArgs args)
     {
         base.OnKeyDown(args);
-        if (args.Handled) return;
+        if (args.Handled || KeepsKeyOutsidePreview(args)) return;
         if (ForwardPreviewKey(args, true)) return;
         if (_pointerMove is not null)
         {

@@ -18,8 +18,10 @@
                     Value="{CompiledBinding Zoom, Mode=TwoWay}" Width="120" VerticalAlignment="Center"
                     AutomationProperties.Name="{x:Static loc:UiStrings.Zoom}" ToolTip.Tip="{x:Static loc:UiStrings.ZoomRangeHint}" />
             <TextBlock Text="{CompiledBinding Zoom, StringFormat='{}{0:P0}'}" VerticalAlignment="Center" Margin="4,0" FontSize="12" />
-            <Button Content="-" Command="{CompiledBinding ZoomOutCommand}" Padding="6,2" FontSize="12" />
-            <Button Content="+" Command="{CompiledBinding ZoomInCommand}" Padding="6,2" FontSize="12" />
+            <Button Content="-" Command="{CompiledBinding ZoomOutCommand}" Padding="6,2" FontSize="12"
+                    AutomationProperties.Name="{x:Static loc:UiStrings.ZoomOut}" ToolTip.Tip="{x:Static loc:UiStrings.ZoomOut}" />
+            <Button Content="+" Command="{CompiledBinding ZoomInCommand}" Padding="6,2" FontSize="12"
+                    AutomationProperties.Name="{x:Static loc:UiStrings.ZoomIn}" ToolTip.Tip="{x:Static loc:UiStrings.ZoomIn}" />
             <Button Content="100%" Command="{CompiledBinding ResetZoomCommand}" Padding="6,2" FontSize="12" />
             <Button Content="{x:Static loc:UiStrings.Fit}" Click="OnFitClick" Padding="6,2" FontSize="12" />
             <Button Content="{x:Static loc:UiStrings.ZoomSelectionShort}" Click="OnSelectionClick" Padding="6,2" FontSize="12" />

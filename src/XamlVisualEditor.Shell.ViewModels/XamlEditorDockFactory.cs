@@ -837,10 +837,12 @@ public sealed partial class XamlEditorDockFactory : Factory
     /// <param name="rootDock">The layout to save.</param>
     /// <param name="filePath">The target file; null saves the working layout of the next start.</param>
     /// <param name="layoutName">The name of the saved user layout that the working layout came from, if any.</param>
-    public void SaveLayout(IRootDock rootDock, string? filePath = null, string? layoutName = null)
+    /// <returns>False when the layout could not be written; the previous file then stays unchanged.</returns>
+    public bool SaveLayout(IRootDock rootDock, string? filePath = null, string? layoutName = null)
     {
-        if (filePath is null && !HasDesktopLifetime()) return;
+        if (filePath is null && !HasDesktopLifetime()) return true;
         filePath ??= GetDefaultLayoutPath();
+        string tempPath = filePath + ".tmp";
         List<Action> restoreActions = DetachRuntimeDocuments(rootDock);
         restoreActions.InsertRange(0, DetachNonPersistentExtensionTools(rootDock));
         restoreActions.InsertRange(0, DetachToolViewModels(rootDock));
@@ -866,7 +868,10 @@ public sealed partial class XamlEditorDockFactory : Factory
                 snapshot[LAYOUT_NAME_KEY] = layoutName;
             }
 
-            File.WriteAllText(filePath, snapshot.ToJsonString());
+            // The move replaces the file in one step, so an interrupted write never leaves a truncated layout.
+            File.WriteAllText(tempPath, snapshot.ToJsonString());
+            File.Move(tempPath, filePath, overwrite: true);
+            return true;
         }
         catch (Exception ex)
         {
@@ -874,6 +879,9 @@ public sealed partial class XamlEditorDockFactory : Factory
             {
                 _logger.LogWarning("Failed to save dock layout: {Message}", ex.Message);
             }
+
+            TryDeleteFile(tempPath);
+            return false;
         }
         finally
         {
@@ -881,6 +889,17 @@ public sealed partial class XamlEditorDockFactory : Factory
             {
                 restore();
             }
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

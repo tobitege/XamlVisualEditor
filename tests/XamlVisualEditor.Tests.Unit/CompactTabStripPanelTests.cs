@@ -28,7 +28,7 @@ public sealed class CompactTabStripPanelTests
     public void Tabs_that_do_not_fit_shrink_their_titles_to_the_available_width()
     {
         CompactTabStripPanel panel = new();
-        foreach (string title in new[] { "Solution Explorer", "File Explorer", "Toolbox", "TFVC Explorer" })
+        foreach (string title in new[] { "Solution Explorer", "File Explorer", "Toolbox", "Source Explorer" })
         {
             panel.Children.Add(new StackPanel
             {

@@ -15,7 +15,11 @@ public sealed class McpSessionService
         _workspaceInfo = workspaceInfo ?? throw new ArgumentNullException(nameof(workspaceInfo));
     }
 
-    public async Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, CancellationToken ct)
+    public Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, CancellationToken ct) =>
+        InitializeAsync(request, McpProtocol.StdioProtocolVersions, ct);
+
+    /// <summary>Authorizes the client and answers with the requested protocol version when it is one of <paramref name="supportedVersions"/>.</summary>
+    public async Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, IReadOnlyList<string> supportedVersions, CancellationToken ct)
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
         McpWorkspacePermissionState? state = await _permissions
@@ -34,7 +38,7 @@ public sealed class McpSessionService
             new McpPromptsCapability());
 
         McpInitializeResult result = new(
-            McpProtocol.ProtocolVersion,
+            McpProtocol.NegotiateVersion(request?.ProtocolVersion, supportedVersions),
             serverInfo,
             capabilities,
             workspaceId,

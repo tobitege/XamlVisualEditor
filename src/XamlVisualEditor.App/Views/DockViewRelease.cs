@@ -27,6 +27,8 @@ public static class DockViewRelease
     {
         foreach (DockControl dockControl in window.GetVisualDescendants().OfType<DockControl>().ToArray())
         {
+            // Turns the inherited data context into a local value, so clearing the window data context later does not
+            // take the layout away from the dock control.
             dockControl.DataContext = dockControl.DataContext;
             List<Visual> views = new(dockControl.GetVisualDescendants());
             if (ControlRecyclingDataTemplate.GetControlRecycling(dockControl) is ControlRecycling recycling)

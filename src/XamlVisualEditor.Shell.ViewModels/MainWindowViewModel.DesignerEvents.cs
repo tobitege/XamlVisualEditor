@@ -87,10 +87,9 @@ public sealed partial class MainWindowViewModel
         WorkspaceModel? workspace = _workspace;
         string originalXaml = document.SyncEngine.CurrentText
             ?? throw new InvalidOperationException("Wait for the AXAML document to finish synchronizing.");
-        StringComparer pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         Dictionary<string, string> openTexts = Documents.OfType<TextDocumentViewModel>()
             .Where(item => !item.IsDisposed && string.Equals(Path.GetExtension(item.FilePath), ".cs", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(item => item.FilePath, item => item.Document.Text, pathComparer);
+            .ToDictionary(item => item.FilePath, item => item.Document.Text, FileSystemPathComparison.Comparer);
         DesignerEventBindingRequest request = new(owners.SingleOrDefault()?.ProjectPath, className,
             controlType.FullName, controlType.AssemblyName, eventName, handlerName, openTexts);
         DesignerEventBindingResult result = await service.ResolveEventHandlerAsync(request, cancellationToken);

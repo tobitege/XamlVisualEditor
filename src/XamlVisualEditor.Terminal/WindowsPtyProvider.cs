@@ -126,8 +126,9 @@ internal sealed class WindowsPtyProcess : IPtyProcess
     private readonly IntPtr _pseudoConsole;
     private readonly ManualResetEvent _processExited;
     private readonly RegisteredWaitHandle _exitWait;
+    private readonly object _pseudoConsoleLock = new();
     private WindowsNative.STARTUPINFOEX _startupInfo;
-    private int _pseudoConsoleClosed;
+    private bool _pseudoConsoleClosed;
     private int _disposed;
 
     public Stream Input => _inputStream;
@@ -156,7 +157,12 @@ internal sealed class WindowsPtyProcess : IPtyProcess
 
     public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
     {
-        WindowsNative.ResizePseudoConsole(_pseudoConsole, (short)columns, (short)rows);
+        // The exit callback closes the pseudo console on a thread pool thread; the handle is freed afterwards.
+        lock (_pseudoConsoleLock)
+        {
+            if (_pseudoConsoleClosed) return;
+            WindowsNative.ResizePseudoConsole(_pseudoConsole, (short)columns, (short)rows);
+        }
     }
 
     private void OnProcessExited(object? state, bool timedOut)
@@ -166,7 +172,14 @@ internal sealed class WindowsPtyProcess : IPtyProcess
 
     private void ClosePseudoConsoleOnce()
     {
-        if (Interlocked.Exchange(ref _pseudoConsoleClosed, 1) != 0) return;
+        lock (_pseudoConsoleLock)
+        {
+            if (_pseudoConsoleClosed) return;
+            _pseudoConsoleClosed = true;
+        }
+
+        // Closing outside the lock: ClosePseudoConsole can wait for the output reader, and no resize
+        // can start once the flag is set.
         WindowsNative.ClosePseudoConsoleHandle(_pseudoConsole);
     }
 

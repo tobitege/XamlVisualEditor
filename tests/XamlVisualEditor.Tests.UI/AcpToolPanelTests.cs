@@ -155,6 +155,44 @@ public sealed class AcpToolPanelTests
         finally { owner.Close(); }
     }
 
+    [AvaloniaFact]
+    public async Task TerminalOutputIsPolledOnlyWhileTheTerminalIsOpen()
+    {
+        FakeAgent service = new();
+        bool exited = false;
+        service.TerminalOutput = _ => exited
+            ? JsonSerializer.SerializeToElement(new { output = "done", truncated = false, exitStatus = new { exitCode = 0 } })
+            : JsonSerializer.SerializeToElement(new { output = "running", truncated = false });
+        using AcpToolViewModel vm = new(service);
+        await vm.ConnectMockCommand.Execute().ToTask();
+        Assert.True(vm.IsConnected);
+
+        service.Notify(TerminalToolCall("open"));
+        Assert.True(await PumpUntilAsync(() => service.TerminalOutputCalls >= 3, TimeSpan.FromSeconds(10)));
+
+        exited = true;
+        Assert.True(await PumpUntilAsync(() =>
+            vm.Transcript.OfType<AcpTranscriptToolEntry>().Single().TerminalExitCode == 0, TimeSpan.FromSeconds(10)));
+        int callsAfterExit = service.TerminalOutputCalls;
+        await PumpUntilAsync(() => false, TimeSpan.FromSeconds(2.5));
+        Assert.Equal(callsAfterExit, service.TerminalOutputCalls);
+    }
+
+    [AvaloniaFact]
+    public async Task TerminalUnknownToTheClientIsNotPolledAgain()
+    {
+        FakeAgent service = new();
+        using AcpToolViewModel vm = new(service);
+        await vm.ConnectMockCommand.Execute().ToTask();
+        Assert.True(vm.IsConnected);
+
+        service.Notify(TerminalToolCall("released"));
+        await PumpUntilAsync(() => false, TimeSpan.FromSeconds(2.5));
+
+        Assert.Equal(1, service.TerminalOutputCalls);
+        Assert.Equal("released", vm.Transcript.OfType<AcpTranscriptToolEntry>().Single().TerminalId);
+    }
+
     private sealed class FakeAgent : IAcpService
     {
         public bool IsConnected { get; private set; }
@@ -205,8 +243,34 @@ public sealed class AcpToolPanelTests
             return Task.FromResult(JsonSerializer.SerializeToElement(new { }));
         }
         public Task SendNotificationAsync(string method, object? parameters, CancellationToken ct) => Task.CompletedTask;
-        public JsonElement? GetTerminalOutput(string terminalId) => null;
+        private int _terminalOutputCalls;
+        public int TerminalOutputCalls => Volatile.Read(ref _terminalOutputCalls);
+        public Func<string, JsonElement?> TerminalOutput { get; set; } = _ => null;
+        public void Notify(object update) => Update(update);
+        public JsonElement? GetTerminalOutput(string terminalId)
+        {
+            Interlocked.Increment(ref _terminalOutputCalls);
+            return TerminalOutput(terminalId);
+        }
         public void SetPermissionHandler(Func<AcpPermissionRequest, CancellationToken, Task<AcpPermissionOutcome>>? handler) { }
+    }
+
+    private static object TerminalToolCall(string terminalId) => new
+    {
+        sessionUpdate = "tool_call", toolCallId = "tool-" + terminalId, title = "Run", kind = "execute", status = "in_progress",
+        content = new object[] { new { type = "terminal", terminalId } }
+    };
+
+    private static async Task<bool> PumpUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            if (condition()) return true;
+            if (DateTime.UtcNow >= deadline) return false;
+            await Task.Delay(50);
+        }
     }
 
     private static async Task<Window> ShowInWindowAsync(Control control, double width = 900, double height = 600)

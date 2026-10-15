@@ -399,10 +399,17 @@ public sealed class PreviewerSurfaceSelectionTests
                 new DesignerHostNode(other.Id, 4, 1, "Avalonia.Controls.TextBox", "Other", 10, 65, 60, 20, true)
             });
             Assert.True(session.TryReceiveDesignTree(PreviewerTcpSession.DesignTreeMessagePrefix + JsonSerializer.Serialize(tree)));
+            // The surface applies the design tree through a dispatcher post.
+            bool TreeApplied() => document.DesignSurface.ItemMap.GetValueOrDefault(button.Id)?.HostInstanceId == 2;
             Dispatcher.UIThread.RunJobs();
+            for (int attempt = 0; attempt < 100 && !TreeApplied(); attempt++)
+            {
+                await Task.Delay(50, cancellationToken);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.True(TreeApplied());
             window.UpdateLayout();
-            await Task.Delay(30, cancellationToken);
-            Dispatcher.UIThread.RunJobs();
 
             void Click(double x, double y)
             {

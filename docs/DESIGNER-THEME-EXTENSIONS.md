@@ -87,7 +87,7 @@ reported rather than silently replacing a saved selection with another theme.
 
 `extensions/XamlVisualEditor.FloweryThemeExtension` contains an optional provider for Flowery.NET 3.4.0.
 The editor application does not reference this project or Flowery.NET.
-The target project supplies its own Flowery.NET assembly.
+In previews, the provider applies only to projects that reference Flowery.NET and uses the target project's Flowery.NET assembly.
 
 Build the package from the repository root:
 
@@ -105,4 +105,4 @@ The provider adds `DaisyUITheme` only when the target application has no such st
 Palettes use a temporary resource layer. Project default restores the original resources, variant, and theme name.
 The provider does not call `CustomThemeApplicator`, which can persist application settings.
 Normal `ThemeChanged` subscribers still run inside the trusted preview process.
-The package contains the adapter, not another copy of Flowery.NET or the editor SDK.
+The package contains the adapter and `Flowery.NET.dll` for the editor theme provider, but not the editor SDK.

@@ -19,12 +19,12 @@ public sealed class IdeBridgeSessionService
         _workspaceInfo = workspaceInfo ?? throw new ArgumentNullException(nameof(workspaceInfo));
     }
 
-    /// <summary>Initializes a session for a client.</summary>
+    /// <summary>Initializes a session for a client of the active workspace.</summary>
     public async Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request, CancellationToken ct)
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
         IdeBridgeWorkspacePermissionState? state = await _permissions
-            .AuthorizeAsync(workspaceId, request?.SessionToken, ct)
+            .AuthorizeAsync(workspaceId, ct)
             .ConfigureAwait(false);
 
         if (state is null)
@@ -34,19 +34,23 @@ public sealed class IdeBridgeSessionService
 
         return new BridgeInitializeResult(
             IdeBridgeProtocol.ProtocolVersion,
-            state.Capabilities,
+            IdeBridgePermissionService.GetCapabilities(state.AccessLevel),
             workspaceId,
-            state.SessionToken);
+            Guid.NewGuid().ToString("N"));
     }
 
+    // The session is bound to the active workspace; a client may name it but cannot select another one.
     private string ResolveWorkspaceId(string? requestedId)
     {
-        string? path = requestedId ?? _workspaceInfo.WorkspacePath;
-        if (string.IsNullOrWhiteSpace(path))
+        string? path = _workspaceInfo.WorkspacePath;
+        string workspaceId = string.IsNullOrWhiteSpace(path) ? "default" : Path.GetFullPath(path);
+        if (!string.IsNullOrWhiteSpace(requestedId)
+            && !string.Equals(workspaceId, Path.GetFullPath(requestedId),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
-            return "default";
+            throw new IdeBridgeJsonRpcException(-32602, "The requested workspace is not the active workspace.");
         }
 
-        return Path.GetFullPath(path);
+        return workspaceId;
     }
 }

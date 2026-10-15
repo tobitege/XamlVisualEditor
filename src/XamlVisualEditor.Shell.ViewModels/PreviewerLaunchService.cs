@@ -27,6 +27,7 @@ internal sealed class PreviewerLaunchService : IDisposable
     {
         public required WorkspaceModel Workspace { get; init; }
         public string? WorkspacePath { get; init; }
+        public Action<string, string>? Log { get; init; }
         public TaskCompletionSource<PreviewerLaunchResult> Started { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Process? Process { get; set; }
@@ -43,6 +44,28 @@ internal sealed class PreviewerLaunchService : IDisposable
     }
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
+
+    private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>Waits for an ended host process; returns false when it did not exit within the timeout.</summary>
+    internal Func<Process, TimeSpan, bool> WaitForProcessExit { get; init; } =
+        static (process, timeout) => process.WaitForExit(timeout);
+
+    /// <summary>Registers an already running host process and its session for a file.</summary>
+    internal void AddRunningInstance(string xamlFilePath, WorkspaceModel workspace, string? workspacePath,
+        Process? process, PreviewerTcpSession? session, Action<string, string>? log = null)
+    {
+        PreviewerInstance instance = new()
+        {
+            Workspace = workspace, WorkspacePath = workspacePath, Log = log, Process = process, Session = session
+        };
+        instance.Started.TrySetResult(new PreviewerLaunchResult(true, null, process));
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _instances.Add(xamlFilePath, instance);
+        }
+    }
 
     public async Task<PreviewerLaunchResult> StartPreviewerAsync(
         string xamlFilePath,
@@ -69,7 +92,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             }
             if (created)
             {
-                instance = new PreviewerInstance { Workspace = workspace, WorkspacePath = workspacePath };
+                instance = new PreviewerInstance { Workspace = workspace, WorkspacePath = workspacePath, Log = log };
                 _instances.Add(xamlFilePath, instance);
             }
             if (!string.IsNullOrWhiteSpace(xamlText))
@@ -400,14 +423,31 @@ internal sealed class PreviewerLaunchService : IDisposable
             instances = _instances.Values.ToArray();
             _instances.Clear();
         }
+        // Every host is ended before the first wait, so one slow host does not delay ending the others.
+        List<PreviewerInstance> ending = new();
         foreach (PreviewerInstance instance in instances)
         {
             instance.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer service is closed."));
-            DisposeInstance(instance);
+            if (EndInstance(instance) is not null) ending.Add(instance);
+        }
+
+        // Closing the service waits for the hosts, so no process outlives the editor.
+        Stopwatch elapsed = Stopwatch.StartNew();
+        foreach (PreviewerInstance instance in ending)
+        {
+            TimeSpan remaining = ProcessExitTimeout - elapsed.Elapsed;
+            WaitForExitAndDispose(instance, remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
         }
     }
 
-    private static void DisposeInstance(PreviewerInstance instance)
+    // The wait runs off the calling thread; closing a document must not block the UI thread.
+    private void DisposeInstance(PreviewerInstance instance)
+    {
+        if (EndInstance(instance) is not null)
+            _ = Task.Run(() => WaitForExitAndDispose(instance, ProcessExitTimeout));
+    }
+
+    private static Process? EndInstance(PreviewerInstance instance)
     {
         lock (instance)
         {
@@ -415,12 +455,26 @@ internal sealed class PreviewerLaunchService : IDisposable
             instance.PendingTheme?.TrySetCanceled();
         }
         instance.Session?.Dispose();
-        if (instance.Process is not { } process) return;
+        if (instance.Process is not { } process) return null;
         try
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
-            if (!process.WaitForExit(5000))
-                throw new TimeoutException("The previewer process did not exit within five seconds.");
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            instance.Log?.Invoke("Warning", $"The previewer process could not be ended: {ex.Message}");
+        }
+        return process;
+    }
+
+    private void WaitForExitAndDispose(PreviewerInstance instance, TimeSpan timeout)
+    {
+        if (instance.Process is not { } process) return;
+        try
+        {
+            if (!WaitForProcessExit(process, timeout))
+                instance.Log?.Invoke("Warning", "The previewer process did not exit after it was ended.");
         }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }

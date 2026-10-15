@@ -166,8 +166,7 @@ public sealed class LanguageNavigationServiceAdapter : ILanguageNavigationServic
             ct.ThrowIfCancellationRequested();
 
             IEditorDocument? document = _editor.GetOpenDocuments()
-                .FirstOrDefault(doc =>
-                    string.Equals(doc.FilePath, docEdit.FilePath, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
 
             if (document is null)
             {

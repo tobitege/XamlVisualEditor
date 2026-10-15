@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using XamlVisualEditor.Extensions;
@@ -135,6 +136,152 @@ public sealed class ExtensionPackageStoreTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task GetInstalledRestoresTheInstallationWhenMovingTheExtractedContentFails()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string versionDirectory = CreateArchiveOnlyInstallation(root);
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader(), null,
+                (source, destination, _) =>
+                {
+                    if (Path.GetFileName(source).Contains(".installing-", StringComparison.Ordinal))
+                        throw new IOException("Simulated rename failure.");
+                    Directory.Move(source, destination);
+                    return Task.CompletedTask;
+                });
+
+            Assert.Empty(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.True(File.Exists(Path.Combine(versionDirectory, "example.sample-extension.1.0.0.nupkg")));
+            Assert.Equal(["1.0.0"], Directory.GetDirectories(Path.GetDirectoryName(versionDirectory)!).Select(Path.GetFileName));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetInstalledKeepsAFreshlyRetiredDirectoryWhoseTimestampIsOld()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string versionDirectory = CreateArchiveOnlyInstallation(root);
+            Directory.SetLastWriteTimeUtc(versionDirectory, DateTime.UtcNow.AddHours(-2));
+            ExtensionPackageStore failingStore = new(Path.Combine(root, "installed"), new ExtensionPackageLoader(), null,
+                (source, destination, _) =>
+                {
+                    if (string.Equals(destination, versionDirectory, StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("Simulated rename failure.");
+                    Directory.Move(source, destination);
+                    return Task.CompletedTask;
+                });
+            Assert.Empty(await failingStore.GetInstalledAsync(CancellationToken.None));
+            string retired = Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(versionDirectory)!, "1.0.0.retired-*"));
+            Assert.True(Directory.GetLastWriteTimeUtc(retired) < DateTime.UtcNow.AddHours(-1));
+
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+            await store.GetInstalledAsync(CancellationToken.None);
+
+            Assert.True(File.Exists(Path.Combine(retired, "example.sample-extension.1.0.0.nupkg")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetInstalledSkipsAnExtensionDirectoryThatIsALink()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+            await store.InstallAsync(CreatePackage(root, "sample-extension", "example", "1.0.0"), CancellationToken.None);
+            string target = Path.Combine(root, "elsewhere");
+            Directory.CreateDirectory(target);
+            CreateDirectoryLink(Path.Combine(root, "installed", "example.linked"), target);
+
+            ExtensionPackageInfo installed = Assert.Single(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.Equal("example.sample-extension", installed.Manifest.ExtensionId);
+        }
+        finally
+        {
+            // A recursive delete does not remove a junction; the link itself goes first.
+            string link = Path.Combine(root, "installed", "example.linked");
+            if (Directory.Exists(link))
+                Directory.Delete(link);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentGetInstalledMigratesAnArchiveOnlyInstallationOnce()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string versionDirectory = CreateArchiveOnlyInstallation(root);
+            int migrations = 0;
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader(), null,
+                async (source, destination, ct) =>
+                {
+                    await Task.Delay(50, ct);
+                    if (Path.GetFileName(source).Contains(".installing-", StringComparison.Ordinal))
+                        Interlocked.Increment(ref migrations);
+                    Directory.Move(source, destination);
+                });
+
+            IReadOnlyList<ExtensionPackageInfo>[] results = await Task.WhenAll(
+                Task.Run(() => store.GetInstalledAsync(CancellationToken.None)),
+                Task.Run(() => store.GetInstalledAsync(CancellationToken.None)));
+
+            Assert.All(results, result => Assert.Equal(versionDirectory, Assert.Single(result).InstallationDirectory));
+            Assert.Equal(1, migrations);
+            Assert.Equal("sample payload", File.ReadAllText(Path.Combine(versionDirectory, "lib", "net10.0", "Sample.dll")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string CreateArchiveOnlyInstallation(string root)
+    {
+        string versionDirectory = Path.Combine(root, "installed", "example.sample-extension", "1.0.0");
+        Directory.CreateDirectory(versionDirectory);
+        File.Move(CreatePackage(root, "sample-extension", "example", "1.0.0"),
+            Path.Combine(versionDirectory, "example.sample-extension.1.0.0.nupkg"));
+        return versionDirectory;
+    }
+
+    // A junction needs no elevation on Windows; other systems create a symbolic link.
+    private static void CreateDirectoryLink(string link, string target)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return;
+        }
+
+        using Process process = Process.Start(new ProcessStartInfo("cmd.exe")
+        {
+            ArgumentList = { "/c", "mklink", "/J", link, target },
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true
+        })!;
+        process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
     }
 
     private static string CreatePackage(string root, string name, string publisher, string version, string? extraEntry = null)

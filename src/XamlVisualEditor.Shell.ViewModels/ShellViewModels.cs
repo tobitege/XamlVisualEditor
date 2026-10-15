@@ -97,7 +97,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     private BreakpointsViewModel? _breakpointsSource;
     private readonly ILogger<DesignerDocumentViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
-    private readonly Dictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
         = new(FileSystemPathComparison.Comparer);
 
     /// <summary>
@@ -173,10 +173,10 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     public partial AvOrientation SplitOrientation { get; set; } = AvOrientation.Vertical;
 
     /// <summary>
-    /// Gets or sets the selected AST node ID (synced between editor, tree, and designer).
+    /// Gets the selected AST node ID (synced between editor, tree, and designer).
     /// </summary>
     [Reactive]
-    public partial Guid? SelectedNodeId { get; set; }
+    public partial Guid? SelectedNodeId { get; private set; }
 
     /// <summary>
     /// Gets the source of the most recent selection change.
@@ -188,8 +188,14 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     /// </summary>
     public void SetSelectedNode(Guid? nodeId, SyncSource source)
     {
+        // The source is set first, so observers of either property see the new node together with its source.
+        bool sourceChanged = _selectionSource != source;
         _selectionSource = source;
         SelectedNodeId = nodeId;
+        if (sourceChanged)
+        {
+            this.RaisePropertyChanged(nameof(SelectionSource));
+        }
     }
 
     private void UpdateSelectedElementLines()
@@ -420,6 +426,8 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
                 Observable.Return(_metadataService is not null && _workspaceProvider is not null && _openFileAsync is not null),
                 (hasSelection, servicesAvailable) => hasSelection && servicesAvailable);
         NavigateToDefinitionCommand = ReactiveCommand.CreateFromTask(NavigateToDefinitionAsync, canNavigate);
+        _disposables.Add(NavigateToDefinitionCommand.ThrownExceptions
+            .Subscribe(error => _logger.LogWarning("Navigate to definition failed: {Message}", error.Message)));
 
         IDisposable previewerToggleSubscription = this.WhenAnyValue(
                 x => x.UseExternalPreviewer, x => x.IsLoaded, x => x.StartPreviewerCommand)
@@ -517,7 +525,10 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             return;
         }
 
-        string? targetPath = FindXamlFileForType(project, type.FullName);
+        // Reading every XAML file of the project would block the UI thread.
+        string[] xamlFiles = project.XamlFiles.Select(file => file.FilePath).ToArray();
+        string fullTypeName = type.FullName;
+        string? targetPath = await Task.Run(() => FindXamlFileForType(xamlFiles, fullTypeName));
         if (string.IsNullOrWhiteSpace(targetPath))
         {
             return;
@@ -526,11 +537,11 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         await _openFileAsync(targetPath);
     }
 
-    private string? FindXamlFileForType(ProjectModel project, string fullTypeName)
+    private string? FindXamlFileForType(IEnumerable<string> xamlFiles, string fullTypeName)
     {
-        foreach (XamlFileModel file in project.XamlFiles)
+        foreach (string filePath in xamlFiles)
         {
-            string? className = TryGetXamlClassName(file.FilePath);
+            string? className = TryGetXamlClassName(filePath);
             if (string.IsNullOrWhiteSpace(className))
             {
                 continue;
@@ -538,7 +549,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
 
             if (string.Equals(className, fullTypeName, StringComparison.Ordinal))
             {
-                return file.FilePath;
+                return filePath;
             }
         }
 
@@ -561,7 +572,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             _xamlClassCache[filePath] = (lastWrite, className);
             return className;
         }
-        catch
+        catch (Exception ex) when (ex is System.IO.IOException or System.Xml.XmlException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -2274,6 +2285,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly IDotNetCli _dotNetCli;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
+
+    /// <summary>The number of designer documents that keep a previewer host: the active one and the most recently active ones.</summary>
+    internal const int MaxLivePreviewers = 4;
+
+    // Designer documents, most recently activated first.
+    private readonly List<DesignerDocumentViewModel> _previewerActivationOrder = new();
+
+    internal PreviewerLaunchService PreviewerLaunchService => _previewerLaunchService;
     private readonly IDebuggerServiceRegistry _debuggerRegistry;
     private const string NetcoredbgServiceId = "debugger.netcoredbg";
     private readonly Dictionary<string, string?> _adapterPathsByService = new(StringComparer.OrdinalIgnoreCase);
@@ -2642,6 +2661,21 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     public partial bool IsStarting { get; private set; }
 
     private void SetPersistentStatus(string message) => SetStatusText(message, persistent: true);
+
+    // Without a subscriber to ThrownExceptions ReactiveUI ends the application when a command fails.
+    private void ReportCommandFailures(string messageFormat, params IHandleObservableErrors[] commands)
+    {
+        foreach (IHandleObservableErrors command in commands)
+        {
+            _disposables.Add(command.ThrownExceptions
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(error =>
+                {
+                    _logger.LogWarning(error, "Command failed: {Message}", error.Message);
+                    SetPersistentStatus(string.Format(messageFormat, (object?)error.Message));
+                }));
+        }
+    }
 
     private void SetStatusText(string message, bool persistent)
     {
@@ -3496,6 +3530,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         // Close document command (used by tab close buttons)
         CloseDocumentCommand = ReactiveCommand.CreateFromTask<IEditorDocumentViewModel>(ConfirmAndCloseDocumentAsync);
+        ReportCommandFailures(UiStrings.DocumentOpenFailed,
+            OpenDocumentCommand, OpenWorkspaceCommand, OpenPathCommand, OpenPathsCommand, OpenRecentCommand);
+        ReportCommandFailures(UiStrings.CommandFailed,
+            NewDocumentCommand, CloseActiveDocumentCommand, CloseWorkspaceCommand, CloseDocumentCommand,
+            SaveDocumentCommand, SaveAllCommand, ExitCommand, OpenExtensionManagerCommand, ClearRecentFilesCommand,
+            ManageRecentFilesCommand, OpenOptionsCommand, SetThemeDefaultCommand, SetThemeLightCommand,
+            SetThemeDarkCommand, RenameSymbolCommand, FormatDocumentCommand, CodeActionsCommand,
+            DocumentSymbolsCommand, WorkspaceSymbolsCommand, UndoCommand, RedoCommand, CutCommand, CopyCommand,
+            PasteCommand, DuplicateCommand, DeleteCommand, SelectAllCommand, ToggleBreakpointsCommand,
+            ToggleCallStackCommand, ToggleLocalsCommand, ToggleWatchesCommand, ResetLayoutCommand, SaveLayoutCommand,
+            SaveLayoutAsCommand, DeleteLayoutCommand, ManageLayoutsCommand, OpenCanvasCommand, StartPreviewerCommand,
+            StartDebugCommand, StopDebugCommand, ContinueDebugCommand, StepOverCommand, StepInCommand,
+            StepOutCommand, PauseDebugCommand, ToggleBreakpointCommand, StartRunCommand, StopRunCommand,
+            NewTerminalCommand, ShowCommandPaletteCommand);
 
         // Update trees when active document changes
         IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
@@ -3536,6 +3584,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 doc.PreviewerSession = _previewerLaunchService.TryGetSession(doc.FilePath, out PreviewerTcpSession? session)
                     ? session
                     : null;
+                TrackPreviewerActivation(doc);
             });
         _disposables.Add(previewerSessionSubscription);
 
@@ -4234,7 +4283,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             await doc.SaveCommand.Execute().ToTask();
             return true;
         }
-        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        // InvalidOperationException reports a document that cannot be saved yet, for example during a designer edit.
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             _logger.LogWarning("Save document failed: {Message}", ex.Message);
             SetPersistentStatus(FileSystemErrorMessages.TryGetReadOnlyEntryName(ex, doc.FilePath, out string? readOnlyName)
@@ -4639,10 +4689,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
-                _ = AutoSaveAsync(doc);
+                _ = ReportFailureAsync(AutoSaveAsync(doc));
             });
 
         _autoSaveSubscriptions[doc] = subscription;
+    }
+
+    // A task that nobody awaits reports its failure to the user instead of ending unobserved.
+    private async System.Threading.Tasks.Task ReportFailureAsync(System.Threading.Tasks.Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Background operation failed: {Message}", ex.Message);
+            SetPersistentStatus(string.Format(UiStrings.CommandFailed, (object?)ex.Message));
+        }
     }
 
     private void AttachAutoSave(TextDocumentViewModel doc)
@@ -4659,7 +4723,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
-                _ = AutoSaveAsync(doc);
+                _ = ReportFailureAsync(AutoSaveAsync(doc));
             });
 
         _autoSaveSubscriptions[doc] = subscription;
@@ -5984,7 +6048,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        DockFactory.SaveLayout(DockLayout, _userLayoutStore.GetPath(name));
+        if (!DockFactory.SaveLayout(DockLayout, _userLayoutStore.GetPath(name)))
+        {
+            SetPersistentStatus(string.Format(UiStrings.LayoutSaveFailed, name));
+            return;
+        }
+
         SetCurrentLayout(name, isLoaded: true);
         RefreshSavedLayoutMenuItems();
         StatusText = string.Format(UiStrings.LayoutSaved, name);
@@ -7765,6 +7834,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             designer.CloseRequested -= CloseDocument;
             designer.PreviewerSession = null;
+            _previewerActivationOrder.Remove(designer);
             _previewerLaunchService.StopPreviewer(designer.FilePath);
         }
         doc.Dispose();
@@ -7790,6 +7860,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // Returns null when an interceptor cancelled the open.
     private async System.Threading.Tasks.Task<string?> ResolveUserOpenPathAsync(string filePath)
     {
+        if (FileSystemPathValidation.IsAccepted(filePath))
+        {
+            filePath = NormalizeDocumentPath(filePath);
+        }
+
         if (_documentOpenResolver is null
             || !FileSystemPathValidation.IsAccepted(filePath)
             || !System.IO.File.Exists(filePath)
@@ -7820,28 +7895,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         try
         {
             foreach (IEditorDocumentViewModel document in Documents.ToArray()) CloseDocument(document);
-            _workspace = null;
-            _workspacePath = null;
-            HasWorkspace = false;
-            _workspaceInfoUpdater?.UpdateWorkspacePath(null);
-            _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
-            WorkspaceProjects.Clear();
-            _projectLookup.Clear();
-            SetActiveProject(null);
-            SolutionExplorer.Clear();
-            SolutionExplorer.IsVisible = false;
-            _assemblyResolver?.Dispose();
-            _assemblyResolver = null;
-            WorkspaceDesignThemeRegistry.Clear();
             _backNavigation.Clear();
             _forwardNavigation.Clear();
             UpdateNavigationState();
-
-            if (_languageRegistry is not null)
-            {
-                foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
-                    await service.ClearWorkspaceAsync();
-            }
+            await ResetWorkspaceStateAsync(workspacePath: null);
             StatusText = UiStrings.WorkspaceClosed;
         }
         catch (Exception ex)
@@ -7855,33 +7912,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
     }
 
-    public System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
+    public async System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
     {
         if (RejectInvalidPath(folderPath))
         {
             RemoveRecentFile(folderPath, RecentEntryKind.Folder);
-            return System.Threading.Tasks.Task.CompletedTask;
+            return;
         }
 
         if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
         {
             RemoveRecentFile(folderPath, RecentEntryKind.Folder);
             StatusText = UiStrings.FolderNotFound;
-            return System.Threading.Tasks.Task.CompletedTask;
+            return;
         }
 
         StopDocumentPreviewers();
-        _workspace = null;
-        _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
-        _workspacePath = folderPath;
-        _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
-        HasWorkspace = false;
-
-        WorkspaceProjects.Clear();
-        _projectLookup.Clear();
-        SetActiveProject(null);
-        SolutionExplorer.Clear();
-        SolutionExplorer.IsVisible = false;
+        await ResetWorkspaceStateAsync(folderPath);
 
         string name = System.IO.Path.GetFileName(folderPath.TrimEnd(
             System.IO.Path.DirectorySeparatorChar,
@@ -7889,7 +7936,30 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         StatusText = string.Format(UiStrings.FolderOpened, (object?)(name));
         LogOutput("Info", $"Opened folder: {folderPath}");
         AddRecentFile(System.IO.Path.TrimEndingDirectorySeparator(folderPath), RecentEntryKind.Folder);
-        return System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    // Drops everything that belongs to the previous solution: projects, assemblies, design themes and language state.
+    private async System.Threading.Tasks.Task ResetWorkspaceStateAsync(string? workspacePath)
+    {
+        _workspace = null;
+        _workspacePath = workspacePath;
+        _workspaceInfoUpdater?.UpdateWorkspacePath(workspacePath);
+        HasWorkspace = false;
+        _controlCatalogUpdater?.SetWorkspaceAssemblies(Array.Empty<string>());
+        WorkspaceProjects.Clear();
+        _projectLookup.Clear();
+        SetActiveProject(null);
+        SolutionExplorer.Clear();
+        SolutionExplorer.IsVisible = false;
+        _assemblyResolver?.Dispose();
+        _assemblyResolver = null;
+        WorkspaceDesignThemeRegistry.Clear();
+
+        if (_languageRegistry is not null)
+        {
+            foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+                await service.ClearWorkspaceAsync();
+        }
     }
 
     private async System.Threading.Tasks.Task OpenFromSolutionExplorerAsync(string filePath)
@@ -7932,6 +8002,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return null;
         }
 
+        filePath = NormalizeDocumentPath(filePath);
         if (!System.IO.File.Exists(filePath))
         {
             RemoveRecentFile(filePath);
@@ -7958,7 +8029,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             await TryLoadWorkspaceForXamlAsync(filePath);
         }
 
-        IEditorDocumentViewModel? existing = Documents.FirstOrDefault(d => d.FilePath == filePath);
+        IEditorDocumentViewModel? existing = Documents.FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
         if (existing is not null)
         {
             ActiveDocument = existing;
@@ -7987,7 +8058,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ActiveDocument = designer;
             AddDocumentToDock(designer);
             AttachAutoSave(designer);
-            await designer.LoadAsync();
+            try
+            {
+                await designer.LoadAsync();
+            }
+            catch (Exception ex) when (IsDocumentReadFailure(ex))
+            {
+                DiscardUnreadableDocument(designer, ex);
+                return null;
+            }
             if (designer.IsDisposed || !Documents.Contains(designer)) return null;
             UpdateTrees(designer);
             doc = designer;
@@ -8000,7 +8079,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ActiveDocument = textDoc;
             AddDocumentToDock(textDoc);
             AttachAutoSave(textDoc);
-            await textDoc.LoadAsync();
+            try
+            {
+                await textDoc.LoadAsync();
+            }
+            catch (Exception ex) when (IsDocumentReadFailure(ex))
+            {
+                DiscardUnreadableDocument(textDoc, ex);
+                return null;
+            }
             UpdateTrees(null);
             doc = textDoc;
         }
@@ -8016,6 +8103,34 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         return doc;
+    }
+
+    // Document identity uses the full path, so one file reached through different spellings maps to one document.
+    private static string NormalizeDocumentPath(string filePath)
+    {
+        try
+        {
+            return System.IO.Path.GetFullPath(filePath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or System.IO.PathTooLongException)
+        {
+            return filePath;
+        }
+    }
+
+    private static bool IsDocumentReadFailure(Exception error) =>
+        error is DecoderFallbackException or System.IO.IOException or UnauthorizedAccessException;
+
+    // The tab is added before the file is read; a file that cannot be read must not leave an empty tab behind.
+    private void DiscardUnreadableDocument(IEditorDocumentViewModel document, Exception error)
+    {
+        _logger.LogWarning("Open document failed: {Path}: {Message}", document.FilePath, error.Message);
+        string fileName = document.FileName;
+        string reason = error is DecoderFallbackException
+            ? UiStrings.DocumentNotUtf8Reason
+            : FileSystemErrorMessages.DescribeReason(error, document.FilePath);
+        CloseDocument(document);
+        SetPersistentStatus(string.Format(UiStrings.DocumentOpenFailedNamed, fileName, reason));
     }
 
     private async Task OpenRecentAsync(RecentFileEntry entry)
@@ -8667,6 +8782,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return document.SyncEngine.CurrentText;
     }
 
+    private bool IsWithinLivePreviewers(DesignerDocumentViewModel document)
+    {
+        int index = _previewerActivationOrder.IndexOf(document);
+        return index >= 0 && index < MaxLivePreviewers;
+    }
+
+    // Every previewer is a separate host process; only the recently active documents keep theirs.
+    private void TrackPreviewerActivation(DesignerDocumentViewModel document)
+    {
+        _previewerActivationOrder.Remove(document);
+        _previewerActivationOrder.Insert(0, document);
+        _previewerActivationOrder.RemoveAll(item => item.IsDisposed || !Documents.Contains(item));
+        foreach (DesignerDocumentViewModel inactive in _previewerActivationOrder.Skip(MaxLivePreviewers))
+        {
+            inactive.PreviewerSession = null;
+            _previewerLaunchService.StopPreviewer(inactive.FilePath);
+        }
+
+        if (document.UseExternalPreviewer && document.IsLoaded && document.PreviewerSession is null
+            && document.StartPreviewerCommand is { } start && start.CanExecute(null))
+        {
+            start.Execute(null);
+        }
+    }
+
     private System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync() =>
         ActiveDesignerDocument is { } document
             ? StartPreviewerForDocumentAsync(document)
@@ -8678,6 +8818,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string? workspacePath = _workspacePath;
         if (document.IsDisposed || !document.IsLoaded || !Documents.Contains(document)) return;
         if (_changingThemePackages.Any(id => UsesThemePackage(document, id))) return;
+        // A document outside the live set starts its previewer when it becomes active again.
+        if (!IsWithinLivePreviewers(document)) return;
         ConfigurePreviewThemes(document);
         document.SetPreviewerLaunchError(null);
         if (workspace is null)
@@ -8764,8 +8906,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     /// <summary>
     /// Starts the previewer for an open XAML file, waits for a stable frame and saves it as
-    /// PNG. The previewer process ends afterwards, so batch runs do not accumulate host
-    /// processes.
+    /// PNG. A previewer process started for the export ends afterwards, so batch runs do not accumulate host
+    /// processes; the live previewer of a document keeps running.
     /// </summary>
     public async System.Threading.Tasks.Task<XamlVisualEditor.Extensions.PreviewExportResult> ExportPreviewAsync(
         string filePath,
@@ -8791,6 +8933,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         ActiveDocument = doc;
+        // A document that shows its live previewer keeps it after the export; only a host started for the export ends.
+        bool usesLivePreviewer = doc.UseExternalPreviewer || _previewerLaunchService.TryGetSession(filePath, out _);
         PreviewerLaunchResult launch = await _previewerLaunchService.StartPreviewerAsync(
             filePath,
             doc.SyncEngine.CurrentText,
@@ -8827,8 +8971,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
         finally
         {
-            doc.PreviewerSession = null;
-            _previewerLaunchService.StopPreviewer(filePath);
+            if (!usesLivePreviewer)
+            {
+                doc.PreviewerSession = null;
+                _previewerLaunchService.StopPreviewer(filePath, launch.Process);
+            }
         }
     }
 

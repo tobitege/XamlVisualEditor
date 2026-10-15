@@ -21,6 +21,22 @@ public sealed class ExtensionManagerViewModelTests
     }
 
     [Fact]
+    public void PackageItem_ShowsDeclaredCapabilities()
+    {
+        ExtensionManifest manifest = new()
+        {
+            Name = "sample",
+            Publisher = "example",
+            Version = "1.0.0",
+            Capabilities = new[] { ExtensionHostCapabilities.DocumentOpenInterceptors }
+        };
+
+        ExtensionPackageItemViewModel item = new(new ExtensionPackageInfo("sample.nupkg", manifest), isEnabled: true);
+
+        Assert.Equal(ExtensionHostCapabilities.DocumentOpenInterceptors, item.Capabilities);
+    }
+
+    [Fact]
     public async Task EnableToggle_CallsManager()
     {
         FakeManager manager = new();

@@ -23,6 +23,7 @@ using System.Reactive.Linq;
 using TextMateSharp.Grammars;
 using XamlVisualEditor.CodeEditor;
 using XmlFoldingStrategy = XamlVisualEditor.CodeEditor.XmlFoldingStrategy;
+using XamlVisualEditor.App.Services;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.DragDrop;
@@ -38,7 +39,7 @@ namespace XamlVisualEditor.App.Views;
 /// The Document is assigned programmatically rather than via compiled binding
 /// to ensure AvaloniaEdit's TextEditor properly initializes with the shared TextDocument.
 /// </summary>
-public sealed partial class XamlCodeEditorView : UserControl
+public sealed partial class XamlCodeEditorView : UserControl, IDisposable
 {
     private TextMate.Installation? _textMateInstallation;
     private CompletionWindow? _completionWindow;
@@ -91,7 +92,22 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
     }
 
+    // The dock caches the view of a hidden tab and attaches it again, so a detach keeps the editor set up with its
+    // foldings and tokenized lines; only the popups and the pending hover request end here.
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)
+    {
+        _completionWindow?.Close();
+        _completionWindow = null;
+        _insightWindow?.Close();
+        _insightWindow = null;
+
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
+        _hoverCts = null;
+    }
+
+    /// <summary>Releases the editor setup when the view is discarded, for example when its tab closes.</summary>
+    public void Dispose()
     {
         // Dispose TextMate native resources
         _textMateInstallation?.Dispose();
@@ -144,8 +160,8 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
     }
 
-    // Dock keeps the view of a document while its tab is hidden, so every load sets the editor up again after the
-    // teardown of the previous detach.
+    // Dock keeps the view of a document while its tab is hidden; a load after the view was disposed sets the editor
+    // up again.
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_textEditor is not null)
@@ -438,8 +454,23 @@ public sealed partial class XamlCodeEditorView : UserControl
             .ToList();
 
         int currentLength = document.TextLength;
+        // Regions folded by the user from a selection are not produced by the strategy; they are passed in again so
+        // that the update keeps them, and one of them replaces a strategy region with the same start.
+        List<FoldingSection> manualSections = _foldingManager.AllFoldings
+            .Where(section => TextEditorViewHost.IsManualFolding(section) && section.Length > 0)
+            .ToList();
         List<NewFolding> safeFoldings = foldings
             .Where(folding => folding.StartOffset >= 0 && folding.EndOffset <= currentLength)
+            .Where(folding => manualSections.All(section => section.StartOffset != folding.StartOffset))
+            .Concat(manualSections.Select(section => new NewFolding(section.StartOffset, section.EndOffset)
+            {
+                Name = section.Title,
+                DefaultClosed = section.IsFolded
+            }))
+            .OrderBy(folding => folding.StartOffset)
+            .ToList();
+        List<(int Start, int End, string Title, bool IsFolded)> manual = manualSections
+            .Select(section => (section.StartOffset, section.EndOffset, section.Title, section.IsFolded))
             .ToList();
 
         try
@@ -448,6 +479,18 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
         catch (ArgumentException)
         {
+        }
+
+        // The update matches existing regions by start offset only, so the manual marker and fold state are set again.
+        foreach ((int start, int end, string title, bool isFolded) in manual)
+        {
+            if (_foldingManager.AllFoldings.FirstOrDefault(candidate =>
+                    candidate.StartOffset == start && candidate.EndOffset == end) is { } section)
+            {
+                TextEditorViewHost.MarkManualFolding(section);
+                section.Title = title;
+                section.IsFolded = isFolded;
+            }
         }
     }
 

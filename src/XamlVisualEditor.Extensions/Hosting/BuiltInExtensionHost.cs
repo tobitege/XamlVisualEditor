@@ -219,8 +219,13 @@ public sealed class BuiltInExtensionHost : IDisposable
         _extensionSubscriptions.Clear();
     }
 
-    // capabilities: host capabilities the extension declared, from its manifest for installed packages and
-    // from ExtensionCapabilitiesAttribute for extensions registered with the editor.
+    /// <summary>Creates the activation context of one extension.</summary>
+    /// <param name="capabilities">
+    /// Host capabilities the extension declared, from its manifest for installed packages and from
+    /// <see cref="ExtensionCapabilitiesAttribute"/> for extensions registered with the editor. The extension
+    /// declares them itself and the extension manager lists them for the user; the check only withholds services
+    /// that were not declared and is not a sandbox, because extension code runs in the editor process.
+    /// </param>
     private ExtensionContext CreateContext(string extensionId, string extensionPath, IReadOnlyList<string> capabilities)
     {
         List<IDisposable> subscriptions = new();

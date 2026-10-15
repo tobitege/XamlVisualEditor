@@ -112,6 +112,8 @@ public sealed class EditorThemeService : IEditorThemeService, IDisposable
         bool isLight = _application.ActualThemeVariant == ThemeVariant.Light;
         _dockThemeManager.Switch(isLight ? 0 : 1);
         _dockThemeManager.SwitchPreset(isLight ? 1 : 2);
+        // DockFluentThemeManager.Switch sets the requested variant to Light or Dark; this restores Default for the
+        // system theme.
         _application.RequestedThemeVariant = variant;
     }
 

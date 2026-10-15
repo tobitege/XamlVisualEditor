@@ -10,6 +10,12 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class TerminalProfileTests(ITestOutputHelper output)
 {
+    /// <summary>
+    /// The external cases open real, visible console windows on the desktop and depend on how the
+    /// default terminal host reuses windows. They run only when this variable is set to <c>1</c>.
+    /// </summary>
+    private const string DesktopTestsVariable = "XVE_RUN_DESKTOP_TESTS";
+
     [Theory]
     [InlineData(TerminalShell.CommandPrompt, TerminalLocation.Internal)]
     [InlineData(TerminalShell.WindowsPowerShell, TerminalLocation.Internal)]
@@ -19,9 +25,12 @@ public sealed class TerminalProfileTests(ITestOutputHelper output)
     [InlineData(TerminalShell.PowerShell7, TerminalLocation.External)]
     public async Task ConfiguredShellStartsInternallyOrInAVisibleExternalWindow(TerminalShell shell, TerminalLocation location)
     {
-        if (!OperatingSystem.IsWindows()) return;
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The configured shells are Windows shells.");
+        Assert.SkipWhen(location == TerminalLocation.External &&
+            Environment.GetEnvironmentVariable(DesktopTestsVariable) != "1",
+            $"External terminal windows open on the desktop; set {DesktopTestsVariable}=1 to run this case.");
         EditorOptions configuration = new() { TerminalShell = shell, TerminalLocation = location };
-        Assert.True(File.Exists(configuration.ShellPath), configuration.ShellPath);
+        Assert.SkipUnless(File.Exists(configuration.ShellPath), "Shell not installed: " + configuration.ShellPath);
         RecordingPtyProvider provider = new();
         TerminalService service = new(provider, new ManagedTerminalEmulatorFactory());
         TerminalSessionOptions options = new()

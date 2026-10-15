@@ -685,14 +685,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        string repoPath = RepositoryRoot!;
-        string path = selected.Path;
-        bool confirmed = await ConfirmGitActionAsync(UiStrings.GitUnstageConfirmTitle,
-            string.Format(UiStrings.GitUnstageOnePrompt, path), UiStrings.Unstage);
-        if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        await _gitService.UnstageAsync(repoPath, new[] { path });
+        await _gitService.UnstageAsync(RepositoryRoot, new[] { selected.Path });
         await RefreshAsync();
     }
 
@@ -712,7 +705,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         string repoPath = RepositoryRoot!;
         string path = selected.Path;
         bool confirmed = await ConfirmGitActionAsync(UiStrings.GitDiscardConfirmTitle,
-            string.Format(UiStrings.GitDiscardOnePrompt, path), UiStrings.Discard, destructive: true);
+            string.Format(UiStrings.GitDiscardWorkingChangesPrompt, path), UiStrings.Discard, destructive: true);
         if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -760,16 +753,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             paths[i] = _stagedItems[i].Path;
         }
 
-        string repoPath = RepositoryRoot!;
-        string prompt = paths.Length == 1
-            ? string.Format(UiStrings.GitUnstageOnePrompt, paths[0])
-            : string.Format(UiStrings.GitUnstageManyPrompt, paths.Length);
-        bool confirmed = await ConfirmGitActionAsync(UiStrings.GitUnstageConfirmTitle,
-            prompt, UiStrings.UnstageAll);
-        if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        await _gitService.UnstageAsync(repoPath, paths);
+        await _gitService.UnstageAsync(RepositoryRoot, paths);
         await RefreshAsync();
     }
 

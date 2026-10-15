@@ -2,55 +2,30 @@ using System;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml.MarkupExtensions;
-using Avalonia.Threading;
 
 namespace XamlVisualEditor.App.Services;
 
+/// <summary>
+/// Gives every owned window, including the dialogs of extensions, the accent frame that EditorTheme styles for
+/// <see cref="FrameClass"/>.
+/// </summary>
+/// <remarks>
+/// A window receives its owner during <c>Show</c> before its first frame is rendered, so the class is in place for
+/// that frame and the content of the window stays where it is.
+/// </remarks>
 internal static class DialogAppearance
 {
-    private const string FrameClass = "editor-dialog-frame";
+    internal const string FrameClass = "editor-dialog-frame";
     private static int _initialized;
 
     public static void Initialize()
     {
         if (Interlocked.Exchange(ref _initialized, 1) != 0) return;
-
-        Window.IsVisibleProperty.Changed.AddClassHandler<Window>(static (window, _) =>
-        {
-            if (!window.IsVisible) return;
-            window.Opened -= OnDialogOpened;
-            window.Opened += OnDialogOpened;
-        });
+        Install();
     }
 
-    private static void OnDialogOpened(object? sender, EventArgs args)
-    {
-        if (sender is not Window window) return;
-        window.Opened -= OnDialogOpened;
-        if (window.Owner is null) return;
-        if (window.Content is Border existing && existing.Classes.Contains(FrameClass)) return;
-
-        var focused = window.FocusManager?.GetFocusedElement();
-        // Detach the existing root before adding it to the focus-independent frame.
-        object? content = window.Content;
-        window.Content = null;
-        var frame = new Border
-        {
-            BorderThickness = new Thickness(2),
-            Child = content as Control ?? new ContentControl { Content = content }
-        };
-        frame.Classes.Add(FrameClass);
-        frame.Bind(Border.BorderBrushProperty,
-            new DynamicResourceExtension("SystemControlHighlightAccentBrush"));
-        window.Content = frame;
-
-        if (focused is not null)
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (window.IsVisible) focused.Focus();
-            }, DispatcherPriority.Loaded);
-        }
-    }
+    /// <summary>Adds the class handler; disposing the result removes it.</summary>
+    internal static IDisposable Install() =>
+        WindowBase.OwnerProperty.Changed.AddClassHandler<Window>(static (window, _) =>
+            window.Classes.Set(FrameClass, window.Owner is not null));
 }

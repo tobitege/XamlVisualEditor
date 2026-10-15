@@ -34,6 +34,10 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     private readonly SerialDisposable _profileSubscription = new();
     private readonly Subject<Unit> _saveRequests = new();
     private readonly Dictionary<string, int> _toolCallIndexes = new(StringComparer.Ordinal);
+    // Terminal id to tool call id for terminals that have not exited; only touched on the main thread.
+    private readonly Dictionary<string, string> _openTerminals = new(StringComparer.Ordinal);
+    private readonly SerialDisposable _terminalPolling = new();
+    private bool _isPollingTerminals;
     private CancellationTokenSource? _authCts;
 
     public ObservableCollection<AcpSessionEntry> Sessions { get; } = new();
@@ -212,14 +216,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         _service.NotificationReceived += OnNotificationReceived;
         _service.ConnectionChanged += OnConnectionChanged;
         _service.StderrReceived += OnStderrReceived;
-        _disposables.Add(Observable.Interval(TimeSpan.FromSeconds(1))
-            .WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(_ =>
-            {
-                if (!IsConnected) return;
-                foreach (AcpTranscriptToolEntry entry in Transcript.OfType<AcpTranscriptToolEntry>().ToArray())
-                    if (entry.TerminalId is not null && entry.TerminalExitCode is null && entry.TerminalSignal is null)
-                        RefreshTerminalOutput(entry.ToolCallId, entry.TerminalId);
-            }));
+        _disposables.Add(_terminalPolling);
         UpdateConnectionState();
 
         _disposables.Add(_saveRequests
@@ -422,6 +419,11 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
         IsConnected = _service.IsConnected;
         StatusText = IsConnected ? UiStrings.Connected : UiStrings.Disconnected;
+        if (!IsConnected && _openTerminals.Count > 0)
+        {
+            _openTerminals.Clear();
+            UpdateTerminalPolling();
+        }
         ActiveSessionId = _service.ActiveSessionId;
 
         if (!string.IsNullOrWhiteSpace(ActiveSessionId))
@@ -910,30 +912,39 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             return null;
         }
 
-        if (info.ExpiresAt is not null && info.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(1))
+        if (info.ExpiresAt is null || info.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1))
         {
-            if (!string.IsNullOrWhiteSpace(info.RefreshToken)
-                && !string.IsNullOrWhiteSpace(profile.OAuthTokenUrl))
+            return info.AccessToken;
+        }
+
+        bool hasTokenEndpoint = Uri.TryCreate(profile.OAuthTokenUrl, UriKind.Absolute, out _);
+        if (!string.IsNullOrWhiteSpace(info.RefreshToken) && hasTokenEndpoint)
+        {
+            try
             {
-                try
-                {
-                    AcpTokenResponse refreshed = await _oauthService.RefreshTokenAsync(
-                            profile.OAuthClientId,
-                            info.RefreshToken,
-                            profile.OAuthTokenUrl,
-                            CancellationToken.None)
-                        .ConfigureAwait(false);
-                    await StoreOAuthTokenAsync(profile.Id, refreshed).ConfigureAwait(false);
-                    return refreshed.AccessToken;
-                }
-                catch
-                {
-                    return info.AccessToken;
-                }
+                AcpTokenResponse refreshed = await _oauthService.RefreshTokenAsync(
+                        profile.OAuthClientId,
+                        info.RefreshToken,
+                        profile.OAuthTokenUrl!,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+                await StoreOAuthTokenAsync(profile.Id, refreshed).ConfigureAwait(false);
+                return refreshed.AccessToken;
+            }
+            catch (Exception ex)
+            {
+                AddActivity(UiStrings.OAuthFailedPrefix + ex.Message, "error");
             }
         }
 
-        return info.AccessToken;
+        if (info.ExpiresAt > DateTimeOffset.UtcNow)
+        {
+            return info.AccessToken;
+        }
+
+        // The stored API key holds the same expired token, so the connection must not fall back to it.
+        WebAuthStatus = hasTokenEndpoint ? UiStrings.StateExpired : UiStrings.OAuthEndpointsRequired;
+        throw new InvalidOperationException(UiStrings.OAuthTokenExpired);
     }
 
 
@@ -1086,7 +1097,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 && index < Transcript.Count
                 && Transcript[index] is AcpTranscriptToolEntry existing)
             {
-                Transcript[index] = existing with
+                AcpTranscriptToolEntry updated = existing with
                 {
                     Title = title ?? existing.Title,
                     Status = status ?? existing.Status,
@@ -1098,10 +1109,12 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                     TerminalId = contentSnapshot.TerminalId ?? existing.TerminalId,
                     OutputText = contentSnapshot.OutputText ?? existing.OutputText
                 };
+                Transcript[index] = updated;
+                TrackOpenTerminal(updated);
                 return Disposable.Empty;
             }
 
-            Transcript.Add(new AcpTranscriptToolEntry(
+            AcpTranscriptToolEntry added = new(
                 toolCallId,
                 title ?? UiStrings.ToolCall,
                 status ?? "pending",
@@ -1115,8 +1128,10 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 false,
                 null,
                 null,
-                contentSnapshot.OutputText));
+                contentSnapshot.OutputText);
+            Transcript.Add(added);
             _toolCallIndexes[toolCallId] = Transcript.Count - 1;
+            TrackOpenTerminal(added);
             return Disposable.Empty;
         });
 
@@ -1136,7 +1151,13 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         try
         {
             JsonElement? snapshot = _service.GetTerminalOutput(terminalId);
-            if (snapshot is null) return;
+            if (snapshot is null)
+            {
+                // The client no longer knows this terminal, so no further output can arrive.
+                RxSchedulers.MainThreadScheduler.Schedule(() => ForgetOpenTerminal(terminalId));
+                return;
+            }
+
             JsonElement response = snapshot.Value;
 
             string? output = TryGetString(response, "output");
@@ -1144,9 +1165,10 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 && truncElement.ValueKind == JsonValueKind.True;
             int? exitCode = null;
             string? signal = null;
+            bool exited = response.TryGetProperty("exitStatus", out JsonElement exitStatus)
+                && exitStatus.ValueKind == JsonValueKind.Object;
 
-            if (response.TryGetProperty("exitStatus", out JsonElement exitStatus)
-                && exitStatus.ValueKind == JsonValueKind.Object)
+            if (exited)
             {
                 if (exitStatus.TryGetProperty("exitCode", out JsonElement exitCodeElement)
                     && exitCodeElement.ValueKind == JsonValueKind.Number
@@ -1160,6 +1182,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
             RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
             {
+                if (exited) ForgetOpenTerminal(terminalId);
                 if (!_toolCallIndexes.TryGetValue(toolCallId, out int index)
                     || index < 0
                     || index >= Transcript.Count
@@ -1182,6 +1205,37 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         {
             AddActivity(UiStrings.TerminalOutputFailedPrefix + ex.Message, "error");
         }
+    }
+
+    private void TrackOpenTerminal(AcpTranscriptToolEntry entry)
+    {
+        if (entry.TerminalId is null || entry.TerminalExitCode is not null || entry.TerminalSignal is not null) return;
+        _openTerminals[entry.TerminalId] = entry.ToolCallId;
+        UpdateTerminalPolling();
+    }
+
+    private void ForgetOpenTerminal(string terminalId)
+    {
+        if (_openTerminals.Remove(terminalId)) UpdateTerminalPolling();
+    }
+
+    private void UpdateTerminalPolling()
+    {
+        bool poll = _openTerminals.Count > 0 && !_disposed;
+        if (poll == _isPollingTerminals) return;
+        _isPollingTerminals = poll;
+        _terminalPolling.Disposable = poll
+            ? Observable.Interval(TimeSpan.FromSeconds(1))
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(_ => PollOpenTerminals())
+            : Disposable.Empty;
+    }
+
+    private void PollOpenTerminals()
+    {
+        if (!IsConnected) return;
+        foreach (KeyValuePair<string, string> terminal in _openTerminals.ToArray())
+            RefreshTerminalOutput(terminal.Value, terminal.Key);
     }
 
     private readonly record struct ToolContentSnapshot(

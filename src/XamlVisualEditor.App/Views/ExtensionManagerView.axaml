@@ -44,6 +44,9 @@
         <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Version}"
                                Width="*"
                                Binding="{CompiledBinding Version}" />
+        <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.ExtensionCapabilities}"
+                               Width="*"
+                               Binding="{CompiledBinding Capabilities}" />
         <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Enabled}"
                                    Width="Auto">
           <dg:DataGridTemplateColumn.CellTemplate>

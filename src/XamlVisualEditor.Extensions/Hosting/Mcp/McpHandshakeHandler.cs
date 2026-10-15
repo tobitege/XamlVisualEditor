@@ -28,9 +28,12 @@ public sealed class McpHandshakeHandler : IMcpRequestHandler
             ? null
             : JsonSerializer.Deserialize<McpInitializeParams>(parameters.Value.GetRawText(), McpMessageFraming.SerializerOptions);
 
-        McpInitializeOutcome outcome = await _sessionService.InitializeAsync(request, ct).ConfigureAwait(false);
+        IReadOnlyList<string> supportedVersions = context.Connection is null
+            ? McpProtocol.HttpProtocolVersions
+            : McpProtocol.StdioProtocolVersions;
+        McpInitializeOutcome outcome = await _sessionService.InitializeAsync(request, supportedVersions, ct).ConfigureAwait(false);
         McpInitializeResult result = outcome.Result;
-        McpSessionInfo session = new(result.WorkspaceId, outcome.AccessLevel, result.SessionToken);
+        McpSessionInfo session = new(result.WorkspaceId, outcome.AccessLevel, result.SessionToken, result.ProtocolVersion);
 
         if (context.Connection is not null)
         {

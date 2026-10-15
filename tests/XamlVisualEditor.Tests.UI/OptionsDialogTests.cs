@@ -29,7 +29,7 @@ public sealed class OptionsDialogTests
         string breakpointsTitle, string localsTitle, string emptyDocumentsText)
     {
         CultureInfo? previousCulture = UiStrings.Culture;
-        string file = Path.Combine(AppContext.BaseDirectory, "localized-dock-" + Guid.NewGuid().ToString("N") + ".json");
+        string file = Path.Combine(Path.GetTempPath(), "localized-dock-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {
             UiStrings.Culture = CultureInfo.GetCultureInfo(savedLanguage);
@@ -46,7 +46,11 @@ public sealed class OptionsDialogTests
             Assert.Equal(emptyDocumentsText, vm.DockFactory.CreateDocumentDock().EmptyContent);
             Assert.Equal(emptyDocumentsText, new CanvasDockFactory().CreateDocumentDock().EmptyContent);
         }
-        finally { UiStrings.Culture = previousCulture; }
+        finally
+        {
+            UiStrings.Culture = previousCulture;
+            File.Delete(file);
+        }
     }
 
     [AvaloniaTheory]
@@ -56,7 +60,7 @@ public sealed class OptionsDialogTests
     {
         CultureInfo? previousCulture = UiStrings.Culture;
         UiStrings.Culture = CultureInfo.GetCultureInfo(language);
-        string file = Path.Combine(AppContext.BaseDirectory, "options-test-" + Guid.NewGuid().ToString("N") + ".json");
+        string file = Path.Combine(Path.GetTempPath(), "options-test-" + Guid.NewGuid().ToString("N") + ".json");
         string executable = Environment.ProcessPath ?? throw new InvalidOperationException("Test process path unavailable.");
         EditorOptionsStore store = new(file);
         store.Save(new EditorOptions { Language = language, CommandPromptPath = executable });
@@ -123,6 +127,7 @@ public sealed class OptionsDialogTests
             window.Close();
             Application.Current.Styles.Remove(theme);
             UiStrings.Culture = previousCulture;
+            File.Delete(file);
         }
     }
 

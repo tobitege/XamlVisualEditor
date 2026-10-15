@@ -20,23 +20,36 @@ public sealed class IdeBridgeSessionService
     }
 
     /// <summary>Initializes a session for a client of the active workspace.</summary>
-    public async Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request, CancellationToken ct)
+    public Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request, CancellationToken ct) =>
+        InitializeAsync(request, null, ct);
+
+    /// <summary>
+    /// Initializes a session for a client of the active workspace. <paramref name="register"/> receives the
+    /// new session before a revocation of the consent can run.
+    /// </summary>
+    public async Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request,
+        Action<BridgeInitializeResult>? register, CancellationToken ct)
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
+        BridgeInitializeResult? result = null;
         IdeBridgeWorkspacePermissionState? state = await _permissions
-            .AuthorizeAsync(workspaceId, ct)
+            .AuthorizeAsync(workspaceId, granted =>
+            {
+                result = new BridgeInitializeResult(
+                    IdeBridgeProtocol.ProtocolVersion,
+                    IdeBridgePermissionService.GetCapabilities(granted.AccessLevel),
+                    workspaceId,
+                    Guid.NewGuid().ToString("N"));
+                register?.Invoke(result);
+            }, ct)
             .ConfigureAwait(false);
 
-        if (state is null)
+        if (state is null || result is null)
         {
             throw new IdeBridgeJsonRpcException(-32000, "Permission denied.");
         }
 
-        return new BridgeInitializeResult(
-            IdeBridgeProtocol.ProtocolVersion,
-            IdeBridgePermissionService.GetCapabilities(state.AccessLevel),
-            workspaceId,
-            Guid.NewGuid().ToString("N"));
+        return result;
     }
 
     // The session is bound to the active workspace; a client may name it but cannot select another one.

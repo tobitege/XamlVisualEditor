@@ -170,6 +170,35 @@ public sealed class LayoutEditingWorkflowTests
         Assert.Same(extra, Assert.Single(editor.GetChildren(border)));
     }
 
+    [Fact]
+    public void GridPositionIsClampedOnlyToDefinitionsThatThePlainGridDeclaresItself()
+    {
+        const string avalonia = "https://github.com/avaloniaui";
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(typeof(LibraryGrid).Assembly.Location);
+        string libraryNamespace = $"clr-namespace:XamlVisualEditor.TestControls;assembly={typeof(LibraryGrid).Assembly.GetName().Name}";
+        MutableAstObjectNode subclass = new() { TypeName = nameof(LibraryGrid), XmlNamespace = libraryNamespace };
+        MutableAstObjectNode inSubclass = new() { TypeName = nameof(CaptionControl), XmlNamespace = libraryNamespace };
+        Assert.True(new LayoutEditService(metadata).TryInsert(subclass, inSubclass, out string? error,
+            placement: new LayoutPlacement(Row: 2, Column: 3)), error);
+        Assert.Equal("2", inSubclass.GetPropertyValue("Grid.Row"));
+        Assert.Equal("3", inSubclass.GetPropertyValue("Grid.Column"));
+
+        LayoutEditService editor = new();
+        MutableAstObjectNode withoutDefinitions = new() { TypeName = "Grid", XmlNamespace = avalonia };
+        MutableAstObjectNode styled = new() { TypeName = "Button", XmlNamespace = avalonia };
+        Assert.True(editor.TryInsert(withoutDefinitions, styled, out error, placement: new LayoutPlacement(Row: 2, Column: 1)), error);
+        Assert.Equal("2", styled.GetPropertyValue("Grid.Row"));
+        Assert.Equal("1", styled.GetPropertyValue("Grid.Column"));
+
+        MutableAstObjectNode declared = new() { TypeName = "Grid", XmlNamespace = avalonia };
+        declared.SetPropertyValue("RowDefinitions", "Auto,*");
+        MutableAstObjectNode clamped = new() { TypeName = "Button", XmlNamespace = avalonia };
+        Assert.True(editor.TryInsert(declared, clamped, out error, placement: new LayoutPlacement(Row: 5, Column: 2)), error);
+        Assert.Equal("1", clamped.GetPropertyValue("Grid.Row"));
+        Assert.Equal("2", clamped.GetPropertyValue("Grid.Column"));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

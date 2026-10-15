@@ -13,8 +13,22 @@ namespace XamlVisualEditor.Acp;
 
 public sealed class AcpTerminalManager
 {
+    private const int DefaultMaxReleasedOutputs = 32;
     private readonly ConcurrentDictionary<string, TerminalState> _terminals = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, JsonElement> _releasedOutput = new(StringComparer.Ordinal);
+    // Release order of the kept outputs; the oldest is dropped once more than _maxReleasedOutputs are kept.
+    private readonly ConcurrentQueue<string> _releasedOrder = new();
+    private readonly int _maxReleasedOutputs;
+
+    public AcpTerminalManager()
+        : this(DefaultMaxReleasedOutputs)
+    {
+    }
+
+    internal AcpTerminalManager(int maxReleasedOutputs)
+    {
+        _maxReleasedOutputs = maxReleasedOutputs;
+    }
 
     public JsonElement? GetOutput(string terminalId)
     {
@@ -53,6 +67,7 @@ public sealed class AcpTerminalManager
             }
         }
         _releasedOutput.Clear();
+        _releasedOrder.Clear();
     }
 
     private async Task<JsonElement?> HandleCreateAsync(JsonElement? parameters, CancellationToken ct)
@@ -188,6 +203,12 @@ public sealed class AcpTerminalManager
         state.Kill("SIGKILL");
         await state.WaitForExitAsync().ConfigureAwait(false);
         _releasedOutput[terminalId] = CreateOutput(state);
+        _releasedOrder.Enqueue(terminalId);
+        while (_releasedOrder.Count > _maxReleasedOutputs && _releasedOrder.TryDequeue(out string? oldest))
+        {
+            _releasedOutput.TryRemove(oldest, out _);
+        }
+
         await state.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -359,20 +380,10 @@ public sealed class AcpTerminalManager
             }
         }
 
-        public TerminalExitStatus? GetExitStatusIfCompleted()
-        {
-            if (_exitSignal is not null)
-            {
-                return new TerminalExitStatus { ExitCode = null, Signal = _exitSignal };
-            }
-
-            if (!Process.HasExited)
-            {
-                return null;
-            }
-
-            return new TerminalExitStatus { ExitCode = Process.ExitCode, Signal = null };
-        }
+        // The terminal counts as completed once its output is drained: a reader that stops polling at the
+        // first exit status must not miss output that is still arriving after the process has exited.
+        public TerminalExitStatus? GetExitStatusIfCompleted() =>
+            ExitTask.IsCompletedSuccessfully ? ExitTask.Result : null;
 
         public Task<TerminalExitStatus> WaitForExitAsync()
         {

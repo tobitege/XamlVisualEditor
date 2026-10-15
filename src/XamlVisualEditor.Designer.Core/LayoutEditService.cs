@@ -258,31 +258,54 @@ public sealed class LayoutEditService
         }
         if (kind == LayoutContainerKind.Grid)
         {
-            ClampGridPosition(node, "Grid.Row", placement?.Row, DefinitionCount(parent, "RowDefinitions"));
-            ClampGridPosition(node, "Grid.Column", placement?.Column, DefinitionCount(parent, "ColumnDefinitions"));
+            bool plainGrid = IsPlainGrid(parent);
+            ClampGridPosition(node, "Grid.Row", placement?.Row, plainGrid ? DefinitionCount(parent, "RowDefinitions") : null);
+            ClampGridPosition(node, "Grid.Column", placement?.Column, plainGrid ? DefinitionCount(parent, "ColumnDefinitions") : null);
         }
     }
 
-    private static void ClampGridPosition(MutableAstObjectNode node, string property, int? supplied, int count)
+    // count is null when the definitions in the AST are not the complete set of the grid; the position is
+    // then kept and only negative values are corrected.
+    private static void ClampGridPosition(MutableAstObjectNode node, string property, int? supplied, int? count)
     {
         string? current = node.GetPropertyValue(property);
         if (supplied is null && current is not null && !int.TryParse(current, out _)) return;
         int value = supplied ?? (int.TryParse(current, out int parsed) ? parsed : 0);
-        value = Math.Clamp(value, 0, count - 1);
+        value = count is int known ? Math.Clamp(value, 0, known - 1) : Math.Max(0, value);
         node.SetPropertyValue(property, value.ToString(CultureInfo.InvariantCulture));
         string spanProperty = property + "Span";
         if (int.TryParse(node.GetPropertyValue(spanProperty), out int span))
-            node.SetPropertyValue(spanProperty, Math.Clamp(span, 1, count - value).ToString(CultureInfo.InvariantCulture));
+        {
+            span = count is int total ? Math.Clamp(span, 1, total - value) : Math.Max(1, span);
+            node.SetPropertyValue(spanProperty, span.ToString(CultureInfo.InvariantCulture));
+        }
     }
 
-    private static int DefinitionCount(MutableAstObjectNode parent, string name)
+    // A subclass of Grid can define rows and columns in code or its template, so only a plain Grid has
+    // all its definitions in the markup.
+    private bool IsPlainGrid(MutableAstObjectNode node)
+    {
+        TypeMetadata? metadata = _metadata?.GetType(node.XmlNamespace, node.TypeName);
+        Type? type = metadata is null ? null : _metadata?.ResolveClrType(metadata);
+        if (type is not null) return type == typeof(Grid);
+        return node.TypeName == "Grid"
+            && (string.IsNullOrEmpty(node.XmlNamespace) || node.XmlNamespace == "https://github.com/avaloniaui");
+    }
+
+    // Returns the number of definitions the element sets itself, or null when it sets none or sets them
+    // through a binding or resource; a style can then supply definitions the AST does not show.
+    private static int? DefinitionCount(MutableAstObjectNode parent, string name)
     {
         MutableAstPropertyNode? property = FindProperty(parent, name);
-        if (property?.Value is MutableAstTextNode text)
-            return Math.Max(1, text.Text.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).Length);
-        if (property?.Value is MutableAstObjectNode { TypeName: CollectionNodeName } collection)
-            return Math.Max(1, collection.Children.OfType<MutableAstObjectNode>().Count());
-        return 1;
+        return property?.Value switch
+        {
+            MutableAstTextNode text when !text.Text.TrimStart().StartsWith('{') =>
+                Math.Max(1, text.Text.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).Length),
+            MutableAstObjectNode { TypeName: CollectionNodeName } collection =>
+                Math.Max(1, collection.Children.OfType<MutableAstObjectNode>().Count()),
+            MutableAstObjectNode { TypeName: "RowDefinition" or "ColumnDefinition" } => 1,
+            _ => null
+        };
     }
 
     private static void SetCoordinate(MutableAstObjectNode node, string property, double? value)

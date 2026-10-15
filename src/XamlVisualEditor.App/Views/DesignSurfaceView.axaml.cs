@@ -1083,8 +1083,8 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (docVm.UseExternalPreviewer)
         {
+            ReleaseRuntimeSurface();
             canvas.Children.Clear();
-            if (_runtimeRenderedDocument?.Root is Window ownedWindow) ownedWindow.Close();
             _rootControl = null;
             _runtimeRenderedDocument = null;
             _runtimeDocumentOwner = null;
@@ -1139,6 +1139,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         ClearHover();
+        ReleaseRuntimeSurface();
         canvas.Children.Clear();
         _runtimeRenderFailed = false;
         canvas.Children.Add(tree);

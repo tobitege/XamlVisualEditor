@@ -137,6 +137,7 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
     private bool CloseDocumentCore(string filePath)
     {
+        filePath = MainWindowViewModel.NormalizeAcceptedDocumentPath(filePath);
         IEditorDocumentViewModel? document = _mainViewModel.Documents
             .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
         if (document is null)
@@ -267,9 +268,10 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             return;
         }
 
+        string documentPath = MainWindowViewModel.NormalizeAcceptedDocumentPath(filePath);
         foreach (IEditorDocumentViewModel document in _mainViewModel.Documents)
         {
-            if (!FileSystemPathComparison.Equals(document.FilePath, filePath)) continue;
+            if (!FileSystemPathComparison.Equals(document.FilePath, documentPath)) continue;
             if (document is DesignerDocumentViewModel designer) designer.IsWriteProtectionManaged = managed;
             else if (document is TextDocumentViewModel text) text.IsWriteProtectionManaged = managed;
         }

@@ -54,13 +54,30 @@ public sealed partial class DesignerDocumentViewModel
         CodeEditor.IsModified = modified;
     }
 
-    private async Task SaveDocumentFileAsync()
+    private Task SaveDocumentFileAsync() => WriteDocumentFileAsync(overwrite: false);
+
+    /// <inheritdoc />
+    public Task OverwriteFileAsync() => WriteDocumentFileAsync(overwrite: true);
+
+    private async Task WriteDocumentFileAsync(bool overwrite)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
         if (IsLoading) throw new InvalidOperationException("Wait until the document finishes loading before saving.");
         CodeEditor.FlushPendingTextChanges();
         string text = await SyncEngine.SaveAsync();
-        await _fileState.SaveAsync(FilePath, text);
+        await _fileState.SaveAsync(FilePath, text, overwrite);
+        UpdateFileModifiedState();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The disk text enters the document like typed text, so the reload can be undone.</remarks>
+    public async Task ReloadFromDiskAsync()
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        if (IsLoading) throw new InvalidOperationException("Wait until the document finishes loading before reloading.");
+        string text = await _fileState.ReadAsync(FilePath);
+        CodeEditor.Document.Text = text;
+        CodeEditor.FlushPendingTextChanges();
         UpdateFileModifiedState();
     }
 }

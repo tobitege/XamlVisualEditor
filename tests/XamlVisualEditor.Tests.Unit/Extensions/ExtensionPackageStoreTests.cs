@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
 using System.Text;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -254,6 +256,147 @@ public sealed class ExtensionPackageStoreTests
         }
     }
 
+    [Fact]
+    public async Task GetInstalledRenamesAnAbandonedRetiredDirectoryBackWhenItsVersionDirectoryIsMissing()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+            string versionDirectory = (await store.InstallAsync(CreatePackage(root, "sample-extension", "example", "1.0.0"), CancellationToken.None))
+                .InstallationDirectory!;
+            await MoveFreshDirectoryAsync(versionDirectory, versionDirectory + AbandonedWorkDirectorySuffix(".retired-"));
+            string otherVersion = (await store.InstallAsync(CreatePackage(root, "sample-extension", "example", "0.9.0"), CancellationToken.None))
+                .InstallationDirectory!;
+            string staleCopy = otherVersion + AbandonedWorkDirectorySuffix(".retired-");
+            Directory.CreateDirectory(staleCopy);
+
+            ExtensionPackageInfo installed = Assert.Single(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.Equal(versionDirectory, installed.InstallationDirectory);
+            Assert.True(File.Exists(Path.Combine(versionDirectory, "example.sample-extension.1.0.0.nupkg")));
+            Assert.Equal(["0.9.0", "1.0.0"],
+                Directory.GetDirectories(Path.GetDirectoryName(versionDirectory)!).Select(Path.GetFileName).Order());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("sample-extension", "1.0.0.installing-1")]
+    [InlineData("sample-extension", "1.0.0.retired-1")]
+    [InlineData("sample.retired-1", "1.0.0")]
+    public async Task InstallRejectsNamesThatContainAWorkDirectoryMarker(string name, string version)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string installRoot = Path.Combine(root, "installed");
+            ExtensionPackageStore store = new(installRoot, new ExtensionPackageLoader());
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => store.InstallAsync(CreatePackage(root, name, "example", version), CancellationToken.None));
+
+            Assert.False(Directory.Exists(installRoot));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetInstalledRemovesTheRetiredDirectoryOfAnUninstalledExtension()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string retired = Path.Combine(root, "installed", "example.sample-extension.retired-1-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(retired, "1.0.0"));
+            File.WriteAllText(Path.Combine(retired, "1.0.0", "Left.dll"), "left over");
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+
+            Assert.Empty(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.False(Directory.Exists(retired));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UninstallRemovesTheExtensionFromTheListingWhileOneOfItsAssembliesIsLoaded()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string installRoot = Path.Combine(root, "installed");
+        LoadedAssemblyHolder holder = new();
+        try
+        {
+            ExtensionPackageStore store = new(installRoot, new ExtensionPackageLoader());
+            ExtensionPackageInfo installed = await store.InstallAsync(CreatePackage(root, "sample-extension", "example", "1.0.0"), CancellationToken.None);
+            string assemblyPath = Path.Combine(installed.InstallationDirectory!, "lib", "net10.0", "Loaded.dll");
+            File.Copy(typeof(ExtensionPackageLoader).Assembly.Location, assemblyPath);
+            holder.Load(assemblyPath);
+
+            await store.UninstallAsync("example.sample-extension", CancellationToken.None);
+
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "example.sample-extension")));
+            Assert.Empty(await store.GetInstalledAsync(CancellationToken.None));
+            ExtensionPackageInfo reinstalled = await store.InstallAsync(CreatePackage(root, "sample-extension", "example", "1.0.0"), CancellationToken.None);
+            Assert.Equal(installed.InstallationDirectory, Assert.Single(await store.GetInstalledAsync(CancellationToken.None)).InstallationDirectory);
+            Assert.Equal(installed.InstallationDirectory, reinstalled.InstallationDirectory);
+        }
+        finally
+        {
+            holder.Unload();
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    // The marker followed by creation ticks two hours in the past and a unique id.
+    private static string AbandonedWorkDirectorySuffix(string marker) =>
+        marker + DateTime.UtcNow.AddHours(-2).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N");
+
+    // Keeps an assembly file mapped like a loaded extension assembly until Unload is called.
+    private sealed class LoadedAssemblyHolder
+    {
+        private AssemblyLoadContext? _context;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Load(string path)
+        {
+            _context = new AssemblyLoadContext("extension-package-store-test", isCollectible: true);
+            _context.LoadFromAssemblyPath(path);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Unload()
+        {
+            if (_context is null) return;
+            WeakReference reference = new(_context);
+            _context.Unload();
+            _context = null;
+            for (int attempt = 0; attempt < 10 && reference.IsAlive; attempt++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+    }
+
     private static string CreateArchiveOnlyInstallation(string root)
     {
         string versionDirectory = Path.Combine(root, "installed", "example.sample-extension", "1.0.0");
@@ -282,6 +425,23 @@ public sealed class ExtensionPackageStoreTests
         process.StandardOutput.ReadToEnd();
         process.WaitForExit();
         Assert.Equal(0, process.ExitCode);
+    }
+
+    // A virus scanner may still hold freshly extracted files open, which denies moving their directory for a moment.
+    private static async Task MoveFreshDirectoryAsync(string source, string destination)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(source, destination);
+                return;
+            }
+            catch (Exception exception) when (attempt < 20 && exception is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(100);
+            }
+        }
     }
 
     private static string CreatePackage(string root, string name, string publisher, string version, string? extraEntry = null)

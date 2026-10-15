@@ -31,9 +31,11 @@ public sealed class IdeBridgeHandshakeHandler : IIdeBridgeRequestHandler
             ? null
             : JsonSerializer.Deserialize<BridgeInitializeParams>(parameters.Value.GetRawText(), IdeBridgeMessageFraming.SerializerOptions);
 
-        BridgeInitializeResult result = await _sessionService.InitializeAsync(request, ct).ConfigureAwait(false);
-        _registry.Set(connection, new IdeBridgeSessionInfo(result.WorkspaceId, result.Capabilities, result.SessionToken));
-        return result;
+        // The session is registered while the consent cannot be revoked, so a revocation either precedes
+        // the authorization or ends the registered session.
+        return await _sessionService.InitializeAsync(request,
+            authorized => _registry.Set(connection, new IdeBridgeSessionInfo(authorized.WorkspaceId, authorized.Capabilities, authorized.SessionToken)),
+            ct).ConfigureAwait(false);
     }
 
     private Task<object?> HandleShutdownAsync(IdeBridgeJsonRpcConnection connection, CancellationToken ct)

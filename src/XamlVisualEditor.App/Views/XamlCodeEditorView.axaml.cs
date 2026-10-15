@@ -292,8 +292,7 @@ public sealed partial class XamlCodeEditorView : UserControl, IDisposable
                 h => vm.Document.TextChanged += h,
                 h => vm.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => UpdateFoldings());
+            .Subscribe(_ => Dispatcher.UIThread.Post(UpdateFoldings));
         _vmSubscriptions.Add(_foldingSubscription);
         UpdateFoldings();
 
@@ -422,6 +421,9 @@ public sealed partial class XamlCodeEditorView : UserControl, IDisposable
         _textEditor.TextArea.TextView.InvalidateVisual();
     }
 
+    /// <summary>Gets how often the folding regions were computed again for the text.</summary>
+    internal int FoldingUpdateCount { get; private set; }
+
     private void UpdateFoldings()
     {
         if (_textEditor?.Document is null || _foldingManager is null)
@@ -429,6 +431,7 @@ public sealed partial class XamlCodeEditorView : UserControl, IDisposable
             return;
         }
 
+        FoldingUpdateCount++;
         TextDocument document = _textEditor.Document;
         int length = document.TextLength;
         if (length == 0)

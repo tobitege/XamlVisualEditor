@@ -20,6 +20,7 @@ public sealed class FileSystemErrorMessagesTests : IDisposable
     [Fact]
     public void DeletingReadOnlyFile_NamesTheFile()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnlyReason);
         string path = CreateReadOnlyFile(_root, "Locked.tmp");
 
         UnauthorizedAccessException error = Assert.Throws<UnauthorizedAccessException>(() => File.Delete(path));
@@ -32,6 +33,7 @@ public sealed class FileSystemErrorMessagesTests : IDisposable
     [Fact]
     public void DeletingFolderWithReadOnlyFile_NamesTheFileBelowTheFolder()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnlyReason);
         string folder = Path.Combine(_root, "Folder");
         string nested = Path.Combine(folder, "Nested");
         Directory.CreateDirectory(nested);
@@ -47,6 +49,7 @@ public sealed class FileSystemErrorMessagesTests : IDisposable
     [Fact]
     public void DeletingFileInUse_DescribesTheLock()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnlyReason);
         string path = Path.Combine(_root, "Open.txt");
         File.WriteAllText(path, "content");
         using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.None);
@@ -64,6 +67,9 @@ public sealed class FileSystemErrorMessagesTests : IDisposable
 
         Assert.Equal("Custom failure", FileSystemErrorMessages.DescribeReason(error, Path.Combine(_root, "Any.txt")));
     }
+
+    private const string WindowsOnlyReason =
+        "Only Windows refuses to delete read-only or open files; other systems delete them.";
 
     private static string CreateReadOnlyFile(string directory, string fileName)
     {

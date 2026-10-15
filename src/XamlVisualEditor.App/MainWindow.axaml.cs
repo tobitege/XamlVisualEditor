@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
     private IDisposable? _layoutNameHandler;
     private IDisposable? _confirmLayoutDeleteHandler;
     private IDisposable? _saveChangesHandler;
+    private IDisposable? _saveConflictHandler;
     private bool _isConfirmingClose;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
@@ -111,6 +112,7 @@ public sealed partial class MainWindow : Window
             _layoutNameHandler?.Dispose();
             _confirmLayoutDeleteHandler?.Dispose();
             _saveChangesHandler?.Dispose();
+            _saveConflictHandler?.Dispose();
             _commandPaletteHandler?.Dispose();
             _extensionPackageOpenHandler?.Dispose();
             _extensionManagerHandler?.Dispose();
@@ -137,6 +139,7 @@ public sealed partial class MainWindow : Window
         _layoutNameHandler?.Dispose();
         _confirmLayoutDeleteHandler?.Dispose();
         _saveChangesHandler?.Dispose();
+        _saveConflictHandler?.Dispose();
         _commandPaletteHandler?.Dispose();
         _extensionPackageOpenHandler?.Dispose();
         _extensionManagerHandler?.Dispose();
@@ -284,6 +287,15 @@ public sealed partial class MainWindow : Window
                 DataContext = new SaveChangesDialogViewModel(interaction.Input)
             };
             interaction.SetOutput(await dialog.ShowDialog<SaveChangesChoice>(this));
+        });
+
+        _saveConflictHandler = vm.SaveConflictInteraction.RegisterHandler(async interaction =>
+        {
+            SaveConflictDialog dialog = new()
+            {
+                DataContext = new SaveConflictDialogViewModel(interaction.Input)
+            };
+            interaction.SetOutput(await dialog.ShowDialog<SaveConflictChoice>(this));
         });
 
         _commandPaletteHandler = vm.CommandPaletteInteraction.RegisterHandler(async interaction =>

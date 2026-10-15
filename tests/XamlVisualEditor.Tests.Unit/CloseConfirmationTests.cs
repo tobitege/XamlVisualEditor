@@ -15,6 +15,7 @@ public sealed class CloseConfirmationTests : IDisposable
 {
     private const string OriginalText = "class Example { }";
     private const string ChangedText = "class Example { int _value; }";
+    private const string OutsideText = "class Outside { }";
 
     private readonly string _root = Path.Combine(
         Path.GetTempPath(),
@@ -60,6 +61,116 @@ public sealed class CloseConfirmationTests : IDisposable
         Assert.True(await main.ConfirmShutdownAsync());
         Assert.True(main.IsShutdownConfirmed);
         Assert.Equal(4, prompts.Count);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Saving_over_an_outside_change_asks_and_overwrites_or_reloads()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string codePath = CreateFile("Code.cs");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        List<string> conflicts = new();
+        SaveConflictChoice answer = SaveConflictChoice.Overwrite;
+        using IDisposable handler = main.SaveConflictInteraction.RegisterHandler(interaction =>
+        {
+            conflicts.Add(interaction.Input);
+            interaction.SetOutput(answer);
+        });
+
+        TextDocumentViewModel document = await OpenAndChangeAsync(main, codePath).WaitAsync(cancellationToken);
+        await File.WriteAllTextAsync(codePath, OutsideText, cancellationToken);
+        await main.SaveDocumentCommand.Execute().FirstAsync().ToTask(cancellationToken);
+
+        Assert.Equal(["Code.cs"], conflicts);
+        Assert.Equal(ChangedText, await File.ReadAllTextAsync(codePath, cancellationToken));
+        Assert.False(document.IsModified);
+
+        document.Document.Text = OriginalText;
+        await File.WriteAllTextAsync(codePath, OutsideText, cancellationToken);
+        answer = SaveConflictChoice.Reload;
+        await main.SaveDocumentCommand.Execute().FirstAsync().ToTask(cancellationToken);
+
+        Assert.Equal(2, conflicts.Count);
+        Assert.Equal(OutsideText, document.Document.Text);
+        Assert.False(document.IsModified);
+        Assert.Equal(OutsideText, await File.ReadAllTextAsync(codePath, cancellationToken));
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Reloading_a_designer_document_takes_the_disk_text_into_the_editor_and_the_designer()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        const string xaml = "<UserControl xmlns=\"https://github.com/avaloniaui\"><Button /></UserControl>";
+        const string outsideXaml = "<UserControl xmlns=\"https://github.com/avaloniaui\"><TextBlock /></UserControl>";
+        Directory.CreateDirectory(_root);
+        string path = Path.Combine(_root, "View.axaml");
+        await File.WriteAllTextAsync(path, xaml, cancellationToken);
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        using IDisposable handler = main.SaveConflictInteraction.RegisterHandler(interaction =>
+            interaction.SetOutput(SaveConflictChoice.Reload));
+        await main.OpenFileAsync(path).WaitAsync(cancellationToken);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(Assert.Single(main.Documents));
+        document.CodeEditor.Document.Text = xaml.Replace("Button", "CheckBox", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, outsideXaml, cancellationToken);
+
+        await main.SaveDocumentCommand.Execute().FirstAsync().ToTask(cancellationToken);
+
+        Assert.Equal(outsideXaml, document.CodeEditor.Document.Text);
+        Assert.Equal(outsideXaml, document.SyncEngine.CurrentText);
+        Assert.False(document.IsModified);
+        Assert.Equal(outsideXaml, await File.ReadAllTextAsync(path, cancellationToken));
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task A_declined_conflict_stops_automatic_saves_from_asking_again_until_a_manual_save()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string codePath = CreateFile("Code.cs");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        int conflicts = 0;
+        using IDisposable handler = main.SaveConflictInteraction.RegisterHandler(interaction =>
+        {
+            conflicts++;
+            interaction.SetOutput(SaveConflictChoice.Cancel);
+        });
+
+        TextDocumentViewModel document = await OpenAndChangeAsync(main, codePath).WaitAsync(cancellationToken);
+        await File.WriteAllTextAsync(codePath, OutsideText, cancellationToken);
+        main.SetAutoSaveCommand.Execute().Subscribe();
+        await main.AutoSaveAsync(document).WaitAsync(cancellationToken);
+        await main.AutoSaveAsync(document).WaitAsync(cancellationToken);
+
+        Assert.Equal(1, conflicts);
+
+        await main.SaveDocumentCommand.Execute().FirstAsync().ToTask(cancellationToken);
+
+        Assert.Equal(2, conflicts);
+        Assert.Equal(OutsideText, await File.ReadAllTextAsync(codePath, cancellationToken));
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task A_declined_conflict_of_an_automatic_save_on_shutdown_asks_and_lets_the_user_discard()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string codePath = CreateFile("Code.cs");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        List<IReadOnlyList<string>> prompts = new();
+        using IDisposable saveHandler = main.SaveChangesInteraction.RegisterHandler(interaction =>
+        {
+            prompts.Add(interaction.Input);
+            interaction.SetOutput(SaveChangesChoice.Discard);
+        });
+        using IDisposable conflictHandler = main.SaveConflictInteraction.RegisterHandler(interaction =>
+            interaction.SetOutput(SaveConflictChoice.Cancel));
+
+        await OpenAndChangeAsync(main, codePath).WaitAsync(cancellationToken);
+        await File.WriteAllTextAsync(codePath, OutsideText, cancellationToken);
+        main.SetAutoSaveCommand.Execute().Subscribe();
+
+        Assert.True(await main.ConfirmShutdownAsync().WaitAsync(cancellationToken));
+        Assert.True(main.IsShutdownConfirmed);
+        Assert.Equal(["Code.cs"], Assert.Single(prompts));
+        Assert.Equal(OutsideText, await File.ReadAllTextAsync(codePath, cancellationToken));
     }
 
     [AvaloniaFact(Timeout = 30000)]

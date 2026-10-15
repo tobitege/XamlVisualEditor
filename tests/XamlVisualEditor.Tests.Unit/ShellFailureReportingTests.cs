@@ -83,6 +83,51 @@ public sealed class ShellFailureReportingTests : IDisposable
     }
 
     [AvaloniaFact(Timeout = 30000)]
+    public async Task Loading_a_workspace_without_build_outputs_drops_the_design_themes_of_the_previous_solution()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string projectPath = Path.Combine(_root, "Unbuilt.csproj");
+        await File.WriteAllTextAsync(projectPath, "<Project />", cancellationToken);
+        string snapshot = Path.Combine(_root, "missing-snapshot");
+        WorkspaceModel workspace = new()
+        {
+            Projects = new[]
+            {
+                new ProjectModel
+                {
+                    Name = "Unbuilt", ProjectPath = projectPath, AssemblySnapshotDirectory = snapshot,
+                    OutputAssemblyPath = Path.Combine(snapshot, "Unbuilt.dll"),
+                    XamlFiles = Array.Empty<XamlFileModel>(), Files = Array.Empty<ProjectFileModel>(),
+                    References = Array.Empty<AssemblyReference>()
+                }
+            }
+        };
+        IReadOnlyList<Func<IStyle?>> previousStyles = WorkspaceDesignThemeRegistry.StyleFactories;
+        IReadOnlyList<Func<IResourceProvider?>> previousResources = WorkspaceDesignThemeRegistry.ResourceFactories;
+        try
+        {
+            Func<IStyle?> staleStyle = () => null;
+            Func<IResourceProvider?> staleResources = () => null;
+            WorkspaceDesignThemeRegistry.Update(new[] { staleStyle }, new[] { staleResources });
+            using MainWindowViewModel main = new(
+                workspaceService: new FixedWorkspaceService(workspace),
+                metadataService: new XamlVisualEditor.Workspace.TypeMetadataService(),
+                recentFilesPath: Path.Combine(_root, "recent.json"),
+                workspaceSessions: new WorkspaceSessionStore(Path.Combine(_root, "sessions.json")));
+
+            await main.OpenFileAsync(projectPath).WaitAsync(cancellationToken);
+
+            Assert.True(main.HasWorkspace);
+            Assert.DoesNotContain(staleStyle, WorkspaceDesignThemeRegistry.StyleFactories);
+            Assert.DoesNotContain(staleResources, WorkspaceDesignThemeRegistry.ResourceFactories);
+        }
+        finally
+        {
+            WorkspaceDesignThemeRegistry.Update(previousStyles, previousResources);
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
     public async Task Selecting_the_same_node_from_another_source_notifies_the_source()
     {
         string path = Path.Combine(_root, "Selection.axaml");
@@ -127,5 +172,16 @@ public sealed class ShellFailureReportingTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    private sealed class FixedWorkspaceService(WorkspaceModel workspace) : XamlVisualEditor.Core.Interfaces.IWorkspaceService
+    {
+        public Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default) =>
+            Task.FromResult(workspace);
+
+        public Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default) =>
+            Task.FromResult(workspace);
+
+        public WorkspaceModel CreateStandaloneWorkspace(string xamlFilePath) => workspace;
     }
 }

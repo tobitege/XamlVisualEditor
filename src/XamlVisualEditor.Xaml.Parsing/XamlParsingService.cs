@@ -107,8 +107,8 @@ public sealed class XamlParsingService : IXamlParsingService
             XmlNamespace = element.Name.NamespaceName
         };
         ReadLocalNamespaces(element, node.NamespaceAliases);
-        bool preserve = PreservesWhitespace(element, inheritedPreserve);
-        bool preserveWhitespace = preserve || HasMixedContent(element);
+        bool preserve = XamlWhitespaceRules.PreservesWhitespace(element, inheritedPreserve);
+        bool preserveWhitespace = XamlWhitespaceRules.PreservesContentWhitespace(element, preserve);
 
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
         {
@@ -244,8 +244,8 @@ public sealed class XamlParsingService : IXamlParsingService
             XmlSpace = element.Attribute(XNamespace.Xml + "space")?.Value
         };
         ReadLocalNamespaces(element, propNode.NamespaceAliases);
-        bool preserve = PreservesWhitespace(element, inheritedPreserve);
-        bool preserveWhitespace = preserve || HasMixedContent(element);
+        bool preserve = XamlWhitespaceRules.PreservesWhitespace(element, inheritedPreserve);
+        bool preserveWhitespace = XamlWhitespaceRules.PreservesContentWhitespace(element, preserve);
 
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
         {
@@ -291,15 +291,6 @@ public sealed class XamlParsingService : IXamlParsingService
         parentNode.Properties.Add(propNode);
         return propNode;
     }
-
-    // In mixed content such as "Hello <Bold>x</Bold> <Italic>y</Italic>" the whitespace between the
-    // inline elements is displayed text, as the serializer's source merge also treats it.
-    private static bool HasMixedContent(XElement element) =>
-        element.HasElements && element.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value));
-
-    // A local xml:space directive overrides the mode inherited from the enclosing element.
-    private static bool PreservesWhitespace(XElement element, bool inheritedPreserve) =>
-        element.Attribute(XNamespace.Xml + "space") is { } directive ? directive.Value == "preserve" : inheritedPreserve;
 
     private static void ReadDocumentTrivia(XDocument xml, MutableAstDocument document)
     {

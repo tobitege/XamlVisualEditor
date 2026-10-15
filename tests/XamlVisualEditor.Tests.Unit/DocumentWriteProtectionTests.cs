@@ -41,6 +41,35 @@ public sealed class DocumentWriteProtectionTests : IDisposable
     }
 
     [AvaloniaFact(Timeout = 30000)]
+    public async Task AutoSaveOfReadOnlyFileOnShutdown_AsksAndLetsTheUserDiscard()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        string codePath = CreateReadOnlyFile("Shutdown.cs");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        System.Collections.Generic.List<System.Collections.Generic.IReadOnlyList<string>> prompts = new();
+        SaveChangesChoice answer = SaveChangesChoice.Cancel;
+        using IDisposable handler = main.SaveChangesInteraction.RegisterHandler(interaction =>
+        {
+            prompts.Add(interaction.Input);
+            interaction.SetOutput(answer);
+        });
+        await main.OpenFileAsync(codePath).WaitAsync(cancellationToken);
+        TextDocumentViewModel document = Assert.IsType<TextDocumentViewModel>(Assert.Single(main.Documents));
+        document.Document.Text = "class Example { int _value; }";
+        main.SetAutoSaveCommand.Execute().Subscribe();
+
+        Assert.False(await main.ConfirmShutdownAsync().WaitAsync(cancellationToken));
+        Assert.Equal(["Shutdown.cs"], Assert.Single(prompts));
+
+        answer = SaveChangesChoice.Discard;
+        Assert.True(await main.ConfirmShutdownAsync().WaitAsync(cancellationToken));
+        Assert.True(main.IsShutdownConfirmed);
+        Assert.Equal(2, prompts.Count);
+        Assert.Equal(OriginalText, await File.ReadAllTextAsync(codePath).WaitAsync(cancellationToken));
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
     public async Task OpenReadOnlyFile_ShowsMarkerUntilWriteProtectionIsRemoved()
     {
         System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;

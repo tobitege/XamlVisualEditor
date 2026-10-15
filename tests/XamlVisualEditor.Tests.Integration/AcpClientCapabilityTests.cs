@@ -52,7 +52,8 @@ public sealed class AcpClientCapabilityTests
     public async Task TerminalCreateOutputReleaseRoundTrip()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        // The round trip starts a real process, which can take longer than 15 s on a busy CI runner.
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(60));
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpTerminalManager terminalManager = new();

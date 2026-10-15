@@ -381,6 +381,29 @@ public sealed class DesignerTransactionWorkflowTests
         Assert.Equal(incomplete, engine.GetCurrentText());
     }
 
+    [Fact]
+    public async Task AstChangesAreRefusedWhileTheSourceHasErrorsAndTheTextStaysUnchanged()
+    {
+        const string original = "<Grid xmlns=\"https://github.com/avaloniaui\"><Button Content=\"Original\" /></Grid>";
+        const string unclosed = "<Grid xmlns=\"https://github.com/avaloniaui\" Margin=\"1\"><Button Content=\"Kept\" /><TextBlock Text=\"Tail\" />";
+        using SyncEngine engine = new(new XamlParsingService(), new XamlSerializationService(), new AstNodeMap());
+        await engine.LoadAsync(original);
+        engine.NotifyTextChanged(unclosed, SyncSource.CodeEditor);
+        Assert.False(engine.CanEditAst);
+        MutableAstDocument document = engine.CurrentDocument!;
+        Assert.NotNull(document.Root);
+
+        document.Root!.SetPropertyValue("Opacity", "0.5");
+        Assert.False(engine.NotifyAstChanged(document, SyncSource.DesignSurface));
+
+        Assert.Equal(unclosed, engine.GetCurrentText());
+        Assert.Null(engine.CurrentDocument!.Root!.GetPropertyValue("Opacity"));
+
+        engine.CurrentDocument!.Root!.SetPropertyValue("Opacity", "0.5");
+        Assert.Equal(unclosed, await engine.SaveAsync());
+        Assert.Null(engine.CurrentDocument!.Root!.GetPropertyValue("Opacity"));
+    }
+
     private static MutableAstObjectNode Find(MutableAstObjectNode root, string typeName)
     {
         Stack<MutableAstObjectNode> nodes = new();

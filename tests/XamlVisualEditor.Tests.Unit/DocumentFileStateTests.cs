@@ -90,10 +90,27 @@ public sealed class DocumentFileStateTests : IDisposable
         await state.ReadAsync(path, TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(path, "class Outside { }", TestContext.Current.CancellationToken);
 
-        IOException error = await Assert.ThrowsAsync<IOException>(() => state.SaveAsync(path, "class Editor { }"));
+        IOException error = await Assert.ThrowsAsync<FileChangedOutsideEditorException>(() => state.SaveAsync(path, "class Editor { }"));
 
         Assert.Equal(string.Format(UiStrings.FileChangedOutsideEditor, "Shared.cs"), error.Message);
         Assert.Equal("class Outside { }", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Overwriting_a_file_changed_outside_the_editor_writes_and_takes_the_written_bytes_as_baseline()
+    {
+        string path = Path.Combine(_root, "Overwrite.cs");
+        await File.WriteAllTextAsync(path, "class First { }", TestContext.Current.CancellationToken);
+        DocumentFileState state = new();
+        await state.ReadAsync(path, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(path, "class Outside, longer than the first { }", TestContext.Current.CancellationToken);
+
+        await state.SaveAsync(path, "class Editor { }", overwrite: true);
+
+        Assert.Equal("class Editor { }", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+        Assert.False(state.IsModified("class Editor { }"));
+        await state.SaveAsync(path, "class Next { }");
+        Assert.Equal("class Next { }", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
     }
 
     [Fact]

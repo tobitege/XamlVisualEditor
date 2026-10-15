@@ -86,6 +86,48 @@ public sealed class McpIntegrationTests
         Assert.Equal(0, registry.Count);
     }
 
+    [Fact]
+    public async Task RevocationRequestedWhileTheSessionIsRegisteredEndsThatSession()
+    {
+        InMemorySettingsStore settings = new();
+        string workspaceId = System.IO.Path.GetFullPath("/tmp/xve");
+        StubWindow window = new(XamlVisualEditor.Core.Localization.UiStrings.AllowFullAccess);
+        McpSessionRegistry registry = new();
+        McpRequestRouter router = CreateHandshakeRouter(settings, window, new StubWorkspaceInfo("/tmp/xve"), registry, out McpPermissionService permissions);
+        permissions.PermissionsRevoked += registry.Revoke;
+        Task? revocation = null;
+        bool revokedDuringRegistration = true;
+        registry.Changed += () =>
+        {
+            if (revocation is not null) return;
+            revocation = permissions.ClearPermissionAsync(workspaceId, CancellationToken.None);
+            revokedDuringRegistration = revocation.IsCompleted;
+        };
+
+        McpInitializeResult result = await InitializeAsync(router);
+
+        Assert.False(revokedDuringRegistration);
+        Assert.NotNull(revocation);
+        await revocation;
+        Assert.Null(registry.Resolve(new McpRequestContext(null, result.SessionToken)));
+        Assert.Empty(await permissions.GetPermissionsAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AuthorizeLeavesTheStoredPermissionDictionaryUnchanged()
+    {
+        InMemorySettingsStore settings = new();
+        McpPermissionService permissions = new(settings, new StubWindow(XamlVisualEditor.Core.Localization.UiStrings.AllowReadOnly));
+        await permissions.AuthorizeAsync("first", CancellationToken.None);
+        Dictionary<string, McpWorkspacePermissionState>? stored = settings.Get<Dictionary<string, McpWorkspacePermissionState>>("mcp.permissions");
+
+        await permissions.AuthorizeAsync("second", CancellationToken.None);
+
+        // A reader that enumerates the stored dictionary must not see it change.
+        Assert.Single(Assert.IsType<Dictionary<string, McpWorkspacePermissionState>>(stored));
+        Assert.Equal(2, (await permissions.GetPermissionsAsync(CancellationToken.None)).Count);
+    }
+
     private static McpRequestRouter CreateHandshakeRouter(
         InMemorySettingsStore settings,
         IWindow window,

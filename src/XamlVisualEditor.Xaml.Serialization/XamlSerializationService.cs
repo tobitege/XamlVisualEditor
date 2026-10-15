@@ -51,8 +51,13 @@ public sealed partial class XamlSerializationService : IXamlSerializationService
         if (TryPreserveStructuralSource(currentText, newText, out string preservedText))
         {
             newText = preservedText;
-            if (currentText == newText) return Array.Empty<TextEdit>();
         }
+        else
+        {
+            newText = KeepSourceLineEndingsAndDeclaration(currentText, newText);
+        }
+
+        if (currentText == newText) return Array.Empty<TextEdit>();
 
         // Find common prefix and suffix to minimize the edit
         int commonPrefix = 0;
@@ -82,6 +87,32 @@ public sealed partial class XamlSerializationService : IXamlSerializationService
                 NewText = replacement
             }
         };
+    }
+
+    // Serialized text uses the platform line ending and has no XML declaration; when it replaces the
+    // source text, the source keeps its own line endings and its declaration.
+    private static string KeepSourceLineEndingsAndDeclaration(string sourceText, string serializedText)
+    {
+        // Only CR and LF are line breaks in XML; other Unicode separators are literal characters.
+        string newLine = DetectNewLine(sourceText);
+        string result = serializedText.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        if (newLine != "\n") result = result.Replace("\n", newLine, StringComparison.Ordinal);
+        int start = sourceText.StartsWith('\uFEFF') ? 1 : 0;
+        if (!sourceText.AsSpan(start).StartsWith("<?xml", StringComparison.Ordinal) ||
+            result.StartsWith("<?xml", StringComparison.Ordinal)) return result;
+
+        int declarationEnd = sourceText.IndexOf("?>", start, StringComparison.Ordinal);
+        if (declarationEnd < 0) return result;
+        int contentStart = declarationEnd + 2;
+        while (contentStart < sourceText.Length && char.IsWhiteSpace(sourceText[contentStart])) contentStart++;
+        return sourceText[..contentStart] + result;
+    }
+
+    private static string DetectNewLine(string text)
+    {
+        int newline = text.IndexOf('\n');
+        return newline >= 0 ? newline > 0 && text[newline - 1] == '\r' ? "\r\n" : "\n"
+            : text.Contains('\r') ? "\r" : Environment.NewLine;
     }
 
     private void SerializeNode(

@@ -60,8 +60,7 @@ build URLs themselves from a host and port must be given the base
 `http://127.0.0.1:9222/<token>`.
 
 Use CDP DOM, Runtime, and Page commands for inspection, application-level actions,
-and screenshots. Do not use desktop activation or OS-input automation when the
-workstation is in use. A successful protocol response is not proof of a UI change;
-read the resulting application state after each operation.
+and screenshots. A successful protocol response is not proof of a UI change; read
+the resulting application state after each operation.
 
 Server and client documentation: <https://github.com/wieslawsoltes/CDP>.

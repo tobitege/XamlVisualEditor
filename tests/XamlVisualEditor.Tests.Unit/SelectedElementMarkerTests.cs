@@ -202,6 +202,24 @@ public sealed class SelectedElementMarkerTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Pending_Typing_And_A_Designer_Change_Both_Reach_The_Document()
+    {
+        using DesignerDocumentViewModel document = await LoadAsync();
+        string before = document.CodeEditor.Document.Text;
+        const string typed = "<!-- typed -->";
+        document.CodeEditor.Document.Insert(0, typed);
+        Assert.True(document.CodeEditor.HasPendingTextChanges);
+        string designerText = before.Replace("Text=\"Second\"", "Text=\"Designer\"", StringComparison.Ordinal);
+
+        document.SyncEngine.NotifyTextChanged(designerText, SyncSource.DesignSurface);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        document.CodeEditor.FlushPendingTextChanges();
+
+        Assert.Equal(typed + designerText, document.CodeEditor.Document.Text);
+        Assert.Equal(typed + designerText, document.SyncEngine.CurrentText);
+    }
+
+    [AvaloniaFact]
     public async Task Designer_Document_Reports_Caret_Position_Changes()
     {
         using DesignerDocumentViewModel document = await LoadAsync();

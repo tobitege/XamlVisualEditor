@@ -475,6 +475,12 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             scope: SelectedScope.Scope,
             scopeOwner: owner);
 
+        if (!ActiveDocument.SyncEngine.CanEditAst)
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         bool added = AnimationResourceWriter.TryAddAnimationResource(document, definition, out string? error);
         if (!added)
         {
@@ -482,7 +488,12 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             return;
         }
 
-        ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface);
+        if (!ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface))
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         RefreshResources();
         StatusMessage = string.Format(UiStrings.AnimationAdded, SelectedTimeline.ResourceKey);
     }
@@ -619,6 +630,12 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             scope: snapshot.Scope,
             scopeOwner: owner);
 
+        if (!ActiveDocument.SyncEngine.CanEditAst)
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         bool updated = AnimationResourceWriter.TryUpdateAnimationResource(document, definition, snapshot, out string? error);
         if (!updated)
         {
@@ -626,7 +643,12 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             return;
         }
 
-        ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface);
+        if (!ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface))
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         RefreshResources();
         SelectedResource = AvailableResources.FirstOrDefault(r => string.Equals(r.Snapshot.Key, definition.Key, StringComparison.Ordinal));
         StatusMessage = string.Format(UiStrings.ResourceUpdated, definition.Key);
@@ -646,6 +668,12 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             return;
         }
 
+        if (!ActiveDocument.SyncEngine.CanEditAst)
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         bool deleted = AnimationResourceWriter.TryDeleteAnimationResource(document, SelectedResource.Snapshot, out string? error);
         if (!deleted)
         {
@@ -653,7 +681,12 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             return;
         }
 
-        ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface);
+        if (!ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface))
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         RefreshResources();
         SelectedResource = null;
         StatusMessage = UiStrings.ResourceDeleted;

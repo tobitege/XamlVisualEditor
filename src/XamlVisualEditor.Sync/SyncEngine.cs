@@ -185,6 +185,13 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 _ => UiStrings.Edit
             };
 
+            if (_document is not null && !CanEditAst)
+            {
+                _pendingChanges.Clear();
+                RestoreCurrentText(source);
+                return;
+            }
+
             // Serialize the current AST to text
             if (_document is not null)
             {
@@ -227,9 +234,13 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     /// Notifies the sync engine that the AST document has changed (e.g., from designer or collaboration).
     /// Re-serializes the document to produce updated XAML text.
     /// </summary>
-    public void NotifyAstChanged(MutableAstDocument document, SyncSource source)
+    /// <returns>
+    /// False when the change was not written to the text: while <see cref="CanEditAst"/> is false, a changed
+    /// AST is refused and replaced by a new reading of the unchanged text.
+    /// </returns>
+    public bool NotifyAstChanged(MutableAstDocument document, SyncSource source)
     {
-        if (_isSyncing || _isDisposed) return;
+        if (_isSyncing || _isDisposed) return false;
         _isSyncing = true;
 
         try
@@ -239,7 +250,12 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 SetDocument(document);
             }
 
-            SynchronizeAst();
+            if (!SynchronizeAst())
+            {
+                RestoreCurrentText(source);
+                return false;
+            }
+
             RecordSnapshot(UiStrings.Edit);
 
             SyncEvent syncEvent = new()
@@ -252,6 +268,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
 
             SyncCompleted?.Invoke(syncEvent);
             _syncSubject.OnNext(syncEvent);
+            return true;
         }
         finally
         {
@@ -295,7 +312,12 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         _isSyncing = true;
         try
         {
-            SynchronizeAst();
+            if (!SynchronizeAst())
+            {
+                RestoreCurrentText(SyncSource.DesignSurface);
+                return;
+            }
+
             if (RecordSnapshot(description)) Publish(SyncSource.DesignSurface, Array.Empty<AstChange>());
         }
         finally
@@ -368,18 +390,33 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         _undoRedo.Redo(snapshot => RestoreSnapshot(snapshot, SyncSource.DesignSurface));
     }
 
-    private void SynchronizeAst()
+    // Writes AST changes into the text. Returns false without changing the text when the AST differs from
+    // the text but CanEditAst is false: the AST is then a tolerant partial reading of text with errors, and
+    // writing it back would replace the unread rest of the text.
+    private bool SynchronizeAst()
     {
-        if (_document is null) return;
+        if (_document is null) return true;
         string canonical = _serializer.Serialize(_document);
         if (!string.Equals(canonical, _synchronizedAst, StringComparison.Ordinal))
         {
+            if (!CanEditAst) return false;
             _lastKnownText = ApplyEdits(_lastKnownText,
                 XamlSerializationService.ComputeMinimalEdits(_lastKnownText, canonical));
             RefreshSourcePositions();
         }
         _synchronizedAst = canonical;
         RefreshNodeMap();
+        return true;
+    }
+
+    // Discards AST changes that were refused by reading the AST again from the unchanged text.
+    private void RestoreCurrentText(SyncSource source)
+    {
+        DocumentSnapshot snapshot = _checkpoint is { } checkpoint && string.Equals(checkpoint.Text, _lastKnownText, StringComparison.Ordinal)
+            ? checkpoint
+            : new DocumentSnapshot(_lastKnownText, _synchronizedAst,
+                System.Collections.Immutable.ImmutableDictionary<string, Guid>.Empty);
+        RestoreSnapshot(snapshot, source);
     }
 
     private void RefreshSourcePositions()
@@ -445,7 +482,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         bool companionsApplied = false;
         try
         {
-            SynchronizeAst();
+            if (!SynchronizeAst()) throw new InvalidOperationException("Resolve XAML errors before editing the designer.");
             DocumentSnapshot after = CaptureSnapshot();
             DocumentCompanionChange.ApplyAll(group.CompanionChanges, forward: true);
             companionsApplied = true;

@@ -136,6 +136,12 @@ public sealed class McpJsonRpcConnection : IAsyncDisposable
             return null;
         }
 
+        if (methodElement.ValueKind != JsonValueKind.String)
+        {
+            object? invalidId = hasId && TryGetIdValue(idElement, out object? value) ? value : null;
+            return CreateErrorPayload(invalidId, -32600, "Invalid Request");
+        }
+
         string? method = methodElement.GetString();
         if (string.IsNullOrWhiteSpace(method))
         {

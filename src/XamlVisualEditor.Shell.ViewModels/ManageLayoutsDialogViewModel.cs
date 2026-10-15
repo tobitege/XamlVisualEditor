@@ -1,10 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using ReactiveUI;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Localization;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -91,7 +93,19 @@ public sealed class ManageLayoutsDialogViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        if (!_store.Rename(oldName, newName))
+        bool renamed;
+        try
+        {
+            renamed = _store.Rename(oldName, newName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ErrorText = string.Format(UiStrings.LayoutRenameFailed, oldName,
+                FileSystemErrorMessages.DescribeReason(ex, _store.GetPath(oldName)));
+            return;
+        }
+
+        if (!renamed)
         {
             ErrorText = _store.Exists(oldName)
                 ? string.Format(UiStrings.LayoutNameExists, newName)
@@ -112,7 +126,18 @@ public sealed class ManageLayoutsDialogViewModel : ReactiveObject, IDisposable
         }
 
         int index = Names.IndexOf(name);
-        bool deleted = _store.Delete(name);
+        bool deleted;
+        try
+        {
+            deleted = _store.Delete(name);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ErrorText = string.Format(UiStrings.LayoutDeleteFailed, name,
+                FileSystemErrorMessages.DescribeReason(ex, _store.GetPath(name)));
+            return;
+        }
+
         Reload(null, index);
         if (deleted)
         {

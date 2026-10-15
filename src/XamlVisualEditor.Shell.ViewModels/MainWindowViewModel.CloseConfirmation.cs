@@ -12,6 +12,9 @@ namespace XamlVisualEditor.Shell.ViewModels;
 /// <summary>The answer to the question whether modified documents are saved before they close; the default keeps them open.</summary>
 public enum SaveChangesChoice { Cancel, Save, Discard }
 
+/// <summary>The answer to saving a file that changed on disk; the default saves nothing and keeps the editor text.</summary>
+public enum SaveConflictChoice { Cancel, Overwrite, Reload }
+
 public sealed partial class MainWindowViewModel
 {
     private bool _isClosingDocument;
@@ -20,12 +23,19 @@ public sealed partial class MainWindowViewModel
     /// <summary>Asks which of the listed modified files are saved before they close.</summary>
     public Interaction<IReadOnlyList<string>, SaveChangesChoice> SaveChangesInteraction { get; } = new();
 
+    /// <summary>
+    /// Asks whether the named file, which changed on disk after the editor read it, is overwritten with the editor text
+    /// or reloaded from disk.
+    /// </summary>
+    public Interaction<string, SaveConflictChoice> SaveConflictInteraction { get; } = new();
+
     /// <summary>Gets whether the user already confirmed closing the application.</summary>
     public bool IsShutdownConfirmed { get; private set; }
 
     /// <summary>
     /// Saves or discards the modified documents before they close. Manual saving asks the user, automatic saving saves
-    /// without asking, and disabled saving discards. Returns false when the user cancels or a save fails.
+    /// without asking, and disabled saving discards. An automatic save that fails asks the user as well. Returns false
+    /// when the user cancels or a save the user chose fails.
     /// </summary>
     public async Task<bool> ConfirmCloseAsync(IEnumerable<IEditorDocumentViewModel> documents)
     {
@@ -35,20 +45,40 @@ public sealed partial class MainWindowViewModel
             return true;
         }
 
-        SaveChangesChoice choice = SaveBehavior == SaveBehavior.AutoSave
-            ? SaveChangesChoice.Save
-            : await SaveChangesInteraction.Handle(modified.Select(document => document.FileName).ToArray());
+        if (SaveBehavior == SaveBehavior.AutoSave)
+        {
+            if (await TrySaveBeforeCloseAsync(modified))
+            {
+                return true;
+            }
+
+            // A write-protected file or a declined conflict must not keep the documents open for good:
+            // the question lets the user discard the changes.
+            modified = modified.Where(document => document.IsModified).ToArray();
+            if (modified.Length == 0)
+            {
+                return true;
+            }
+        }
+
+        SaveChangesChoice choice = await SaveChangesInteraction.Handle(modified.Select(document => document.FileName).ToArray());
         if (choice != SaveChangesChoice.Save)
         {
             return choice == SaveChangesChoice.Discard;
         }
 
-        foreach (IEditorDocumentViewModel document in modified)
+        return await TrySaveBeforeCloseAsync(modified);
+    }
+
+    private async Task<bool> TrySaveBeforeCloseAsync(IEnumerable<IEditorDocumentViewModel> documents)
+    {
+        foreach (IEditorDocumentViewModel document in documents)
         {
             bool saved = !HasWorkspace && IsUntitledDocument(document)
                 ? await TrySaveUntitledDocumentAsync(document)
                 : await TrySaveDocumentAsync(document);
-            if (!saved)
+            // A document reloaded from disk instead of saved has no changes left to lose.
+            if (!saved && document.IsModified)
             {
                 return false;
             }

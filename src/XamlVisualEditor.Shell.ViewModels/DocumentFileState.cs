@@ -49,7 +49,11 @@ internal sealed class DocumentFileState
         _ => new UTF8Encoding(false, true)
     };
 
-    public async Task SaveAsync(string filePath, string text)
+    /// <summary>
+    /// Writes the text with the encoding the file was read with. Throws <see cref="FileChangedOutsideEditorException"/>
+    /// when the file on disk no longer holds the bytes last read or written, unless <paramref name="overwrite"/> is set.
+    /// </summary>
+    public async Task SaveAsync(string filePath, string text, bool overwrite = false)
     {
         await _fileGate.WaitAsync();
         try
@@ -61,21 +65,22 @@ internal sealed class DocumentFileState
             content.CopyTo(bytes, preamble.Length);
 
             // Keep the comparison and write under the same file lock.
-            FileMode mode = _persistedBytes is null ? FileMode.CreateNew : FileMode.Open;
+            FileMode mode = _persistedBytes is null ? FileMode.CreateNew
+                : overwrite ? FileMode.OpenOrCreate : FileMode.Open;
             await using FileStream stream = new(filePath, mode, FileAccess.ReadWrite, FileShare.Read,
                 bufferSize: 4096, options: FileOptions.Asynchronous);
-            if (_persistedBytes is not null)
+            if (_persistedBytes is not null && !overwrite)
             {
                 if (stream.Length != _persistedBytes.Length)
                 {
-                    throw new IOException(string.Format(UiStrings.FileChangedOutsideEditor, Path.GetFileName(filePath)));
+                    throw new FileChangedOutsideEditorException(filePath);
                 }
 
                 byte[] currentBytes = new byte[_persistedBytes.Length];
                 await stream.ReadExactlyAsync(currentBytes);
                 if (!currentBytes.AsSpan().SequenceEqual(_persistedBytes))
                 {
-                    throw new IOException(string.Format(UiStrings.FileChangedOutsideEditor, Path.GetFileName(filePath)));
+                    throw new FileChangedOutsideEditorException(filePath);
                 }
 
                 if (currentBytes.AsSpan().SequenceEqual(bytes))
@@ -98,3 +103,7 @@ internal sealed class DocumentFileState
         }
     }
 }
+
+/// <summary>Reports that a file changed on disk after the editor read or last saved it.</summary>
+internal sealed class FileChangedOutsideEditorException(string filePath)
+    : IOException(string.Format(UiStrings.FileChangedOutsideEditor, Path.GetFileName(filePath)));

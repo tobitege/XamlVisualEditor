@@ -39,6 +39,8 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
     private readonly ILanguageDiagnosticsSource? _diagnosticsSource;
     private readonly ILogger<CodeEditorViewModel> _logger;
     private bool _suppressTextChanged;
+    // The text that the editor and the sync engine last agreed on.
+    private string _syncedText = string.Empty;
     private int _ignoreCaretUpdates;
 
     /// <summary>
@@ -367,6 +369,7 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
         try
         {
             Document.Text = text;
+            _syncedText = text;
             IsModified = false;
         }
         finally
@@ -533,14 +536,25 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
         _syncEngine.CommitUndoBatch(UiStrings.TextEdit);
 
         _syncEngine.NotifyTextChanged(text, SyncSource.CodeEditor);
+        _syncedText = text;
         HasPendingTextChanges = false;
     }
 
     private void OnSyncEvent(SyncEvent syncEvent)
     {
-        if (HasPendingTextChanges || !string.Equals(syncEvent.XamlText,
-                _syncEngine.CurrentText ?? string.Empty, StringComparison.Ordinal))
+        // A later event carries the newer text.
+        if (!string.Equals(syncEvent.XamlText, _syncEngine.CurrentText ?? string.Empty, StringComparison.Ordinal))
         {
+            return;
+        }
+
+        if (HasPendingTextChanges)
+        {
+            if (syncEvent.XamlText is { } foreignText)
+            {
+                MergeForeignChangeIntoPendingText(foreignText);
+            }
+
             return;
         }
 
@@ -549,21 +563,21 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
             !string.Equals(previousText, currentText, StringComparison.Ordinal))
         {
             int caretOffset = CaretOffset;
-            int start = 0;
-            while (start < previousText.Length && start < currentText.Length && previousText[start] == currentText[start]) start++;
-            int suffix = 0;
-            while (suffix < previousText.Length - start && suffix < currentText.Length - start
-                && previousText[^(suffix + 1)] == currentText[^(suffix + 1)]) suffix++;
+            (int start, int previousEnd, int currentEnd) = FindChangedSpan(previousText, currentText);
             HasPendingTextChanges = false;
             _suppressTextChanged = true;
             try
             {
-                Document.Replace(start, previousText.Length - start - suffix,
-                    currentText.Substring(start, currentText.Length - start - suffix));
+                Document.Replace(start, previousEnd - start, currentText[start..currentEnd]);
                 IsModified = false;
             }
             finally { _suppressTextChanged = false; }
             SetCaretOffsetFromSync(caretOffset);
+        }
+
+        if (syncEvent.XamlText is { } syncedText)
+        {
+            _syncedText = syncedText;
         }
 
         if (_languageService is null)
@@ -587,6 +601,61 @@ public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable, I
         }
 
         _ = RefreshSemanticTokensAsync();
+    }
+
+    // Typing that has not reached the sync engine yet and a change from another source, such as the designer, both
+    // started from the last synchronized text. The other change enters the editor next to the typing, and the pending
+    // commit then carries both; the engine ignores text changes while it publishes, so the commit stays pending.
+    private void MergeForeignChangeIntoPendingText(string foreignText)
+    {
+        string baseText = _syncedText;
+        if (string.Equals(baseText, foreignText, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        string localText = Document.Text;
+        (int foreignStart, int foreignBaseEnd, int foreignEnd) = FindChangedSpan(baseText, foreignText);
+        (int localStart, int localBaseEnd, _) = FindChangedSpan(baseText, localText);
+        _syncedText = foreignText;
+        int offset;
+        if (foreignBaseEnd <= localStart)
+        {
+            offset = foreignStart;
+        }
+        else if (foreignStart >= localBaseEnd)
+        {
+            offset = foreignStart + localText.Length - baseText.Length;
+        }
+        else
+        {
+            // Both changed the same text: the typing wins, and the other change remains in the undo history.
+            return;
+        }
+
+        int removedLength = foreignBaseEnd - foreignStart;
+        string inserted = foreignText[foreignStart..foreignEnd];
+        int caretOffset = CaretOffset;
+        _suppressTextChanged = true;
+        try
+        {
+            Document.Replace(offset, removedLength, inserted);
+        }
+        finally { _suppressTextChanged = false; }
+
+        if (caretOffset >= offset + removedLength) caretOffset += inserted.Length - removedLength;
+        SetCaretOffsetFromSync(caretOffset);
+    }
+
+    // The common prefix and suffix stay; [Start, OldEnd) of the old text becomes [Start, NewEnd) of the new text.
+    private static (int Start, int OldEnd, int NewEnd) FindChangedSpan(string oldText, string newText)
+    {
+        int start = 0;
+        while (start < oldText.Length && start < newText.Length && oldText[start] == newText[start]) start++;
+        int suffix = 0;
+        while (suffix < oldText.Length - start && suffix < newText.Length - start
+            && oldText[^(suffix + 1)] == newText[^(suffix + 1)]) suffix++;
+        return (start, oldText.Length - suffix, newText.Length - suffix);
     }
 
     public async Task InitializeLanguageServicesAsync(CancellationToken ct = default)

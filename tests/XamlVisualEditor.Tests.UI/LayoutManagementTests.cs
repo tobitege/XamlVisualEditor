@@ -217,6 +217,24 @@ public sealed class LayoutManagementTests
     }
 
     [AvaloniaFact]
+    public async Task ManageLayoutsShowsARenameOrDeleteThatTheFileSystemRefusesInTheDialog()
+    {
+        List<string> deleted = new();
+        using ManageLayoutsDialogViewModel dialog = new(new LockedLayoutStore(), (_, _) => { }, deleted.Add);
+        using IDisposable confirm = dialog.ConfirmDeleteInteraction.RegisterHandler(confirmation => confirmation.SetOutput(true));
+        Assert.Equal("Alpha", dialog.SelectedName);
+
+        dialog.EditName = "Beta";
+        await dialog.RenameCommand.Execute();
+        Assert.Equal(string.Format(UiStrings.LayoutRenameFailed, "Alpha", LockedLayoutStore.Message), dialog.ErrorText);
+
+        await dialog.DeleteCommand.Execute();
+        Assert.Equal(string.Format(UiStrings.LayoutDeleteFailed, "Alpha", LockedLayoutStore.Message), dialog.ErrorText);
+        Assert.Equal(new[] { "Alpha" }, dialog.Names);
+        Assert.Empty(deleted);
+    }
+
+    [AvaloniaFact]
     public async Task EveryPresetKeepsSolutionExplorerAndFileExplorerVisible()
     {
         using LayoutTestHost host = new();
@@ -465,5 +483,23 @@ public sealed class LayoutManagementTests
     private sealed class PanelProvider : ICustomViewProvider
     {
         public object CreateViewModel() => new object();
+    }
+
+    // A store whose layout file another process keeps open: moving or deleting it fails.
+    private sealed class LockedLayoutStore : IUserLayoutStore
+    {
+        public const string Message = "The layout file is locked.";
+
+        public IReadOnlyList<string> ListNames() => new[] { "Alpha" };
+
+        public bool IsValidName(string? name) => !string.IsNullOrWhiteSpace(name);
+
+        public string GetPath(string name) => Path.Combine(Path.GetTempPath(), name + ".json");
+
+        public bool Exists(string name) => name == "Alpha";
+
+        public bool Delete(string name) => throw new IOException(Message);
+
+        public bool Rename(string name, string newName) => throw new IOException(Message);
     }
 }

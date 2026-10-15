@@ -56,13 +56,22 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
         }
 
         Dictionary<string, ExtensionPackageInfo> results = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string extensionDirectory in Directory.EnumerateDirectories(_installRoot))
+        foreach (string extensionDirectory in Directory.GetDirectories(_installRoot))
         {
             string id = Path.GetFileName(extensionDirectory);
+            // An uninstalled extension directory is renamed to a retired directory before its files are
+            // deleted; files that were still in use when it was uninstalled are removed here.
+            if (id.Contains(RetiredMarker, StringComparison.Ordinal))
+            {
+                TryDeleteDirectory(extensionDirectory);
+                continue;
+            }
+
             string[] versionDirectories;
             try
             {
                 DesignerThemePackageContributions.ResolvePackagePath(_installRoot, id);
+                await CleanUpAbandonedWorkDirectoriesAsync(Directory.GetDirectories(extensionDirectory), ct).ConfigureAwait(false);
                 versionDirectories = Directory.GetDirectories(extensionDirectory);
             }
             catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
@@ -75,11 +84,7 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
             {
                 ct.ThrowIfCancellationRequested();
                 string version = Path.GetFileName(directory);
-                if (IsAbandonedWorkDirectory(directory))
-                {
-                    TryDeleteDirectory(directory);
-                    continue;
-                }
+                if (IsWorkDirectoryName(version)) continue;
                 ExtensionPackageInfo info;
                 try
                 {
@@ -124,6 +129,9 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
         DesignerThemePackageContributions.ValidateSegment(info.Manifest.Name, "extension name");
         DesignerThemePackageContributions.ValidateSegment(info.Manifest.Publisher, "extension publisher");
         DesignerThemePackageContributions.ValidateSegment(info.Manifest.Version, "extension version");
+        // Directory names with these markers are staging or retired directories that listing removes.
+        if (IsWorkDirectoryName(info.Manifest.ExtensionId) || IsWorkDirectoryName(info.Manifest.Version))
+            throw new InvalidDataException("The extension ID or version contains a reserved name part.");
         string extensionDir = DesignerThemePackageContributions.ResolvePackagePath(_installRoot,
             Path.Combine(info.Manifest.ExtensionId, info.Manifest.Version));
         if (Directory.Exists(extensionDir)) throw new InvalidOperationException("This extension version is already installed. Uninstall it before reinstalling.");
@@ -134,13 +142,53 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
         return installed;
     }
 
+    // A retired directory holds the previous content of its version directory, including the archive.
+    // When the version directory is missing, the run was interrupted between moving the old content
+    // away and moving the new content in, or restoring the old content failed: the retired directory
+    // is renamed back. It is deleted only when its version directory exists. A staging directory is an
+    // extracted copy of an archive that is still kept elsewhere and is always deleted.
+    private async Task CleanUpAbandonedWorkDirectoriesAsync(string[] directories, CancellationToken ct)
+    {
+        foreach (string directory in directories)
+        {
+            if (!IsAbandonedWorkDirectory(directory, RetiredMarker)) continue;
+            string name = Path.GetFileName(directory);
+            string versionDirectory = Path.Combine(Path.GetDirectoryName(directory)!,
+                name[..name.IndexOf(RetiredMarker, StringComparison.Ordinal)]);
+            if (Directory.Exists(versionDirectory))
+            {
+                TryDeleteDirectory(directory);
+                continue;
+            }
+
+            try
+            {
+                await _moveDirectory(directory, versionDirectory, ct).ConfigureAwait(false);
+                _logger.LogWarning("Restored the interrupted installation {Directory} from {RetiredDirectory}.", versionDirectory, directory);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogError(exception, "Could not restore the installation {Directory} from {RetiredDirectory}.", versionDirectory, directory);
+            }
+        }
+
+        foreach (string directory in directories)
+        {
+            if (IsAbandonedWorkDirectory(directory, InstallingMarker))
+                TryDeleteDirectory(directory);
+        }
+    }
+
+    private static bool IsWorkDirectoryName(string name) =>
+        name.Contains(InstallingMarker, StringComparison.Ordinal) || name.Contains(RetiredMarker, StringComparison.Ordinal);
+
     // Staging and retired directories are renamed away when an installation completes; one that stays
     // behind for longer than any installation takes belongs to an interrupted run. A rename keeps the
     // last write time of the renamed directory, so the creation time is taken from the name.
-    private static bool IsAbandonedWorkDirectory(string directory)
+    private static bool IsAbandonedWorkDirectory(string directory, string marker)
     {
         string name = Path.GetFileName(directory);
-        string? suffix = WorkDirectorySuffix(name, InstallingMarker) ?? WorkDirectorySuffix(name, RetiredMarker);
+        string? suffix = WorkDirectorySuffix(name, marker);
         if (suffix is null) return false;
         int separator = suffix.IndexOf('-');
         DateTime created = separator > 0
@@ -311,7 +359,11 @@ public sealed class ExtensionPackageStore : IExtensionPackageStore
             string extensionDir = DesignerThemePackageContributions.ResolvePackagePath(_installRoot, extensionId);
             if (Directory.Exists(extensionDir))
             {
-                Directory.Delete(extensionDir, recursive: true);
+                // The rename removes the extension from the listing in one step. Loaded assemblies cannot be
+                // deleted on Windows; they stay in the retired directory until a later listing removes it.
+                string retiredDirectory = extensionDir + NewWorkDirectorySuffix(RetiredMarker);
+                await _moveDirectory(extensionDir, retiredDirectory, ct).ConfigureAwait(false);
+                TryDeleteDirectory(retiredDirectory);
             }
         }
         finally { _operations.Release(); }

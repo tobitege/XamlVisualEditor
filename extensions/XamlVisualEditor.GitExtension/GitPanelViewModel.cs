@@ -667,8 +667,10 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await _gitService.StageAsync(RepositoryRoot, new[] { selected.Path });
-        await RefreshAsync();
+        IGitService gitService = _gitService;
+        string repoPath = RepositoryRoot!;
+        string path = selected.Path;
+        await RunGitActionAsync(() => gitService.StageAsync(repoPath, new[] { path }));
     }
 
     private async System.Threading.Tasks.Task UnstageSelectedAsync()
@@ -684,8 +686,10 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await _gitService.UnstageAsync(RepositoryRoot, new[] { selected.Path });
-        await RefreshAsync();
+        IGitService gitService = _gitService;
+        string repoPath = RepositoryRoot!;
+        string path = selected.Path;
+        await RunGitActionAsync(() => gitService.UnstageAsync(repoPath, new[] { path }));
     }
 
     private async System.Threading.Tasks.Task DiscardSelectedAsync()
@@ -708,8 +712,8 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
             return;
 
-        await _gitService.DiscardAsync(repoPath, new[] { path });
-        await RefreshAsync();
+        IGitService gitService = _gitService;
+        await RunGitActionAsync(() => gitService.DiscardAsync(repoPath, new[] { path }));
     }
 
     private async System.Threading.Tasks.Task StageAllAsync()
@@ -730,8 +734,9 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             paths[i] = _unstagedItems[i].Path;
         }
 
-        await _gitService.StageAsync(RepositoryRoot, paths);
-        await RefreshAsync();
+        IGitService gitService = _gitService;
+        string repoPath = RepositoryRoot!;
+        await RunGitActionAsync(() => gitService.StageAsync(repoPath, paths));
     }
 
     private async System.Threading.Tasks.Task UnstageAllAsync()
@@ -752,8 +757,9 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             paths[i] = _stagedItems[i].Path;
         }
 
-        await _gitService.UnstageAsync(RepositoryRoot, paths);
-        await RefreshAsync();
+        IGitService gitService = _gitService;
+        string repoPath = RepositoryRoot!;
+        await RunGitActionAsync(() => gitService.UnstageAsync(repoPath, paths));
     }
 
     private async System.Threading.Tasks.Task<bool> ConfirmGitActionAsync(
@@ -778,9 +784,40 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await _gitService.CommitAsync(RepositoryRoot, message);
-        CommitMessage = string.Empty;
+        IGitService gitService = _gitService;
+        string repoPath = RepositoryRoot!;
+        string commitMessage = message;
+        await RunGitActionAsync(async () =>
+        {
+            await gitService.CommitAsync(repoPath, commitMessage);
+            CommitMessage = string.Empty;
+        });
+    }
+
+    /// <summary>
+    /// Runs a modifying git action, refreshes the status and shows a failure of the action in
+    /// <see cref="ErrorMessage"/> after the refresh.
+    /// </summary>
+    private async System.Threading.Tasks.Task RunGitActionAsync(Func<System.Threading.Tasks.Task> action)
+    {
+        string? failure = null;
+        try
+        {
+            await action();
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = string.Format(UiStrings.GitCommandFailed, exception.Message);
+        }
+
         await RefreshAsync();
+        if (failure is not null)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (IsGitMonitoringEnabled) ErrorMessage = failure;
+            });
+        }
     }
 
     private void ConfigureWatcher(string? repoRoot)

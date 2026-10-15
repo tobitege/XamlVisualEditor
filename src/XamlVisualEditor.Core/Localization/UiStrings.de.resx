@@ -1144,4 +1144,12 @@
   <data name="ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
   <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
+  <data name="GitCommandFailed" xml:space="preserve"><value>Git-Befehl fehlgeschlagen: {0}</value></data>
+  <data name="SaveConflictTitle" xml:space="preserve"><value>Datei auf dem Datenträger geändert</value></data>
+  <data name="SaveConflictPrompt" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Mit dem Text aus dem Editor überschreiben oder vom Datenträger neu laden und die Änderungen im Editor verwerfen?</value></data>
+  <data name="Overwrite" xml:space="preserve"><value>Überschreiben</value></data>
+  <data name="DocumentReloadedFromDisk" xml:space="preserve"><value>„{0}“ wurde vom Datenträger neu geladen; die Änderungen im Editor wurden verworfen</value></data>
+  <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht umbenannt werden: {1}</value></data>
+  <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gelöscht werden: {1}</value></data>
+  <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Beheben Sie die XAML-Fehler, bevor Sie das Dokument hier bearbeiten.</value></data>
 </root>

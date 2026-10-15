@@ -32,7 +32,16 @@ public sealed class McpPermissionService
     }
 
     /// <summary>Returns the stored consent of the workspace or prompts for and persists a new one.</summary>
-    public async Task<McpWorkspacePermissionState?> AuthorizeAsync(string workspaceId, CancellationToken ct)
+    public Task<McpWorkspacePermissionState?> AuthorizeAsync(string workspaceId, CancellationToken ct) =>
+        AuthorizeAsync(workspaceId, null, ct);
+
+    /// <summary>
+    /// Returns the stored consent of the workspace or prompts for and persists a new one.
+    /// <paramref name="onAuthorized"/> runs with the granted consent before a revocation can remove it,
+    /// so a session registered there is ended by every later revocation.
+    /// </summary>
+    public async Task<McpWorkspacePermissionState?> AuthorizeAsync(string workspaceId,
+        Action<McpWorkspacePermissionState>? onAuthorized, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(workspaceId))
         {
@@ -45,6 +54,7 @@ public sealed class McpPermissionService
             Dictionary<string, McpWorkspacePermissionState> states = await LoadStatesAsync(ct).ConfigureAwait(false);
             if (states.TryGetValue(workspaceId, out McpWorkspacePermissionState? existing))
             {
+                onAuthorized?.Invoke(existing);
                 return existing;
             }
 
@@ -56,6 +66,7 @@ public sealed class McpPermissionService
 
             states[workspaceId] = granted;
             await SaveStatesAsync(states, ct).ConfigureAwait(false);
+            onAuthorized?.Invoke(granted);
             return granted;
         }
         finally
@@ -140,12 +151,16 @@ public sealed class McpPermissionService
         return new McpWorkspacePermissionState(accessLevel, DateTimeOffset.UtcNow);
     }
 
+    // The settings return the stored dictionary itself, which other readers enumerate concurrently; it is
+    // never changed in place, every change is made on a copy that is then saved.
     private Task<Dictionary<string, McpWorkspacePermissionState>> LoadStatesAsync(CancellationToken ct)
     {
         Dictionary<string, McpWorkspacePermissionState>? states = _settings
             .Get<Dictionary<string, McpWorkspacePermissionState>>(SettingsSection);
 
-        return Task.FromResult(states ?? new Dictionary<string, McpWorkspacePermissionState>(StringComparer.Ordinal));
+        return Task.FromResult(states is null
+            ? new Dictionary<string, McpWorkspacePermissionState>(StringComparer.Ordinal)
+            : new Dictionary<string, McpWorkspacePermissionState>(states, StringComparer.Ordinal));
     }
 
     private Task SaveStatesAsync(Dictionary<string, McpWorkspacePermissionState> states, CancellationToken ct)

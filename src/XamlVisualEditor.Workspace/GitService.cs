@@ -87,7 +87,7 @@ public sealed class GitService : IGitService
 
         List<string> args = new() { "add", "--" };
         args.AddRange(paths);
-        await RunGitAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, ct);
     }
 
     public async Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
@@ -99,7 +99,7 @@ public sealed class GitService : IGitService
 
         List<string> args = new() { "reset", "-q", "--" };
         args.AddRange(paths);
-        await RunGitAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, ct);
     }
 
     public async Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
@@ -113,7 +113,7 @@ public sealed class GitService : IGitService
         // staged but not yet committed is never removed from disk.
         List<string> args = new() { "restore", "--worktree", "--" };
         args.AddRange(paths);
-        await RunGitAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, ct);
     }
 
     public async Task CommitAsync(string repoPath, string message, CancellationToken ct = default)
@@ -124,7 +124,30 @@ public sealed class GitService : IGitService
         }
 
         List<string> args = new() { "commit", "-m", message };
-        await RunGitAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, ct);
+    }
+
+    /// <summary>
+    /// Runs a modifying git command and throws <see cref="InvalidOperationException"/> with git's error output
+    /// when it exits with a non-zero code.
+    /// </summary>
+    private async Task RunGitCheckedAsync(string workingDirectory, IReadOnlyList<string> args, CancellationToken ct)
+    {
+        GitCommandResult result = await RunGitAsync(workingDirectory, args, ct);
+        if (result.ExitCode == 0)
+        {
+            return;
+        }
+
+        string error = result.StandardError.Trim();
+        if (error.Length == 0)
+        {
+            error = result.StandardOutput.Trim();
+        }
+
+        throw new InvalidOperationException(error.Length == 0
+            ? $"git {args[0]} exited with code {result.ExitCode}."
+            : error);
     }
 
     private static string? ResolveWorkingDirectory(string path)
@@ -196,6 +219,9 @@ public sealed class GitService : IGitService
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        // Paths are passed as literal file names; glob characters such as '[' or '*' in a file name
+        // must not widen a stage, unstage or discard to other files.
+        startInfo.Environment["GIT_LITERAL_PATHSPECS"] = "1";
 
         foreach (string arg in args)
         {

@@ -72,8 +72,9 @@ public sealed class PreviewerLaunchTests
               <Button Name="PreviewButton" editor:DesignNodeIdentity.NodeId="{{buttonId}}" Content="Host frame" Margin="7,8,9,10" Padding="3,4,5,6" />
             </UserControl>
             """;
+        System.Collections.Concurrent.ConcurrentQueue<string> hostMessages = new();
         Task<PreviewerLaunchResult> Start(WorkspaceModel context) => previewerService.StartPreviewerAsync(
-            xamlFilePath, xaml, context, null, null, null);
+            xamlFilePath, xaml, context, null, null, (level, message) => hostMessages.Enqueue(level + ": " + message));
         using Barrier startBarrier = new(2);
         Task<PreviewerLaunchResult> StartTogether() => Task.Run(async () =>
         {
@@ -118,7 +119,7 @@ public sealed class PreviewerLaunchTests
             (byte red, byte green, byte blue) = theme == "Light"
                 ? ((byte)0xEE, (byte)0xF4, (byte)0xFA) : ((byte)0x10, (byte)0x20, (byte)0x30);
             await AssertThemeFrameAsync(firstSession,
-                () => previewerService.SendUpdateXamlAsync(xamlFilePath, themedXaml, workspace, null), red, green, blue);
+                () => previewerService.SendUpdateXamlAsync(xamlFilePath, themedXaml, workspace, null), red, green, blue, hostMessages);
             Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
             Assert.False(firstProcess.HasExited);
         }
@@ -144,7 +145,7 @@ public sealed class PreviewerLaunchTests
                 (byte red, byte green, byte blue) = theme == Avalonia.Styling.ThemeVariant.Light
                     ? ((byte)0xEE, (byte)0xF4, (byte)0xFA) : ((byte)0x10, (byte)0x20, (byte)0x30);
                 await AssertThemeFrameAsync(firstSession,
-                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue);
+                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue, hostMessages);
                 DesignerHostSnapshot previewTree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
                 DesignerHostNode previewNode = Assert.Single(previewTree.Nodes);
                 var previewObject = Assert.IsType<XamlVisualEditor.Xaml.Ast.MutableAstObjectNode>(
@@ -220,7 +221,7 @@ public sealed class PreviewerLaunchTests
                     _ => ((byte)0x33, (byte)0x44, (byte)0x55)
                 };
                 await AssertThemeFrameAsync(firstSession,
-                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null, themeRequest: request), red, green, blue);
+                    () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null, themeRequest: request), red, green, blue, hostMessages);
                 DesignerHostSnapshot tree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
                 DesignerHostNode sample = Assert.Single(tree.Nodes, node => node.Name == "ThemeSample");
                 Assert.Equal(160, sample.Width);
@@ -242,7 +243,7 @@ public sealed class PreviewerLaunchTests
         DesignerThemeRequest partialRequest = new(Guid.NewGuid(), new[] { unavailable, provider }, new(provider.Id, "harbor"));
         string partialPreview = renderer.PrepareXaml(themedDocument, themeRequest: partialRequest);
         await AssertThemeFrameAsync(firstSession,
-            () => previewerService.SendUpdateXamlAsync(xamlFilePath, partialPreview, workspace, null, themeRequest: partialRequest), 0x12, 0x34, 0x56);
+            () => previewerService.SendUpdateXamlAsync(xamlFilePath, partialPreview, workspace, null, themeRequest: partialRequest), 0x12, 0x34, 0x56, hostMessages);
         Assert.NotNull(Assert.Single(firstSession.LastThemeCatalog!.Providers, item => item.Id == unavailable.Id).Error);
         Assert.Null(firstSession.LastError);
 
@@ -260,7 +261,7 @@ public sealed class PreviewerLaunchTests
         DesignerThemeRequest recoveredRequest = partialRequest with { RequestId = Guid.NewGuid(), Selection = null };
         await AssertThemeFrameAsync(firstSession,
             () => previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: recoveredRequest), workspace, null,
-                themeRequest: recoveredRequest), 0x33, 0x44, 0x55);
+                themeRequest: recoveredRequest), 0x33, 0x44, 0x55, hostMessages);
         Assert.Null(firstSession.LastError);
         Assert.False(firstProcess.HasExited);
         previewerService.StopPreviewer(xamlFilePath, firstProcess);
@@ -364,7 +365,7 @@ public sealed class PreviewerLaunchTests
     }
 
     private static async Task AssertThemeFrameAsync(PreviewerTcpSession session, Func<Task> update,
-        byte red, byte green, byte blue)
+        byte red, byte green, byte blue, IEnumerable<string> hostMessages)
     {
         TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame)
@@ -388,7 +389,8 @@ public sealed class PreviewerLaunchTests
             string actual = frame is not null && frame.Width >= 2 && frame.Height >= 2 && frame.Data.Length > pixel + 3
                 ? $"#{frame.Data[pixel + 2]:X2}{frame.Data[pixel + 1]:X2}{frame.Data[pixel]:X2}" : "no frame";
             throw new InvalidOperationException($"Expected theme pixel #{red:X2}{green:X2}{blue:X2}, received {actual}. "
-                + $"Previewer error: {session.LastError ?? "<none>"}. Catalog: {session.LastThemeCatalog?.RequestId}.", exception);
+                + $"Previewer error: {session.LastError ?? "<none>"}. Catalog: {session.LastThemeCatalog?.RequestId}." + Environment.NewLine
+                + string.Join(Environment.NewLine, hostMessages.TakeLast(30)), exception);
         }
         finally { session.FrameReceived -= OnFrame; }
     }

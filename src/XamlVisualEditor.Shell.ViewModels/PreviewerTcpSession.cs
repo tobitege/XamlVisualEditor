@@ -360,7 +360,8 @@ public sealed class PreviewerTcpSession : IDisposable
     }
 
     /// <summary>
-    /// Checks that a frame from the previewer process has a supported format, dimensions up to
+    /// Checks that a frame from the previewer process has a format the surface can copy (Bgra8888, which the session
+    /// requests, or Rgb565), dimensions up to
     /// <see cref="MaxFrameDimension"/> and pixel data for every row its stride describes. A frame without size is
     /// valid and shows no image.
     /// </summary>
@@ -372,7 +373,7 @@ public sealed class PreviewerTcpSession : IDisposable
         int bytesPerPixel = frame.Format switch
         {
             PixelFormat.Rgb565 => 2,
-            PixelFormat.Bgra8888 or PixelFormat.Rgba8888 => 4,
+            PixelFormat.Bgra8888 => 4,
             _ => 0
         };
         if (bytesPerPixel == 0 || frame.Data is null || frame.Stride < 0) return false;

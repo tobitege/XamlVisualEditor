@@ -160,7 +160,43 @@ public sealed class PreviewerLifetimeTests : IDisposable
         Assert.True(main.PreviewerLaunchService.TryGetSession(xamlPath, out PreviewerTcpSession? live));
         Assert.Same(session, live);
         Assert.Same(session, document.PreviewerSession);
+        // The live host receives the prepared preview XAML with node identities, like every other update.
+        (string? requestedXaml, DesignerThemeRequest? requestedTheme) = main.PreviewerLaunchService.GetRequestedContent(xamlPath);
+        Assert.NotNull(requestedXaml);
+        Assert.Contains(DesignerUpdateProtocol.IdentityNamespace, requestedXaml);
+        Assert.Same(document.PreviewThemeRequest, requestedTheme);
     }
+
+    [AvaloniaFact(Timeout = 60000)]
+    public async Task Exporting_and_closing_find_the_document_through_another_spelling_of_its_path()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Short file names exist only on Windows.");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string folder = Path.Combine(_root, "Folder with a long name");
+        Directory.CreateDirectory(folder);
+        string xamlPath = Path.Combine(folder, "Spelling.axaml");
+        await File.WriteAllTextAsync(xamlPath, Xaml, cancellationToken);
+        char[] buffer = new char[1024];
+        uint length = GetShortPathName(xamlPath, buffer, (uint)buffer.Length);
+        string shortPath = new(buffer, 0, (int)length);
+        Assert.SkipWhen(length == 0 || string.Equals(shortPath, xamlPath, StringComparison.OrdinalIgnoreCase),
+            "The volume does not create short file names.");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        await main.OpenFileAsync(xamlPath).WaitAsync(cancellationToken);
+        using EditorServicesAdapter editor = new(main);
+
+        XamlVisualEditor.Extensions.PreviewExportResult result = await main.ExportPreviewAsync(
+            shortPath, Path.Combine(_root, "Spelling.png"), timeoutMs: 300).WaitAsync(cancellationToken);
+
+        Assert.Equal(UiStrings.NoWorkspaceLoaded, result.Error);
+        Assert.True(await editor.CloseDocumentAsync(shortPath, cancellationToken));
+        Assert.Empty(main.Documents);
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW",
+        CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern uint GetShortPathName(string longPath,
+        [System.Runtime.InteropServices.Out] char[] shortPath, uint bufferLength);
 
     public void Dispose()
     {

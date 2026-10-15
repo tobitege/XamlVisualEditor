@@ -117,6 +117,36 @@ public sealed class IdeBridgePermissionServiceTests
     }
 
     [Fact]
+    public async Task AuthorizeAsyncLeavesTheStoredDictionaryUnchangedAndRunsTheRegistrationBeforeARevocation()
+    {
+        FakeSettings settings = new();
+        IdeBridgePermissionService service = new(settings, new FakeWindow { NextPick = new QuickPickItem(UiStrings.AllowReadOnly, "", null) });
+        await service.AuthorizeAsync("ws4", CancellationToken.None);
+        Dictionary<string, IdeBridgeWorkspacePermissionState> stored = Assert.IsType<Dictionary<string, IdeBridgeWorkspacePermissionState>>(
+            settings.Get<Dictionary<string, IdeBridgeWorkspacePermissionState>>("ideBridge.permissions"));
+
+        await service.AuthorizeAsync("ws5", CancellationToken.None);
+
+        // A reader that enumerates the stored dictionary must not see it change.
+        Assert.Single(stored);
+        Assert.Equal(2, (await service.GetPermissionsAsync(CancellationToken.None)).Count);
+
+        Task? revocation = null;
+        bool revokedDuringRegistration = true;
+        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws5", _ =>
+        {
+            revocation = service.ClearPermissionAsync("ws5", CancellationToken.None);
+            revokedDuringRegistration = revocation.IsCompleted;
+        }, CancellationToken.None);
+
+        Assert.NotNull(state);
+        Assert.False(revokedDuringRegistration);
+        Assert.NotNull(revocation);
+        await revocation;
+        Assert.Equal("ws4", Assert.Single(await service.GetPermissionsAsync(CancellationToken.None)).WorkspaceId);
+    }
+
+    [Fact]
     public async Task SessionsAreBoundToTheActiveWorkspaceAndGetFreshTokens()
     {
         string active = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "xve-bridge-active"));

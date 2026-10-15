@@ -66,6 +66,17 @@ internal sealed class PreviewerLaunchService : IDisposable
         }
     }
 
+    /// <summary>Gets the XAML and theme request that the host of a file renders; both are null without a host.</summary>
+    internal (string? Xaml, DesignerThemeRequest? ThemeRequest) GetRequestedContent(string xamlFilePath)
+    {
+        lock (_gate)
+        {
+            return _instances.TryGetValue(xamlFilePath, out PreviewerInstance? instance)
+                ? (instance.XamlText, instance.ThemeRequest)
+                : (null, null);
+        }
+    }
+
     public async Task<PreviewerLaunchResult> StartPreviewerAsync(
         string xamlFilePath,
         string? xamlText,
@@ -314,6 +325,8 @@ internal sealed class PreviewerLaunchService : IDisposable
         }
     }
 
+    private static readonly TimeSpan ThemeConfirmationTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>Waits until the host has applied the request, so the document that follows renders with it.</summary>
     private static async Task SendThemeRequestAsync(PreviewerInstance instance, DesignerThemeRequest request)
     {
@@ -324,7 +337,11 @@ internal sealed class PreviewerLaunchService : IDisposable
         {
             await process.StandardInput.WriteLineAsync(DesignerThemeProtocol.RequestPrefix + JsonSerializer.Serialize(request));
             await process.StandardInput.FlushAsync();
-            await completion.Task;
+            // A host that does not confirm must not hold back the document update; the load then reports the theme state.
+            await completion.Task.WaitAsync(ThemeConfirmationTimeout);
+        }
+        catch (TimeoutException)
+        {
         }
         finally
         {

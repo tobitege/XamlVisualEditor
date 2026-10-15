@@ -86,10 +86,7 @@ public sealed partial class XamlSerializationService
     }
 
     private static bool PreservesContentWhitespace(XContainer container) => container is XElement element &&
-            (!element.HasElements ||
-             element.AncestorsAndSelf().Select(parent => (string?)parent.Attribute(XNamespace.Xml + "space"))
-                 .FirstOrDefault(value => value is not null) == "preserve" ||
-             element.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value)));
+        XamlWhitespaceRules.PreservesContentWhitespace(element, XamlWhitespaceRules.PreservesWhitespace(element));
 
     private static IReadOnlyList<int> GetSourceLineOffsets(string text)
     {

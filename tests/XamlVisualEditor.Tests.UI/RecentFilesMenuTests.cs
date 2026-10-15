@@ -127,7 +127,7 @@ public sealed class RecentFilesMenuTests
     [AvaloniaFact]
     public async Task FullHistoryCanBeSearchedRemovedWithDeleteAndButtonAndClearedPersistently()
     {
-        string prefix = Path.Combine(AppContext.BaseDirectory, "recent-test-" + Guid.NewGuid().ToString("N"));
+        string prefix = Path.Combine(Path.GetTempPath(), "recent-test-" + Guid.NewGuid().ToString("N"));
         string store = prefix + ".json";
         string[] paths = Enumerable.Range(0, 12).Select(index => prefix + "-View" + index + ".axaml").ToArray();
         File.WriteAllText(paths[0], "<Canvas xmlns='https://github.com/avaloniaui' />");
@@ -225,6 +225,7 @@ public sealed class RecentFilesMenuTests
             window.Close();
             Application.Current.Styles.Remove(gridTheme);
             Application.Current.Styles.Remove(theme);
+            foreach (string path in paths.Append(store)) File.Delete(path);
         }
     }
 

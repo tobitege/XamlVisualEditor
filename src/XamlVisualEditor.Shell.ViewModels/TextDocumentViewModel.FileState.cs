@@ -52,4 +52,19 @@ public sealed partial class TextDocumentViewModel
         await _fileState.SaveAsync(FilePath, Document.Text);
         UpdateFileModifiedState();
     }
+
+    /// <inheritdoc />
+    public async Task OverwriteFileAsync()
+    {
+        await _fileState.SaveAsync(FilePath, Document.Text, overwrite: true);
+        UpdateFileModifiedState();
+    }
+
+    /// <inheritdoc />
+    public async Task ReloadFromDiskAsync()
+    {
+        string text = await _fileState.ReadAsync(FilePath);
+        Document.Text = text;
+        UpdateFileModifiedState();
+    }
 }

@@ -77,6 +77,20 @@ public sealed class DesignerCoordinateReadoutTests : IDisposable
     }
 
     [Fact]
+    public void Selection_DisplaysTheCurrentCultureButCopiesInvariantXaml()
+    {
+        CultureInfo german = CultureInfo.GetCultureInfo("de-DE");
+        CultureInfo.CurrentCulture = german;
+        DesignerCoordinateReadout readout = new();
+
+        readout.SetSelection(new Rect(12, 8.5, 100, 30.25), 1);
+
+        Assert.Equal(string.Format(german, UiStrings.CoordinateStripSelection, "12", "8,5", "100", "30,25"),
+            readout.SelectionText);
+        Assert.Equal("12,8.5,100,30.25", readout.SelectionValue);
+    }
+
+    [Fact]
     public void Change_ShowsSignedDifferenceSinceBeginUntilEnd()
     {
         DesignerCoordinateReadout readout = new();

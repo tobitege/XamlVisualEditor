@@ -1144,4 +1144,12 @@
   <data name="ZoomOut" xml:space="preserve"><value>Zoom out</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
   <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
+  <data name="GitCommandFailed" xml:space="preserve"><value>Git command failed: {0}</value></data>
+  <data name="SaveConflictTitle" xml:space="preserve"><value>File changed on disk</value></data>
+  <data name="SaveConflictPrompt" xml:space="preserve"><value>"{0}" was changed outside the editor. Overwrite it with the text from the editor, or reload it from disk and discard the changes in the editor?</value></data>
+  <data name="Overwrite" xml:space="preserve"><value>Overwrite</value></data>
+  <data name="DocumentReloadedFromDisk" xml:space="preserve"><value>"{0}" was reloaded from disk; the changes in the editor were discarded</value></data>
+  <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' could not be renamed: {1}</value></data>
+  <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' could not be deleted: {1}</value></data>
+  <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Fix the XAML errors before editing the document here.</value></data>
 </root>

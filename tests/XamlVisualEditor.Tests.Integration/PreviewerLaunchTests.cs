@@ -368,10 +368,13 @@ public sealed class PreviewerLaunchTests
         byte red, byte green, byte blue, IEnumerable<string> hostMessages)
     {
         TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        System.Collections.Concurrent.ConcurrentQueue<string> seen = new();
         void OnFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame)
         {
             if (frame.Width < 2 || frame.Height < 2) return;
             int pixel = frame.Stride + 4;
+            if (frame.Data.Length > pixel + 3)
+                seen.Enqueue($"{frame.Width}x{frame.Height} #{frame.Data[pixel + 2]:X2}{frame.Data[pixel + 1]:X2}{frame.Data[pixel]:X2}");
             if (frame.Data.Length > pixel + 3 && frame.Data[pixel] == blue
                 && frame.Data[pixel + 1] == green && frame.Data[pixel + 2] == red && frame.Data[pixel + 3] == 255)
                 ready.TrySetResult(true);
@@ -390,6 +393,7 @@ public sealed class PreviewerLaunchTests
                 ? $"#{frame.Data[pixel + 2]:X2}{frame.Data[pixel + 1]:X2}{frame.Data[pixel]:X2}" : "no frame";
             throw new InvalidOperationException($"Expected theme pixel #{red:X2}{green:X2}{blue:X2}, received {actual}. "
                 + $"Previewer error: {session.LastError ?? "<none>"}. Catalog: {session.LastThemeCatalog?.RequestId}." + Environment.NewLine
+                + $"Frames after the update: {seen.Count} ({string.Join(", ", seen.Distinct())})" + Environment.NewLine
                 + string.Join(Environment.NewLine, hostMessages.TakeLast(30)), exception);
         }
         finally { session.FrameReceived -= OnFrame; }

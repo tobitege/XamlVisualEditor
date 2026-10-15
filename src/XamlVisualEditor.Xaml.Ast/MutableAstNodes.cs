@@ -90,6 +90,7 @@ public abstract class MutableAstNode : INotifyPropertyChanged
 public sealed class MutableAstDocument : IXamlDocumentModel
 {
     private MutableAstObjectNode? _root;
+    private readonly Dictionary<string, string> _detachedNamespaceAliases = new();
     public List<XmlTrivia> TrailingTrivia { get; } = new();
 
     /// <summary>
@@ -121,14 +122,21 @@ public sealed class MutableAstDocument : IXamlDocumentModel
             {
                 _root.Parent = null;
                 _root.ChangeEmitted += OnChildChangeEmitted;
+                foreach (KeyValuePair<string, string> alias in _detachedNamespaceAliases)
+                {
+                    _root.NamespaceAliases.TryAdd(alias.Key, alias.Value);
+                }
+
+                _detachedNamespaceAliases.Clear();
             }
         }
     }
 
     /// <summary>
-    /// Gets the namespace aliases declared at the document level.
+    /// Gets the namespace declarations of the root element. Without a root, declarations are held
+    /// until a root is assigned, which then adopts them without overriding its own.
     /// </summary>
-    public Dictionary<string, string> NamespaceAliases { get; } = new();
+    public Dictionary<string, string> NamespaceAliases => _root?.NamespaceAliases ?? _detachedNamespaceAliases;
 
     /// <inheritdoc />
     public event Action<AstChange>? Changed;

@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CSharp.Language;
 
@@ -16,15 +17,18 @@ public static class DesignerEventBindingResolver
         if (!SyntaxFacts.IsValidIdentifier(request.HandlerName) ||
             request.HandlerName.StartsWith('@') || SyntaxFacts.GetKeywordKind(request.HandlerName) != SyntaxKind.None)
         {
-            throw new InvalidOperationException("Enter a C# method name for the event handler.");
+            throw new InvalidOperationException(UiStrings.EventHandlerNameInvalid);
         }
 
         List<(Compilation Compilation, INamedTypeSymbol Owner)> candidates = new();
+        // A project with several target frameworks loads once per framework; one of them stands for the project.
+        HashSet<string> candidateProjectFiles = new(FileSystemPathComparison.Comparer);
         foreach (Project project in solution.Projects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (project.Language != LanguageNames.CSharp || request.ProjectPath is not null &&
-                !FileSystemPathComparison.Equals(project.FilePath, request.ProjectPath))
+                !FileSystemPathComparison.Equals(project.FilePath, request.ProjectPath) ||
+                project.FilePath is { } projectFile && candidateProjectFiles.Contains(projectFile))
             {
                 continue;
             }
@@ -35,22 +39,23 @@ public static class DesignerEventBindingResolver
                 SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly))
             {
                 candidates.Add((compilation, owner));
+                if (project.FilePath is not null) candidateProjectFiles.Add(project.FilePath);
             }
         }
 
         if (candidates.Count != 1)
         {
             throw new InvalidOperationException(candidates.Count == 0
-                ? $"The form class '{request.ClassName}' is not available in the loaded C# project."
-                : $"The form class '{request.ClassName}' belongs to multiple projects. Open its owning project.");
+                ? string.Format(UiStrings.EventHandlerFormClassMissing, request.ClassName)
+                : string.Format(UiStrings.EventHandlerFormClassAmbiguous, request.ClassName));
         }
 
         (Compilation originalCompilation, INamedTypeSymbol ownerType) = candidates[0];
         INamedTypeSymbol controlType = ResolveControlType(originalCompilation, request)
-            ?? throw new InvalidOperationException($"The control type '{request.ControlTypeFullName}' is not available in the form's project.");
+            ?? throw new InvalidOperationException(string.Format(UiStrings.EventHandlerControlTypeMissing, request.ControlTypeFullName));
         if (controlType.IsGenericType)
         {
-            throw new InvalidOperationException("Event validation for a generic control requires its concrete type arguments.");
+            throw new InvalidOperationException(UiStrings.EventHandlerGenericControl);
         }
 
         IEventSymbol? eventSymbol = null;
@@ -61,7 +66,7 @@ public static class DesignerEventBindingResolver
 
         if (eventSymbol is null)
         {
-            throw new InvalidOperationException($"The control does not declare the event '{request.EventName}'.");
+            throw new InvalidOperationException(string.Format(UiStrings.EventHandlerEventMissing, request.EventName));
         }
 
         ClassDeclarationSyntax? ownerDeclaration = null;
@@ -76,7 +81,7 @@ public static class DesignerEventBindingResolver
 
         if (ownerDeclaration is null)
         {
-            throw new InvalidOperationException("The form class has no C# declaration in the loaded project.");
+            throw new InvalidOperationException(UiStrings.EventHandlerFormDeclarationMissing);
         }
 
         SyntaxTree sourceTree = ownerDeclaration.SyntaxTree;
@@ -102,7 +107,7 @@ public static class DesignerEventBindingResolver
         string probeText = $"private void {probeName}({controlTypeName} target) {{ target.{eventIdentifier} += {request.HandlerName}; }}";
         SyntaxAnnotation marker = new();
         MethodDeclarationSyntax probe = (SyntaxFactory.ParseMemberDeclaration(probeText) as MethodDeclarationSyntax
-            ?? throw new InvalidOperationException("The event signature could not be represented in C#."))
+            ?? throw new InvalidOperationException(UiStrings.EventHandlerSignatureUnrepresentable))
             .WithAdditionalAnnotations(marker);
         SyntaxNode changedRoot = sourceRoot.ReplaceNode(ownerDeclaration, ownerDeclaration.AddMembers(probe));
         if (assemblyAlias is not null && changedRoot is CompilationUnitSyntax compilationUnit)
@@ -119,7 +124,8 @@ public static class DesignerEventBindingResolver
             .FirstOrDefault(diagnostic => diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
         if (error is not null)
         {
-            throw new InvalidOperationException($"Cannot assign '{request.HandlerName}' to '{request.EventName}': {error.GetMessage()}");
+            throw new InvalidOperationException(string.Format(UiStrings.EventHandlerAssignmentError,
+                request.HandlerName, request.EventName, error.GetMessage()));
         }
 
         AssignmentExpressionSyntax assignment = resolvedProbe.DescendantNodes().OfType<AssignmentExpressionSyntax>().Single();
@@ -127,7 +133,7 @@ public static class DesignerEventBindingResolver
             semanticModel.GetSymbolInfo(assignment.Right, cancellationToken).Symbol is not IMethodSymbol handler ||
             handler.MethodKind != MethodKind.Ordinary)
         {
-            throw new InvalidOperationException("The handler name must resolve to a compatible C# method.");
+            throw new InvalidOperationException(UiStrings.EventHandlerIncompatibleMethod);
         }
 
         string? declarationId = handler.OriginalDefinition.GetDocumentationCommentId();
@@ -135,7 +141,7 @@ public static class DesignerEventBindingResolver
             DocumentationCommentId.GetFirstSymbolForDeclarationId(declarationId, originalCompilation) as IMethodSymbol;
         if (originalHandler is null)
         {
-            throw new InvalidOperationException("The handler could not be mapped to the original project.");
+            throw new InvalidOperationException(UiStrings.EventHandlerMappingFailed);
         }
 
         originalHandler = originalHandler.PartialImplementationPart ?? originalHandler;

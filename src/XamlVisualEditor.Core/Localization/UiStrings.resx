@@ -1257,4 +1257,27 @@
   <data name="MeasureHint" xml:space="preserve"><value>Measure: drag on the surface to measure a distance in pixels</value></data>
   <data name="MeasureResult" xml:space="preserve"><value>Measured distance</value></data>
   <data name="MeasureResultHint" xml:space="preserve"><value>Horizontal and vertical distance and direct length. Click to copy as dx,dy.</value></data>
+  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Load the owning project before refactoring control names.</value></data>
+  <data name="CodeBehindRenameOwningProjectMissing" xml:space="preserve"><value>The control's owning project is not loaded.</value></data>
+  <data name="CodeBehindRenameInvalidName" xml:space="preserve"><value>The new control name is not a valid C# member name.</value></data>
+  <data name="CodeBehindRenameCompilationUnavailable" xml:space="preserve"><value>The project compilation is unavailable.</value></data>
+  <data name="CodeBehindRenameClassMissing" xml:space="preserve"><value>The code-behind class '{0}' could not be resolved.</value></data>
+  <data name="CodeBehindRenameClassForeign" xml:space="preserve"><value>The code-behind class is not defined in the owning project.</value></data>
+  <data name="CodeBehindRenameMemberExists" xml:space="preserve"><value>The code-behind class already contains a member named '{0}'.</value></data>
+  <data name="CodeBehindRenameNameReferenced" xml:space="preserve"><value>The name '{0}' is referenced by code-behind and cannot be removed.</value></data>
+  <data name="CodeBehindRenameConflictingEdits" xml:space="preserve"><value>Conflicting rename edits in '{0}'.</value></data>
+  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Load the form's project before assigning an event handler.</value></data>
+  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Enter a C# method name for the event handler.</value></data>
+  <data name="EventHandlerFormClassMissing" xml:space="preserve"><value>The form class '{0}' is not available in the loaded C# project.</value></data>
+  <data name="EventHandlerFormClassAmbiguous" xml:space="preserve"><value>The form class '{0}' belongs to multiple projects. Open its owning project.</value></data>
+  <data name="EventHandlerControlTypeMissing" xml:space="preserve"><value>The control type '{0}' is not available in the form's project.</value></data>
+  <data name="EventHandlerGenericControl" xml:space="preserve"><value>Event validation for a generic control requires its concrete type arguments.</value></data>
+  <data name="EventHandlerEventMissing" xml:space="preserve"><value>The control does not declare the event '{0}'.</value></data>
+  <data name="EventHandlerFormDeclarationMissing" xml:space="preserve"><value>The form class has no C# declaration in the loaded project.</value></data>
+  <data name="EventHandlerSignatureUnrepresentable" xml:space="preserve"><value>The event signature could not be represented in C#.</value></data>
+  <data name="EventHandlerAssignmentError" xml:space="preserve"><value>Cannot assign '{0}' to '{1}': {2}</value></data>
+  <data name="EventHandlerIncompatibleMethod" xml:space="preserve"><value>The handler name must resolve to a compatible C# method.</value></data>
+  <data name="EventHandlerMappingFailed" xml:space="preserve"><value>The handler could not be mapped to the original project.</value></data>
+  <data name="DropTargetUnavailable" xml:space="preserve"><value>The drop target is not part of the design surface.</value></data>
+  <data name="DropPositionUnavailable" xml:space="preserve"><value>The element cannot be placed beside the drop target.</value></data>
 </root>

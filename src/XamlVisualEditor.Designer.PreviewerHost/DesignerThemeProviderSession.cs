@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using System.Text.Json;
 using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Designer.PreviewerHost;
@@ -12,11 +11,11 @@ internal sealed class DesignerThemeProviderSession : IDisposable
     private readonly Dictionary<string, Provider> _providers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AssemblyDependencyResolver> _resolvers = new(StringComparer.Ordinal);
     private Provider? _active;
-    private string? _lastCatalog;
 
     public DesignerThemeProviderSession() => AssemblyLoadContext.Default.Resolving += ResolveProviderDependency;
 
-    public void Apply(DesignerThemeRequest request)
+    /// <summary>Loads the requested providers, applies the selection and returns the catalog with the selection error, if any.</summary>
+    public (DesignerThemeCatalog Catalog, string? Error) Apply(DesignerThemeRequest request)
     {
         Dictionary<string, DesignerThemeProviderRegistration> requested = request.Providers.ToDictionary(item => item.Id, StringComparer.Ordinal);
         foreach (var entry in _providers.ToArray())
@@ -56,14 +55,21 @@ internal sealed class DesignerThemeProviderSession : IDisposable
             }
         }
 
-        string catalog = JsonSerializer.Serialize(new DesignerThemeCatalog(request.RequestId, catalogs));
-        if (catalog != _lastCatalog)
+        DesignerThemeCatalog catalog = new(request.RequestId, catalogs);
+        try
         {
-            Console.WriteLine(DesignerThemeProtocol.CatalogPrefix + catalog);
-            _lastCatalog = catalog;
+            Select(request.Selection, catalogs);
+            return (catalog, null);
         }
+        catch (Exception error)
+        {
+            return (catalog, error.GetBaseException().Message);
+        }
+    }
 
-        if (request.Selection is not { } selection)
+    private void Select(DesignerThemeSelection? selection, IReadOnlyList<DesignerThemeProviderCatalog> catalogs)
+    {
+        if (selection is null)
         {
             ResetActive();
             return;

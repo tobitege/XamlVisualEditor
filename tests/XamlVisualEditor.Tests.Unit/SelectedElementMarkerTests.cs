@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Shell.ViewModels;
@@ -179,6 +180,25 @@ public sealed class SelectedElementMarkerTests : IDisposable
         Assert.Equal(new SourceLineRange(5, 7), document.CodeEditor.DiagnosticLines);
         Assert.Equal(0, document.CodeEditor.SelectionLength);
         Assert.Equal(document.CodeEditor.GetOffsetForLineColumn(6, 13), document.CodeEditor.CaretOffset);
+    }
+
+    [AvaloniaFact]
+    public async Task Text_From_Another_Source_Replaces_Only_The_Changed_Span()
+    {
+        using DesignerDocumentViewModel document = await LoadAsync();
+        string before = document.CodeEditor.Document.Text;
+        string after = before.Replace("Text=\"First\"", "Text=\"Changed\"", StringComparison.Ordinal);
+        List<(int Offset, int RemovalLength, string Inserted)> changes = new();
+        document.CodeEditor.Document.Changed += (_, change) =>
+            changes.Add((change.Offset, change.RemovalLength, change.InsertedText.Text));
+
+        document.SyncEngine.NotifyTextChanged(after, SyncSource.DesignSurface);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+        Assert.Equal(after, document.CodeEditor.Document.Text);
+        Assert.Equal((before.IndexOf("First\"", StringComparison.Ordinal), "First".Length, "Changed"), Assert.Single(changes));
+        Assert.True(document.CodeEditor.IsModified);
+        Assert.False(document.CodeEditor.HasPendingTextChanges);
     }
 
     [AvaloniaFact]

@@ -1257,4 +1257,27 @@
   <data name="MeasureHint" xml:space="preserve"><value>Messen: auf der Fläche ziehen, um einen Abstand in Pixeln zu messen</value></data>
   <data name="MeasureResult" xml:space="preserve"><value>Gemessener Abstand</value></data>
   <data name="MeasureResultHint" xml:space="preserve"><value>Waagerechter und senkrechter Abstand sowie direkte Länge. Klicken kopiert den Wert als dx,dy.</value></data>
+  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Laden Sie das zugehörige Projekt, bevor Sie Control-Namen umgestalten.</value></data>
+  <data name="CodeBehindRenameOwningProjectMissing" xml:space="preserve"><value>Das Projekt, zu dem das Control gehört, ist nicht geladen.</value></data>
+  <data name="CodeBehindRenameInvalidName" xml:space="preserve"><value>Der neue Control-Name ist kein gültiger C#-Membername.</value></data>
+  <data name="CodeBehindRenameCompilationUnavailable" xml:space="preserve"><value>Die Kompilierung des Projekts ist nicht verfügbar.</value></data>
+  <data name="CodeBehindRenameClassMissing" xml:space="preserve"><value>Die Code-Behind-Klasse '{0}' konnte nicht aufgelöst werden.</value></data>
+  <data name="CodeBehindRenameClassForeign" xml:space="preserve"><value>Die Code-Behind-Klasse ist nicht im zugehörigen Projekt definiert.</value></data>
+  <data name="CodeBehindRenameMemberExists" xml:space="preserve"><value>Die Code-Behind-Klasse enthält bereits einen Member namens '{0}'.</value></data>
+  <data name="CodeBehindRenameNameReferenced" xml:space="preserve"><value>Der Name '{0}' wird im Code-Behind verwendet und kann nicht entfernt werden.</value></data>
+  <data name="CodeBehindRenameConflictingEdits" xml:space="preserve"><value>Widersprüchliche Umbenennungen in '{0}'.</value></data>
+  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Laden Sie das Projekt des Formulars, bevor Sie einen Event-Handler zuweisen.</value></data>
+  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Geben Sie einen C#-Methodennamen für den Event-Handler ein.</value></data>
+  <data name="EventHandlerFormClassMissing" xml:space="preserve"><value>Die Formularklasse '{0}' ist im geladenen C#-Projekt nicht verfügbar.</value></data>
+  <data name="EventHandlerFormClassAmbiguous" xml:space="preserve"><value>Die Formularklasse '{0}' gehört zu mehreren Projekten. Öffnen Sie das zugehörige Projekt.</value></data>
+  <data name="EventHandlerControlTypeMissing" xml:space="preserve"><value>Der Control-Typ '{0}' ist im Projekt des Formulars nicht verfügbar.</value></data>
+  <data name="EventHandlerGenericControl" xml:space="preserve"><value>Die Event-Prüfung für ein generisches Control benötigt dessen konkrete Typargumente.</value></data>
+  <data name="EventHandlerEventMissing" xml:space="preserve"><value>Das Control deklariert das Event '{0}' nicht.</value></data>
+  <data name="EventHandlerFormDeclarationMissing" xml:space="preserve"><value>Die Formularklasse hat im geladenen Projekt keine C#-Deklaration.</value></data>
+  <data name="EventHandlerSignatureUnrepresentable" xml:space="preserve"><value>Die Event-Signatur lässt sich in C# nicht darstellen.</value></data>
+  <data name="EventHandlerAssignmentError" xml:space="preserve"><value>'{0}' kann '{1}' nicht zugewiesen werden: {2}</value></data>
+  <data name="EventHandlerIncompatibleMethod" xml:space="preserve"><value>Der Handler-Name muss auf eine kompatible C#-Methode verweisen.</value></data>
+  <data name="EventHandlerMappingFailed" xml:space="preserve"><value>Der Handler konnte dem ursprünglichen Projekt nicht zugeordnet werden.</value></data>
+  <data name="DropTargetUnavailable" xml:space="preserve"><value>Das Ablageziel gehört nicht zur Entwurfsoberfläche.</value></data>
+  <data name="DropPositionUnavailable" xml:space="preserve"><value>Das Element kann nicht neben dem Ablageziel platziert werden.</value></data>
 </root>

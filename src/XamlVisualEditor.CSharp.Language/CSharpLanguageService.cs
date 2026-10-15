@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.Tags;
 using Microsoft.CodeAnalysis.Text;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CSharp.Language;
 
@@ -58,13 +59,14 @@ public sealed partial class CSharpLanguageService : ILanguageIntellisenseService
         CancellationToken cancellationToken = default)
     {
         Solution solution = await _workspaceManager.GetSolutionAsync(cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Load the owning project before refactoring control names.");
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameProjectNotLoaded);
         foreach (var openDocument in request.OpenDocumentTexts)
             foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(openDocument.Key))
                 solution = solution.WithDocumentText(id, SourceText.From(openDocument.Value));
-        Project project = solution.Projects.SingleOrDefault(candidate =>
+        // A project with several target frameworks loads once per framework, all sharing the same sources.
+        Project project = solution.Projects.FirstOrDefault(candidate =>
             FileSystemPathComparison.Equals(candidate.FilePath, request.ProjectPath))
-            ?? throw new InvalidOperationException("The control's owning project is not loaded.");
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameOwningProjectMissing);
         return await DesignerCodeBehindRenamePlanner.CreateAsync(project, request.ClassName,
             request.OldName, request.NewName, cancellationToken).ConfigureAwait(false);
     }

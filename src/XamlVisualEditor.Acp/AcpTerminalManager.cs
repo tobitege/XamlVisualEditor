@@ -312,6 +312,7 @@ public sealed class AcpTerminalManager
 
     private sealed class TerminalState : IAsyncDisposable
     {
+        private static readonly TimeSpan OutputDrainTimeout = TimeSpan.FromSeconds(2);
         private readonly CancellationTokenSource _outputCts = new();
         private string? _exitSignal;
 
@@ -383,7 +384,7 @@ public sealed class AcpTerminalManager
             try
             {
                 await Process.WaitForExitAsync().ConfigureAwait(false);
-                await Task.WhenAll(StdOutTask, StdErrTask).ConfigureAwait(false);
+                await DrainOutputAsync().ConfigureAwait(false);
             }
             catch
             {
@@ -412,18 +413,28 @@ public sealed class AcpTerminalManager
             }
         }
 
+        // A process the command left running in the background inherits the output pipes and keeps
+        // them open after the command itself has exited, so the readers get a bounded time to finish.
+        private async Task DrainOutputAsync()
+        {
+            Task readers = Task.WhenAll(StdOutTask, StdErrTask);
+            if (await Task.WhenAny(readers, Task.Delay(OutputDrainTimeout)).ConfigureAwait(false) != readers)
+            {
+                _outputCts.Cancel();
+            }
+        }
+
         public async ValueTask DisposeAsync()
         {
-            _outputCts.Cancel();
-
             try
             {
-                await Task.WhenAll(StdOutTask, StdErrTask).ConfigureAwait(false);
+                await DrainOutputAsync().ConfigureAwait(false);
             }
             catch
             {
             }
 
+            _outputCts.Cancel();
             Process.Dispose();
             _outputCts.Dispose();
         }

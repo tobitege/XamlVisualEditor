@@ -139,7 +139,7 @@ public sealed class TfvcOfflineTests : IDisposable
         client.WorkspacesFailure = new TfCommandException("workspaces", new TfCommandResult(100, string.Empty, "TF400324"));
         FakeWorkspaceInfo workspaceInfo = new();
         using TfvcSession session = TfvcSessionTests.CreateSession(client, storage, workspaceInfo);
-        ScriptedDialogHost dialogs = new((dialogId, _) => dialogId == ConfirmationDialogRequest.DIALOG_ID);
+        ScriptedDialogHost dialogs = new((dialogId, _) => dialogId == ConfirmationDialogRequest.DialogId);
         RecordingWindow window = new();
         using TfvcOfflineCoordinator coordinator = new(
             session,

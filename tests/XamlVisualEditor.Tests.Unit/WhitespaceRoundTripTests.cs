@@ -32,6 +32,40 @@ public sealed class WhitespaceRoundTripTests
         Assert.Contains(blocks[2].Nodes(), node => node is XComment { Value: "keep" });
     }
 
+    [Fact]
+    public void WhitespaceBetweenInlineElementsOfMixedContentSurvivesSaving()
+    {
+        const string source = """
+            <StackPanel xmlns="https://github.com/avaloniaui">
+                <TextBlock>Hello <Bold>x</Bold> <Italic>y</Italic></TextBlock>
+            </StackPanel>
+            """;
+        MutableAstDocument document = Assert.IsType<MutableAstDocument>(new XamlParsingService().Parse(source).Document);
+
+        XElement saved = XElement.Parse(new XamlSerializationService().Serialize(document), LoadOptions.PreserveWhitespace);
+
+        XNamespace avalonia = "https://github.com/avaloniaui";
+        Assert.Equal("Hello x y", saved.Element(avalonia + "TextBlock")?.Value);
+    }
+
+    [Fact]
+    public void NodeWithoutNamespaceInheritsTheDefaultNamespaceAndExplicitEmptyNamespaceIsKept()
+    {
+        const string source = """
+            <StackPanel xmlns="https://github.com/avaloniaui">
+                <Data xmlns=""><Item /></Data>
+            </StackPanel>
+            """;
+        MutableAstDocument document = Assert.IsType<MutableAstDocument>(new XamlParsingService().Parse(source).Document);
+        document.Root!.Children.Add(new MutableAstObjectNode { TypeName = "Button", XmlNamespace = string.Empty });
+
+        XElement saved = XElement.Parse(new XamlSerializationService().Serialize(document));
+
+        XNamespace avalonia = "https://github.com/avaloniaui";
+        Assert.NotNull(saved.Element(avalonia + "Button"));
+        Assert.NotNull(saved.Element("Data")?.Element("Item"));
+    }
+
     [Theory]
     [InlineData("  leading and trailing  ", false)]
     [InlineData(" \t ", true)]

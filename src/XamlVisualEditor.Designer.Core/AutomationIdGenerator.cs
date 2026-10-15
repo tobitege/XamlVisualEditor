@@ -53,24 +53,9 @@ internal static class AutomationIdGenerator
     private static string GetPropertyName(MutableAstObjectNode parent, MutableAstObjectNode node)
     {
         Dictionary<string, string> aliases = new(StringComparer.Ordinal);
-        Stack<MutableAstNode> scope = new();
-        for (MutableAstNode? current = parent; current is not null; current = current.Parent) scope.Push(current);
-        foreach (MutableAstNode current in scope)
-        {
-            if (current is MutableAstObjectNode element)
-                foreach (var alias in element.NamespaceAliases) aliases[alias.Key] = alias.Value;
-            else if (current is MutableAstPropertyNode property)
-                foreach (var alias in property.NamespaceAliases) aliases[alias.Key] = alias.Value;
-        }
-        scope.Clear();
-        for (MutableAstNode? current = node; current is not null; current = current.Parent) scope.Push(current);
-        foreach (MutableAstNode current in scope)
-        {
-            if (current is MutableAstObjectNode element)
-                foreach (var alias in element.NamespaceAliases) aliases[alias.Key] = alias.Value;
-            else if (current is MutableAstPropertyNode property)
-                foreach (var alias in property.NamespaceAliases) aliases[alias.Key] = alias.Value;
-        }
+        // The inserted subtree may not be attached yet, so both chains contribute their aliases.
+        AddScopeAliases(parent, aliases);
+        AddScopeAliases(node, aliases);
         foreach (var alias in aliases)
             if (alias.Value == AvaloniaNamespace)
                 return string.IsNullOrEmpty(alias.Key) ? PropertyName : alias.Key + ":" + PropertyName;
@@ -79,6 +64,20 @@ internal static class AutomationIdGenerator
         for (int index = 1; aliases.ContainsKey(prefix); index++) prefix = "automation" + index;
         node.NamespaceAliases[prefix] = AvaloniaNamespace;
         return prefix + ":" + PropertyName;
+    }
+
+    /// <summary>Applies the namespace aliases from the root down to <paramref name="innermost"/>; inner declarations win.</summary>
+    private static void AddScopeAliases(MutableAstNode innermost, Dictionary<string, string> aliases)
+    {
+        Stack<MutableAstNode> scope = new();
+        for (MutableAstNode? current = innermost; current is not null; current = current.Parent) scope.Push(current);
+        foreach (MutableAstNode current in scope)
+        {
+            if (current is MutableAstObjectNode element)
+                foreach (var alias in element.NamespaceAliases) aliases[alias.Key] = alias.Value;
+            else if (current is MutableAstPropertyNode property)
+                foreach (var alias in property.NamespaceAliases) aliases[alias.Key] = alias.Value;
+        }
     }
 
     private static MutableAstPropertyNode? FindId(MutableAstObjectNode node) =>

@@ -46,7 +46,7 @@ public sealed class ServerPanelLayoutTests
     public async Task McpPanelKeepsControlsInsideAndDisjoint(double width)
     {
         McpPanelView view = new();
-        await AssertPanelLayoutAsync(view, width, UiStrings.Mcp, "McpStatus", "McpEndpoint", "McpWorkspace", "McpToken");
+        await AssertPanelLayoutAsync(view, width, UiStrings.Mcp, "McpStatus", "McpEndpoint", "McpWorkspace");
     }
 
     [AvaloniaTheory]

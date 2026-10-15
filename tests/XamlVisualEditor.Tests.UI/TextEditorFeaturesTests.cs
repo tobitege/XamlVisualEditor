@@ -111,11 +111,11 @@ public sealed class TextEditorFeaturesTests
 
         fixture.ActiveDocument = null;
         Assert.False(fixture.Host.HasActiveEditor);
-        Assert.True(fixture.ContextKeys.TryGet(TextEditorContextKeys.HAS_ACTIVE_EDITOR, out bool hasEditor) && !hasEditor);
+        Assert.True(fixture.ContextKeys.TryGet(TextEditorContextKeys.HasActiveEditor, out bool hasEditor) && !hasEditor);
         Assert.False(await fixture.Host.ExecuteAsync(TextEditorViewAction.Find, CancellationToken.None));
 
         fixture.ActiveDocument = fixture.Editors[1].State;
-        Assert.True(fixture.ContextKeys.TryGet(TextEditorContextKeys.HAS_ACTIVE_EDITOR, out hasEditor) && hasEditor);
+        Assert.True(fixture.ContextKeys.TryGet(TextEditorContextKeys.HasActiveEditor, out hasEditor) && hasEditor);
         first.TextArea.Focus();
         Assert.True(await fixture.Host.ExecuteAsync(TextEditorViewAction.Replace, CancellationToken.None));
         Assert.True(second.SearchPanel.IsOpened);
@@ -132,7 +132,7 @@ public sealed class TextEditorFeaturesTests
         FoldingManager.Uninstall(foldings);
 
         TextEditorFeaturesBehavior.SetIsEnabled(second, false);
-        Assert.True(fixture.ContextKeys.TryGet(TextEditorContextKeys.HAS_ACTIVE_EDITOR, out hasEditor) && !hasEditor);
+        Assert.True(fixture.ContextKeys.TryGet(TextEditorContextKeys.HasActiveEditor, out hasEditor) && !hasEditor);
     }
 
     private sealed class EditorFixture : IDisposable

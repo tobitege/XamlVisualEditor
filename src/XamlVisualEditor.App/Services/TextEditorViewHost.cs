@@ -54,7 +54,7 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
     /// <summary>Creates the host.</summary>
     /// <param name="contextMenuItems">The items of the editor context menu.</param>
     /// <param name="activeDocument">Reports the view model of the active document, which is the data context of its editor.</param>
-    /// <param name="contextKeys">Receives <see cref="TextEditorContextKeys.HAS_ACTIVE_EDITOR"/>.</param>
+    /// <param name="contextKeys">Receives <see cref="TextEditorContextKeys.HasActiveEditor"/>.</param>
     public TextEditorViewHost(
         ObservableCollection<ExtensionMenuItemViewModel> contextMenuItems,
         IObservable<object?> activeDocument,
@@ -402,7 +402,7 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
     // Menus disable the view actions while the active document shows no editor, for example the designer alone.
     private void RefreshActiveEditorKey()
     {
-        _contextKeys?.Set(TextEditorContextKeys.HAS_ACTIVE_EDITOR, TryGetActiveEditor(out _));
+        _contextKeys?.Set(TextEditorContextKeys.HasActiveEditor, TryGetActiveEditor(out _));
     }
 
     private bool TryGetActiveEditor(out TextEditor editor)

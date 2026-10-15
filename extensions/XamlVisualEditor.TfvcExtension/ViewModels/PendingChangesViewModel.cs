@@ -610,7 +610,7 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         }
 
         bool? result = await _dialogHost.ShowDialogAsync<bool>(
-            ConfirmationDialogRequest.DIALOG_ID,
+            ConfirmationDialogRequest.DialogId,
             new ConfirmationDialogRequest(title, message, action, IsDestructive: true),
             CancellationToken.None);
         return result == true;

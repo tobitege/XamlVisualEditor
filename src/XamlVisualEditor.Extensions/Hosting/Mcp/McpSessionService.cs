@@ -19,7 +19,7 @@ public sealed class McpSessionService
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
         McpWorkspacePermissionState? state = await _permissions
-            .AuthorizeAsync(workspaceId, request?.SessionToken, ct)
+            .AuthorizeAsync(workspaceId, ct)
             .ConfigureAwait(false);
 
         if (state is null)

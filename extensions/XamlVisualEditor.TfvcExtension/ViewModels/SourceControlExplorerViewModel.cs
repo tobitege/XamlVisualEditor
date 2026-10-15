@@ -645,7 +645,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             }
 
             bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
-                ConfirmationDialogRequest.DIALOG_ID,
+                ConfirmationDialogRequest.DialogId,
                 new ConfirmationDialogRequest(
                     TfvcStrings.CheckOut,
                     string.Format(CultureInfo.CurrentCulture, TfvcStrings.CheckOutFolderConfirmMessageFormat, item.ServerPath),
@@ -691,7 +691,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         }
 
         bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
-            ConfirmationDialogRequest.DIALOG_ID,
+            ConfirmationDialogRequest.DialogId,
             new ConfirmationDialogRequest(
                 TfvcStrings.Undo,
                 string.Format(CultureInfo.CurrentCulture, TfvcStrings.UndoConfirmMessageFormat, count),

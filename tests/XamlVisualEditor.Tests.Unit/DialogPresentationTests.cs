@@ -68,7 +68,7 @@ public sealed class DialogPresentationTests
             owner.Show();
             using CancellationTokenSource workDone = new();
             Task<bool?> dialogTask = host.ShowDialogAsync<bool?>(
-                ProgressDialogRequest.DIALOG_ID, new ProgressDialogRequest("Converting", "This can take a while."), workDone.Token);
+                ProgressDialogRequest.DialogId, new ProgressDialogRequest("Converting", "This can take a while."), workDone.Token);
             Flush(owner);
             ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
             Assert.Single(dialog.GetVisualDescendants().OfType<ProgressBar>(), bar => bar.IsIndeterminate);
@@ -96,7 +96,7 @@ public sealed class DialogPresentationTests
             owner.Show();
             using CancellationTokenSource workDone = new();
             Task<bool?> dialogTask = host.ShowDialogAsync<bool?>(
-                ProgressDialogRequest.DIALOG_ID, new ProgressDialogRequest("Converting", "This can take a while.", "Stop"), workDone.Token);
+                ProgressDialogRequest.DialogId, new ProgressDialogRequest("Converting", "This can take a while.", "Stop"), workDone.Token);
             Flush(owner);
             ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
             Button cancel = Assert.Single(dialog.GetVisualDescendants().OfType<Button>(), button => button.Name == "CancelButton");

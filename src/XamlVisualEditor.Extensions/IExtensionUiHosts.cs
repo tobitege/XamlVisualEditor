@@ -16,7 +16,7 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
     string? CancelText = null)
 {
     /// <summary>Identifier of the shared confirmation dialog.</summary>
-    public const string DIALOG_ID = "xve.confirm";
+    public const string DialogId = "xve.confirm";
 }
 
 /// <summary>Requests a modal, indeterminate progress dialog that blocks the editor while work runs.</summary>
@@ -28,7 +28,7 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
 public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null)
 {
     /// <summary>Identifier of the shared progress dialog.</summary>
-    public const string DIALOG_ID = "xve.progress";
+    public const string DialogId = "xve.progress";
 }
 
 /// <summary>Controls workspace opening behavior.</summary>

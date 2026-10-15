@@ -71,4 +71,18 @@ public sealed class AssemblySnapshotSettingsTests
         File.WriteAllBytes(Path.Combine(live, "Missing.dll"), new byte[] { 1 });
         Assert.Throws<FileNotFoundException>(() => settings.ResolveAssemblyPath(Path.Combine(live, "Missing.dll")));
     }
+
+    [Fact]
+    public void InvalidSettingsFile_ReportsItsPath()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-assembly-snapshot-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string config = Path.Combine(root, "assembly-snapshots.json");
+        File.WriteAllText(config, "[ { \"WorkspaceRoot\": ");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            AssemblySnapshotSettings.FindForWorkspace(Path.Combine(root, "Sample.csproj"), config));
+
+        Assert.Contains(config, exception.Message);
+    }
 }

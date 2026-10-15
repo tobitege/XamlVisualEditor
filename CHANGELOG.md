@@ -59,6 +59,10 @@ uses Semantic Versioning.
 - The design theme messages in the Output panel follow the editor language.
 - Messages, comments and documentation that were still German are English.
 - SourceLink is enabled only inside a git working copy, so the solution also builds from a copy without `.git`.
+- Installed extension packages are extracted into their version directory when they are installed instead of on activation. Packages installed by an earlier version are converted the first time the installed list is read; a damaged package is skipped and logged instead of hiding all other packages.
+- MCP consent is stored per workspace as an access level: a client that reconnects to a workspace with stored consent is granted without a new prompt, and revoking the consent ends the running sessions of that workspace. Session tokens are created per session and are no longer stored or shown in the MCP panel. HTTP sessions end after one hour without requests.
+- An extension package that registers document open interceptors has to declare `"capabilities": ["documentOpenInterceptors"]` in `xve.extension.json`.
+- The undo history keeps the newest 100 steps.
 
 ### Fixed
 

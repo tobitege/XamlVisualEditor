@@ -316,7 +316,7 @@ public sealed class GitPanelViewTests
 
         public Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
         {
-            Assert.Equal(ConfirmationDialogRequest.DIALOG_ID, dialogId);
+            Assert.Equal(ConfirmationDialogRequest.DialogId, dialogId);
             Requests.Add(Assert.IsType<ConfirmationDialogRequest>(viewModel));
             return Task.FromResult<T?>((T)(object)Confirm);
         }

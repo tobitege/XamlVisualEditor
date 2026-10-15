@@ -18,14 +18,23 @@ namespace XamlVisualEditor.Tests.UI;
 public static class InstalledPackageProbe
 {
     private static readonly ConcurrentDictionary<string, string> Activations = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, bool> InterceptorAccess = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Called by the compiled probe extensions during activation.</summary>
-    public static void Record(string extensionId, string extensionPath) => Activations[extensionId] = extensionPath;
+    public static void Record(string extensionId, string extensionPath, bool receivedDocumentOpenInterceptors)
+    {
+        Activations[extensionId] = extensionPath;
+        InterceptorAccess[extensionId] = receivedDocumentOpenInterceptors;
+    }
 
     public static string? GetActivationPath(string extensionId) =>
         Activations.TryGetValue(extensionId, out string? path) ? path : null;
 
-    public static string CreatePackage(string root, string name)
+    /// <summary>Gets whether the activated package received the document open interceptor registry.</summary>
+    public static bool? ReceivedDocumentOpenInterceptors(string extensionId) =>
+        InterceptorAccess.TryGetValue(extensionId, out bool received) ? received : null;
+
+    public static string CreatePackage(string root, string name, params string[] capabilities)
     {
         string suffix = Guid.NewGuid().ToString("N");
         string assemblyName = "XveProbe" + suffix;
@@ -34,8 +43,9 @@ public static class InstalledPackageProbe
         string assemblyPath = Path.Combine(buildDirectory, assemblyName + ".dll");
         Compile(assemblyName, assemblyPath);
 
+        string capabilityList = string.Join(", ", capabilities.Select(capability => "\"" + capability + "\""));
         string manifest = $$"""
-            { "name": "{{name}}{{suffix}}", "publisher": "probe", "version": "1.0.0", "main": "{{assemblyName}}.dll" }
+            { "name": "{{name}}{{suffix}}", "publisher": "probe", "version": "1.0.0", "main": "{{assemblyName}}.dll", "capabilities": [{{capabilityList}}] }
             """;
         string packagePath = Path.Combine(root, $"{name}-{suffix}.nupkg");
         using ZipArchive archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
@@ -68,7 +78,8 @@ public static class InstalledPackageProbe
                 public System.Threading.Tasks.Task ActivateAsync(
                     XamlVisualEditor.Extensions.ExtensionContext context, System.Threading.CancellationToken cancellationToken)
                 {
-                    XamlVisualEditor.Tests.UI.InstalledPackageProbe.Record(context.ExtensionId, context.ExtensionPath);
+                    XamlVisualEditor.Tests.UI.InstalledPackageProbe.Record(context.ExtensionId, context.ExtensionPath,
+                        context.DocumentOpenInterceptors is not null);
                     return System.Threading.Tasks.Task.CompletedTask;
                 }
             }

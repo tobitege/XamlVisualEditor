@@ -26,14 +26,11 @@ public sealed partial class McpPermissionEntryViewModel
     public McpPermissionEntryViewModel(McpWorkspacePermissionEntry entry)
     {
         WorkspaceId = entry.WorkspaceId;
-        SessionToken = entry.SessionToken;
         GrantedAt = entry.GrantedAt.ToLocalTime().ToString("u");
         AccessLevel = entry.AccessLevel.ToString();
     }
 
     public string WorkspaceId { get; }
-
-    public string SessionToken { get; }
 
     public string GrantedAt { get; }
 
@@ -79,9 +76,6 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
     public partial string? WorkspaceId { get; private set; }
 
     [Reactive]
-    public partial string? SessionToken { get; private set; }
-
-    [Reactive]
     public partial McpPermissionEntryViewModel? SelectedPermission { get; set; }
 
     public IReadOnlyList<string> TransportOptions { get; } = new[] { "stdio", "http", "both" };
@@ -100,8 +94,6 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
 
     public ReactiveCommand<RxVoid, RxVoid> ClearPermissionsCommand { get; }
 
-    public ReactiveCommand<RxVoid, RxVoid> CopyTokenCommand { get; }
-
     public ReactiveCommand<RxVoid, RxVoid> CopyHttpEndpointCommand { get; }
 
     public McpPanelViewModel(
@@ -118,7 +110,6 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
         RefreshPermissionsCommand = ReactiveCommand.CreateFromTask(RefreshPermissionsAsync);
         RevokePermissionCommand = ReactiveCommand.CreateFromTask(RevokeSelectedAsync, this.WhenAnyValue(x => x.SelectedPermission).Select(p => p is not null));
         ClearPermissionsCommand = ReactiveCommand.CreateFromTask(ClearPermissionsAsync);
-        CopyTokenCommand = ReactiveCommand.CreateFromTask(CopyTokenAsync, this.WhenAnyValue(x => x.SessionToken).Select(token => !string.IsNullOrWhiteSpace(token)));
         CopyHttpEndpointCommand = ReactiveCommand.CreateFromTask(CopyHttpEndpointAsync, this.WhenAnyValue(x => x.SelectedTransport).Select(transport =>
             string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
             || string.Equals(transport, "both", StringComparison.OrdinalIgnoreCase)));
@@ -171,8 +162,6 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
         {
             _permissionEntries.Add(new McpPermissionEntryViewModel(entry));
         }
-
-        UpdateSessionToken();
     }
 
     private async Task RevokeSelectedAsync()
@@ -192,17 +181,6 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
         await _permissions.ClearAllAsync(CancellationToken.None);
         AppendLog(UiStrings.PermissionsCleared);
         await RefreshPermissionsAsync();
-    }
-
-    private async Task CopyTokenAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionToken))
-        {
-            return;
-        }
-
-        await CopyToClipboardInteraction.Handle(SessionToken).ConfigureAwait(false);
-        AppendLog(UiStrings.SessionTokenCopied);
     }
 
     private async Task CopyHttpEndpointAsync()
@@ -237,20 +215,6 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
         WorkspaceId = string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
     }
 
-    private void UpdateSessionToken()
-    {
-        if (string.IsNullOrWhiteSpace(WorkspaceId))
-        {
-            SessionToken = null;
-            return;
-        }
-
-        McpPermissionEntryViewModel? match = _permissionEntries.FirstOrDefault(entry =>
-            string.Equals(entry.WorkspaceId, WorkspaceId, StringComparison.OrdinalIgnoreCase));
-
-        SessionToken = match?.SessionToken;
-    }
-
     private McpSettings BuildSettings()
     {
         return new McpSettings(
@@ -277,7 +241,7 @@ public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
 
     private void OnWorkspaceChanged(object? sender, WorkspaceChangedEventArgs args)
     {
-        RxSchedulers.MainThreadScheduler.Schedule(() => { UpdateWorkspaceId(); UpdateSessionToken(); });
+        RxSchedulers.MainThreadScheduler.Schedule(UpdateWorkspaceId);
     }
 
     private void OnStatusChanged(object? sender, EventArgs args)

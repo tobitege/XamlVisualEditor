@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CSharp.Language;
 
@@ -10,7 +11,7 @@ public sealed partial class CSharpLanguageService : IDesignerEventBindingService
         DesignerEventBindingRequest request, CancellationToken cancellationToken = default)
     {
         Solution solution = await _workspaceManager.GetSolutionAsync(cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Load the form's project before assigning an event handler.");
+            ?? throw new InvalidOperationException(UiStrings.EventHandlerProjectNotLoaded);
         foreach (var openDocument in request.OpenDocumentTexts)
         {
             foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(openDocument.Key))

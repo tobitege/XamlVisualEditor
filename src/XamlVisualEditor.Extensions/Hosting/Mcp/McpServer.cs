@@ -20,6 +20,7 @@ public sealed class McpServerOptions
 /// <summary>Hosts MCP JSON-RPC connections.</summary>
 public sealed class McpServer : IAsyncDisposable
 {
+    private static readonly TimeSpan IdleSweepInterval = TimeSpan.FromMinutes(1);
     private readonly McpServerOptions _options;
     private readonly IReadOnlyList<IMcpRequestHandler> _handlers;
     private readonly McpSessionRegistry _sessions;
@@ -29,6 +30,7 @@ public sealed class McpServer : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private McpRequestRouter? _router;
     private McpHttpServer? _httpServer;
+    private ITimer? _idleSweep;
 
     public event EventHandler<McpConnectionChangedEventArgs>? ConnectionChanged;
 
@@ -93,6 +95,8 @@ public sealed class McpServer : IAsyncDisposable
 
         _httpServer = new McpHttpServer(_options.HttpPort, _options.HttpPath, _router, _sessions);
         _acceptLoops.Add(_httpServer.StartAsync(ct));
+        _idleSweep = _sessions.TimeProvider.CreateTimer(
+            static state => ((McpSessionRegistry)state!).ExpireIdle(), _sessions, IdleSweepInterval, IdleSweepInterval);
     }
 
     private void AddConnection(McpJsonRpcConnection connection)
@@ -117,6 +121,7 @@ public sealed class McpServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
+        _idleSweep?.Dispose();
         _sessions.Changed -= OnSessionsChanged;
         Task[] loops;
         lock (_sync)

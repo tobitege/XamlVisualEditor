@@ -63,6 +63,80 @@ public sealed class ExtensionPackageStoreTests
         Assert.False(Directory.Exists(installed));
     }
 
+    [Fact]
+    public async Task GetInstalledExtractsAnArchiveOnlyInstallation()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string versionDirectory = Path.Combine(root, "installed", "example.sample-extension", "1.0.0");
+            Directory.CreateDirectory(Path.Combine(versionDirectory, "content", "lib"));
+            File.Move(CreatePackage(root, "sample-extension", "example", "1.0.0"),
+                Path.Combine(versionDirectory, "example.sample-extension.1.0.0.nupkg"));
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+
+            ExtensionPackageInfo installed = Assert.Single(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.Equal(versionDirectory, installed.InstallationDirectory);
+            Assert.Equal("sample payload", File.ReadAllText(Path.Combine(versionDirectory, "lib", "net10.0", "Sample.dll")));
+            Assert.False(Directory.Exists(Path.Combine(versionDirectory, "content")));
+            Assert.Equal(["1.0.0"], Directory.GetDirectories(Path.GetDirectoryName(versionDirectory)!).Select(Path.GetFileName));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetInstalledSkipsAPackageWhoseIdentityDoesNotMatchItsDirectory()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+            await store.InstallAsync(CreatePackage(root, "sample-extension", "example", "1.0.0"), CancellationToken.None);
+            string foreignDirectory = Path.Combine(root, "installed", "example.other", "2.0.0");
+            Directory.CreateDirectory(foreignDirectory);
+            File.Move(CreatePackage(root, "sample-extension", "example", "2.0.0"),
+                Path.Combine(foreignDirectory, "example.other.2.0.0.nupkg"));
+
+            ExtensionPackageInfo installed = Assert.Single(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.Equal("example.sample-extension", installed.Manifest.ExtensionId);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetInstalledRemovesAbandonedStagingDirectoriesOnly()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "xve-store-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string extensionDirectory = Path.Combine(root, "installed", "example.sample-extension");
+            string abandoned = Path.Combine(extensionDirectory, "1.0.0.installing-" + Guid.NewGuid().ToString("N"));
+            string running = Path.Combine(extensionDirectory, "1.0.0.installing-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(abandoned);
+            Directory.CreateDirectory(running);
+            Directory.SetLastWriteTimeUtc(abandoned, DateTime.UtcNow.AddHours(-2));
+            ExtensionPackageStore store = new(Path.Combine(root, "installed"), new ExtensionPackageLoader());
+
+            Assert.Empty(await store.GetInstalledAsync(CancellationToken.None));
+
+            Assert.False(Directory.Exists(abandoned));
+            Assert.True(Directory.Exists(running));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreatePackage(string root, string name, string publisher, string version, string? extraEntry = null)
     {
         string packagePath = Path.Combine(root, Guid.NewGuid().ToString("N") + ".nupkg");

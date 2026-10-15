@@ -151,6 +151,37 @@ public sealed class ControlFactoryTests
         Assert.Equal("body", body.Text);
     }
 
+    [Fact]
+    public void CreateControlTree_NormalizesContentWhitespaceAndKeepsTheSourceText()
+    {
+        const string xaml = """
+            <StackPanel xmlns="https://github.com/avaloniaui">
+              <TextBlock>
+                Hello
+                world
+              </TextBlock>
+              <Button>
+                <Button.Content>
+                  Click   me
+                </Button.Content>
+              </Button>
+              <TextBlock xml:space="preserve">  kept  </TextBlock>
+            </StackPanel>
+            """;
+        XamlParsingService parser = new();
+        ParseResult result = parser.Parse(xaml, new XamlParserOptions { UseTolerantParser = false });
+        MutableAstDocument document = Assert.IsType<MutableAstDocument>(result.Document);
+        ControlFactory factory = new();
+
+        StackPanel panel = Assert.IsType<StackPanel>(factory.CreateControlTree(document.Root!));
+
+        Assert.Equal("Hello world", Assert.IsType<TextBlock>(panel.Children[0]).Text);
+        Assert.Equal("Click me", Assert.IsType<Button>(panel.Children[1]).Content);
+        Assert.Equal("  kept  ", Assert.IsType<TextBlock>(panel.Children[2]).Text);
+        MutableAstObjectNode firstBlock = Assert.IsType<MutableAstObjectNode>(document.Root!.Children[0]);
+        Assert.Contains('\n', Assert.IsType<MutableAstTextNode>(Assert.Single(firstBlock.Children)).Text);
+    }
+
     private sealed class BodySurfaceControl : ContentControl
     {
         public string Title { get; set; } = string.Empty;

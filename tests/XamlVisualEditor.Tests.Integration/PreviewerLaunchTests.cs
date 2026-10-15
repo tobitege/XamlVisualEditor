@@ -364,6 +364,8 @@ public sealed class PreviewerLaunchTests
         finally { session.DesignTreeChanged -= OnTree; }
     }
 
+    private const string ThemeSampleName = "ThemeSample";
+
     private static async Task AssertThemeFrameAsync(PreviewerTcpSession session, Func<Task> update,
         byte red, byte green, byte blue, IEnumerable<string> hostMessages)
     {
@@ -395,7 +397,7 @@ public sealed class PreviewerLaunchTests
                 + $"Previewer error: {session.LastError ?? "<none>"}. Catalog: {session.LastThemeCatalog?.RequestId}." + Environment.NewLine
                 + $"Frames after the update: {seen.Count} ({string.Join(", ", seen.Distinct())})" + Environment.NewLine
                 + $"Last design tree: render {session.LastDesignTree?.RenderId}, ThemeSample instance "
-                + $"{session.LastDesignTree?.Nodes.FirstOrDefault(node => node.Name == \"ThemeSample\")?.InstanceId}" + Environment.NewLine
+                + $"{session.LastDesignTree?.Nodes.FirstOrDefault(node => node.Name == ThemeSampleName)?.InstanceId}" + Environment.NewLine
                 + string.Join(Environment.NewLine, hostMessages.TakeLast(30)), exception);
         }
         finally { session.FrameReceived -= OnFrame; }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -79,9 +79,12 @@ public sealed class UserLayoutStore : IUserLayoutStore
             return false;
         }
 
-        return name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
+        // The Windows rules apply on every system, so a layout name stays usable when the settings move.
+        return !name.Any(character => character < ' ' || PortableInvalidNameCharacters.Contains(character))
             && !name.EndsWith('.');
     }
+
+    private const string PortableInvalidNameCharacters = "<>:\"/\\|?*";
 
     public string GetPath(string name)
     {

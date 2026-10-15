@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -67,6 +67,7 @@ public sealed class FileExplorerEntryTests
     [Fact]
     public async Task DeleteReadOnlyFileReportsWriteProtectionInUiLanguage()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to delete a read-only file.");
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "locked.tmp");
         File.WriteAllText(path, "data");

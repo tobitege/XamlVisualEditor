@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Xunit;
 using XamlVisualEditor.Core;
@@ -16,7 +16,9 @@ public sealed class SharedFileReaderTests
         {
             using FileStream writer = new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
 
-            Assert.Throws<IOException>(() => File.ReadAllText(path));
+            // Only Windows enforces the share mode of the open handle against a plain read.
+            if (OperatingSystem.IsWindows())
+                Assert.Throws<IOException>(() => File.ReadAllText(path));
             Assert.Equal("{ \"Items\": [] }", SharedFileReader.ReadAllText(path));
         }
         finally

@@ -338,10 +338,13 @@ internal sealed class PreviewerLaunchService : IDisposable
             await process.StandardInput.WriteLineAsync(DesignerThemeProtocol.RequestPrefix + JsonSerializer.Serialize(request));
             await process.StandardInput.FlushAsync();
             // A host that does not confirm must not hold back the document update; the load then reports the theme state.
-            await completion.Task.WaitAsync(ThemeConfirmationTimeout);
+            DesignerThemeResult result = await completion.Task.WaitAsync(ThemeConfirmationTimeout);
+            instance.Log?.Invoke("Info", $"Previewer applied theme request {request.RequestId}"
+                + (result.Error is { } error ? $": {error}" : string.Empty));
         }
         catch (TimeoutException)
         {
+            instance.Log?.Invoke("Warning", $"Previewer did not confirm theme request {request.RequestId} within {ThemeConfirmationTimeout.TotalSeconds:0} s");
         }
         finally
         {

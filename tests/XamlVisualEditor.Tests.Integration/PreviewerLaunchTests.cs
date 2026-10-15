@@ -87,6 +87,7 @@ public sealed class PreviewerLaunchTests
         Assert.Same(firstProcess, results[1].Process);
 
         PreviewerTcpSession firstSession = GetSession(previewerService, xamlFilePath);
+        PreviewerTcpSession CurrentSession() => GetSession(previewerService, xamlFilePath);
         await WaitForFrameAsync(firstSession);
         DesignerHostSnapshot snapshot = await WaitForDesignTreeAsync(firstSession, renderId);
         var rootNode = Assert.Single(snapshot.Nodes, node => node.NodeId == rootId);
@@ -118,7 +119,7 @@ public sealed class PreviewerLaunchTests
                 $"Name=\"PreviewRoot\" editor:DesignPreviewSettings.ThemeVariant=\"{theme}\"", StringComparison.Ordinal);
             (byte red, byte green, byte blue) = theme == "Light"
                 ? ((byte)0xEE, (byte)0xF4, (byte)0xFA) : ((byte)0x10, (byte)0x20, (byte)0x30);
-            await AssertThemeFrameAsync(firstSession,
+            await AssertThemeFrameAsync(() => firstSession,
                 () => previewerService.SendUpdateXamlAsync(xamlFilePath, themedXaml, workspace, null), red, green, blue, hostMessages);
             Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
             Assert.False(firstProcess.HasExited);
@@ -144,7 +145,7 @@ public sealed class PreviewerLaunchTests
                 string prepared = renderer.PrepareXaml(document, themeVariant: theme);
                 (byte red, byte green, byte blue) = theme == Avalonia.Styling.ThemeVariant.Light
                     ? ((byte)0xEE, (byte)0xF4, (byte)0xFA) : ((byte)0x10, (byte)0x20, (byte)0x30);
-                await AssertThemeFrameAsync(firstSession,
+                await AssertThemeFrameAsync(() => firstSession,
                     () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null), red, green, blue, hostMessages);
                 DesignerHostSnapshot previewTree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
                 DesignerHostNode previewNode = Assert.Single(previewTree.Nodes);
@@ -220,51 +221,50 @@ public sealed class PreviewerLaunchTests
                     "clay" => ((byte)0xC0, (byte)0x80, (byte)0x50),
                     _ => ((byte)0x33, (byte)0x44, (byte)0x55)
                 };
-                await AssertThemeFrameAsync(firstSession,
+                await AssertThemeFrameAsync(CurrentSession,
                     () => previewerService.SendUpdateXamlAsync(xamlFilePath, prepared, workspace, null, themeRequest: request), red, green, blue, hostMessages);
-                DesignerHostSnapshot tree = await WaitForDesignTreeAsync(firstSession, PreparedRenderId(prepared));
+                DesignerHostSnapshot tree = await WaitForDesignTreeAsync(CurrentSession(), PreparedRenderId(prepared));
                 DesignerHostNode sample = Assert.Single(tree.Nodes, node => node.Name == "ThemeSample");
                 Assert.Equal(160, sample.Width);
                 Assert.Equal(80, sample.Height);
                 Assert.NotNull(sample.Layout);
                 Assert.True(sample.IsVisible);
-                DesignerThemeCatalog catalog = Assert.IsType<DesignerThemeCatalog>(firstSession.LastThemeCatalog);
+                DesignerThemeCatalog catalog = Assert.IsType<DesignerThemeCatalog>(CurrentSession().LastThemeCatalog);
                 Assert.Equal(request.RequestId, catalog.RequestId);
                 Assert.Equal(new[] { "harbor", "clay" }, Assert.Single(catalog.Providers).Themes.Select(theme => theme.Id));
                 Assert.Equal(original, new XamlVisualEditor.Xaml.Serialization.XamlSerializationService().Serialize(previewDocument));
-                Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
-                Assert.False(firstProcess.HasExited);
             }
         }
+        // A different theme replaces a host that already applied one.
+        Assert.NotSame(firstSession, CurrentSession());
         DesignerThemeProviderRegistration unavailable = provider with
         {
             Id = "missing.provider", Name = "Missing", AssemblyPath = Path.Combine(Path.GetDirectoryName(provider.AssemblyPath)!, "MissingThemeProvider.dll")
         };
         DesignerThemeRequest partialRequest = new(Guid.NewGuid(), new[] { unavailable, provider }, new(provider.Id, "harbor"));
         string partialPreview = renderer.PrepareXaml(themedDocument, themeRequest: partialRequest);
-        await AssertThemeFrameAsync(firstSession,
+        await AssertThemeFrameAsync(CurrentSession,
             () => previewerService.SendUpdateXamlAsync(xamlFilePath, partialPreview, workspace, null, themeRequest: partialRequest), 0x12, 0x34, 0x56, hostMessages);
-        Assert.NotNull(Assert.Single(firstSession.LastThemeCatalog!.Providers, item => item.Id == unavailable.Id).Error);
-        Assert.Null(firstSession.LastError);
+        Assert.NotNull(Assert.Single(CurrentSession().LastThemeCatalog!.Providers, item => item.Id == unavailable.Id).Error);
+        Assert.Null(CurrentSession().LastError);
 
         DesignerThemeRequest rejectedRequest = partialRequest with { RequestId = Guid.NewGuid(), Selection = new(unavailable.Id, "saved-theme") };
         TaskCompletionSource<string> rejected = new(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnRejected(PreviewerErrorInfo error) => rejected.TrySetResult(error.Message);
-        firstSession.ErrorReceived += OnRejected;
+        previewerService.PreviewerErrorReceived += OnRejected;
         try
         {
             await previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: rejectedRequest), workspace, null,
                 themeRequest: rejectedRequest);
             Assert.Contains("Missing", await rejected.Task.WaitAsync(TimeSpan.FromSeconds(20)), StringComparison.Ordinal);
         }
-        finally { firstSession.ErrorReceived -= OnRejected; }
+        finally { previewerService.PreviewerErrorReceived -= OnRejected; }
         DesignerThemeRequest recoveredRequest = partialRequest with { RequestId = Guid.NewGuid(), Selection = null };
-        await AssertThemeFrameAsync(firstSession,
+        await AssertThemeFrameAsync(CurrentSession,
             () => previewerService.SendUpdateXamlAsync(xamlFilePath, renderer.PrepareXaml(themedDocument, themeRequest: recoveredRequest), workspace, null,
                 themeRequest: recoveredRequest), 0x33, 0x44, 0x55, hostMessages);
-        Assert.Null(firstSession.LastError);
-        Assert.False(firstProcess.HasExited);
-        previewerService.StopPreviewer(xamlFilePath, firstProcess);
+        Assert.Null(CurrentSession().LastError);
+        previewerService.StopPreviewer(xamlFilePath);
 
         PreviewerLaunchResult restarted = await Start(workspace);
         Assert.True(restarted.Success, restarted.ErrorMessage);
@@ -366,7 +366,7 @@ public sealed class PreviewerLaunchTests
 
     private const string ThemeSampleName = "ThemeSample";
 
-    private static async Task AssertThemeFrameAsync(PreviewerTcpSession session, Func<Task> update,
+    private static async Task AssertThemeFrameAsync(Func<PreviewerTcpSession> currentSession, Func<Task> update,
         byte red, byte green, byte blue, IEnumerable<string> hostMessages)
     {
         TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -381,10 +381,13 @@ public sealed class PreviewerLaunchTests
                 && frame.Data[pixel + 1] == green && frame.Data[pixel + 2] == red && frame.Data[pixel + 3] == 255)
                 ready.TrySetResult(true);
         }
+        // A theme change can replace the host, so the session is resolved after the update.
+        await update();
+        PreviewerTcpSession session = currentSession();
         session.FrameReceived += OnFrame;
         try
         {
-            await update();
+            if (session.LastFrame is { } latest) OnFrame(latest);
             await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
         }
         catch (TimeoutException exception)

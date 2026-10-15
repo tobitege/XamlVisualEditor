@@ -8807,7 +8807,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             await _previewerLaunchService.SendUpdateXamlAsync(document.FilePath, xaml, workspace,
                 (level, message) => LogOutput(level, message), workspacePath, document.PreviewThemeRequest);
-            if (!document.IsDisposed && ReferenceEquals(workspace, _workspace)) document.SetPreviewerLaunchError(null);
+            if (!document.IsDisposed && ReferenceEquals(workspace, _workspace))
+            {
+                document.SetPreviewerLaunchError(null);
+                // A theme change restarts the host with a new session.
+                if (_previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session)
+                    && !ReferenceEquals(session, document.PreviewerSession))
+                    document.PreviewerSession = session;
+            }
         }
         catch (Exception) when (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(workspace, _workspace))
         {

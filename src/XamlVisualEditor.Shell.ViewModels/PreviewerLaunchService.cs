@@ -228,12 +228,38 @@ internal sealed class PreviewerLaunchService : IDisposable
         DesignerThemeRequest? themeRequest = null)
     {
         PreviewerInstance? instance;
+        PreviewerInstance? replacement = null;
         lock (_gate)
         {
             if (!_instances.TryGetValue(xamlFilePath, out instance) || !ReferenceEquals(instance.Workspace, workspace)) return;
-            instance.XamlText = xamlText;
-            instance.ThemeRequest = themeRequest;
-            if (instance.Session is null) return;
+            // A host keeps the resources and theme variant a provider applied, and a later theme does not reliably
+            // reach the controls it creates on every platform; a different theme therefore starts a fresh host,
+            // which applies the theme before it loads the document.
+            if (instance.LastSentThemeRequestId is { } applied && applied != themeRequest?.RequestId)
+            {
+                replacement = new PreviewerInstance
+                {
+                    Workspace = instance.Workspace, WorkspacePath = instance.WorkspacePath, Log = instance.Log,
+                    XamlText = xamlText, ThemeRequest = themeRequest
+                };
+                _instances[xamlFilePath] = replacement;
+            }
+            else
+            {
+                instance.XamlText = xamlText;
+                instance.ThemeRequest = themeRequest;
+                if (instance.Session is null) return;
+            }
+        }
+
+        if (replacement is not null)
+        {
+            instance.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer restarted for another theme."));
+            DisposeInstance(instance);
+            _ = StartInstanceAsync(xamlFilePath, replacement, workspace, workspacePath ?? replacement.WorkspacePath, null, replacement.Log);
+            await replacement.Started.Task;
+            log?.Invoke("Info", "Previewer restarted for the selected theme");
+            return;
         }
 
         if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))

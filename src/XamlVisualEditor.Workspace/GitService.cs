@@ -1,6 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,10 +17,17 @@ namespace XamlVisualEditor.Workspace;
 public sealed class GitService : IGitService
 {
     private readonly ILogger<GitService> _logger;
+    private readonly GitProcessRunner _runner;
+    private readonly ConcurrentDictionary<string, string> _gitDirectories = new(FileSystemPathComparison.Comparer);
+    private int _versionChecked;
 
-    public GitService(ILogger<GitService>? logger = null)
+    /// <summary>Creates the service.</summary>
+    /// <param name="logger">Receives warnings about failing git commands and an outdated git version.</param>
+    /// <param name="options">The git executable and environment of the git processes; <see cref="GitProcessOptions.Default"/> when null.</param>
+    public GitService(ILogger<GitService>? logger = null, GitProcessOptions? options = null)
     {
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GitService>.Instance;
+        _runner = new GitProcessRunner(options ?? GitProcessOptions.Default);
     }
 
     public async Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default)
@@ -30,9 +38,10 @@ public sealed class GitService : IGitService
             return null;
         }
 
-        GitCommandResult result = await RunGitAsync(
+        GitProcessResult result = await RunGitAsync(
             workingDirectory,
             new[] { "rev-parse", "--show-toplevel" },
+            isReadOnly: true,
             ct,
             allowNonZeroExitCode: true);
         if (result.ExitCode != 0)
@@ -46,7 +55,11 @@ public sealed class GitService : IGitService
 
     public async Task<GitRepositoryStatus> GetStatusAsync(string repoPath, CancellationToken ct = default)
     {
-        GitCommandResult result = await RunGitAsync(repoPath, new[] { "status", "--porcelain=v1", "-b" }, ct);
+        GitProcessResult result = await RunGitAsync(
+            repoPath,
+            new[] { "--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal" },
+            isReadOnly: true,
+            ct);
         if (result.ExitCode != 0)
         {
             return new GitRepositoryStatus
@@ -58,13 +71,14 @@ public sealed class GitService : IGitService
             };
         }
 
-        return GitStatusParser.ParseStatus(repoPath, result.StandardOutput);
+        GitRepositoryOperation operation = await GetOperationAsync(repoPath, ct);
+        return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation);
     }
 
     public async Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default)
     {
         string[] args = BuildDiffArguments(request);
-        GitCommandResult result = await RunGitAsync(repoPath, args, ct, allowNonZeroExitCode: true);
+        GitProcessResult result = await RunGitAsync(repoPath, args, isReadOnly: true, ct, allowNonZeroExitCode: true);
         if (result.ExitCode > 1)
         {
             _logger.LogWarning("git diff failed: {Error}", result.StandardError);
@@ -87,7 +101,7 @@ public sealed class GitService : IGitService
 
         List<string> args = new() { "add", "--" };
         args.AddRange(paths);
-        await RunGitCheckedAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
     }
 
     public async Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
@@ -99,7 +113,7 @@ public sealed class GitService : IGitService
 
         List<string> args = new() { "reset", "-q", "--" };
         args.AddRange(paths);
-        await RunGitCheckedAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
     }
 
     public async Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
@@ -113,7 +127,7 @@ public sealed class GitService : IGitService
         // staged but not yet committed is never removed from disk.
         List<string> args = new() { "restore", "--worktree", "--" };
         args.AddRange(paths);
-        await RunGitCheckedAsync(repoPath, args, ct);
+        await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
     }
 
     public async Task CommitAsync(string repoPath, string message, CancellationToken ct = default)
@@ -123,17 +137,22 @@ public sealed class GitService : IGitService
             return;
         }
 
-        List<string> args = new() { "commit", "-m", message };
-        await RunGitCheckedAsync(repoPath, args, ct);
+        // Standard input carries the message as UTF-8 bytes and has no command line length limit.
+        await using Stream input = GitProcessRequest.Utf8Input(message);
+        await RunGitCheckedAsync(repoPath, new[] { "commit", "-F", "-" }, input, ct);
     }
 
     /// <summary>
     /// Runs a modifying git command and throws <see cref="InvalidOperationException"/> with git's error output
     /// when it exits with a non-zero code.
     /// </summary>
-    private async Task RunGitCheckedAsync(string workingDirectory, IReadOnlyList<string> args, CancellationToken ct)
+    private async Task RunGitCheckedAsync(
+        string workingDirectory,
+        IReadOnlyList<string> args,
+        Stream? standardInput,
+        CancellationToken ct)
     {
-        GitCommandResult result = await RunGitAsync(workingDirectory, args, ct);
+        GitProcessResult result = await RunGitAsync(workingDirectory, args, isReadOnly: false, ct, standardInput: standardInput);
         if (result.ExitCode == 0)
         {
             return;
@@ -148,6 +167,62 @@ public sealed class GitService : IGitService
         throw new InvalidOperationException(error.Length == 0
             ? $"git {args[0]} exited with code {result.ExitCode}."
             : error);
+    }
+
+    private async Task<GitRepositoryOperation> GetOperationAsync(string repoPath, CancellationToken ct)
+    {
+        string? gitDirectory = await GetGitDirectoryAsync(repoPath, ct);
+        return gitDirectory is null ? GitRepositoryOperation.None : DetectOperation(gitDirectory);
+    }
+
+    /// <summary>
+    /// Returns the git directory of the repository, which is a folder outside <c>.git</c> for linked worktrees.
+    /// </summary>
+    private async Task<string?> GetGitDirectoryAsync(string repoPath, CancellationToken ct)
+    {
+        if (_gitDirectories.TryGetValue(repoPath, out string? cached))
+        {
+            return cached;
+        }
+
+        GitProcessResult result = await RunGitAsync(
+            repoPath,
+            new[] { "rev-parse", "--absolute-git-dir" },
+            isReadOnly: true,
+            ct,
+            allowNonZeroExitCode: true);
+        string gitDirectory = result.StandardOutput.Trim();
+        if (result.ExitCode != 0 || gitDirectory.Length == 0)
+        {
+            return null;
+        }
+
+        gitDirectory = Path.GetFullPath(gitDirectory);
+        _gitDirectories[repoPath] = gitDirectory;
+        return gitDirectory;
+    }
+
+    internal static GitRepositoryOperation DetectOperation(string gitDirectory)
+    {
+        if (Directory.Exists(Path.Combine(gitDirectory, "rebase-merge"))
+            || Directory.Exists(Path.Combine(gitDirectory, "rebase-apply")))
+        {
+            return GitRepositoryOperation.Rebasing;
+        }
+
+        if (File.Exists(Path.Combine(gitDirectory, "MERGE_HEAD")))
+        {
+            return GitRepositoryOperation.Merging;
+        }
+
+        if (File.Exists(Path.Combine(gitDirectory, "CHERRY_PICK_HEAD")))
+        {
+            return GitRepositoryOperation.CherryPicking;
+        }
+
+        return File.Exists(Path.Combine(gitDirectory, "REVERT_HEAD"))
+            ? GitRepositoryOperation.Reverting
+            : GitRepositoryOperation.None;
     }
 
     private static string? ResolveWorkingDirectory(string path)
@@ -204,58 +279,28 @@ public sealed class GitService : IGitService
         return args.ToArray();
     }
 
-    private async Task<GitCommandResult> RunGitAsync(
+    private async Task<GitProcessResult> RunGitAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
+        bool isReadOnly,
         CancellationToken ct,
-        bool allowNonZeroExitCode = false)
+        bool allowNonZeroExitCode = false,
+        Stream? standardInput = null)
     {
-        ProcessStartInfo startInfo = new()
+        if (Interlocked.Exchange(ref _versionChecked, 1) == 0)
         {
-            FileName = "git",
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        // Paths are passed as literal file names; glob characters such as '[' or '*' in a file name
-        // must not widen a stage, unstage or discard to other files.
-        startInfo.Environment["GIT_LITERAL_PATHSPECS"] = "1";
-
-        foreach (string arg in args)
-        {
-            startInfo.ArgumentList.Add(arg);
+            await WarnIfOutdatedAsync(workingDirectory, ct);
         }
 
-        using Process process = new() { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.Start();
-
-        using CancellationTokenRegistration registration = ct.Register(() =>
-        {
-            try
+        GitProcessResult result = await _runner.RunAsync(
+            new GitProcessRequest
             {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-            }
-            catch (InvalidOperationException)
-            {
-            }
-        });
-
-        Task<string> outputTask = process.StandardOutput.ReadToEndAsync(ct);
-        Task<string> errorTask = process.StandardError.ReadToEndAsync(ct);
-
-        await Task.WhenAll(outputTask, errorTask, process.WaitForExitAsync(ct));
-
-        GitCommandResult result = new()
-        {
-            ExitCode = process.ExitCode,
-            StandardOutput = outputTask.Result,
-            StandardError = errorTask.Result
-        };
+                WorkingDirectory = workingDirectory,
+                Arguments = args,
+                IsReadOnly = isReadOnly,
+                StandardInput = standardInput
+            },
+            ct);
 
         if (!allowNonZeroExitCode && result.ExitCode != 0)
         {
@@ -265,12 +310,26 @@ public sealed class GitService : IGitService
         return result;
     }
 
-    private sealed class GitCommandResult
+    private async Task WarnIfOutdatedAsync(string workingDirectory, CancellationToken ct)
     {
-        public int ExitCode { get; init; }
-
-        public string StandardOutput { get; init; } = string.Empty;
-
-        public string StandardError { get; init; } = string.Empty;
+        try
+        {
+            GitProcessResult result = await _runner.RunAsync(
+                new GitProcessRequest { WorkingDirectory = workingDirectory, Arguments = new[] { "--version" }, IsReadOnly = true },
+                ct);
+            if (GitExecutableLocator.TryParseVersion(result.StandardOutput, out Version? version)
+                && version < GitExecutableLocator.MinimumVersion)
+            {
+                _logger.LogWarning(
+                    "git {Version} at {Path} is older than {MinimumVersion}; some git commands may fail.",
+                    version,
+                    _runner.ExecutablePath,
+                    GitExecutableLocator.MinimumVersion);
+            }
+        }
+        catch (Win32Exception)
+        {
+            // Git is missing; the command itself reports that.
+        }
     }
 }

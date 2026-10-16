@@ -23,6 +23,33 @@ public sealed class GitRepositoryStatus
     public string? ErrorMessage { get; init; }
 
     public required IReadOnlyList<GitFileChange> Changes { get; init; }
+
+    /// <summary>Gets the full commit id of HEAD, or null when the branch has no commit yet.</summary>
+    public string? HeadSha { get; init; }
+
+    /// <summary>
+    /// Gets whether HEAD points to a commit instead of a branch. <see cref="BranchName"/> then holds the abbreviated
+    /// commit id.
+    /// </summary>
+    public bool IsDetached { get; init; }
+
+    /// <summary>Gets whether the current branch has no commit yet.</summary>
+    public bool IsUnborn { get; init; }
+
+    /// <summary>Gets the merge, rebase, cherry-pick or revert that is in progress.</summary>
+    public GitRepositoryOperation Operation { get; init; }
+}
+
+/// <summary>
+/// An operation that stopped in the middle and waits to be continued or aborted.
+/// </summary>
+public enum GitRepositoryOperation
+{
+    None,
+    Merging,
+    Rebasing,
+    CherryPicking,
+    Reverting
 }
 
 /// <summary>
@@ -45,6 +72,43 @@ public sealed class GitFileChange
     public bool IsRenamed { get; init; }
 
     public bool IsCopied { get; init; }
+
+    /// <summary>Gets how the two sides of a merge conflict changed the file; <see cref="GitConflictKind.None"/> without conflict.</summary>
+    public GitConflictKind ConflictKind { get; init; }
+
+    /// <summary>Gets whether the file has an unresolved merge conflict.</summary>
+    public bool IsConflicted => ConflictKind != GitConflictKind.None;
+}
+
+/// <summary>
+/// The kind of an unresolved merge conflict, named after git's status codes from the view of the current branch
+/// ("us") and the merged commit ("them").
+/// </summary>
+public enum GitConflictKind
+{
+    /// <summary>The file has no conflict.</summary>
+    None,
+
+    /// <summary>Both sides deleted the file (DD).</summary>
+    BothDeleted,
+
+    /// <summary>The current branch added the file (AU).</summary>
+    AddedByUs,
+
+    /// <summary>The merged commit deleted the file (UD).</summary>
+    DeletedByThem,
+
+    /// <summary>The merged commit added the file (UA).</summary>
+    AddedByThem,
+
+    /// <summary>The current branch deleted the file (DU).</summary>
+    DeletedByUs,
+
+    /// <summary>Both sides added the file (AA).</summary>
+    BothAdded,
+
+    /// <summary>Both sides modified the file (UU).</summary>
+    BothModified
 }
 
 /// <summary>

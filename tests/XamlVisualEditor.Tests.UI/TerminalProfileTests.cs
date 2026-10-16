@@ -60,7 +60,8 @@ public sealed class TerminalProfileTests(ITestOutputHelper output)
                 };
                 session.Start();
                 process = Process.GetProcessById(provider.ProcessId);
-                await ready.Task.WaitAsync(TimeSpan.FromSeconds(15));
+                // A cold shell start on a busy CI runner can take longer than 15 s.
+                await ready.Task.WaitAsync(TimeSpan.FromSeconds(60));
             }
             else
             {

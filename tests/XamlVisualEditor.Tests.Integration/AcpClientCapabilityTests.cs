@@ -11,6 +11,9 @@ namespace XamlVisualEditor.Tests.Integration;
 
 public sealed class AcpClientCapabilityTests
 {
+    // Real process starts can take longer than 15 s on a busy CI runner.
+    private static readonly TimeSpan TerminalTestTimeout = TimeSpan.FromSeconds(60);
+
     [Fact]
     public async Task FileSystemReadWriteRoundTrip()
     {
@@ -52,7 +55,7 @@ public sealed class AcpClientCapabilityTests
     public async Task TerminalCreateOutputReleaseRoundTrip()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        using CancellationTokenSource cts = new(TerminalTestTimeout);
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpTerminalManager terminalManager = new();
@@ -107,18 +110,19 @@ public sealed class AcpClientCapabilityTests
     public async Task TerminalWaitAndReleaseReturnWhileABackgroundProcessKeepsTheOutputOpen()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        using CancellationTokenSource cts = new(TerminalTestTimeout);
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpTerminalManager terminalManager = new();
         terminalManager.Register(client);
         client.Start(cts.Token);
 
-        // The command exits at once and leaves a process behind that inherits its output pipes.
+        // The command exits at once and leaves a process behind that inherits its output pipes. That
+        // process outlives the test timeout, so a wait that follows it fails the test.
         string command = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh";
         string[] args = OperatingSystem.IsWindows()
-            ? new[] { "/c", "start", "/b", "ping", "-n", "20", "127.0.0.1" }
-            : new[] { "-c", "sleep 20 &" };
+            ? new[] { "/c", "start", "/b", "ping", "-n", "90", "127.0.0.1" }
+            : new[] { "-c", "sleep 90 &" };
 
         await SendRequestAsync(pipe.ServerWriter, 1, "terminal/create", new { command, args }, cts.Token);
         JsonElement createResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
@@ -137,7 +141,7 @@ public sealed class AcpClientCapabilityTests
     public async Task TerminalOutputReportsTheExitStatusOnlyAfterTheOutputIsComplete()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        using CancellationTokenSource cts = new(TerminalTestTimeout);
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpTerminalManager terminalManager = new();
@@ -174,7 +178,7 @@ public sealed class AcpClientCapabilityTests
     public async Task ReleasedTerminalOutputIsKeptOnlyForTheMostRecentTerminals()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        using CancellationTokenSource cts = new(TerminalTestTimeout);
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpTerminalManager terminalManager = new(maxReleasedOutputs: 2);

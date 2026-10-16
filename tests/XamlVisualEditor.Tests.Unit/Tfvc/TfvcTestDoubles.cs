@@ -118,10 +118,14 @@ internal sealed class FakeTfvcClient : ITfvcClient
     /// <summary>When set, a check-out waits for this task before it completes.</summary>
     public TaskCompletionSource? CheckOutGate { get; set; }
 
+    /// <summary>Raised when a check-out starts, with the checked out paths.</summary>
+    public event Action<IReadOnlyList<string>>? CheckOutStarted;
+
     public async Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken)
     {
         CheckOuts.Add(localPaths);
         CheckOutRecursion.Add(recursive);
+        CheckOutStarted?.Invoke(localPaths);
         if (CheckOutGate is { } gate)
         {
             await gate.Task;
@@ -146,16 +150,12 @@ internal sealed class FakeTfvcClient : ITfvcClient
     public Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
     {
         Adds.Add(localPaths);
-        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+        return AddFailure is null
+            ? Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty))
+            : Task.FromException<TfCommandResult>(AddFailure);
     }
 
-    public List<IReadOnlyList<string>> FolderAdds { get; } = new();
-
-    public Task<TfCommandResult> AddFoldersAsync(TfvcWorkspace workspace, IReadOnlyList<string> localFolders, CancellationToken cancellationToken)
-    {
-        FolderAdds.Add(localFolders);
-        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
-    }
+    public Exception? AddFailure { get; set; }
 
     public List<IReadOnlyList<string>> Deletes { get; } = new();
 
@@ -169,7 +169,7 @@ internal sealed class FakeTfvcClient : ITfvcClient
 
     public List<string> LocalChangeScopes { get; } = new();
 
-    public Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(TfvcWorkspace workspace, string localFolder, CancellationToken cancellationToken)
+    public Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(string localFolder, CancellationToken cancellationToken)
     {
         LocalChangeScopes.Add(localFolder);
         return Task.FromResult<IReadOnlyCollection<string>>(LocalChangeCandidates.ToArray());
@@ -181,10 +181,15 @@ internal sealed class FakeTfvcClient : ITfvcClient
         return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
     }
 
+    /// <summary>Gets or sets whether a check-in call with an item list reports a too long command line.</summary>
+    public bool RejectCheckInItemLists { get; set; }
+
     public Task<TfCommandResult> CheckInAsync(TfvcWorkspace workspace, string comment, IReadOnlyList<string> itemSpecs, CancellationToken cancellationToken)
     {
         CheckIns.Add((comment, itemSpecs));
-        return Task.FromResult(new TfCommandResult(0, CheckInOutput, string.Empty));
+        return RejectCheckInItemLists && itemSpecs.Count > 0
+            ? Task.FromException<TfCommandResult>(new TfCommandLineTooLongException())
+            : Task.FromResult(new TfCommandResult(0, CheckInOutput, string.Empty));
     }
 
     public List<(string Name, string? Comment, IReadOnlyList<string> Items)> Shelves { get; } = new();
@@ -254,6 +259,30 @@ internal sealed class FakeTfvcServerClient : ITfvcServerClient
         ItemRequests.Add(serverPath);
         bool isFolder = Children.ContainsKey(serverPath);
         return Task.FromResult(ExistingItems.Contains(serverPath) || isFolder ? new TfvcServerItem(serverPath, isFolder, 10, null) : null);
+    }
+
+    public List<string> RecursiveItemRequests { get; } = new();
+
+    public Exception? RecursiveItemsFailure { get; set; }
+
+    public Task<IReadOnlyList<TfvcServerItem>> GetItemsRecursiveAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
+    {
+        RecursiveItemRequests.Add(serverPath);
+        if (RecursiveItemsFailure is not null)
+        {
+            return Task.FromException<IReadOnlyList<TfvcServerItem>>(RecursiveItemsFailure);
+        }
+
+        List<TfvcServerItem> items = new();
+        foreach (string path in ExistingItems)
+        {
+            if (TfvcWorkspace.IsSameOrChildServerPath(path, TfvcWorkspace.NormalizeServerPath(serverPath)))
+            {
+                items.Add(new TfvcServerItem(path, Children.ContainsKey(path), 10, null));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<TfvcServerItem>>(items);
     }
 
     public List<TfvcChangesetInfo> History { get; } = new();
@@ -345,6 +374,37 @@ internal sealed class NullExtensionLogger : IExtensionLogger
 
     public void Error(string message, Exception? exception = null)
     {
+    }
+}
+
+internal sealed class RecordingExtensionLogger : IExtensionLogger
+{
+    private readonly object _gate = new();
+    private readonly List<string> _entries = new();
+
+    public IReadOnlyList<string> Entries
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.ToArray();
+            }
+        }
+    }
+
+    public void Info(string message) => Add(message);
+
+    public void Warn(string message) => Add(message);
+
+    public void Error(string message, Exception? exception = null) => Add(message);
+
+    private void Add(string message)
+    {
+        lock (_gate)
+        {
+            _entries.Add(message);
+        }
     }
 }
 
@@ -483,6 +543,17 @@ internal sealed class FakeEditorServices : IEditorServices
 
         ActiveDocument = document;
         ActiveDocumentChanged?.Invoke(this, new EditorActiveDocumentChangedEventArgs { Document = document });
+    }
+
+    /// <summary>Closes a document; closing the active document leaves no active document.</summary>
+    public void Close(IEditorDocument document)
+    {
+        _documents.Remove(document);
+        if (ReferenceEquals(ActiveDocument, document))
+        {
+            ActiveDocument = null;
+            ActiveDocumentChanged?.Invoke(this, new EditorActiveDocumentChangedEventArgs { Document = null });
+        }
     }
 
     public IReadOnlyList<IEditorDocument> GetOpenDocuments() => _documents;

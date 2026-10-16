@@ -12,7 +12,7 @@ namespace XamlVisualEditor.TfvcExtension.Services;
 
 /// <summary>
 /// Switches TFVC between online and offline work: offers offline work when the server is unreachable at startup,
-/// returns to offline work when going online fails, and lets the user pend local changes once after going online.
+/// returns to offline work when going online fails, and lets the user pend local changes after going online.
 /// </summary>
 public sealed class TfvcOfflineCoordinator : IDisposable
 {
@@ -41,11 +41,19 @@ public sealed class TfvcOfflineCoordinator : IDisposable
     }
 
     /// <summary>
-    /// Runs after the session initialization: offers offline work when the connection failed, and proposes the files
-    /// made writable during an earlier offline session when the connection succeeded.
+    /// Runs after the session initialization: offers offline work when the server could not be reached, reports a
+    /// missing tf.exe, and proposes the files made writable during an earlier offline session when the connection
+    /// succeeded.
     /// </summary>
     public async Task HandleInitializedAsync(CancellationToken cancellationToken)
     {
+        // Offline work does not help without tf.exe; going online again would fail the same way.
+        if (_session.Settings.IsConfigured && _session.ConnectionFailed && _session.TfExeMissing)
+        {
+            await _window.ShowErrorMessageAsync(TfvcStrings.TfExeNotFound, CancellationToken.None);
+            return;
+        }
+
         if (_session.Settings.IsConfigured && _session.ConnectionFailed)
         {
             string message = string.Format(
@@ -92,9 +100,10 @@ public sealed class TfvcOfflineCoordinator : IDisposable
     }
 
     /// <summary>
-    /// Lists the local changes without pending change once after going online and pends the ones the user selects.
-    /// Afterwards the offline edit records are forgotten: a change the user did not take stays a local change that
-    /// has to be pended by hand.
+    /// Lists the local changes without pending change after going online and pends the ones the user selects.
+    /// The offline edit records are forgotten once the selection is pended or the user applies the dialog with changes
+    /// left unselected; a change the user did not take then stays a local change that has to be pended by hand. A
+    /// cancelled dialog or a failed pend keeps the records, so the next time going online proposes them again.
     /// </summary>
     public async Task ReconcileAsync(CancellationToken cancellationToken)
     {
@@ -106,18 +115,18 @@ public sealed class TfvcOfflineCoordinator : IDisposable
         try
         {
             IReadOnlyList<TfvcOfflineChange> changes = await _session.RunBusyAsync(() => _reconciler.DetectAsync(cancellationToken));
-            try
+            if (changes.Count > 0)
             {
-                if (changes.Count == 0)
-                {
-                    return;
-                }
-
                 IReadOnlyList<TfvcOfflineChange>? selected = await _dialogHost.ShowDialogAsync<IReadOnlyList<TfvcOfflineChange>>(
                     TfvcReconcileDialogViewModel.DIALOG_ID,
                     new TfvcReconcileDialogViewModel(changes),
                     cancellationToken);
-                if (selected is { Count: > 0 })
+                if (selected is null)
+                {
+                    return;
+                }
+
+                if (selected.Count > 0)
                 {
                     await _session.RunBusyAsync(async () =>
                     {
@@ -126,10 +135,8 @@ public sealed class TfvcOfflineCoordinator : IDisposable
                     });
                 }
             }
-            finally
-            {
-                await _session.ForgetOfflineEditsAsync([.. _session.OfflineEdits], CancellationToken.None);
-            }
+
+            await _session.ForgetOfflineEditsAsync([.. _session.OfflineEdits], CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

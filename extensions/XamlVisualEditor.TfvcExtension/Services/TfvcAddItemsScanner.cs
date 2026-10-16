@@ -19,8 +19,8 @@ public sealed record TfvcAddEntry(string LocalPath, bool IsFolder, DateTime Modi
 /// </summary>
 /// <remarks>
 /// One <c>tf reconcile /promote /preview</c> of the start folder lists every unversioned item that version control
-/// does not ignore; the folders are then browsed from that result. A changed versioned file appears like an added one,
-/// so listed files are checked against the server.
+/// does not ignore. A changed versioned file appears like an added one, so one recursive server query of the start
+/// folder removes the versioned items. The folders are then browsed from that result.
 /// </remarks>
 public sealed class TfvcAddItemsScanner
 {
@@ -43,9 +43,13 @@ public sealed class TfvcAddItemsScanner
     public async Task ScanAsync(CancellationToken cancellationToken)
     {
         _candidates.Clear();
-        foreach (string path in await _session.Client.PreviewLocalChangesAsync(_workspace, RootFolder, cancellationToken))
+        IReadOnlyCollection<string> listed = await _session.Client.PreviewLocalChangesAsync(RootFolder, cancellationToken);
+        HashSet<string> versioned = await GetVersionedServerPathsAsync(cancellationToken);
+        foreach (string path in listed)
         {
-            if ((File.Exists(path) || Directory.Exists(path)) && _session.FindPendingChangeByLocalPath(path) is null)
+            if ((File.Exists(path) || Directory.Exists(path))
+                && _session.FindPendingChangeByLocalPath(path) is null
+                && !(_workspace.TryGetServerPath(path) is { } serverPath && versioned.Contains(serverPath)))
             {
                 _candidates.Add(Path.TrimEndingDirectorySeparator(path));
             }
@@ -55,11 +59,14 @@ public sealed class TfvcAddItemsScanner
     /// <summary>Gets the server path a local folder maps to.</summary>
     public string? GetServerPath(string localFolder) => _workspace.TryGetServerPath(localFolder);
 
+    /// <summary>Gets whether a path is an item to add itself, not only a folder that holds items to add.</summary>
+    public bool IsCandidate(string localPath) => _candidates.Contains(Path.TrimEndingDirectorySeparator(localPath));
+
     /// <summary>
     /// Lists the entries directly in a folder: unversioned files, and folders that are unversioned or hold unversioned
     /// items.
     /// </summary>
-    public async Task<IReadOnlyList<TfvcAddEntry>> ListAsync(string folder, CancellationToken cancellationToken)
+    public IReadOnlyList<TfvcAddEntry> List(string folder)
     {
         string prefix = Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar;
         HashSet<string> folders = new(StringComparer.OrdinalIgnoreCase);
@@ -90,22 +97,60 @@ public sealed class TfvcAddItemsScanner
         List<TfvcAddEntry> entries = new();
         foreach (string path in folders)
         {
-            entries.Add(new TfvcAddEntry(path, true, Directory.GetLastWriteTime(path), null));
+            entries.Add(CreateEntry(path));
         }
 
-        string? collectionUrl = _session.Settings.CollectionUrl;
         foreach (string path in files)
         {
-            if (collectionUrl is not null && _workspace.TryGetServerPath(path) is { } serverPath
-                && await _session.Server.GetItemAsync(collectionUrl, serverPath, cancellationToken) is not null)
-            {
-                continue;
-            }
-
-            FileInfo info = new(path);
-            entries.Add(new TfvcAddEntry(path, false, info.LastWriteTime, info.Length));
+            entries.Add(CreateEntry(path));
         }
 
         return entries;
+    }
+
+    /// <summary>Lists the items to add below a folder at any depth, the folder itself excluded.</summary>
+    public IReadOnlyList<TfvcAddEntry> ListCandidatesBelow(string folder)
+    {
+        string prefix = Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar;
+        List<TfvcAddEntry> entries = new();
+        foreach (string candidate in _candidates)
+        {
+            if (candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                entries.Add(CreateEntry(candidate));
+            }
+        }
+
+        return entries;
+    }
+
+    /// <summary>Describes a local file or folder.</summary>
+    public static TfvcAddEntry CreateEntry(string localPath)
+    {
+        if (Directory.Exists(localPath))
+        {
+            return new TfvcAddEntry(localPath, true, Directory.GetLastWriteTime(localPath), null);
+        }
+
+        FileInfo info = new(localPath);
+        return new TfvcAddEntry(localPath, false, info.LastWriteTime, info.Length);
+    }
+
+    private async Task<HashSet<string>> GetVersionedServerPathsAsync(CancellationToken cancellationToken)
+    {
+        HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
+        string? collectionUrl = _session.Settings.CollectionUrl;
+        string? rootServerPath = _workspace.TryGetServerPath(RootFolder);
+        if (collectionUrl is null || rootServerPath is null)
+        {
+            return paths;
+        }
+
+        foreach (TfvcServerItem item in await _session.Server.GetItemsRecursiveAsync(collectionUrl, rootServerPath, cancellationToken))
+        {
+            paths.Add(item.ServerPath);
+        }
+
+        return paths;
     }
 }

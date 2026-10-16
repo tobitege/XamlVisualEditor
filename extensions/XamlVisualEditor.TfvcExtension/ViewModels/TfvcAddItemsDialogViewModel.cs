@@ -6,8 +6,6 @@ using System.Globalization;
 using System.IO;
 using System.Reactive;
 using System.Reactive.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.TfvcExtension.Localization;
@@ -18,6 +16,10 @@ namespace XamlVisualEditor.TfvcExtension.ViewModels;
 /// <summary>
 /// Browses the unversioned items below a mapped folder and returns the ones to add to version control.
 /// </summary>
+/// <remarks>
+/// Checking a folder checks every item to add below it, and clearing it clears them; a folder shows as checked while
+/// all of them are checked. The result lists only items to add, each on its own, so a cleared item stays out.
+/// </remarks>
 public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
 {
     /// <summary>Dialog id registered with the dialog host.</summary>
@@ -34,14 +36,14 @@ public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
         _getIcon = getIcon;
         CurrentFolder = scanner.RootFolder;
 
-        UpCommand = ReactiveCommand.CreateFromTask(
-            ct => ShowFolderAsync(Path.GetDirectoryName(CurrentFolder) ?? CurrentFolder, ct),
+        UpCommand = ReactiveCommand.Create(
+            () => ShowFolder(Path.GetDirectoryName(CurrentFolder) ?? CurrentFolder),
             this.WhenAnyValue(x => x.CanGoUp));
-        OpenSelectedCommand = ReactiveCommand.CreateFromTask(async ct =>
+        OpenSelectedCommand = ReactiveCommand.Create(() =>
         {
             if (SelectedItem is { Entry.IsFolder: true } folder)
             {
-                await ShowFolderAsync(folder.Entry.LocalPath, ct);
+                ShowFolder(folder.Entry.LocalPath);
             }
             else if (SelectedItem is { } file)
             {
@@ -49,7 +51,7 @@ public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
             }
         });
         FinishCommand = ReactiveCommand.CreateFromTask(
-            async () => { await CloseInteraction.Handle([.. _selected.Values]); },
+            async () => { await CloseInteraction.Handle(GetSelection()); },
             this.WhenAnyValue(x => x.SelectedCount).Select(count => count > 0));
         CancelCommand = ReactiveCommand.CreateFromTask(async () => { await CloseInteraction.Handle(null); });
     }
@@ -97,9 +99,9 @@ public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
     public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     /// <summary>Shows a folder inside the scanned folder.</summary>
-    public async Task ShowFolderAsync(string folder, CancellationToken cancellationToken)
+    public void ShowFolder(string folder)
     {
-        IReadOnlyList<TfvcAddEntry> entries = await _scanner.ListAsync(folder, cancellationToken);
+        IReadOnlyList<TfvcAddEntry> entries = _scanner.List(folder);
         CurrentFolder = Path.TrimEndingDirectorySeparator(folder);
         TargetServerFolder = _scanner.GetServerPath(CurrentFolder);
         CanGoUp = !string.Equals(CurrentFolder, _scanner.RootFolder, StringComparison.OrdinalIgnoreCase);
@@ -110,7 +112,8 @@ public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
             : StringComparer.OrdinalIgnoreCase.Compare(left.LocalPath, right.LocalPath));
         foreach (TfvcAddEntry entry in sorted)
         {
-            TfvcAddItemViewModel item = new(entry, _getIcon(entry.LocalPath, entry.IsFolder), _selected.ContainsKey(entry.LocalPath));
+            bool isSelected = entry.IsFolder ? IsFolderSelected(entry.LocalPath) : _selected.ContainsKey(entry.LocalPath);
+            TfvcAddItemViewModel item = new(entry, _getIcon(entry.LocalPath, entry.IsFolder), isSelected);
             item.WhenAnyValue(x => x.IsSelected).Skip(1).Subscribe(selected => OnSelectionChanged(entry, selected));
             Items.Add(item);
         }
@@ -118,15 +121,62 @@ public sealed partial class TfvcAddItemsDialogViewModel : ReactiveObject
         IsEmpty = Items.Count == 0;
     }
 
+    /// <summary>Gets the items to add, sorted by path.</summary>
+    internal IReadOnlyList<TfvcAddEntry> GetSelection()
+    {
+        List<TfvcAddEntry> selected = [.. _selected.Values];
+        selected.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.LocalPath, right.LocalPath));
+        return selected;
+    }
+
+    private bool IsFolderSelected(string folder)
+    {
+        IReadOnlyList<TfvcAddEntry> below = _scanner.ListCandidatesBelow(folder);
+        bool isCandidate = _scanner.IsCandidate(folder);
+        if (below.Count == 0 && !isCandidate)
+        {
+            return false;
+        }
+
+        if (isCandidate && !_selected.ContainsKey(folder))
+        {
+            return false;
+        }
+
+        foreach (TfvcAddEntry entry in below)
+        {
+            if (!_selected.ContainsKey(entry.LocalPath))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void OnSelectionChanged(TfvcAddEntry entry, bool selected)
     {
-        if (selected)
+        List<TfvcAddEntry> affected = new();
+        if (!entry.IsFolder || _scanner.IsCandidate(entry.LocalPath))
         {
-            _selected[entry.LocalPath] = entry;
+            affected.Add(entry);
         }
-        else
+
+        if (entry.IsFolder)
         {
-            _selected.Remove(entry.LocalPath);
+            affected.AddRange(_scanner.ListCandidatesBelow(entry.LocalPath));
+        }
+
+        foreach (TfvcAddEntry item in affected)
+        {
+            if (selected)
+            {
+                _selected[item.LocalPath] = item;
+            }
+            else
+            {
+                _selected.Remove(item.LocalPath);
+            }
         }
 
         SelectedCount = _selected.Count;

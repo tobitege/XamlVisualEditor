@@ -45,15 +45,23 @@ public sealed class TfCommandRunner : ITfCommandRunner
 
     private readonly ITfExeLocator _locator;
     private readonly IExtensionLogger? _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly Encoding _outputEncoding;
 
     /// <summary>Creates the runner.</summary>
     /// <param name="locator">Locates tf.exe.</param>
     /// <param name="logger">Receives one entry per finished command with exit code, duration and working directory.</param>
     public TfCommandRunner(ITfExeLocator locator, IExtensionLogger? logger = null)
+        : this(locator, logger, TimeProvider.System)
+    {
+    }
+
+    /// <summary>Creates the runner with the clock that starts the command timeouts.</summary>
+    internal TfCommandRunner(ITfExeLocator locator, IExtensionLogger? logger, TimeProvider timeProvider)
     {
         _locator = locator;
         _logger = logger;
+        _timeProvider = timeProvider;
         _outputEncoding = CreateOutputEncoding();
     }
 
@@ -80,8 +88,6 @@ public sealed class TfCommandRunner : ITfCommandRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = true,
-            StandardOutputEncoding = _outputEncoding,
-            StandardErrorEncoding = _outputEncoding,
             CreateNoWindow = true,
             WorkingDirectory = Directory.Exists(workingDirectory)
                 ? workingDirectory
@@ -104,16 +110,16 @@ public sealed class TfCommandRunner : ITfCommandRunner
         }
 
         using (process)
-        using (CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        using (CancellationTokenSource timeoutSource = new(timeout, _timeProvider))
+        using (CancellationTokenSource runSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token))
         {
-            timeoutSource.CancelAfter(timeout);
             process.StandardInput.Close();
             Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
-                Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutSource.Token);
-                Task<string> stderrTask = process.StandardError.ReadToEndAsync(timeoutSource.Token);
-                await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
+                Task<string> stdoutTask = ReadOutputAsync(process.StandardOutput.BaseStream, _outputEncoding, runSource.Token);
+                Task<string> stderrTask = ReadOutputAsync(process.StandardError.BaseStream, _outputEncoding, runSource.Token);
+                await process.WaitForExitAsync(runSource.Token).ConfigureAwait(false);
                 TfCommandResult result = new(process.ExitCode, await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false));
                 LogResult(arguments, startInfo.WorkingDirectory, result, stopwatch.ElapsedMilliseconds);
                 return result;
@@ -180,6 +186,13 @@ public sealed class TfCommandRunner : ITfCommandRunner
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         return Encoding.GetEncoding(0);
+    }
+
+    /// <summary>Decodes one output stream of tf.exe; a Unicode byte order mark overrides the given encoding.</summary>
+    internal static async Task<string> ReadOutputAsync(Stream stream, Encoding encoding, CancellationToken cancellationToken)
+    {
+        using StreamReader reader = new(stream, encoding, detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static void TryKill(Process process)

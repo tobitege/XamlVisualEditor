@@ -28,6 +28,10 @@ public sealed record TfvcWorkItemViewModel(int Id, string Label);
 /// <summary>View model of the pending changes panel: comment, related work items, included and excluded changes.</summary>
 public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposable
 {
+    private const int MAX_SHELVESET_NAME_LENGTH = 64;
+
+    private const string INVALID_SHELVESET_NAME_CHARACTERS = "\"/\\:<>|*?;&";
+
     private readonly TfvcSession _session;
     private readonly TfvcAutoCheckOutService _autoCheckOut;
     private readonly IEditorServices _editor;
@@ -397,11 +401,23 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
             }
             catch (TfCommandLineTooLongException) when (_session.ExcludedServerPaths.Count == 0)
             {
-                // Without exclusions, checking in the whole workspace is the same change set.
+                // Without an item list tf checks in every pending change of the workspace. That equals the displayed list
+                // only while no change was pended since the list was loaded.
+                if (!await IsWorkspaceUnchangedAsync(collectionUrl, workspace, included, cancellationToken))
+                {
+                    OperationMessage = TfvcStrings.PendingChangesChangedCheckInCancelled;
+                    return;
+                }
+
                 result = await _session.Client.CheckInAsync(workspace, comment, Array.Empty<string>(), cancellationToken);
             }
 
             int? changesetId = TfvcOutputParser.TryParseChangesetId(result.CombinedOutput);
+            if (changesetId is null && WorkItems.Count > 0)
+            {
+                changesetId = await FindCheckedInChangesetAsync(collectionUrl, included, cancellationToken);
+            }
+
             List<string> messages = new()
             {
                 changesetId is null
@@ -409,32 +425,105 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
                     : string.Format(CultureInfo.CurrentCulture, TfvcStrings.CheckedInFormat, changesetId.Value)
             };
 
-            if (changesetId is not null)
+            Comment = null;
+            if (changesetId is null)
             {
-                foreach (TfvcWorkItemViewModel workItem in WorkItems)
+                // The work items stay in the list, so the user can link them by hand.
+                if (WorkItems.Count > 0)
                 {
-                    try
-                    {
-                        await _session.Server.LinkChangesetAsync(collectionUrl, workItem.Id, changesetId.Value, cancellationToken);
-                    }
-                    catch (TfvcServerException ex)
-                    {
-                        messages.Add(string.Format(CultureInfo.CurrentCulture, TfvcStrings.WorkItemLinkFailedFormat, workItem.Id, ex.Message));
-                    }
+                    messages.Add(TfvcStrings.ChangesetNotDeterminedWorkItemsKept);
+                }
+
+                OperationMessage = string.Join(Environment.NewLine, messages);
+                return;
+            }
+
+            foreach (TfvcWorkItemViewModel workItem in WorkItems)
+            {
+                try
+                {
+                    await _session.Server.LinkChangesetAsync(collectionUrl, workItem.Id, changesetId.Value, cancellationToken);
+                }
+                catch (TfvcServerException ex)
+                {
+                    messages.Add(string.Format(CultureInfo.CurrentCulture, TfvcStrings.WorkItemLinkFailedFormat, workItem.Id, ex.Message));
                 }
             }
 
-            Comment = null;
             WorkItems.Clear();
             OperationMessage = string.Join(Environment.NewLine, messages);
         }, cancellationToken);
     }
 
+    // The summary line of tf checkin is localized and recognized in English and German only. Otherwise the newest
+    // changeset of a checked-in item counts when the current user authored it and it contains one of the items.
+    private async Task<int?> FindCheckedInChangesetAsync(
+        string collectionUrl,
+        IReadOnlyList<TfvcPendingChange> checkedIn,
+        CancellationToken cancellationToken)
+    {
+        TfvcPendingChange? probe = null;
+        foreach (TfvcPendingChange change in checkedIn)
+        {
+            if (!change.HasChangeType("delete"))
+            {
+                probe = change;
+                break;
+            }
+        }
+
+        if (probe is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            IReadOnlyList<TfvcChangesetInfo> latest = await _session.Server.GetChangesetsAsync(
+                collectionUrl, probe.ServerPath, author: null, skip: 0, top: 1, cancellationToken);
+            string? userId = await _session.Server.GetCurrentUserIdAsync(collectionUrl, cancellationToken);
+            if (latest.Count == 0 || userId is null || latest[0].AuthorId is null
+                || !string.Equals(latest[0].AuthorId, userId, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            HashSet<string> checkedInPaths = new(ToServerPaths(checkedIn), StringComparer.OrdinalIgnoreCase);
+            foreach (TfvcChangesetChange change in await _session.Server.GetChangesetChangesAsync(collectionUrl, latest[0].Id, cancellationToken))
+            {
+                if (checkedInPaths.Contains(change.ServerPath))
+                {
+                    return latest[0].Id;
+                }
+            }
+
+            return null;
+        }
+        catch (TfvcServerException)
+        {
+            return null;
+        }
+    }
+
+    // Compares the pending changes of the workspace, queried now, with the displayed list.
+    private async Task<bool> IsWorkspaceUnchangedAsync(
+        string collectionUrl,
+        TfvcWorkspace workspace,
+        IReadOnlyList<TfvcPendingChange> displayed,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<TfvcPendingChange> current = await _session.Client.GetPendingChangesAsync(collectionUrl, workspace, cancellationToken);
+        HashSet<string> displayedPaths = new(ToServerPaths(displayed), StringComparer.OrdinalIgnoreCase);
+        HashSet<string> currentPaths = new(ToServerPaths(current), StringComparer.OrdinalIgnoreCase);
+        return displayedPaths.SetEquals(currentPaths);
+    }
+
     private async Task ShelveAsync(CancellationToken cancellationToken)
     {
         TfvcWorkspace? workspace = _session.CurrentWorkspace;
+        string? collectionUrl = _session.Settings.CollectionUrl;
         IReadOnlyList<TfvcPendingChange> included = GetIncludedChanges();
-        if (workspace is null || included.Count == 0)
+        if (workspace is null || collectionUrl is null || included.Count == 0)
         {
             return;
         }
@@ -448,6 +537,12 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         }
 
         string shelvesetName = name.Trim();
+        if (!IsValidShelvesetName(shelvesetName))
+        {
+            OperationMessage = string.Format(CultureInfo.CurrentCulture, TfvcStrings.ShelvesetNameInvalidFormat, shelvesetName);
+            return;
+        }
+
         await RunOperationAsync(async () =>
         {
             string? comment = Comment?.Trim();
@@ -457,12 +552,41 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
             }
             catch (TfCommandLineTooLongException) when (_session.ExcludedServerPaths.Count == 0)
             {
-                // Without exclusions, shelving the whole workspace is the same set of changes.
+                // Without an item list tf shelves every pending change of the workspace. That equals the displayed list
+                // only while no change was pended since the list was loaded.
+                if (!await IsWorkspaceUnchangedAsync(collectionUrl, workspace, included, cancellationToken))
+                {
+                    OperationMessage = TfvcStrings.PendingChangesChangedShelveCancelled;
+                    return;
+                }
+
                 await _session.Client.ShelveAsync(workspace, shelvesetName, comment, Array.Empty<string>(), cancellationToken);
             }
 
             OperationMessage = string.Format(CultureInfo.CurrentCulture, TfvcStrings.ShelvedFormat, shelvesetName);
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gets whether tf.exe accepts a name as shelveset name: at most 64 characters, none of <c>" / \ : &lt; &gt; | * ? ; &amp;</c>
+    /// or control characters, and no leading '-' or '@', which tf.exe reads as an option or a command file.
+    /// </summary>
+    internal static bool IsValidShelvesetName(string name)
+    {
+        if (name.Length == 0 || name.Length > MAX_SHELVESET_NAME_LENGTH || name[0] is '-' or '@')
+        {
+            return false;
+        }
+
+        foreach (char character in name)
+        {
+            if (char.IsControl(character) || INVALID_SHELVESET_NAME_CHARACTERS.Contains(character, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private async Task UndoAsync(IReadOnlyList<TfvcPendingChange>? changes)

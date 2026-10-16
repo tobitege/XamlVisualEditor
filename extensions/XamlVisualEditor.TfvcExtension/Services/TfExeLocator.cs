@@ -7,7 +7,10 @@ namespace XamlVisualEditor.TfvcExtension.Services;
 /// <summary>Locates tf.exe.</summary>
 public interface ITfExeLocator
 {
-    /// <summary>Returns the configured path when it exists, otherwise the newest detected installation, or null.</summary>
+    /// <summary>
+    /// Returns the configured path when one is set and the file exists, or null when the configured file does not exist.
+    /// Without a configured path it returns the newest detected installation, or null when none is found.
+    /// </summary>
     string? Locate(string? configuredPath);
 }
 

@@ -22,6 +22,9 @@ public interface ITfvcServerClient
     /// <summary>Gets one item, or null when it does not exist.</summary>
     Task<TfvcServerItem?> GetItemAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken);
 
+    /// <summary>Lists an item and every item below it in one request; empty when the item does not exist.</summary>
+    Task<IReadOnlyList<TfvcServerItem>> GetItemsRecursiveAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken);
+
     /// <summary>Gets a page of the history of an item, newest changeset first.</summary>
     /// <param name="collectionUrl">Project collection URL.</param>
     /// <param name="serverPath">Server path of the item.</param>
@@ -135,6 +138,14 @@ public sealed class TfvcServerClient : ITfvcServerClient, IDisposable
         }
 
         return null;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TfvcServerItem>> GetItemsRecursiveAsync(string collectionUrl, string serverPath, CancellationToken cancellationToken)
+    {
+        string url = BuildItemsUrl(collectionUrl, TfvcWorkspace.NormalizeServerPath(serverPath), "Full");
+        using JsonDocument? document = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+        return document is null ? Array.Empty<TfvcServerItem>() : ReadItems(document.RootElement);
     }
 
     /// <inheritdoc />

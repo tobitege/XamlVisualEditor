@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -16,9 +17,11 @@ namespace XamlVisualEditor.TfvcExtension.Services;
 /// <remarks>
 /// The version control state of a document is determined as soon as it becomes the active document,
 /// before the user can change it: mapping, pending change (tf status) and server existence.
-/// The first text change of a versioned document without pending change then checks the file out.
+/// The first text change of a versioned document without pending edit then checks the file out; a pending
+/// change without edit, such as a rename, branch or merge, leaves the file read-only, so it is checked out too.
 /// A text change that leaves the content equal to the file on disk (for example a reload) does not
-/// count as modification.
+/// count as modification. A failed state lookup is kept for the retry delay, so typing does not start a
+/// tf.exe call per change.
 /// </remarks>
 public sealed class TfvcAutoCheckOutService : IDisposable
 {
@@ -31,6 +34,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     private readonly Func<string, string?> _readFile;
     private readonly TimeSpan _retryDelay;
     private readonly Dictionary<string, Task<TfvcFileState>> _states = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _failedStateTimestamps = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _checkOutsInProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _failedCheckOuts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _declinedOfflineEdits = new(StringComparer.OrdinalIgnoreCase);
@@ -74,6 +78,18 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     /// <summary>Gets whether the state of the active document is being determined.</summary>
     public bool IsCheckingActiveDocument { get; private set; }
 
+    /// <summary>Gets the number of changes that wait for the state of their document.</summary>
+    internal int DeferredChangeCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _deferredChanges.Count;
+            }
+        }
+    }
+
     /// <summary>Starts to observe the editor.</summary>
     public void Start()
     {
@@ -90,7 +106,10 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         _ = UpdateActiveDocumentStateAsync(_editor.ActiveDocument?.FilePath);
     }
 
-    /// <summary>Determines the version control state of a local file; results are cached until the pending changes change.</summary>
+    /// <summary>
+    /// Determines the version control state of a local file; results are cached until the pending changes change,
+    /// a failed lookup for the retry delay.
+    /// </summary>
     public Task<TfvcFileState> GetStateAsync(string localPath, CancellationToken cancellationToken)
     {
         if (_session.IsOffline)
@@ -109,12 +128,14 @@ public sealed class TfvcAutoCheckOutService : IDisposable
 
         lock (_gate)
         {
-            if (_states.TryGetValue(localPath, out Task<TfvcFileState>? cached) && !cached.IsFaulted && !cached.IsCanceled)
+            if (_states.TryGetValue(localPath, out Task<TfvcFileState>? cached) && !cached.IsCanceled
+                && (!cached.IsFaulted || IsWithinRetryDelay(localPath)))
             {
                 return cached;
             }
 
-            Task<TfvcFileState> evaluation = EvaluateAsync(localPath, cancellationToken);
+            _failedStateTimestamps.Remove(localPath);
+            Task<TfvcFileState> evaluation = EvaluateAndRecordFailureAsync(localPath, cancellationToken);
             _states[localPath] = evaluation;
             return evaluation;
         }
@@ -124,7 +145,9 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     public async Task HandleDocumentChangedAsync(IEditorDocument document, CancellationToken cancellationToken)
     {
         string path = document.FilePath;
-        if (string.IsNullOrWhiteSpace(path))
+
+        // Without a collection URL no state can become known, so the change is not kept for later.
+        if (string.IsNullOrWhiteSpace(path) || !_session.Settings.IsConfigured)
         {
             return;
         }
@@ -144,7 +167,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         }
 
         // While the state is unknown or cannot be determined, for example while the session connects, the change is
-        // handled again once the state of the document is known.
+        // handled again once the state of the document is known. A failed lookup is logged where it happens.
         TfvcFileState state;
         try
         {
@@ -153,7 +176,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             DeferChange(path, document);
-            throw;
+            return;
         }
 
         if (state.Kind == TfvcFileStateKind.Unknown)
@@ -162,7 +185,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             return;
         }
 
-        if (state.Kind != TfvcFileStateKind.CheckedIn || state.Workspace is null)
+        if (!NeedsCheckOut(state) || state.Workspace is null)
         {
             return;
         }
@@ -224,6 +247,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         lock (_gate)
         {
             _states.Remove(localPath);
+            _failedStateTimestamps.Remove(localPath);
             _failedCheckOuts.Remove(localPath);
         }
     }
@@ -239,6 +263,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
                 if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 {
                     _states.Remove(path);
+                    _failedStateTimestamps.Remove(path);
                 }
             }
 
@@ -268,6 +293,46 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         }
 
         _documentHandlers.Clear();
+    }
+
+    // A checked-in file and a pending change without edit (rename, branch, merge, undelete, lock and others) are read-only
+    // in a server workspace; tf checkout adds the edit. Added files are writable and a deleted file cannot be edited.
+    private static bool NeedsCheckOut(TfvcFileState state)
+    {
+        return state.Kind switch
+        {
+            TfvcFileStateKind.CheckedIn => true,
+            TfvcFileStateKind.Pending => state.PendingChange is { } change
+                && !change.HasChangeType("edit")
+                && !change.HasChangeType("add")
+                && !change.HasChangeType("delete"),
+            _ => false
+        };
+    }
+
+    // Called with _gate held.
+    private bool IsWithinRetryDelay(string localPath)
+    {
+        return _failedStateTimestamps.TryGetValue(localPath, out long failedAt)
+            && Stopwatch.GetElapsedTime(failedAt) < _retryDelay;
+    }
+
+    private async Task<TfvcFileState> EvaluateAndRecordFailureAsync(string localPath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await EvaluateAsync(localPath, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            lock (_gate)
+            {
+                _failedStateTimestamps[localPath] = Stopwatch.GetTimestamp();
+            }
+
+            _logger.Error(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogStateLookupFailedFormat, localPath), ex);
+            throw;
+        }
     }
 
     private async Task<TfvcFileState> EvaluateAsync(string localPath, CancellationToken cancellationToken)
@@ -548,7 +613,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     }
 
     // A change made before the state of the active document was known checks the file out once the state is known
-    // to be checked in; any other known state discards the change.
+    // to need a check-out; any other known state discards the change.
     private void HandleDeferredChange(string path, TfvcFileState state)
     {
         if (state.Kind == TfvcFileStateKind.Unknown)
@@ -565,7 +630,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             }
         }
 
-        if (state.Kind == TfvcFileStateKind.CheckedIn && _documentHandlers.ContainsKey(document))
+        if (NeedsCheckOut(state) && _documentHandlers.ContainsKey(document))
         {
             OnDocumentChanged(document);
         }
@@ -588,6 +653,18 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         {
             document.Changed -= _documentHandlers[document];
             _documentHandlers.Remove(document);
+        }
+
+        // A closed document drops its waiting change, so the service keeps no reference to it.
+        lock (_gate)
+        {
+            foreach (KeyValuePair<string, IEditorDocument> entry in new List<KeyValuePair<string, IEditorDocument>>(_deferredChanges))
+            {
+                if (!open.Contains(entry.Value))
+                {
+                    _deferredChanges.Remove(entry.Key);
+                }
+            }
         }
 
         foreach (IEditorDocument document in openDocuments)
@@ -619,7 +696,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     {
         int generation = Interlocked.Increment(ref _stateGeneration);
         ActiveDocumentPath = path;
-        if (string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(path) || !_session.Settings.IsConfigured)
         {
             PublishActiveState(generation, TfvcFileState.Unknown, isChecking: false);
             return;
@@ -631,9 +708,9 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         {
             state = await GetStateAsync(path, CancellationToken.None);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.Error(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogStateLookupFailedFormat, path), ex);
+            // The lookup logged the failure.
             state = TfvcFileState.Unknown;
             if (allowRetry)
             {
@@ -670,7 +747,8 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         IsCheckingActiveDocument = isChecking;
         if (!isChecking && ActiveDocumentPath is { } path)
         {
-            // A connected workspace checks a versioned file out on its first edit; offline the user has to confirm.
+            // A connected workspace checks a versioned file out on its first edit, also when it has a pending change
+            // without edit; offline the user has to confirm.
             bool managed;
             lock (_gate)
             {

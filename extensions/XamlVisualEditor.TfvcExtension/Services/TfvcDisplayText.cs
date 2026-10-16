@@ -77,6 +77,10 @@ public static class TfvcDisplayText
         {
             TfExeNotFoundException => TfvcStrings.TfExeNotFound,
             TfCommandLineTooLongException => TfvcStrings.CommandLineTooLong,
+            TfvcWorkspaceFolderNotFoundException folder => string.Format(
+                CultureInfo.CurrentCulture,
+                TfvcStrings.WorkspaceFolderMissingFormat,
+                folder.WorkspaceName),
             TfCommandException command => string.Format(
                 CultureInfo.CurrentCulture,
                 TfvcStrings.CommandFailedFormat,

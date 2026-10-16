@@ -13,6 +13,8 @@ public sealed partial class DesignerDocumentViewModel
 {
     private DesignerThemeRequest? _previewThemeRequest;
     private DesignerThemeCatalog? _previewThemeCatalog;
+    // The choice added for a selection that no catalog has listed yet; a received catalog replaces it.
+    private DesignerThemeChoice? _pendingThemeChoice;
     private bool _updatingThemeChoices;
 
     public DesignerThemeRequest? PreviewThemeRequest
@@ -50,13 +52,50 @@ public sealed partial class DesignerDocumentViewModel
         PreviewThemeRequest = new(Guid.NewGuid(), PreviewThemeRequest?.Providers ?? Array.Empty<DesignerThemeProviderRegistration>(), selection);
         DesignSurface.HasPreviewThemeProviders = PreviewThemeRequest.Providers.Count > 0 || selection is not null;
         DesignerThemeChoice? choice = DesignSurface.PreviewThemes.FirstOrDefault(item => item.Selection == selection);
+        DesignerThemeChoice? replaced = null;
         if (choice is null)
         {
-            choice = new(selection, $"{selection!.ProviderId}/{selection.ThemeId}");
+            choice = CreateUncatalogedThemeChoice(selection!, !CanPreviewerReportThemes);
             DesignSurface.PreviewThemes.Add(choice);
+            replaced = _pendingThemeChoice;
+            _pendingThemeChoice = choice;
         }
         DesignSurface.SelectedPreviewTheme = choice;
+        if (replaced is not null) DesignSurface.PreviewThemes.Remove(replaced);
         if (selection is not null && activatePreviewer) UseExternalPreviewer = true;
+    }
+
+    /// <summary>
+    /// False once the previewer process ended or failed to start; until a previewer runs again, no catalog can list
+    /// the pending selection.
+    /// </summary>
+    private bool CanPreviewerReportThemes =>
+        PreviewerSession is { } session ? !session.IsClosed : _previewerLaunchDiagnostics.Count == 0;
+
+    private static DesignerThemeChoice CreateUncatalogedThemeChoice(DesignerThemeSelection selection, bool unavailable) =>
+        new(selection, string.Format(unavailable ? UiStrings.PreviewThemeUnavailable : UiStrings.PreviewThemePending, selection.ThemeId));
+
+    /// <summary>Relabels the selection that no catalog has listed yet when the previewer stops or runs again.</summary>
+    private void UpdatePendingThemeChoice()
+    {
+        if (_pendingThemeChoice is not { Selection: { } selection } pending) return;
+        int index = DesignSurface.PreviewThemes.IndexOf(pending);
+        if (index < 0)
+        {
+            _pendingThemeChoice = null;
+            return;
+        }
+        DesignerThemeChoice updated = CreateUncatalogedThemeChoice(selection, !CanPreviewerReportThemes);
+        if (updated == pending) return;
+        bool selected = DesignSurface.SelectedPreviewTheme == pending;
+        _pendingThemeChoice = updated;
+        _updatingThemeChoices = true;
+        try
+        {
+            DesignSurface.PreviewThemes[index] = updated;
+            if (selected) DesignSurface.SelectedPreviewTheme = updated;
+        }
+        finally { _updatingThemeChoices = false; }
     }
 
     private void InitializeDesignerThemes()
@@ -86,6 +125,7 @@ public sealed partial class DesignerDocumentViewModel
         if (catalog is null)
         {
             if (PreviewerSession is null) DesignSurface.HasPreviewThemeCatalog = false;
+            UpdatePendingThemeChoice();
             return;
         }
         if (catalog.RequestId != PreviewThemeRequest?.RequestId) return;
@@ -101,9 +141,10 @@ public sealed partial class DesignerDocumentViewModel
         DesignerThemeChoice? selected = choices.FirstOrDefault(choice => choice.Selection == selection);
         if (selected is null)
         {
-            selected = new(selection, string.Format(UiStrings.PreviewThemeUnavailable, $"{selection!.ProviderId}/{selection.ThemeId}"));
+            selected = CreateUncatalogedThemeChoice(selection!, unavailable: true);
             choices.Add(selected);
         }
+        _pendingThemeChoice = null;
         _updatingThemeChoices = true;
         try
         {

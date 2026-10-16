@@ -177,4 +177,9 @@ Work offline? Versioned files stay read-only; when you edit one, XVE asks whethe
   <data name="LogInitializationFailed" xml:space="preserve"><value>TFVC initialization failed.</value></data>
   <data name="TfCommandTimeoutFormat" xml:space="preserve"><value>tf {0} did not finish within {1} seconds.</value></data>
   <data name="HistoryOfflineStatus" xml:space="preserve"><value>Working offline. The history is available again after going online.</value></data>
+  <data name="WorkspaceFolderMissingFormat" xml:space="preserve"><value>No mapped folder of workspace {0} exists on this computer. Get the workspace or create a mapped folder first.</value></data>
+  <data name="ChangesetNotDeterminedWorkItemsKept" xml:space="preserve"><value>The changeset number could not be determined, so the work items were not linked. They stay in the list.</value></data>
+  <data name="PendingChangesChangedCheckInCancelled" xml:space="preserve"><value>The changes are too many for one tf.exe call, and the pending changes of the workspace differ from the displayed list. Nothing was checked in. Refresh the list and try again.</value></data>
+  <data name="PendingChangesChangedShelveCancelled" xml:space="preserve"><value>The changes are too many for one tf.exe call, and the pending changes of the workspace differ from the displayed list. No shelveset was created. Refresh the list and try again.</value></data>
+  <data name="ShelvesetNameInvalidFormat" xml:space="preserve"><value>"{0}" is not a valid shelveset name. A shelveset name has at most 64 characters, does not start with "-" or "@", and contains none of the characters " / \ : &lt; &gt; | * ? ;</value></data>
 </root>

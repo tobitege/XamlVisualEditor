@@ -112,7 +112,8 @@ public sealed class CollaborationExtension : IXveExtension
                 new ExtensionCommandPaletteContribution(JoinSessionCommandId, UiStrings.JoinCollaborationSession, UiStrings.Collaboration),
                 new ExtensionCommandPaletteContribution(LeaveSessionCommandId, UiStrings.LeaveCollaborationSession, UiStrings.Collaboration),
                 new ExtensionCommandPaletteContribution(ShareSessionCommandId, UiStrings.CopyCollaborationLink, UiStrings.Collaboration),
-                new ExtensionCommandPaletteContribution(InviteParticipantCommandId, UiStrings.InviteCollaborationParticipant, UiStrings.Collaboration)
+                new ExtensionCommandPaletteContribution(InviteParticipantCommandId, UiStrings.InviteCollaborationParticipant, UiStrings.Collaboration),
+                new ExtensionCommandPaletteContribution(ToggleCollaborationCommandId, UiStrings.ToggleCollaboration, UiStrings.View)
             }));
 
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(

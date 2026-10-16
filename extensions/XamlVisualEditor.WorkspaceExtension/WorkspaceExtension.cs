@@ -54,6 +54,7 @@ public sealed class WorkspaceExtension : IXveExtension
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly IWorkspaceInfo _workspaceInfo;
     private IWindow? _window;
+    private IWorkspaceModel? _workspaceModel;
 
     public WorkspaceExtension(
         IWorkspaceCommands workspaceCommands,
@@ -66,6 +67,7 @@ public sealed class WorkspaceExtension : IXveExtension
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
         _window = context.Window;
+        _workspaceModel = context.WorkspaceModel;
 
         context.Subscriptions.Add(context.Commands.Register(LoadCommandId, _ => LoadWorkspaceAsync()));
         context.Subscriptions.Add(context.Commands.Register(RestoreCommandId, _ =>
@@ -220,6 +222,18 @@ public sealed class WorkspaceExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             SetStartupProjectCommandId,
             new CommandMetadata(UiStrings.WorkspaceStartupProjectCommand, UiStrings.Workspace, When: "hasWorkspace", Priority: 230)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleBreakpointsCommandId,
+            new CommandMetadata(UiStrings.ToggleBreakpointsCommand, UiStrings.View, Priority: 240)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleCallStackCommandId,
+            new CommandMetadata(UiStrings.ToggleCallStackCommand, UiStrings.View, Priority: 250)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleLocalsCommandId,
+            new CommandMetadata(UiStrings.ToggleLocalsCommand, UiStrings.View, Priority: 260)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleWatchesCommandId,
+            new CommandMetadata(UiStrings.ToggleWatchesCommand, UiStrings.View, Priority: 270)));
     }
 
     private void RegisterMenuContributions(ExtensionContext context)
@@ -292,6 +306,23 @@ public sealed class WorkspaceExtension : IXveExtension
             new(BuildCommandId, UiStrings.BuildWorkspace, UiStrings.Workspace),
             new(RebuildCommandId, UiStrings.RebuildWorkspace, UiStrings.Workspace),
             new(CleanCommandId, UiStrings.CleanWorkspace, UiStrings.Workspace),
+            new(SetStartupProjectCommandId, UiStrings.WorkspaceStartupProjectCommand, UiStrings.Workspace),
+            new(UndoCommandId, UiStrings.EditUndoCommand, UiStrings.Edit),
+            new(RedoCommandId, UiStrings.EditRedoCommand, UiStrings.Edit),
+            new(CutCommandId, UiStrings.EditCutCommand, UiStrings.Edit),
+            new(CopyCommandId, UiStrings.EditCopyCommand, UiStrings.Edit),
+            new(PasteCommandId, UiStrings.EditPasteCommand, UiStrings.Edit),
+            new(DeleteCommandId, UiStrings.EditDeleteCommand, UiStrings.Edit),
+            new(SelectAllCommandId, UiStrings.EditSelectAllCommand, UiStrings.Edit),
+            new(RenameSymbolCommandId, UiStrings.NavigationRenameCommand, UiStrings.Navigation),
+            new(FormatDocumentCommandId, UiStrings.NavigationFormatCommand, UiStrings.Navigation),
+            new(CodeActionsCommandId, UiStrings.NavigationCodeActionsCommand, UiStrings.Navigation),
+            new(DocumentSymbolsCommandId, UiStrings.NavigationDocumentSymbolsCommand, UiStrings.Navigation),
+            new(WorkspaceSymbolsCommandId, UiStrings.NavigationWorkspaceSymbolsCommand, UiStrings.Navigation),
+            new(ToggleBreakpointsCommandId, UiStrings.ToggleBreakpoints, UiStrings.View),
+            new(ToggleCallStackCommandId, UiStrings.ToggleCallStack, UiStrings.View),
+            new(ToggleLocalsCommandId, UiStrings.ToggleLocals, UiStrings.View),
+            new(ToggleWatchesCommandId, UiStrings.ToggleWatches, UiStrings.View),
             new(StartDebugCommandId, UiStrings.DebugStartCommand, UiStrings.Debug),
             new(StopDebugCommandId, UiStrings.DebugStopCommand, UiStrings.Debug),
             new(ContinueDebugCommandId, UiStrings.DebugContinueCommand, UiStrings.Debug),
@@ -335,10 +366,12 @@ public sealed class WorkspaceExtension : IXveExtension
             return ShowNoWorkspaceAsync();
         }
 
-        if (args is null
-            || args.Count == 0
-            || args[0] is not string projectPath
-            || string.IsNullOrWhiteSpace(projectPath))
+        if (args is null || args.Count == 0)
+        {
+            return PickStartupProjectAsync();
+        }
+
+        if (args[0] is not string projectPath || string.IsNullOrWhiteSpace(projectPath))
         {
             return _window?.ShowWarningMessageAsync(UiStrings.StartupProjectPathRequired, CancellationToken.None)
                 ?? Task.CompletedTask;
@@ -346,6 +379,32 @@ public sealed class WorkspaceExtension : IXveExtension
 
         string? targetFramework = args.Count > 1 ? args[1]?.ToString() : null;
         return _workspaceCommands.SetStartupProjectAsync(projectPath, targetFramework, CancellationToken.None);
+    }
+
+    /// <summary>Lets the user pick the startup project from the workspace projects; the palette passes no project path.</summary>
+    private async Task PickStartupProjectAsync()
+    {
+        IReadOnlyList<WorkspaceProjectInfo> projects = _workspaceModel is null
+            ? Array.Empty<WorkspaceProjectInfo>()
+            : await _workspaceModel.GetProjectsAsync(CancellationToken.None);
+        if (_window is null) return;
+        if (projects.Count == 0)
+        {
+            await _window.ShowWarningMessageAsync(UiStrings.WorkspaceHasNoProjects, CancellationToken.None);
+            return;
+        }
+
+        QuickPickItem[] items = projects
+            .Select(project => new QuickPickItem(project.Name, project.TargetFramework, project.ProjectPath))
+            .ToArray();
+        QuickPickItem? choice = await _window.ShowQuickPickAsync(
+            items,
+            new QuickPickOptions(UiStrings.SetStartupProject, CanPickMany: false),
+            CancellationToken.None);
+        int index = choice is null ? -1 : Array.IndexOf(items, choice);
+        if (index < 0) return;
+        WorkspaceProjectInfo picked = projects[index];
+        await _workspaceCommands.SetStartupProjectAsync(picked.ProjectPath, picked.TargetFramework, CancellationToken.None);
     }
 
     private Task ShowNoWorkspaceAsync()

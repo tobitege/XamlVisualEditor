@@ -129,6 +129,33 @@ public sealed class ToolboxExtensionTests
     }
 
     [Fact]
+    public async Task InsertSelected_WithoutArguments_InsertsTheControlSelectedInTheToolbox()
+    {
+        CommandRegistry commands = new();
+        ExtensionContext context = CreateContext(commands, out StubDesignerHost designerHost, out InMemoryWindow window);
+        await context.Settings.UpdateAsync("toolbox.catalog", new List<ToolboxCatalogEntry>
+        {
+            new() { DisplayName = "Button", CommandId = "toolbox.insertSelected",
+                CommandArguments = new List<string> { "Button", "https://github.com/avaloniaui" } }
+        }, SettingsTarget.User, CancellationToken.None);
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("toolbox.insertSelected", null, CancellationToken.None);
+        Assert.Contains(UiStrings.ToolboxSelectionRequired, window.Messages);
+        Assert.Null(designerHost.LastTypeName);
+
+        ExtensionViewRegistry views = Assert.IsType<ExtensionViewRegistry>(context.Views);
+        Assert.True(views.TryGetCustomViewProvider("toolbox.panel", out ICustomViewProvider provider));
+        ToolboxPanelViewModel viewModel = Assert.IsType<ToolboxPanelViewModel>(provider.CreateViewModel());
+        viewModel.SelectedItem = Assert.Single(viewModel.Items);
+        await commands.ExecuteAsync("toolbox.insertSelected", null, CancellationToken.None);
+
+        Assert.Equal("Button", designerHost.LastTypeName);
+        Assert.Equal("https://github.com/avaloniaui", designerHost.LastXmlNamespace);
+        Assert.Null(designerHost.LastParentNodeId);
+    }
+
+    [Fact]
     public async Task InsertAvailabilityTracksTheDesignerDocumentWithOrWithoutAWorkspace()
     {
         RecordingCommands commands = new();

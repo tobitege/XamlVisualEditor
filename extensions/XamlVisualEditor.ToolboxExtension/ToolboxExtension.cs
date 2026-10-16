@@ -27,7 +27,7 @@ public sealed class ToolboxExtension : IXveExtension
 
         context.Subscriptions.Add(context.Commands.Register(InsertButtonCommandId, _ => InsertButtonAsync(context, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(InsertSelectedCommandId, commandContext =>
-            InsertSelectedAsync(context, commandContext, cancellationToken)));
+            InsertSelectedAsync(context, viewModel, commandContext, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(ToggleViewCommandId, _ =>
             context.ViewHost.ToggleAsync(ToolboxViewId, CancellationToken.None)));
         context.Subscriptions.Add(context.Commands.Register(ShowTaskCommandId, _ =>
@@ -149,21 +149,38 @@ public sealed class ToolboxExtension : IXveExtension
 
     private static async Task InsertSelectedAsync(
         ExtensionContext context,
+        ToolboxPanelViewModel viewModel,
         CommandContext commandContext,
         CancellationToken cancellationToken)
     {
         if (!await EnsureInsertTargetAsync(context, cancellationToken)) return;
-        if (!TryGetStringArg(commandContext.Arguments, 0, out string? typeName)
-            || !TryGetStringArg(commandContext.Arguments, 1, out string? xmlNamespace))
+        string? typeName;
+        string? xmlNamespace;
+        string? parentNodeId = null;
+        if (commandContext.Arguments is not { Count: > 0 })
+        {
+            // Without arguments, as from the palette or the menu, the command inserts the control selected in the toolbox.
+            if (viewModel.SelectedItem is not { CanDrag: true } selected)
+            {
+                await context.Window.ShowWarningMessageAsync(UiStrings.ToolboxSelectionRequired, cancellationToken);
+                return;
+            }
+
+            typeName = selected.TypeName;
+            xmlNamespace = selected.XmlNamespace;
+        }
+        else if (!TryGetStringArg(commandContext.Arguments, 0, out typeName)
+            || !TryGetStringArg(commandContext.Arguments, 1, out xmlNamespace))
         {
             await context.Window.ShowWarningMessageAsync(
                 UiStrings.ToolboxArgumentsRequired,
                 cancellationToken);
             return;
         }
-
-        string? parentNodeId = null;
-        _ = TryGetStringArg(commandContext.Arguments, 2, out parentNodeId);
+        else
+        {
+            _ = TryGetStringArg(commandContext.Arguments, 2, out parentNodeId);
+        }
 
         string? insertedNodeId = await context.Designer.InsertElementAsync(
             typeName!,

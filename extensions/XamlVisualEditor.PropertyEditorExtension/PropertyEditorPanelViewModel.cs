@@ -200,14 +200,20 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         get => _isMixed;
         internal set
         {
+            if (_isMixed == value) return;
             this.RaiseAndSetIfChanged(ref _isMixed, value);
             this.RaisePropertyChanged(nameof(ValueSourceDescription));
+            this.RaisePropertyChanged(nameof(ValuePlaceholder));
+            if (IsFlagsEnum) this.RaisePropertyChanged(nameof(FlagSummary));
         }
     }
 
+    /// <summary>The placeholder of the value field: the mixed-values text while <see cref="IsMixed" />, otherwise the default value.</summary>
+    public string? ValuePlaceholder => IsMixed ? UiStrings.MixedValuesPlaceholder : DefaultValue;
+
     internal bool CommittedHasLocalValue => _committedHasLocalValue;
     public IReadOnlyList<EnumFlagOptionViewModel> FlagOptions { get; }
-    public string FlagSummary => Value ?? DefaultValue ?? UiStrings.FlagsDefault;
+    public string FlagSummary => Value ?? (IsMixed ? UiStrings.MixedValuesPlaceholder : DefaultValue ?? UiStrings.FlagsDefault);
     public IReadOnlyList<string>? EnumOptions { get; }
     public IReadOnlyList<string>? BrushPresets { get; }
     public ReactiveCommand<string?, RxVoid> ApplyPresetCommand => _applyPresetCommand ??= ReactiveCommand.Create<string?>(preset =>

@@ -96,6 +96,26 @@ public sealed class WorkspaceExtensionTests
     }
 
     [Fact]
+    public async Task SetStartupProjectCommand_WithoutArguments_WarnsWhenTheWorkspaceHasNoProjects()
+    {
+        var commands = new CommandRegistry();
+        var contributions = new ExtensionContributionRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
+
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
+        await extension.ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("workspace.setStartupProject", null, CancellationToken.None);
+
+        Assert.Contains(XamlVisualEditor.Core.Localization.UiStrings.WorkspaceHasNoProjects, window.Messages);
+        Assert.DoesNotContain(XamlVisualEditor.Core.Localization.UiStrings.StartupProjectPathRequired, window.Messages);
+        Assert.Equal(0, workspaceCommands.SetStartupProjectCalls);
+    }
+
+    [Fact]
     public async Task NewTerminalCommand_IsRegistered_AndInvoked()
     {
         var commands = new CommandRegistry();

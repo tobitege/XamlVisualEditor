@@ -40,6 +40,12 @@ public sealed class SolutionExplorerExtension : IXveExtension
                     "views.left",
                     0)
             }));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleViewCommandId,
+            new CommandMetadata(Title: UiStrings.ToggleSolutionExplorerCommand, Category: UiStrings.View, Priority: 5)));
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            new[] { new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleSolutionExplorer, UiStrings.View) }));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             ViewId,
             new SolutionExplorerViewProvider(_solutionExplorerHost.PanelModel)));

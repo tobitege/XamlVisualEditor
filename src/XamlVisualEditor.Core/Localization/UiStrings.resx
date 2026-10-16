@@ -1299,4 +1299,33 @@
   <data name="FlagsDefault" xml:space="preserve"><value>Default</value></data>
   <data name="GridLengthUnitNeedsValidSize" xml:space="preserve"><value>Enter a valid grid size before changing its unit.</value></data>
   <data name="ValueSourceMixed" xml:space="preserve"><value>Mixed: the selected controls have different local values. Reset removes them from every selected control.</value></data>
+  <data name="MixedValuesPlaceholder" xml:space="preserve"><value>Mixed values</value></data>
+  <data name="ToggleAcpCommand" xml:space="preserve"><value>View: Toggle ACP</value></data>
+  <data name="ToggleAcp" xml:space="preserve"><value>Toggle ACP</value></data>
+  <data name="ToggleMcpCommand" xml:space="preserve"><value>View: Toggle MCP</value></data>
+  <data name="ToggleMcp" xml:space="preserve"><value>Toggle MCP</value></data>
+  <data name="ToggleSolutionExplorerCommand" xml:space="preserve"><value>View: Toggle Solution Explorer</value></data>
+  <data name="ToggleSolutionExplorer" xml:space="preserve"><value>Toggle Solution Explorer</value></data>
+  <data name="ToggleFileExplorerCommand" xml:space="preserve"><value>View: Toggle File Explorer</value></data>
+  <data name="ToggleFileExplorer" xml:space="preserve"><value>Toggle File Explorer</value></data>
+  <data name="ToggleOutputCommand" xml:space="preserve"><value>View: Toggle Output</value></data>
+  <data name="ToggleOutput" xml:space="preserve"><value>Toggle Output</value></data>
+  <data name="ToggleProblemsCommand" xml:space="preserve"><value>View: Toggle Problems</value></data>
+  <data name="ToggleProblems" xml:space="preserve"><value>Toggle Problems</value></data>
+  <data name="ToggleVisualTreeCommand" xml:space="preserve"><value>View: Toggle Visual Tree</value></data>
+  <data name="ToggleVisualTree" xml:space="preserve"><value>Toggle Visual Tree</value></data>
+  <data name="ToggleLogicalTreeCommand" xml:space="preserve"><value>View: Toggle Logical Tree</value></data>
+  <data name="ToggleLogicalTree" xml:space="preserve"><value>Toggle Logical Tree</value></data>
+  <data name="ToggleBreakpointsCommand" xml:space="preserve"><value>View: Toggle Breakpoints</value></data>
+  <data name="ToggleBreakpoints" xml:space="preserve"><value>Toggle Breakpoints</value></data>
+  <data name="ToggleCallStackCommand" xml:space="preserve"><value>View: Toggle Call Stack</value></data>
+  <data name="ToggleCallStack" xml:space="preserve"><value>Toggle Call Stack</value></data>
+  <data name="ToggleLocalsCommand" xml:space="preserve"><value>View: Toggle Locals</value></data>
+  <data name="ToggleLocals" xml:space="preserve"><value>Toggle Locals</value></data>
+  <data name="ToggleWatchesCommand" xml:space="preserve"><value>View: Toggle Watches</value></data>
+  <data name="ToggleWatches" xml:space="preserve"><value>Toggle Watches</value></data>
+  <data name="ToggleReferences" xml:space="preserve"><value>Toggle References</value></data>
+  <data name="ToggleCollaboration" xml:space="preserve"><value>Toggle Collaboration</value></data>
+  <data name="WorkspaceHasNoProjects" xml:space="preserve"><value>The workspace contains no projects.</value></data>
+  <data name="ToolboxSelectionRequired" xml:space="preserve"><value>No toolbox item selected. Select a control in the toolbox first.</value></data>
 </root>

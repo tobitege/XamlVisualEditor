@@ -82,21 +82,24 @@ public sealed class ShellFailureReportingTests : IDisposable
         }
     }
 
-    [AvaloniaFact(Timeout = 30000)]
-    public async Task Loading_a_workspace_without_build_outputs_drops_the_design_themes_of_the_previous_solution()
+    [AvaloniaTheory(Timeout = 30000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Loading_a_workspace_without_build_outputs_drops_the_design_themes_of_the_previous_solution(bool useSnapshot)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         string projectPath = Path.Combine(_root, "Unbuilt.csproj");
         await File.WriteAllTextAsync(projectPath, "<Project />", cancellationToken);
-        string snapshot = Path.Combine(_root, "missing-snapshot");
+        string output = Path.Combine(_root, useSnapshot ? "missing-snapshot" : "missing-output");
         WorkspaceModel workspace = new()
         {
             Projects = new[]
             {
                 new ProjectModel
                 {
-                    Name = "Unbuilt", ProjectPath = projectPath, AssemblySnapshotDirectory = snapshot,
-                    OutputAssemblyPath = Path.Combine(snapshot, "Unbuilt.dll"),
+                    Name = "Unbuilt", ProjectPath = projectPath,
+                    AssemblySnapshotDirectory = useSnapshot ? output : null,
+                    OutputAssemblyPath = Path.Combine(output, "Unbuilt.dll"),
                     XamlFiles = Array.Empty<XamlFileModel>(), Files = Array.Empty<ProjectFileModel>(),
                     References = Array.Empty<AssemblyReference>()
                 }

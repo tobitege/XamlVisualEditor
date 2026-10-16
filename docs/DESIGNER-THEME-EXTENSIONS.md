@@ -75,6 +75,14 @@ own theme.
 A theme that follows the options does not switch the document to the external
 previewer; an explicit pick does.
 
+Until the preview reports its catalog, the selector lists a selected theme by its ID
+with the note that it waits for the preview. Once the previewer exits or fails to
+start, the entry reads "Unavailable" until a previewer starts again; a catalog that
+does not offer the theme shows it the same way. When more than one provider is
+registered, or the selection names another provider than the registered one, the
+entry starts with the provider name, or with the provider ID when no registration
+names it, because two providers can offer the same theme ID.
+
 ## Lifecycle
 
 Install and enable the package through Extensions. XVE extracts its payload into

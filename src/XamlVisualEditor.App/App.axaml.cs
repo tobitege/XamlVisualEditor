@@ -70,6 +70,34 @@ public sealed class App : Application
     /// </summary>
     public static IServiceProvider? Services { get; private set; }
 
+    /// <summary>The built-in extensions in the order in which the host activates them.</summary>
+    internal static IReadOnlyList<Type> BuiltInExtensionTypes { get; } =
+    [
+        typeof(AcpExtensionEntry),
+        typeof(GitExtensionEntry),
+        typeof(TfvcExtensionEntry),
+        typeof(IdeBridgeExtensionEntry),
+        typeof(McpExtensionEntry),
+        typeof(VscodeCompatExtensionEntry),
+        typeof(DotNetTemplatesExtensionEntry),
+        typeof(FileExplorerExtensionEntry),
+        typeof(SolutionExplorerExtensionEntry),
+        typeof(ToolboxExtensionEntry),
+        typeof(PropertyEditorExtensionEntry),
+        typeof(OutputExtensionEntry),
+        typeof(NavigationExtensionEntry),
+        typeof(XamlEditorExtensionEntry),
+        typeof(TreeInspectorExtensionEntry),
+        typeof(AnimationEditorExtensionEntry),
+        typeof(CollaborationExtensionEntry),
+        typeof(DebugSettingsExtensionEntry),
+        typeof(LspSettingsExtensionEntry),
+        typeof(WorkspaceExtensionEntry),
+        typeof(TextEditingExtensionEntry),
+        typeof(DapDebuggingExtensionEntry),
+        typeof(DotNetSdkDebuggingExtensionEntry)
+    ];
+
     public override void Initialize()
     {
         var culture = System.Globalization.CultureInfo.GetCultureInfo(_editorOptions.Current.Language);
@@ -306,29 +334,10 @@ public sealed class App : Application
         services.AddSingleton<Func<string, IExtensionStorage>>(_ =>
             extensionId => new FileExtensionStorage(extensionId));
         services.AddSingleton<BuiltInExtensionHost>();
-        services.AddSingleton<IXveExtension, AcpExtensionEntry>();
-        services.AddSingleton<IXveExtension, GitExtensionEntry>();
-        services.AddSingleton<IXveExtension, TfvcExtensionEntry>();
-        services.AddSingleton<IXveExtension, IdeBridgeExtensionEntry>();
-        services.AddSingleton<IXveExtension, McpExtensionEntry>();
-        services.AddSingleton<IXveExtension, VscodeCompatExtensionEntry>();
-        services.AddSingleton<IXveExtension, DotNetTemplatesExtensionEntry>();
-        services.AddSingleton<IXveExtension, FileExplorerExtensionEntry>();
-        services.AddSingleton<IXveExtension, SolutionExplorerExtensionEntry>();
-        services.AddSingleton<IXveExtension, ToolboxExtensionEntry>();
-        services.AddSingleton<IXveExtension, PropertyEditorExtensionEntry>();
-        services.AddSingleton<IXveExtension, OutputExtensionEntry>();
-        services.AddSingleton<IXveExtension, NavigationExtensionEntry>();
-        services.AddSingleton<IXveExtension, XamlEditorExtensionEntry>();
-        services.AddSingleton<IXveExtension, TreeInspectorExtensionEntry>();
-        services.AddSingleton<IXveExtension, AnimationEditorExtensionEntry>();
-        services.AddSingleton<IXveExtension, CollaborationExtensionEntry>();
-        services.AddSingleton<IXveExtension, DebugSettingsExtensionEntry>();
-        services.AddSingleton<IXveExtension, LspSettingsExtensionEntry>();
-        services.AddSingleton<IXveExtension, WorkspaceExtensionEntry>();
-        services.AddSingleton<IXveExtension, TextEditingExtensionEntry>();
-        services.AddSingleton<IXveExtension, DapDebuggingExtensionEntry>();
-        services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();
+        foreach (Type extensionType in BuiltInExtensionTypes)
+        {
+            services.AddSingleton(typeof(IXveExtension), extensionType);
+        }
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
         services.AddSingleton(sp =>

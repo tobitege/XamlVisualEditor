@@ -77,7 +77,7 @@ public sealed class ToolboxExtension : IXveExtension
             ToggleViewCommandId,
             new CommandMetadata(
                 Title: UiStrings.ToggleToolboxCommand,
-                Category: UiStrings.Toolbox,
+                Category: UiStrings.View,
                 Priority: 80)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
@@ -87,7 +87,7 @@ public sealed class ToolboxExtension : IXveExtension
                 new ExtensionCommandPaletteContribution(InsertButtonCommandId, UiStrings.ToolboxInsertButton, UiStrings.Toolbox),
                 new ExtensionCommandPaletteContribution(InsertSelectedCommandId, UiStrings.ToolboxInsertSelected, UiStrings.Toolbox),
                 new ExtensionCommandPaletteContribution(ShowTaskCommandId, UiStrings.ToolboxShowLoadTask, UiStrings.Toolbox),
-                new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleToolbox, UiStrings.Toolbox)
+                new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleToolbox, UiStrings.View)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(

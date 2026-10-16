@@ -42,31 +42,38 @@ public sealed class HostServicesTests
     public async Task CommandRegistryKeepsTheReplacementWhenTheReplacedRegistrationIsDisposed()
     {
         var registry = new CommandRegistry();
-        Func<CommandContext, Task> handler = _ => Task.CompletedTask;
+        List<string> calls = new();
 
-        IDisposable replaced = registry.Register("test.command", handler);
-        using IDisposable current = registry.Register("test.command", handler);
-        replaced.Dispose();
-        replaced.Dispose();
-
+        IDisposable replaced = registry.Register("test.command", _ => { calls.Add("replaced"); return Task.CompletedTask; });
+        using IDisposable current = registry.Register("test.command", _ => { calls.Add("current"); return Task.CompletedTask; });
         await registry.ExecuteAsync("test.command", null, CancellationToken.None);
+        replaced.Dispose();
+        replaced.Dispose();
+        await registry.ExecuteAsync("test.command", null, CancellationToken.None);
+
+        Assert.Equal(new[] { "current", "current" }, calls);
+        current.Dispose();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.ExecuteAsync("test.command", null, CancellationToken.None));
     }
 
     [Fact]
     public void CommandMetadataRegistryKeepsTheReplacementWhenTheReplacedRegistrationIsDisposed()
     {
         var registry = new CommandMetadataRegistry();
-        CommandMetadata metadata = new(Title: "Title");
+        CommandMetadata replacedMetadata = new(Title: "Replaced");
+        CommandMetadata currentMetadata = new(Title: "Current");
         int changedCount = 0;
 
-        IDisposable replaced = registry.Register("test.command", metadata);
-        using IDisposable current = registry.Register("test.command", metadata);
+        IDisposable replaced = registry.Register("test.command", replacedMetadata);
+        using IDisposable current = registry.Register("test.command", currentMetadata);
         registry.Changed += (_, _) => changedCount++;
+        Assert.True(registry.TryGet("test.command", out CommandMetadata beforeDisposal));
+        Assert.Same(currentMetadata, beforeDisposal);
         replaced.Dispose();
         replaced.Dispose();
 
         Assert.True(registry.TryGet("test.command", out CommandMetadata stored));
-        Assert.Same(metadata, stored);
+        Assert.Same(currentMetadata, stored);
         Assert.Equal(0, changedCount);
         current.Dispose();
         Assert.False(registry.TryGet("test.command", out _));
@@ -77,15 +84,18 @@ public sealed class HostServicesTests
     public void ExtensionViewRegistryKeepsTheReplacementWhenTheReplacedRegistrationIsDisposed()
     {
         var registry = new ExtensionViewRegistry();
-        ICustomViewProvider provider = new NullCustomViewProvider();
+        ICustomViewProvider replacedProvider = new NullCustomViewProvider();
+        ICustomViewProvider currentProvider = new NullCustomViewProvider();
 
-        IDisposable replaced = registry.RegisterCustomViewProvider("test.view", provider);
-        using IDisposable current = registry.RegisterCustomViewProvider("test.view", provider);
+        IDisposable replaced = registry.RegisterCustomViewProvider("test.view", replacedProvider);
+        using IDisposable current = registry.RegisterCustomViewProvider("test.view", currentProvider);
+        Assert.True(registry.TryGetCustomViewProvider("test.view", out ICustomViewProvider beforeDisposal));
+        Assert.Same(currentProvider, beforeDisposal);
         replaced.Dispose();
         replaced.Dispose();
 
         Assert.True(registry.TryGetCustomViewProvider("test.view", out ICustomViewProvider stored));
-        Assert.Same(provider, stored);
+        Assert.Same(currentProvider, stored);
         current.Dispose();
         Assert.False(registry.TryGetCustomViewProvider("test.view", out _));
     }

@@ -250,6 +250,23 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     [Reactive]
     public partial PreviewerTcpSession? PreviewerSession { get; set; }
 
+    private PreviewerState _previewerState;
+
+    /// <summary>
+    /// Gets the state of the external previewer of this document. The shell sets it where it starts, stops or loses a
+    /// previewer; <see cref="PreviewerSession"/> may be null in every state, for example after a tab switch.
+    /// </summary>
+    public PreviewerState PreviewerState
+    {
+        get => _previewerState;
+        internal set
+        {
+            if (IsDisposed || _previewerState == value) return;
+            this.RaiseAndSetIfChanged(ref _previewerState, value);
+            UpdatePendingThemeChoice();
+        }
+    }
+
     /// <summary>
     /// Command to navigate to the selected control definition.
     /// </summary>
@@ -303,7 +320,11 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
             StartPreviewerCommand = start;
             _disposables.Add(start);
             _disposables.Add(start.ThrownExceptions.WitnessOn(RxSchedulers.MainThreadScheduler)
-                .Subscribe(error => SetPreviewerLaunchError(error.Message)));
+                .Subscribe(error =>
+                {
+                    SetPreviewerLaunchError(error.Message);
+                    PreviewerState = PreviewerState.Failed;
+                }));
             UseExternalPreviewer = _workspaceProvider?.Invoke() is { Projects.Count: > 0 };
         }
 
@@ -1278,6 +1299,27 @@ public enum DocumentViewMode
 
     /// <summary>Split view (design + code).</summary>
     Split
+}
+
+/// <summary>
+/// Specifies the state of the external previewer of a document.
+/// </summary>
+public enum PreviewerState
+{
+    /// <summary>No previewer was started, or the editor stopped it.</summary>
+    Stopped,
+
+    /// <summary>The editor is starting a previewer.</summary>
+    Starting,
+
+    /// <summary>A previewer process runs and has a session.</summary>
+    Running,
+
+    /// <summary>The previewer process ended without the editor stopping it.</summary>
+    Exited,
+
+    /// <summary>The previewer could not be started.</summary>
+    Failed
 }
 
 /// <summary>
@@ -3587,16 +3629,27 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     return;
                 }
 
-                doc.PreviewerSession = _previewerLaunchService.TryGetSession(doc.FilePath, out PreviewerTcpSession? session)
-                    ? session
-                    : null;
+                // Without a host the document keeps its state, so a previewer that exited stays reported as exited.
+                if (_previewerLaunchService.TryGetSession(doc.FilePath, out PreviewerTcpSession? session))
+                {
+                    doc.PreviewerSession = session;
+                    doc.PreviewerState = PreviewerState.Running;
+                }
+                else
+                {
+                    doc.PreviewerSession = null;
+                }
                 TrackPreviewerActivation(doc);
             });
         _disposables.Add(previewerSessionSubscription);
 
         _previewerLaunchService.PreviewerErrorReceived += OnPreviewerErrorReceived;
+        _previewerLaunchService.PreviewerExited += OnPreviewerExited;
         _disposables.Add(Disposable.Create(() =>
-            _previewerLaunchService.PreviewerErrorReceived -= OnPreviewerErrorReceived));
+        {
+            _previewerLaunchService.PreviewerErrorReceived -= OnPreviewerErrorReceived;
+            _previewerLaunchService.PreviewerExited -= OnPreviewerExited;
+        }));
 
         Debugger.DebugOutputReceived += OnDebugOutputReceived;
         Debugger.DebugStopped += OnDebugStopped;
@@ -8825,8 +8878,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     internal void ApplyPreviewerUpdateResult(DesignerDocumentViewModel document, PreviewerLaunchResult result)
     {
         bool hasSession = _previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session);
-        if (hasSession && !ReferenceEquals(session, document.PreviewerSession))
-            document.PreviewerSession = session;
+        if (hasSession)
+        {
+            if (!ReferenceEquals(session, document.PreviewerSession)) document.PreviewerSession = session;
+            document.PreviewerState = PreviewerState.Running;
+        }
         if (result.Success)
         {
             document.SetPreviewerLaunchError(null);
@@ -8837,6 +8893,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (!string.IsNullOrWhiteSpace(result.ErrorMessage)) LogOutput("Error", result.ErrorMessage);
         if (hasSession) return;
         document.PreviewerSession = null;
+        document.PreviewerState = PreviewerState.Failed;
         if (ReferenceEquals(ActiveDesignerDocument, document)) SetPersistentStatus(UiStrings.PreviewerStartFailed);
     }
 
@@ -8847,6 +8904,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return new XamlVisualEditor.Designer.Rendering.RuntimeDesignRenderer(metadata)
                 .PrepareXaml(ast, themeVariant: document.DesignSurface.PreviewThemeVariant, themeRequest: document.PreviewThemeRequest);
         return document.SyncEngine.CurrentText;
+    }
+
+    // Stopping a host the editor started is no exit; a previewer that had already exited or failed stays reported so.
+    private static void MarkPreviewerStopped(DesignerDocumentViewModel document)
+    {
+        if (document.PreviewerState is PreviewerState.Running or PreviewerState.Starting)
+            document.PreviewerState = PreviewerState.Stopped;
     }
 
     private bool IsWithinLivePreviewers(DesignerDocumentViewModel document)
@@ -8865,6 +8929,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             inactive.PreviewerSession = null;
             _previewerLaunchService.StopPreviewer(inactive.FilePath);
+            MarkPreviewerStopped(inactive);
         }
 
         if (document.UseExternalPreviewer && document.IsLoaded && document.PreviewerSession is null
@@ -8892,16 +8957,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (workspace is null)
         {
             document.SetPreviewerLaunchError(UiStrings.PreviewerNeedsProject);
+            document.PreviewerState = PreviewerState.Failed;
             return;
         }
 
+        document.PreviewerState = PreviewerState.Starting;
         if (!await EnsurePreviewerTrustAsync(document.FilePath))
         {
             if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = UiStrings.PreviewerStartCanceled;
+            MarkPreviewerStopped(document);
             return;
         }
 
-        if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace)) return;
+        if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace))
+        {
+            MarkPreviewerStopped(document);
+            return;
+        }
         string? xamlText = GetPreviewerXaml(document);
         PreviewerLaunchResult result = await _previewerLaunchService.StartPreviewerAsync(
             document.FilePath,
@@ -8916,6 +8988,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(_workspace, workspace))
         {
             if (result.Process is not null) _previewerLaunchService.StopPreviewer(document.FilePath, result.Process);
+            MarkPreviewerStopped(document);
             return;
         }
 
@@ -8925,12 +8998,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             if (_previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session))
             {
                 document.PreviewerSession = session;
+                document.PreviewerState = PreviewerState.Running;
+            }
+            else if (document.PreviewerState == PreviewerState.Starting)
+            {
+                // The host was released after the start returned and the editor did not stop it, so its process
+                // exited; OnPreviewerExited skips a document that is still starting.
+                document.PreviewerState = PreviewerState.Exited;
             }
             return;
         }
 
         if (ReferenceEquals(ActiveDesignerDocument, document)) SetPersistentStatus(UiStrings.PreviewerStartFailed);
         document.PreviewerSession = null;
+        document.PreviewerState = PreviewerState.Failed;
         document.SetPreviewerLaunchError(result.ErrorMessage ?? UiStrings.PreviewerStartFailedText);
         if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
         {
@@ -9029,6 +9110,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         doc.PreviewerSession = session;
+        doc.PreviewerState = PreviewerState.Running;
         try
         {
             Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await WaitForStableFrameAsync(session, timeoutMs, staleFrame);
@@ -9051,6 +9133,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             {
                 doc.PreviewerSession = null;
                 _previewerLaunchService.StopPreviewer(filePath, launch.Process);
+                MarkPreviewerStopped(doc);
             }
         }
     }
@@ -9263,6 +9346,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 Column = column,
                 Length = 1
             }, error.FilePath);
+        }, DispatcherPriority.Background);
+    }
+
+    // The exit arrives on a process thread. A start that began in the meantime reports its own result, and a host
+    // that already took over keeps the document running.
+    internal void OnPreviewerExited(string xamlFilePath)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_previewerLaunchService.TryGetSession(xamlFilePath, out _)) return;
+            foreach (DesignerDocumentViewModel document in Documents.OfType<DesignerDocumentViewModel>()
+                .Where(candidate => !candidate.IsDisposed && candidate.PreviewerState != PreviewerState.Starting
+                    && FileSystemPathComparison.Equals(candidate.FilePath, xamlFilePath)).ToList())
+                document.PreviewerState = PreviewerState.Exited;
         }, DispatcherPriority.Background);
     }
 
@@ -9572,6 +9669,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             document.PreviewerSession = null;
             _previewerLaunchService.StopPreviewer(document.FilePath);
+            MarkPreviewerStopped(document);
         }
     }
 

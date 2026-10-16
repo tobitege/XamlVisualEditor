@@ -45,23 +45,38 @@ public sealed class CommandPaletteCoverageTests
         await host.ActivateAsync();
 
         IReadOnlyList<string> commandIds = await host.Commands.GetCommandsAsync(CancellationToken.None);
-        HashSet<string> paletteIds = host.ViewModel.CommandPaletteItems.Select(item => item.CommandId)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> registeredIds = commandIds.ToHashSet(StringComparer.Ordinal);
+        List<string> paletteIds = host.ViewModel.CommandPaletteItems.Select(item => item.CommandId).ToList();
+        HashSet<string> paletteIdSet = paletteIds.ToHashSet(StringComparer.Ordinal);
         List<string> missing = [];
         foreach (string commandId in commandIds)
         {
             if (!host.CommandMetadata.TryGet(commandId, out CommandMetadata metadata) || string.IsNullOrWhiteSpace(metadata.Title))
                 missing.Add(commandId + ": no command metadata with a title");
-            if (!paletteIds.Contains(commandId))
+            if (!paletteIdSet.Contains(commandId))
                 missing.Add(commandId + ": not in the command palette");
         }
+
+        foreach (string paletteId in paletteIdSet.Where(id => !registeredIds.Contains(id)))
+            missing.Add(paletteId + ": palette item without a command handler");
+        foreach (IGrouping<string, string> duplicate in paletteIds.GroupBy(id => id, StringComparer.Ordinal).Where(group => group.Count() > 1))
+            missing.Add(duplicate.Key + ": " + duplicate.Count() + " palette items");
 
         Assert.NotEmpty(commandIds);
         Assert.Contains("textEditing.options", commandIds);
         Assert.Empty(missing);
     }
 
-    /// <summary>The built-in extensions in the order of the application's service registration (App.axaml.cs).</summary>
+    [AvaloniaFact]
+    public void The_test_creates_the_built_in_extensions_of_the_application_in_its_order()
+    {
+        using ExtensionCommandMenuIntegrationTests.ExtensionMenuTestHost host = new();
+
+        Assert.Equal(XamlVisualEditor.App.App.BuiltInExtensionTypes,
+            CreateBuiltInExtensions(host).Select(extension => extension.GetType()));
+    }
+
+    /// <summary>The built-in extensions of <see cref="XamlVisualEditor.App.App.BuiltInExtensionTypes"/>, in that order.</summary>
     private static IXveExtension[] CreateBuiltInExtensions(ExtensionCommandMenuIntegrationTests.ExtensionMenuTestHost host) =>
     [
         new AcpExtensionEntry(new AcpService(new AcpAgentHostFactory()), new EmptyProfileStore(), new EmptySecretStore(),

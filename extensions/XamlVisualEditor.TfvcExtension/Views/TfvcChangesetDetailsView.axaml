@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+             xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+             x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcChangesetDetailsView"
+             x:DataType="vm:TfvcChangesetDetailsViewModel">
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+      <TextBlock Grid.Column="0" Text="{CompiledBinding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Padding="8,2"
+              Content="{x:Static loc:TfvcStrings.BackToPendingChanges}"
+              Command="{CompiledBinding CloseCommand}" />
+    </Grid>
+
+    <TextBlock DockPanel.Dock="Top" Text="{CompiledBinding Summary}" Opacity="0.7" Margin="0,0,0,6" />
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding Message}"
+               TextWrapping="Wrap"
+               Margin="0,0,0,6"
+               IsVisible="{CompiledBinding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <Expander DockPanel.Dock="Top" Header="{x:Static loc:TfvcStrings.Comment}" IsExpanded="True"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,4">
+      <StackPanel Spacing="4">
+        <TextBox Text="{CompiledBinding Comment, Mode=TwoWay}"
+                 IsReadOnly="{CompiledBinding !CanEditComment}"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 MinHeight="72"
+                 MaxHeight="200"
+                 AutomationProperties.Name="{x:Static loc:TfvcStrings.Comment}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button Content="{x:Static loc:TfvcStrings.Save}"
+                  Command="{CompiledBinding SaveCommand}"
+                  Classes="accent"
+                  Padding="10,2"
+                  IsVisible="{CompiledBinding CanEditComment}" />
+          <TextBlock Text="{x:Static loc:TfvcStrings.ChangesetCommentReadOnly}" Opacity="0.7" VerticalAlignment="Center"
+                     IsVisible="{CompiledBinding !CanEditComment}" />
+        </StackPanel>
+      </StackPanel>
+    </Expander>
+
+    <TextBlock DockPanel.Dock="Top" Text="{CompiledBinding ChangesHeader}" FontWeight="SemiBold" Margin="0,4,0,4" />
+
+    <dg:DataGrid Classes="explorer-compact"
+                 MinHeight="80"
+                 ItemsSource="{CompiledBinding Changes}"
+                 AutoGenerateColumns="False"
+                 CanUserResizeColumns="True"
+                 CanUserSortColumns="True"
+                 GridLinesVisibility="None"
+                 IsReadOnly="True">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnChange}" Width="120"
+                               x:DataType="vm:TfvcChangeRowViewModel"
+                               Binding="{CompiledBinding ChangeText}" SortMemberPath="ChangeText" />
+        <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnItem}" Width="*"
+                               x:DataType="vm:TfvcChangeRowViewModel"
+                               Binding="{CompiledBinding ServerPath}" SortMemberPath="ServerPath" />
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
+    <!-- Built into the application; not published as a separate package. -->
+    <IsPackable>false</IsPackable>
+    <RootNamespace>XamlVisualEditor.TfvcExtension</RootNamespace>
+    <Description>Team Foundation Version Control panels: source control explorer, pending changes and automatic check-out on edit</Description>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" />
+    <PackageReference Include="ProDataGrid" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.SourceGenerators" PrivateAssets="all" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Localization\TfvcStrings.resx">
+      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+      <StronglyTypedNamespace>XamlVisualEditor.TfvcExtension.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>TfvcStrings</StronglyTypedClassName>
+      <StronglyTypedFileName>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\TfvcStrings.g.cs</StronglyTypedFileName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,169 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+             xmlns:views="using:XamlVisualEditor.TfvcExtension.Views"
+             xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+             x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcHistoryView"
+             x:DataType="vm:TfvcHistoryViewModel">
+  <DockPanel Margin="6">
+    <!-- Activity of this panel at its top edge; the strip keeps its height, so the layout never moves. -->
+    <Border DockPanel.Dock="Top" Height="2" Margin="-6,-6,-6,4" IsHitTestVisible="False">
+      <ProgressBar Height="2" MinHeight="2" IsIndeterminate="True" IsVisible="{CompiledBinding IsBusy}" />
+    </Border>
+
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+      <TextBlock Grid.Column="0" Text="{x:Static loc:TfvcStrings.SourceLocation}" VerticalAlignment="Center" Margin="0,0,6,0" />
+      <TextBox Grid.Column="1"
+               Text="{CompiledBinding LocationText, Mode=TwoWay}"
+               AutomationProperties.Name="{x:Static loc:TfvcStrings.SourceLocation}">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{CompiledBinding NavigateCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+      <Button Grid.Column="2" Margin="4,0,0,0" Padding="8,2"
+              Content="{x:Static loc:TfvcStrings.Go}"
+              Command="{CompiledBinding NavigateCommand}" />
+    </Grid>
+
+    <!-- Fixed field widths; in a narrow dock the buttons move to the next line instead of squeezing the fields. -->
+    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+      <TextBox Width="320" Margin="0,0,4,4"
+               Text="{CompiledBinding SearchText, Mode=TwoWay}"
+               PlaceholderText="{x:Static loc:TfvcStrings.SearchComments}"
+               ToolTip.Tip="{x:Static loc:TfvcStrings.SearchComments}"
+               AutomationProperties.Name="{x:Static loc:TfvcStrings.SearchComments}">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{CompiledBinding SearchCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+      <AutoCompleteBox Width="220" Margin="0,0,4,4"
+                       Text="{CompiledBinding AuthorText, Mode=TwoWay}"
+                       ItemsSource="{CompiledBinding KnownAuthors}"
+                       FilterMode="Contains"
+                       MinimumPrefixLength="1"
+                       PlaceholderText="{x:Static loc:TfvcStrings.FilterUser}"
+                       ToolTip.Tip="{x:Static loc:TfvcStrings.FilterUser}"
+                       AutomationProperties.Name="{x:Static loc:TfvcStrings.FilterUser}">
+        <AutoCompleteBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{CompiledBinding SearchCommand}" />
+        </AutoCompleteBox.KeyBindings>
+      </AutoCompleteBox>
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+        <Button Padding="8,2"
+                Content="{x:Static loc:TfvcStrings.SearchButton}"
+                Command="{CompiledBinding SearchCommand}" />
+        <Button Padding="8,2"
+                Content="{x:Static loc:TfvcStrings.ShowAll}"
+                Command="{CompiledBinding ClearSearchCommand}" />
+        <Button Padding="8,2"
+                Content="{x:Static loc:TfvcStrings.Refresh}"
+                Command="{CompiledBinding RefreshCommand}" />
+      </StackPanel>
+    </WrapPanel>
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding Message}"
+               TextWrapping="Wrap"
+               Margin="0,0,0,6"
+               IsVisible="{CompiledBinding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <TabControl>
+      <TabItem Header="{x:Static loc:TfvcStrings.Changesets}">
+        <Grid RowDefinitions="2*,4,*">
+          <DockPanel Grid.Row="0">
+          <Button DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2"
+                  Content="{x:Static loc:TfvcStrings.LoadMore}"
+                  Command="{CompiledBinding LoadMoreCommand}"
+                  IsVisible="{CompiledBinding HasMore}" />
+          <dg:DataGrid Classes="explorer-compact"
+                       MinHeight="80"
+                       ItemsSource="{CompiledBinding Changesets}"
+                       SelectedItem="{CompiledBinding SelectedChangeset, Mode=TwoWay}"
+                       SortingModel="{CompiledBinding SortingModel}"
+                       AutoGenerateColumns="False"
+                       CanUserResizeColumns="True"
+                       CanUserSortColumns="True"
+                       GridLinesVisibility="None"
+                       IsReadOnly="True"
+                       views:RightClickSelectBehavior.IsEnabled="True"
+                       views:DoubleTapCommandBehavior.Command="{CompiledBinding ShowChangesetDetailsCommand}">
+            <dg:DataGrid.ContextMenu>
+              <ContextMenu x:DataType="vm:TfvcHistoryViewModel">
+                <MenuItem Header="{x:Static loc:TfvcStrings.ChangesetDetails}" Command="{CompiledBinding ShowChangesetDetailsCommand}" />
+              </ContextMenu>
+            </dg:DataGrid.ContextMenu>
+            <dg:DataGrid.Columns>
+              <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnChangeset}" Width="90"
+                                     x:DataType="vm:TfvcChangesetRowViewModel"
+                                     Binding="{CompiledBinding Id}" SortMemberPath="Id" />
+              <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnUser}" Width="160"
+                                     x:DataType="vm:TfvcChangesetRowViewModel"
+                                     Binding="{CompiledBinding Author}" SortMemberPath="Author" />
+              <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnDate}" Width="150"
+                                     x:DataType="vm:TfvcChangesetRowViewModel"
+                                     Binding="{CompiledBinding DateText}" SortMemberPath="Date" />
+              <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnComment}" Width="*" SortMemberPath="Comment">
+                <dg:DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:TfvcChangesetRowViewModel">
+                    <TextBlock Text="{CompiledBinding CommentLine}" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{CompiledBinding Comment}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </dg:DataGridTemplateColumn.CellTemplate>
+              </dg:DataGridTemplateColumn>
+            </dg:DataGrid.Columns>
+          </dg:DataGrid>
+          </DockPanel>
+          <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+          <dg:DataGrid Grid.Row="2"
+                       MinHeight="40"
+                       Classes="explorer-compact"
+                       ItemsSource="{CompiledBinding Changes}"
+                       AutoGenerateColumns="False"
+                       CanUserResizeColumns="True"
+                       CanUserSortColumns="True"
+                       GridLinesVisibility="None"
+                       IsReadOnly="True">
+            <dg:DataGrid.Columns>
+              <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnChange}" Width="140"
+                                     x:DataType="vm:TfvcChangeRowViewModel"
+                                     Binding="{CompiledBinding ChangeText}" SortMemberPath="ChangeText" />
+              <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnItem}" Width="*"
+                                     x:DataType="vm:TfvcChangeRowViewModel"
+                                     Binding="{CompiledBinding ServerPath}" SortMemberPath="ServerPath" />
+            </dg:DataGrid.Columns>
+          </dg:DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="{x:Static loc:TfvcStrings.Labels}">
+        <dg:DataGrid Classes="explorer-compact"
+                     ItemsSource="{CompiledBinding Labels}"
+                     AutoGenerateColumns="False"
+                     CanUserResizeColumns="True"
+                     CanUserSortColumns="True"
+                     GridLinesVisibility="None"
+                     IsReadOnly="True">
+          <dg:DataGrid.Columns>
+            <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnLabel}" Width="200"
+                                   x:DataType="vm:TfvcLabelRowViewModel"
+                                   Binding="{CompiledBinding Name}" SortMemberPath="Name" />
+            <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnUser}" Width="160"
+                                   x:DataType="vm:TfvcLabelRowViewModel"
+                                   Binding="{CompiledBinding Owner}" SortMemberPath="Owner" />
+            <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnDate}" Width="150"
+                                   x:DataType="vm:TfvcLabelRowViewModel"
+                                   Binding="{CompiledBinding DateText}" SortMemberPath="Date" />
+            <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnScope}" Width="220"
+                                   x:DataType="vm:TfvcLabelRowViewModel"
+                                   Binding="{CompiledBinding Scope}" SortMemberPath="Scope" />
+            <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnComment}" Width="*"
+                                   x:DataType="vm:TfvcLabelRowViewModel"
+                                   Binding="{CompiledBinding Description}" SortMemberPath="Description" />
+          </dg:DataGrid.Columns>
+        </dg:DataGrid>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</UserControl>

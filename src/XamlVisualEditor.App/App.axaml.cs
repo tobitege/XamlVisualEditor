@@ -18,6 +18,7 @@ using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using AcpExtensionEntry = XamlVisualEditor.AcpExtension.AcpExtension;
 using GitExtensionEntry = XamlVisualEditor.GitExtension.GitExtension;
+using TfvcExtensionEntry = XamlVisualEditor.TfvcExtension.TfvcExtension;
 using IdeBridgeExtensionEntry = XamlVisualEditor.IdeBridgeExtension.IdeBridgeExtension;
 using McpExtensionEntry = XamlVisualEditor.McpExtension.McpExtension;
 using VscodeCompatExtensionEntry = XamlVisualEditor.VscodeCompatExtension.VscodeCompatExtension;
@@ -73,6 +74,7 @@ public sealed class App : Application
     [
         typeof(AcpExtensionEntry),
         typeof(GitExtensionEntry),
+        typeof(TfvcExtensionEntry),
         typeof(IdeBridgeExtensionEntry),
         typeof(McpExtensionEntry),
         typeof(VscodeCompatExtensionEntry),

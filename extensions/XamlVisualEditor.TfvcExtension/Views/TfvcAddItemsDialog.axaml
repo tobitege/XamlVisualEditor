@@ -1,0 +1,84 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dg="using:Avalonia.Controls"
+        xmlns:media="using:Avalonia.Media"
+        xmlns:vm="using:XamlVisualEditor.TfvcExtension.ViewModels"
+        xmlns:views="using:XamlVisualEditor.TfvcExtension.Views"
+        xmlns:loc="using:XamlVisualEditor.TfvcExtension.Localization"
+        xmlns:core="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+        x:Class="XamlVisualEditor.TfvcExtension.Views.TfvcAddItemsDialog"
+        x:DataType="vm:TfvcAddItemsDialogViewModel"
+        Title="{x:Static loc:TfvcStrings.AddItemsTitle}"
+        Classes="editor-chrome"
+        Width="900"
+        Height="560"
+        MinWidth="520"
+        MinHeight="320"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="12">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
+      <TextBlock Text="{x:Static loc:TfvcStrings.AddItemsLookIn}" VerticalAlignment="Center" Margin="0,0,6,0" />
+      <TextBox Grid.Column="1" Text="{CompiledBinding CurrentFolder}" IsReadOnly="True" />
+      <Button Grid.Column="2" Content="{x:Static loc:TfvcStrings.AddItemsUp}" Command="{CompiledBinding UpCommand}"
+              Margin="6,0,0,0" Padding="8,2" />
+    </Grid>
+    <TextBlock DockPanel.Dock="Top" Text="{x:Static loc:TfvcStrings.AddItemsMessage}" TextWrapping="Wrap" Margin="0,0,0,8" />
+    <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,12,0,0">
+      <TextBlock Text="{x:Static loc:TfvcStrings.AddItemsTargetFolder}" />
+      <TextBox Text="{CompiledBinding TargetServerFolder}" IsReadOnly="True" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+        <Button Content="{x:Static loc:TfvcStrings.AddItemsFinish}" Command="{CompiledBinding FinishCommand}"
+                IsDefault="True" MinWidth="110" />
+        <Button Content="{x:Static core:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}"
+                IsCancel="True" MinWidth="90" />
+      </StackPanel>
+    </StackPanel>
+    <Panel>
+      <dg:DataGrid ItemsSource="{CompiledBinding Items}"
+                   SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
+                   AutoGenerateColumns="False"
+                   CanUserResizeColumns="True"
+                   CanUserSortColumns="True"
+                   GridLinesVisibility="None"
+                   views:DoubleTapCommandBehavior.Command="{CompiledBinding OpenSelectedCommand}">
+        <dg:DataGrid.Columns>
+          <dg:DataGridTemplateColumn Width="36" x:DataType="vm:TfvcAddItemViewModel">
+            <dg:DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TfvcAddItemViewModel">
+                <CheckBox IsChecked="{CompiledBinding IsSelected, Mode=TwoWay}" HorizontalAlignment="Center" />
+              </DataTemplate>
+            </dg:DataGridTemplateColumn.CellTemplate>
+          </dg:DataGridTemplateColumn>
+          <dg:DataGridTemplateColumn Header="{x:Static loc:TfvcStrings.ColumnName}" Width="*" IsReadOnly="True"
+                                     SortMemberPath="Name" x:DataType="vm:TfvcAddItemViewModel">
+            <dg:DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TfvcAddItemViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                  <ContentControl Content="{CompiledBinding Icon}" VerticalAlignment="Center">
+                    <ContentControl.DataTemplates>
+                      <DataTemplate x:DataType="media:IImage">
+                        <Image Width="16" Height="16" Source="{CompiledBinding .}" />
+                      </DataTemplate>
+                    </ContentControl.DataTemplates>
+                  </ContentControl>
+                  <TextBlock Text="{CompiledBinding Name}" VerticalAlignment="Center" />
+                </StackPanel>
+              </DataTemplate>
+            </dg:DataGridTemplateColumn.CellTemplate>
+          </dg:DataGridTemplateColumn>
+          <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnModified}" Width="180" IsReadOnly="True"
+                                 x:DataType="vm:TfvcAddItemViewModel"
+                                 Binding="{CompiledBinding ModifiedText}" SortMemberPath="Entry.Modified" />
+          <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnType}" Width="120" IsReadOnly="True"
+                                 x:DataType="vm:TfvcAddItemViewModel"
+                                 Binding="{CompiledBinding TypeText}" SortMemberPath="TypeText" />
+          <dg:DataGridTextColumn Header="{x:Static loc:TfvcStrings.ColumnSize}" Width="90" IsReadOnly="True"
+                                 x:DataType="vm:TfvcAddItemViewModel"
+                                 Binding="{CompiledBinding SizeText}" SortMemberPath="Entry.Size" />
+        </dg:DataGrid.Columns>
+      </dg:DataGrid>
+      <TextBlock Text="{x:Static loc:TfvcStrings.AddItemsNone}" IsVisible="{CompiledBinding IsEmpty}"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" />
+    </Panel>
+  </DockPanel>
+</Window>

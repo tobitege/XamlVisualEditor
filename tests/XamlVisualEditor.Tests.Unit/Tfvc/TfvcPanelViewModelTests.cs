@@ -1,0 +1,642 @@
+using System.Collections.Generic;
+using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.DataGridHierarchical;
+using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Xunit;
+using XamlVisualEditor.TfvcExtension.Localization;
+using XamlVisualEditor.TfvcExtension.Models;
+using XamlVisualEditor.TfvcExtension.Services;
+using XamlVisualEditor.TfvcExtension.ViewModels;
+using XamlVisualEditor.TfvcExtension.Views;
+
+namespace XamlVisualEditor.Tests.Unit.Tfvc;
+
+public sealed class TfvcPanelViewModelTests
+{
+    [Fact]
+    public void TreeBuilder_CollapsesFolderChainsLikeVisualStudio()
+    {
+        TfvcPendingChange[] changes =
+        [
+            TfvcTestData.CreateChange("$/Product/app/src/core/Core.csproj", @"C:\src\Product\app\src\core\Core.csproj"),
+            TfvcTestData.CreateChange("$/Product/app/src/core/readme.md", @"C:\src\Product\app\src\core\readme.md"),
+            TfvcTestData.CreateChange("$/Product/app/src/ui/readme.md", @"C:\src\Product\app\src\ui\readme.md"),
+            TfvcTestData.CreateChange("$/Product/tools/Tests/Unit/A.cs", @"C:\src\Product\tools\Tests\Unit\A.cs")
+        ];
+
+        IReadOnlyList<PendingChangeNodeViewModel> roots = PendingChangeTreeBuilder.Build(changes);
+
+        PendingChangeNodeViewModel root = Assert.Single(roots);
+        Assert.Equal(@"C:\src\Product", root.Name);
+        Assert.Equal([@"app\src", @"tools\Tests\Unit"], [root.Children[0].Name, root.Children[1].Name]);
+        PendingChangeNodeViewModel appSrc = root.Children[0];
+        Assert.Equal(["core", "ui"], [appSrc.Children[0].Name, appSrc.Children[1].Name]);
+        Assert.Equal(["Core.csproj", "readme.md"], [appSrc.Children[0].Children[0].Name, appSrc.Children[0].Children[1].Name]);
+        Assert.Equal("A.cs", Assert.Single(root.Children[1].Children).Name);
+        Assert.Equal(4, root.GetChanges().Count);
+    }
+
+    [Fact]
+    public void TreeBuilder_GroupsUnmappedChangesByServerPath()
+    {
+        IReadOnlyList<PendingChangeNodeViewModel> roots = PendingChangeTreeBuilder.Build(
+            [TfvcTestData.CreateChange("$/Product/src/deleted.cs", null, "Delete")]);
+
+        PendingChangeNodeViewModel root = Assert.Single(roots);
+        Assert.Equal("$/Product/src", root.Name);
+        PendingChangeNodeViewModel file = Assert.Single(root.Children);
+        Assert.Equal("deleted.cs", file.Name);
+        Assert.False(file.IsFolder);
+        Assert.StartsWith("[", file.ChangeLabel);
+    }
+
+    [Fact]
+    public async Task PendingChanges_SplitsIncludedAndExcludedAndChecksInIncludedOnly()
+    {
+        (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            await session.SetExcludedAsync(["$/Product/b.cs"], true, CancellationToken.None);
+
+            Assert.Equal(1, viewModel.IncludedCount);
+            Assert.Equal(1, viewModel.ExcludedCount);
+
+            // tf.exe lists the folders and files before the summary; a folder name with a number must not be taken as the changeset.
+            client.CheckInOutput = "C:\\src\\Product\\changeset-viewer\\v2:\r\nChecking in edit: a.cs\r\n\r\nChangeset #4711 checked in.\r\n";
+            server.WorkItems[17] = new TfvcWorkItemInfo(17, "Task", "Port the form", "Active");
+            viewModel.WorkItemIdText = "#17";
+            await viewModel.AddWorkItemCommand.Execute().ToTask();
+            Assert.Single(viewModel.WorkItems);
+
+            viewModel.Comment = "  Update a  ";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            (string comment, IReadOnlyList<string> items) = Assert.Single(client.CheckIns);
+            Assert.Equal("Update a", comment);
+            Assert.Equal(["$/Product/a.cs"], items);
+            Assert.Equal((17, 4711), Assert.Single(server.Links));
+            Assert.Empty(viewModel.WorkItems);
+            Assert.Null(viewModel.Comment);
+            Assert.Contains("4711", viewModel.OperationMessage);
+        }
+    }
+
+    [Theory]
+    [InlineData("current-user", true)]
+    [InlineData("other-user", false)]
+    public async Task PendingChanges_FindsUnrecognizedChangesetOnTheServerOrKeepsTheWorkItems(string authorId, bool linked)
+    {
+        (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            // A display language other than English or German.
+            client.CheckInOutput = "Ensemble de modifications 4712 archivé.";
+            server.CurrentUserId = "current-user";
+            server.History.Add(new TfvcChangesetInfo(4712, "Test User", null, "Update", authorId));
+            server.ChangesetChanges[4712] = [new TfvcChangesetChange("$/Product/a.cs", "edit")];
+            server.WorkItems[17] = new TfvcWorkItemInfo(17, "Task", "Port the form", "Active");
+            viewModel.WorkItemIdText = "17";
+            await viewModel.AddWorkItemCommand.Execute().ToTask();
+
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Single(client.CheckIns);
+            Assert.Null(viewModel.Comment);
+            if (linked)
+            {
+                Assert.Equal((17, 4712), Assert.Single(server.Links));
+                Assert.Empty(viewModel.WorkItems);
+                Assert.Contains("4712", viewModel.OperationMessage);
+            }
+            else
+            {
+                Assert.Empty(server.Links);
+                Assert.Equal(17, Assert.Single(viewModel.WorkItems).Id);
+                Assert.Contains(TfvcStrings.ChangesetNotDeterminedWorkItemsKept, viewModel.OperationMessage);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_KeepsWorkItemsWhenTheServerKnowsNoChangeset()
+    {
+        (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            client.CheckInOutput = "Ensemble de modifications 4712 archivé.";
+            server.CurrentUserId = "current-user";
+            server.WorkItems[17] = new TfvcWorkItemInfo(17, "Task", "Port the form", "Active");
+            viewModel.WorkItemIdText = "17";
+            await viewModel.AddWorkItemCommand.Execute().ToTask();
+
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Empty(server.Links);
+            Assert.Single(viewModel.WorkItems);
+            Assert.Contains(TfvcStrings.CheckedIn, viewModel.OperationMessage);
+            Assert.Contains(TfvcStrings.ChangesetNotDeterminedWorkItemsKept, viewModel.OperationMessage);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ChecksInWholeWorkspaceOnlyWhileItMatchesTheDisplayedList()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        client.RejectCheckInItemLists = true;
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Equal(2, client.CheckIns.Count);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], client.CheckIns[0].Items);
+            Assert.Empty(client.CheckIns[1].Items);
+
+            // A change pended after the list was loaded would be checked in without being shown.
+            client.CheckIns.Clear();
+            client.PendingChanges = [.. client.PendingChanges, TfvcTestData.CreateChange("$/Product/c.cs", @"C:\src\Product\c.cs")];
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], Assert.Single(client.CheckIns).Items);
+            Assert.Equal(TfvcStrings.PendingChangesChangedCheckInCancelled, viewModel.OperationMessage);
+            Assert.Equal("Update", viewModel.Comment);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ShelvesWholeWorkspaceOnlyWhileItMatchesTheDisplayedList()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        client.RejectShelveItemLists = true;
+        RecordingWindow window = new() { InputBoxResult = "Nightly" };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            client.PendingChanges = [.. client.PendingChanges, TfvcTestData.CreateChange("$/Product/c.cs", @"C:\src\Product\c.cs")];
+
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], Assert.Single(client.Shelves).Items);
+            Assert.Equal(TfvcStrings.PendingChangesChangedShelveCancelled, viewModel.OperationMessage);
+        }
+    }
+
+    [Theory]
+    [InlineData("/delete")]
+    [InlineData("-i")]
+    [InlineData("@items.txt")]
+    [InlineData("Fix: layout")]
+    [InlineData("Nightly;OtherUser")]
+    [InlineData("a\"b")]
+    [InlineData("Fix & test")]
+    public async Task PendingChanges_RejectsInvalidShelvesetNames(string name)
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        RecordingWindow window = new() { InputBoxResult = name };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Empty(client.Shelves);
+            Assert.Contains(name, viewModel.OperationMessage);
+        }
+    }
+
+    [Fact]
+    public void IsValidShelvesetName_LimitsTheLength()
+    {
+        Assert.True(PendingChangesViewModel.IsValidShelvesetName(new string('a', 64)));
+        Assert.False(PendingChangesViewModel.IsValidShelvesetName(new string('a', 65)));
+        Assert.True(PendingChangesViewModel.IsValidShelvesetName("Nightly build 2026-10-16"));
+    }
+
+    [Fact]
+    public async Task PendingChanges_CheckInRequiresComment()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            viewModel.Comment = "   ";
+
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Empty(client.CheckIns);
+            Assert.False(string.IsNullOrEmpty(viewModel.OperationMessage));
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ShelvesDisplayedChangesOnly()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        RecordingWindow window = new() { InputBoxResult = " Nightly " };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            viewModel.Comment = " Work in progress ";
+
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            (string name, string? comment, IReadOnlyList<string> items) = Assert.Single(client.Shelves);
+            Assert.Equal("Nightly", name);
+            Assert.Equal("Work in progress", comment);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], items);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ShelvesWholeWorkspaceOnlyWhenItemListIsTooLongWithoutExclusions()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        client.RejectShelveItemLists = true;
+        RecordingWindow window = new() { InputBoxResult = "Nightly" };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Equal(2, client.Shelves.Count);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], client.Shelves[0].Items);
+            Assert.Empty(client.Shelves[1].Items);
+
+            client.Shelves.Clear();
+            await session.SetExcludedAsync(["$/Product/b.cs"], true, CancellationToken.None);
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Equal(["$/Product/a.cs"], Assert.Single(client.Shelves).Items);
+            Assert.False(string.IsNullOrEmpty(viewModel.OperationMessage));
+        }
+    }
+
+    [Fact]
+    public void FormatSize_UsesBinaryUnits()
+    {
+        Assert.EndsWith(" B", SourceControlItemViewModel.FormatSize(512));
+        Assert.EndsWith(" KB", SourceControlItemViewModel.FormatSize(2048));
+        Assert.EndsWith(" MB", SourceControlItemViewModel.FormatSize(5L * 1024 * 1024));
+    }
+
+    [Fact]
+    public async Task PendingChanges_UndoSelectedAsksForConfirmation()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        ConfirmingDialogHost dialogHost = new();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, dialogHost))
+        {
+            viewModel.SelectedIncludedRow = viewModel.IncludedModel.Flattened[0];
+
+            await viewModel.UndoSelectedCommand.Execute().ToTask();
+
+            Assert.Equal(1, dialogHost.Confirmations);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], Assert.Single(client.Undos));
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_CompareShowsDiff()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            PendingChangeNodeViewModel root = viewModel.IncludedRoots[0];
+            viewModel.SelectedIncludedRow = root.Children[0];
+
+            await viewModel.CompareSelectedCommand.Execute().ToTask();
+
+            Assert.True(viewModel.IsDiffVisible);
+            Assert.Equal(5, viewModel.DiffLines.Count);
+            Assert.Equal(TfvcDiffLineKind.Added, viewModel.DiffLines[4].Kind);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_SuccessfulCompareClearsPreviousError()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            viewModel.SelectedIncludedRow = viewModel.IncludedRoots[0].Children[0];
+            client.DifferenceFailure = new TfCommandException("difference", new TfCommandResult(100, string.Empty, "TF400324: unavailable"));
+
+            await viewModel.CompareSelectedCommand.Execute().ToTask();
+            Assert.Contains("TF400324", viewModel.OperationMessage);
+
+            client.DifferenceFailure = null;
+            await viewModel.CompareSelectedCommand.Execute().ToTask();
+
+            Assert.Null(viewModel.OperationMessage);
+            Assert.True(viewModel.IsDiffVisible);
+        }
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_NavigatesToServerPathAndShowsWorkspaceState()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null)];
+        server.Children["$/Product"] = [new TfvcServerItem("$/Product/a.cs", false, 29, null), new TfvcServerItem("$/Product/c.cs", false, 28, null)];
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = new(
+            session,
+            new TfvcAutoCheckOutService(session, new FakeEditorServices(), new RecordingWindow(), new NullExtensionLogger()),
+            new FakeEditorServices(),
+            new ConfirmingDialogHost(),
+            null))
+        {
+            await viewModel.NavigateToAsync("$/Product/a.cs", CancellationToken.None);
+
+            SourceControlItemViewModel? selected = viewModel.SelectedItem;
+            Assert.NotNull(selected);
+            Assert.Equal("$/Product/a.cs", selected.ServerPath);
+            Assert.Equal(@"C:\src\Product\a.cs", selected.LocalPath);
+            Assert.NotEmpty(selected.PendingChangeText);
+            Assert.Equal("29", selected.ChangesetText);
+            Assert.Equal("$/Product/a.cs", viewModel.PathText);
+            Assert.Empty(client.CheckOuts);
+        }
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_ChecksOutFolderRecursivelyAfterConfirmation()
+    {
+        string localRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xve-tfvc-" + System.Guid.NewGuid().ToString("N"));
+        string folder = System.IO.Path.Combine(localRoot, "src");
+        System.IO.Directory.CreateDirectory(folder);
+        try
+        {
+            FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace(localRoot: localRoot)] };
+            FakeTfvcServerClient server = new();
+            server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null)];
+            server.Children["$/Product"] = [new TfvcServerItem("$/Product/src", true, 29, null)];
+            server.Children["$/Product/src"] = [];
+            using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+            await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+            ConfirmingDialogHost dialogHost = new();
+            using SourceControlExplorerViewModel viewModel = new(
+                session,
+                new TfvcAutoCheckOutService(session, new FakeEditorServices(), new RecordingWindow(), new NullExtensionLogger()),
+                new FakeEditorServices(),
+                dialogHost,
+                null);
+
+            await viewModel.NavigateToAsync("$/Product/src", CancellationToken.None);
+            Assert.True(await viewModel.CheckOutCommand.CanExecute.FirstAsync());
+            await viewModel.CheckOutCommand.Execute().ToTask();
+
+            Assert.Equal(1, dialogHost.Confirmations);
+            Assert.Equal([folder], Assert.Single(client.CheckOuts));
+            Assert.Equal([true], client.CheckOutRecursion);
+        }
+        finally
+        {
+            System.IO.Directory.Delete(localRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_SessionChangesDuringRootLoadDoNotStartAnotherLoad()
+    {
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null)];
+        server.ChildrenGate = new TaskCompletionSource();
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                await session.RefreshPendingChangesAsync(CancellationToken.None);
+            }
+
+            server.ChildrenGate.SetResult();
+            await Task.Yield();
+
+            Assert.Equal(["$/"], server.ChildrenRequests);
+            Assert.Equal("$/", Assert.Single(viewModel.Roots).ServerPath);
+        }
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_FocusShowsOnlyFolderAndIsRestored()
+    {
+        InMemoryExtensionStorage storage = new();
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        FakeTfvcServerClient server = new();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null), new TfvcServerItem("$/Other", true, 20, null)];
+        server.Children["$/Product"] = [new TfvcServerItem("$/Product/src", true, 29, null)];
+        server.Children["$/Product/src"] = [new TfvcServerItem("$/Product/src/a.cs", false, 28, null)];
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, storage, new FakeWorkspaceInfo(), server);
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            await viewModel.NavigateToAsync("$/Product/src", CancellationToken.None);
+            await viewModel.FocusSelectedCommand.Execute().ToTask();
+
+            Assert.Equal("$/Product/src", viewModel.FocusedPath);
+            SourceControlItemViewModel root = Assert.Single(viewModel.Roots);
+            Assert.Equal("$/Product/src", root.ServerPath);
+            Assert.Equal("a.cs", Assert.Single(root.Children).Name);
+        }
+
+        server.ChildrenRequests.Clear();
+        server.ItemRequests.Clear();
+        using (SourceControlExplorerViewModel reopened = CreateExplorer(session))
+        {
+            await reopened.NavigateToAsync("$/Product/src/a.cs", CancellationToken.None);
+            Assert.Equal("$/Product/src", reopened.FocusedPath);
+            Assert.Equal("$/Product/src", Assert.Single(reopened.Roots).ServerPath);
+            Assert.Equal(["$/Product/src"], server.ItemRequests);
+            Assert.Equal(["$/Product/src"], server.ChildrenRequests);
+
+            await reopened.NavigateToAsync("$/Other", CancellationToken.None);
+            Assert.Null(reopened.FocusedPath);
+            Assert.Equal("$/", Assert.Single(reopened.Roots).ServerPath);
+            Assert.Equal("$/Other", reopened.SelectedItem?.ServerPath);
+        }
+
+        Assert.Null(await session.LoadExplorerFocusAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SourceControlExplorer_ExpandingAFolderReplacesOnlyItsOwnRows()
+    {
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null), new TfvcServerItem("$/Other", true, 20, null)];
+        server.Children["$/Product"] = [new TfvcServerItem("$/Product/src", true, 29, null)];
+        server.Children["$/Other"] = [new TfvcServerItem("$/Other/b.cs", false, 19, null)];
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            await viewModel.NavigateToAsync("$/Product", CancellationToken.None);
+            SourceControlItemViewModel other = Assert.Single(viewModel.Roots[0].Children, child => child.Name == "Other");
+            HierarchicalNode otherNode = Assert.IsType<HierarchicalNode>(viewModel.Model.FindNode(other));
+            int otherIndex = viewModel.Model.IndexOf(otherNode);
+            List<FlattenedChange> changes = new();
+            viewModel.Model.FlattenedChanged += (_, e) => changes.AddRange(e.Changes);
+
+            viewModel.Model.Expand(otherNode);
+            for (int attempt = 0; attempt < 50 && other.Children.Count != 1; attempt++)
+            {
+                await Task.Delay(10);
+            }
+
+            Assert.Equal("b.cs", Assert.Single(other.Children).Name);
+            // A refresh of the whole model would start at row 0 and scroll the grid back to the top.
+            Assert.NotEmpty(changes);
+            Assert.All(changes, change => Assert.True(change.Index > otherIndex));
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task SourceControlExplorer_ExpandingAFolderKeepsTheScrollPosition()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        server.Children["$/"] = [new TfvcServerItem("$/Product", true, 200, null)];
+        server.Children["$/Product"] = Enumerable.Range(0, 40)
+            .Select(index => new TfvcServerItem($"$/Product/Folder{index:00}", true, 100 - index, null)).ToArray();
+        server.Children["$/Product/Folder35"] = [new TfvcServerItem("$/Product/Folder35/a.cs", false, 10, null), new TfvcServerItem("$/Product/Folder35/b.cs", false, 9, null)];
+        using (session)
+        using (SourceControlExplorerViewModel viewModel = CreateExplorer(session))
+        {
+            // The user works in a focused folder.
+            await viewModel.NavigateToAsync("$/Product", cancellationToken);
+            await viewModel.FocusSelectedCommand.Execute().ToTask(cancellationToken);
+            await viewModel.NavigateToAsync("$/Product/Folder39", cancellationToken);
+            SourceControlExplorerView view = new() { DataContext = viewModel };
+            Window window = new() { Width = 320, Height = 420, Content = view };
+            window.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+            window.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://XamlVisualEditor.Tests.Unit"))
+            {
+                Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml")
+            });
+            try
+            {
+                window.Show();
+                await FlushLayoutAsync(window);
+                DataGrid grid = view.GetVisualDescendants().OfType<DataGrid>().Single();
+                // The headless application has no application styles; the data grid takes its theme explicitly.
+                Assert.True(grid.TryFindResource(typeof(DataGrid), out object? theme));
+                grid.Theme = Assert.IsType<Avalonia.Styling.ControlTheme>(theme);
+                await FlushLayoutAsync(window);
+                grid.ScrollIntoView(grid.SelectedItem, null);
+                await FlushLayoutAsync(window);
+                int firstRowBefore = GetFirstVisibleRow(grid);
+                Assert.True(firstRowBefore > 0, "The selected last folder must scroll the tree away from its root.");
+
+                // Like the user: click the folder row, then its expander.
+                SourceControlItemViewModel folder = Assert.Single(viewModel.Roots[0].Children, child => child.Name == "Folder35");
+                HierarchicalNode folderNode = viewModel.Model.FindNode(folder)!;
+                DataGridRow folderRow = grid.GetVisualDescendants().OfType<DataGridRow>().Single(row => ReferenceEquals(row.DataContext, folderNode));
+                Click(window, folderRow, new Point(folderRow.Bounds.Width / 2, folderRow.Bounds.Height / 2));
+                await FlushLayoutAsync(window);
+                firstRowBefore = GetFirstVisibleRow(grid);
+                Avalonia.Controls.Primitives.ToggleButton expander = folderRow.GetVisualDescendants()
+                    .OfType<Avalonia.Controls.Primitives.ToggleButton>().Single(button => button.Name == "PART_Expander");
+                // The server answers after the expander shows its placeholder row, like a real round trip.
+                server.ChildrenGate = new TaskCompletionSource();
+                Click(window, expander, new Point(expander.Bounds.Width / 2, expander.Bounds.Height / 2));
+                await FlushLayoutAsync(window);
+                server.ChildrenGate.SetResult();
+                for (int attempt = 0; attempt < 50 && folder.Children.Count != 2; attempt++)
+                {
+                    await Task.Delay(10, cancellationToken);
+                }
+
+                await FlushLayoutAsync(window);
+                Assert.Equal(2, folder.Children.Count);
+                Assert.InRange(GetFirstVisibleRow(grid), firstRowBefore - 1, firstRowBefore + 3);
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+    }
+
+    private static void Click(Window window, Visual target, Point point)
+    {
+        Point windowPoint = target.TranslatePoint(point, window)!.Value;
+        window.MouseDown(windowPoint, Avalonia.Input.MouseButton.Left);
+        window.MouseUp(windowPoint, Avalonia.Input.MouseButton.Left);
+    }
+
+    private static int GetFirstVisibleRow(DataGrid grid) =>
+        grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(row => row.IsVisible && row.Bounds.Bottom > 0)
+            .Min(row => row.Index);
+
+    private static async Task FlushLayoutAsync(Window window)
+    {
+        for (int pass = 0; pass < 3; pass++)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            window.UpdateLayout();
+        }
+    }
+
+    private static SourceControlExplorerViewModel CreateExplorer(TfvcSession session)
+    {
+        return new SourceControlExplorerViewModel(
+            session,
+            new TfvcAutoCheckOutService(session, new FakeEditorServices(), new RecordingWindow(), new NullExtensionLogger()),
+            new FakeEditorServices(),
+            new ConfirmingDialogHost(),
+            null);
+    }
+
+    private static PendingChangesViewModel CreatePendingChangesViewModel(
+        TfvcSession session,
+        FakeTfvcClient client,
+        ConfirmingDialogHost? dialogHost = null,
+        RecordingWindow? window = null)
+    {
+        FakeEditorServices editor = new();
+        return new PendingChangesViewModel(
+            session,
+            new TfvcAutoCheckOutService(session, editor, new RecordingWindow(), new NullExtensionLogger()),
+            editor,
+            window ?? new RecordingWindow(),
+            dialogHost ?? new ConfirmingDialogHost(),
+            null);
+    }
+
+    private static async Task<(TfvcSession Session, FakeTfvcClient Client, FakeTfvcServerClient Server)> CreateSessionAsync()
+    {
+        FakeTfvcClient client = new()
+        {
+            Workspaces = [TfvcTestData.CreateWorkspace()],
+            PendingChanges =
+            [
+                TfvcTestData.CreateChange("$/Product/a.cs", @"C:\src\Product\a.cs"),
+                TfvcTestData.CreateChange("$/Product/b.cs", @"C:\src\Product\b.cs", "Add")
+            ]
+        };
+        FakeTfvcServerClient server = new();
+        TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+        return (session, client, server);
+    }
+}

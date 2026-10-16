@@ -50,6 +50,7 @@ public sealed partial class MainWindowViewModel
         {
             _previewerLaunchService.StopPreviewer(document.FilePath);
             document.PreviewerSession = null;
+            MarkPreviewerStopped(document);
         }
     }, RxSchedulers.MainThreadScheduler).ToTask(ct);
 
@@ -71,7 +72,12 @@ public sealed partial class MainWindowViewModel
             {
                 if (_themePackagesDisposed || document.IsDisposed || !document.UseExternalPreviewer || !Documents.Contains(document)) return RxVoid.Default;
                 try { await StartPreviewerForDocumentAsync(document); }
-                catch (Exception error) { if (!document.IsDisposed) document.SetPreviewerLaunchError(error.Message); }
+                catch (Exception error)
+                {
+                    if (document.IsDisposed) return RxVoid.Default;
+                    document.SetPreviewerLaunchError(error.Message);
+                    document.PreviewerState = PreviewerState.Failed;
+                }
                 return RxVoid.Default;
             }, RxSchedulers.MainThreadScheduler), RxSchedulers.MainThreadScheduler).ToTask(ct).ConfigureAwait(false);
         }

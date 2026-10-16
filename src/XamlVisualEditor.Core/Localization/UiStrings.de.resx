@@ -915,7 +915,7 @@
   <data name="DeleteResourceFailed" xml:space="preserve"><value>Die Ressource konnte nicht gelöscht werden.</value></data>
   <data name="KeyframeTimeRange" xml:space="preserve"><value>Die Zeit muss innerhalb der Zeitleistendauer liegen.</value></data>
   <data name="ValueCannotBeEmpty" xml:space="preserve"><value>Der Wert darf nicht leer sein.</value></data>
-  <data name="InvalidEasing" xml:space="preserve"><value>Easing ist ungültig. Verwenden Sie ein Schlüsselwort oder cubic-bezier.</value></data>
+  <data name="InvalidEasing" xml:space="preserve"><value>Easing ist ungültig. Verwende ein Schlüsselwort oder cubic-bezier.</value></data>
   <data name="EditKeyframeTime" xml:space="preserve"><value>Keyframe-Zeit bearbeiten</value></data>
   <data name="EditKeyframeValue" xml:space="preserve"><value>Keyframe-Wert bearbeiten</value></data>
   <data name="EditKeyframeEasing" xml:space="preserve"><value>Keyframe-Easing bearbeiten</value></data>
@@ -934,10 +934,10 @@
   <data name="ExtensionManagerUnavailable" xml:space="preserve"><value>Die Erweiterungsverwaltung ist nicht verfügbar.</value></data>
   <data name="TerminalServiceUnavailable" xml:space="preserve"><value>Der Terminal-Dienst ist nicht verfügbar.</value></data>
   <data name="NetcoredbgDownloadStarting" xml:space="preserve"><value>netcoredbg wurde nicht gefunden. Download wird versucht...</value></data>
-  <data name="PreviewerNeedsProject" xml:space="preserve"><value>Öffnen Sie vor dem Starten der Vorschau ein Projekt.</value></data>
+  <data name="PreviewerNeedsProject" xml:space="preserve"><value>Öffne vor dem Starten der Vorschau ein Projekt.</value></data>
   <data name="PreviewerStartFailedText" xml:space="preserve"><value>Die Vorschau konnte nicht gestartet werden.</value></data>
   <data name="StartPreviewer" xml:space="preserve"><value>Vorschau starten</value></data>
-  <data name="PreviewerTrustExplanation" xml:space="preserve"><value>Die Vorschau führt Projektcode in einem eigenen Prozess aus. Fahren Sie nur fort, wenn Sie diesem Arbeitsbereich vertrauen.</value></data>
+  <data name="PreviewerTrustExplanation" xml:space="preserve"><value>Die Vorschau führt Projektcode in einem eigenen Prozess aus. Fahre nur fort, wenn du diesem Arbeitsbereich vertraust.</value></data>
   <data name="DesignerDocumentNotOpen" xml:space="preserve"><value>Das Dokument ist nicht als Designer-Dokument geöffnet.</value></data>
   <data name="PreviewerTrustDenied" xml:space="preserve"><value>Der Vorschau wurde nicht vertraut.</value></data>
   <data name="NoPreviewerSession" xml:space="preserve"><value>Keine Vorschausitzung verfügbar.</value></data>
@@ -1108,7 +1108,7 @@
   <data name="MeasureHint" xml:space="preserve"><value>Messen: auf der Fläche ziehen, um einen Abstand in Pixeln zu messen</value></data>
   <data name="MeasureResult" xml:space="preserve"><value>Gemessener Abstand</value></data>
   <data name="MeasureResultHint" xml:space="preserve"><value>Waagerechter und senkrechter Abstand sowie direkte Länge. Klicken kopiert den Wert als dx,dy.</value></data>
-  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Laden Sie das zugehörige Projekt, bevor Sie Control-Namen umgestalten.</value></data>
+  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Lade das zugehörige Projekt, bevor du Control-Namen umgestaltest.</value></data>
   <data name="CodeBehindRenameOwningProjectMissing" xml:space="preserve"><value>Das Projekt, zu dem das Control gehört, ist nicht geladen.</value></data>
   <data name="CodeBehindRenameInvalidName" xml:space="preserve"><value>Der neue Control-Name ist kein gültiger C#-Membername.</value></data>
   <data name="CodeBehindRenameCompilationUnavailable" xml:space="preserve"><value>Die Kompilierung des Projekts ist nicht verfügbar.</value></data>
@@ -1117,10 +1117,10 @@
   <data name="CodeBehindRenameMemberExists" xml:space="preserve"><value>Die Code-Behind-Klasse enthält bereits einen Member namens '{0}'.</value></data>
   <data name="CodeBehindRenameNameReferenced" xml:space="preserve"><value>Der Name '{0}' wird im Code-Behind verwendet und kann nicht entfernt werden.</value></data>
   <data name="CodeBehindRenameConflictingEdits" xml:space="preserve"><value>Widersprüchliche Umbenennungen in '{0}'.</value></data>
-  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Laden Sie das Projekt des Formulars, bevor Sie einen Event-Handler zuweisen.</value></data>
-  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Geben Sie einen C#-Methodennamen für den Event-Handler ein.</value></data>
+  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Lade das Projekt des Formulars, bevor du einen Event-Handler zuweist.</value></data>
+  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Gib einen C#-Methodennamen für den Event-Handler ein.</value></data>
   <data name="EventHandlerFormClassMissing" xml:space="preserve"><value>Die Formularklasse '{0}' ist im geladenen C#-Projekt nicht verfügbar.</value></data>
-  <data name="EventHandlerFormClassAmbiguous" xml:space="preserve"><value>Die Formularklasse '{0}' gehört zu mehreren Projekten. Öffnen Sie das zugehörige Projekt.</value></data>
+  <data name="EventHandlerFormClassAmbiguous" xml:space="preserve"><value>Die Formularklasse '{0}' gehört zu mehreren Projekten. Öffne das zugehörige Projekt.</value></data>
   <data name="EventHandlerControlTypeMissing" xml:space="preserve"><value>Der Control-Typ '{0}' ist im Projekt des Formulars nicht verfügbar.</value></data>
   <data name="EventHandlerGenericControl" xml:space="preserve"><value>Die Event-Prüfung für ein generisches Control benötigt dessen konkrete Typargumente.</value></data>
   <data name="EventHandlerEventMissing" xml:space="preserve"><value>Das Control deklariert das Event '{0}' nicht.</value></data>
@@ -1132,7 +1132,7 @@
   <data name="DropTargetUnavailable" xml:space="preserve"><value>Das Ablageziel gehört nicht zur Entwurfsoberfläche.</value></data>
   <data name="DropPositionUnavailable" xml:space="preserve"><value>Das Element kann nicht neben dem Ablageziel platziert werden.</value></data>
   <data name="GitDiscardWorkingChangesPrompt" xml:space="preserve"><value>Änderungen in der Arbeitsdatei verwerfen: {0}? Die Datei wird auf den Stand im Git-Index oder im letzten Commit zurückgesetzt; Änderungen im Git-Index bleiben erhalten.</value></data>
-  <data name="OAuthTokenExpired" xml:space="preserve"><value>Die OAuth-Anmeldung ist abgelaufen und konnte nicht erneuert werden. Melden Sie sich erneut an oder hinterlegen Sie die URL des Token-Endpunkts.</value></data>
+  <data name="OAuthTokenExpired" xml:space="preserve"><value>Die OAuth-Anmeldung ist abgelaufen und konnte nicht erneuert werden. Melde dich erneut an oder hinterlege die URL des Token-Endpunkts.</value></data>
   <data name="DocumentOpenFailedNamed" xml:space="preserve"><value>„{0}“ konnte nicht geöffnet werden: {1}</value></data>
   <data name="DocumentNotUtf8Reason" xml:space="preserve"><value>Die Datei ist kein gültiger UTF-8-Text.</value></data>
   <data name="CommandFailed" xml:space="preserve"><value>Der Befehl ist fehlgeschlagen: {0}</value></data>
@@ -1152,7 +1152,9 @@
   <data name="DocumentReloadedFromDisk" xml:space="preserve"><value>„{0}“ wurde vom Datenträger neu geladen; die Änderungen im Editor wurden verworfen</value></data>
   <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht umbenannt werden: {1}</value></data>
   <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gelöscht werden: {1}</value></data>
-  <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Beheben Sie die XAML-Fehler, bevor Sie das Dokument hier bearbeiten.</value></data>
+  <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du das Dokument hier bearbeitest.</value></data>
+  <data name="PreviewThemePending" xml:space="preserve"><value>{0} (wartet auf die Vorschau)</value></data>
+  <data name="PreviewThemeProjectDefault" xml:space="preserve"><value>Projektstandard</value></data>
   <data name="ActionsForFormat" xml:space="preserve"><value>Aktionen für {0}</value></data>
   <data name="AddChild" xml:space="preserve"><value>Unterelement hinzufügen</value></data>
   <data name="AddColumn" xml:space="preserve"><value>Spalte hinzufügen</value></data>

@@ -24,6 +24,7 @@ using OutputExtensionEntry = XamlVisualEditor.OutputExtension.OutputExtension;
 using PropertyEditorExtensionEntry = XamlVisualEditor.PropertyEditorExtension.PropertyEditorExtension;
 using SolutionExplorerExtensionEntry = XamlVisualEditor.SolutionExplorerExtension.SolutionExplorerExtension;
 using TextEditingExtensionEntry = XamlVisualEditor.TextEditingExtension.TextEditingExtension;
+using TfvcExtensionEntry = XamlVisualEditor.TfvcExtension.TfvcExtension;
 using ToolboxExtensionEntry = XamlVisualEditor.ToolboxExtension.ToolboxExtension;
 using TreeInspectorExtensionEntry = XamlVisualEditor.TreeInspectorExtension.TreeInspectorExtension;
 using VscodeCompatExtensionEntry = XamlVisualEditor.VscodeCompatExtension.VscodeCompatExtension;
@@ -81,6 +82,7 @@ public sealed class CommandPaletteCoverageTests
         new AcpExtensionEntry(new AcpService(new AcpAgentHostFactory()), new EmptyProfileStore(), new EmptySecretStore(),
             new AcpOAuthDeviceFlowService(), host.WorkspaceInfo),
         new GitExtensionEntry(new GitService(), host.WorkspaceInfo, new InMemoryDialogHost()),
+        new TfvcExtensionEntry(),
         new IdeBridgeExtensionEntry(),
         new McpExtensionEntry(),
         new VscodeCompatExtensionEntry(),

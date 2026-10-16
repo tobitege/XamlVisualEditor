@@ -863,6 +863,10 @@
   <data name="ToggleDebugSettings" xml:space="preserve"><value>Toggle Debug Settings</value></data>
   <data name="ToggleLspSettingsCommand" xml:space="preserve"><value>View: Toggle LSP Settings</value></data>
   <data name="ToggleLspSettings" xml:space="preserve"><value>Toggle LSP Settings</value></data>
+  <data name="ToggleToolboxCommand" xml:space="preserve"><value>View: Toggle Toolbox</value></data>
+  <data name="ToggleToolbox" xml:space="preserve"><value>Toggle Toolbox</value></data>
+  <data name="TogglePropertiesCommand" xml:space="preserve"><value>View: Toggle Properties</value></data>
+  <data name="ToggleProperties" xml:space="preserve"><value>Toggle Properties</value></data>
   <data name="UndoAddNode" xml:space="preserve"><value>Add {0}</value></data>
   <data name="UndoRemoveNode" xml:space="preserve"><value>Remove node</value></data>
   <data name="UndoMoveNode" xml:space="preserve"><value>Move node</value></data>

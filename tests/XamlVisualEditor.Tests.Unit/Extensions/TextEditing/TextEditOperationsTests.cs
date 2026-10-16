@@ -1,8 +1,11 @@
+using Avalonia.Headless.XUnit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.TextEditingExtension.Services;
 using Xunit;
+using TextAnchor = AvaloniaEdit.Document.TextAnchor;
+using TextDocumentViewModel = XamlVisualEditor.Shell.ViewModels.TextDocumentViewModel;
 using TextEditingExtensionEntry = XamlVisualEditor.TextEditingExtension.TextEditingExtension;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions.TextEditing;
@@ -90,7 +93,7 @@ public sealed class TextEditOperationsTests
     }
 
     [Fact]
-    public void ToggleOverSeparateMarkupCommentsCommentsTheLineBetweenThem()
+    public void ToggleOverSeparateMarkupCommentsCommentsEverythingAndTogglesBackExactly()
     {
         string text = "<!-- <A/> -->\n<B/>\n<!-- <C/> -->";
 
@@ -98,19 +101,161 @@ public sealed class TextEditOperationsTests
         string commentedText = Apply(text, commented);
         TextEditResult uncommented = TextEditOperations.ToggleComment(commentedText, commented.Selection, Xaml)!;
 
-        Assert.Equal("<!-- <A/> -->\n<!-- <B/> -->\n<!-- <C/> -->", commentedText);
-        Assert.Equal("<A/>\n<B/>\n<C/>", Apply(commentedText, uncommented));
+        Assert.Equal("<!-- <!-!- <A/> -!->\n<B/>\n<!-!- <C/> -!-> -->", commentedText);
+        Assert.Equal(text, Apply(commentedText, uncommented));
     }
 
     [Fact]
-    public void CommentAroundAnInnerMarkupCommentKeepsItAndCommentsTheRest()
+    public void CommentAroundAnInnerMarkupCommentEscapesItAndUncommentRestoresIt()
     {
         string text = "<Grid>\n  <!-- <A/> -->\n  <B/>\n</Grid>";
 
         TextEditResult result = TextEditOperations.Comment(text, new TextSelection(0, text.Length, text.Length), Xaml)!;
+        string commentedText = Apply(text, result);
 
-        Assert.Equal("<!-- <Grid> -->\n  <!-- <A/> -->\n  <!-- <B/>\n</Grid> -->", Apply(text, result));
-        Assert.Null(TextEditOperations.Comment(Apply(text, result), new TextSelection(0, 0, 0), Xaml));
+        Assert.Equal("<!-- <Grid>\n  <!-!- <A/> -!->\n  <B/>\n</Grid> -->", commentedText);
+        Assert.Null(TextEditOperations.Comment(commentedText, new TextSelection(0, 0, 0), Xaml));
+        Assert.Equal(text, Apply(commentedText, TextEditOperations.Uncomment(commentedText, result.Selection, Xaml)!));
+    }
+
+    [Fact]
+    public void DoubleDashInMarkupStaysWellFormedXmlAndReturnsAfterUncomment()
+    {
+        string text = "<Grid>\n  <Button Tag=\"a--b\" Content=\"-!x---\" />\n  <!-- old -->\n</Grid>";
+
+        TextEditResult commented = TextEditOperations.Comment(text, new TextSelection(0, text.Length, text.Length), Xaml)!;
+        string commentedText = Apply(text, commented);
+        TextEditResult uncommented = TextEditOperations.ToggleComment(commentedText, commented.Selection, Xaml)!;
+
+        Assert.DoesNotContain("--", commentedText[4..^3], StringComparison.Ordinal);
+        System.Xml.Linq.XDocument.Parse("<Root>" + commentedText + "</Root>");
+        Assert.Equal(text, Apply(commentedText, uncommented));
+    }
+
+    [Theory]
+    [InlineData("<A/>")]
+    [InlineData("  <A Tag=\"--\"/>  ")]
+    [InlineData("<A Tag=\"-!-!\" />\n<!-- <B Tag=\"x-!-y\"/> -->")]
+    [InlineData("<!-- <A/> -->\n<B/>\n<!-- <C/> -->")]
+    [InlineData("<A Tag=\"---\"/>\r\n<B Tag=\"-\"/>")]
+    public void UncommentReversesCommentForEveryMarkup(string text)
+    {
+        TextEditResult commented = TextEditOperations.Comment(text, new TextSelection(0, text.Length, text.Length), Xaml)!;
+        string commentedText = Apply(text, commented);
+
+        TextEditResult uncommented = TextEditOperations.Uncomment(commentedText, commented.Selection, Xaml)!;
+
+        Assert.Equal(text, Apply(commentedText, uncommented));
+    }
+
+    [Fact]
+    public void StylesheetCommentEscapesTheEndOfAnInnerComment()
+    {
+        CommentSyntax css = CommentSyntax.Resolve("site.css", null)!;
+        string text = "a { }\n/* b */\nc { }";
+
+        TextEditResult commented = TextEditOperations.ToggleComment(text, new TextSelection(0, text.Length, text.Length), css)!;
+        string commentedText = Apply(text, commented);
+        TextEditResult uncommented = TextEditOperations.ToggleComment(commentedText, commented.Selection, css)!;
+
+        Assert.Equal("/* a { }\n/* b *!/\nc { } */", commentedText);
+        Assert.Equal(text, Apply(commentedText, uncommented));
+    }
+
+    [Fact]
+    public void LineCommentStartsAtTheIndentationColumnWithMixedTabsAndSpaces()
+    {
+        string text = "\tint a;\n    int b;\n  \t  int c;";
+        TextSelection all = new(0, text.Length, text.Length);
+
+        string commented = Apply(text, TextEditOperations.Comment(text, all, CSharp, tabSize: 4)!);
+        string uncommented = Apply(commented, TextEditOperations.ToggleComment(commented, new TextSelection(0, commented.Length, commented.Length), CSharp, tabSize: 4)!);
+
+        Assert.Equal("\t// int a;\n    // int b;\n  \t//   int c;", commented);
+        Assert.Equal(text, uncommented);
+    }
+
+    [Fact]
+    public void LineCommentIsOneInsertionPerLine()
+    {
+        string text = string.Join("\n", Enumerable.Range(0, 500).Select(index => "    int value" + index + ";"));
+
+        TextEditResult result = TextEditOperations.Comment(text, new TextSelection(0, text.Length, text.Length), CSharp)!;
+
+        Assert.Equal(500, result.Edits.Count);
+        Assert.All(result.Edits, edit => Assert.Equal((0, "// "), (edit.Length, edit.NewText)));
+    }
+
+    [AvaloniaFact]
+    public void CommentOfManyLinesIsOneUndoStepAndKeepsAnchorsOnTheLines()
+    {
+        string text = string.Join("\n", Enumerable.Range(0, 500).Select(index => "int value" + index + ";"));
+        using TextDocumentViewModel document = new(Path.GetFullPath("Long.cs"));
+        document.Document.Text = text;
+        document.Document.UndoStack.ClearAll();
+        int marked = text.IndexOf("value250;", StringComparison.Ordinal) + 2;
+        TextAnchor anchor = document.Document.CreateAnchor(marked);
+
+        document.ApplyTextEdits(TextEditOperations.Comment(text, new TextSelection(0, text.Length, text.Length), CSharp)!.Edits);
+
+        Assert.False(anchor.IsDeleted);
+        Assert.Equal(marked + 251 * 3, anchor.Offset);
+        Assert.Equal('l', document.Document.GetCharAt(anchor.Offset));
+        document.Document.UndoStack.Undo();
+        Assert.Equal(text, document.Document.Text);
+        Assert.False(document.Document.UndoStack.CanUndo);
+    }
+
+    [Fact]
+    public void CSharpBlockCommentIsUncommentedAndOtherCodeIsLineCommented()
+    {
+        string single = "  /* int a; */";
+        string multiLine = "/* int a;\n   int b; */";
+        string mixed = "/* a */ b";
+
+        Assert.Equal("  int a;", Apply(single, TextEditOperations.ToggleComment(single, new TextSelection(0, 0, 0), CSharp)!));
+        Assert.Equal("int a;\n   int b;", Apply(multiLine, TextEditOperations.Uncomment(multiLine, new TextSelection(0, multiLine.Length, multiLine.Length), CSharp)!));
+        Assert.Equal("// /* a */ b", Apply(mixed, TextEditOperations.ToggleComment(mixed, new TextSelection(0, 0, 0), CSharp)!));
+    }
+
+    [Fact]
+    public void VisualBasicUncommentRecognisesRem()
+    {
+        CommentSyntax vb = CommentSyntax.Resolve("Module.vb", null)!;
+        string text = "REM a\n' b\n  rem\tc";
+        string word = "REMARK = 1";
+
+        string uncommented = Apply(text, TextEditOperations.ToggleComment(text, new TextSelection(0, text.Length, text.Length), vb)!);
+        string commented = Apply(word, TextEditOperations.ToggleComment(word, new TextSelection(0, 0, 0), vb)!);
+
+        Assert.Equal("a\nb\n  \tc", uncommented);
+        Assert.Equal("' REMARK = 1", commented);
+    }
+
+    [Fact]
+    public void BatchUncommentRecognisesRemAtRemAndLabelComments()
+    {
+        CommentSyntax batch = CommentSyntax.Resolve("build.bat", null)!;
+        string text = "@REM a\n:: b\nREM c\n@rem";
+
+        string uncommented = Apply(text, TextEditOperations.ToggleComment(text, new TextSelection(0, text.Length, text.Length), batch)!);
+
+        Assert.Equal("a\nb\nc\n", uncommented);
+        Assert.Equal(new TextSelection(5, 1, 6), TextEditOperations.FindMatchingBracket("(a::b)", 0, batch));
+    }
+
+    [Theory]
+    [InlineData("Module.vb", "f(\"C:\\\", (a))", 1, 12)]
+    [InlineData("Module.vb", "\"(\"\"x)\"", 1, 5)]
+    [InlineData("build.cmd", "echo (\"C:\\\")", 5, 11)]
+    [InlineData("query.sql", "('C:\\', (x))", 0, 11)]
+    [InlineData("query.sql", "'(''x)'", 1, 5)]
+    [InlineData("A.cs", "f(\"a\\\")\", b)", 1, 11)]
+    public void StringLiteralsFollowTheEscapeRulesOfTheLanguage(string path, string text, int caret, int expected)
+    {
+        TextSelection? match = TextEditOperations.FindMatchingBracket(text, caret, CommentSyntax.Resolve(path, null));
+
+        Assert.Equal(new TextSelection(expected, 1, expected + 1), match);
     }
 
     [Fact]
@@ -240,6 +385,8 @@ public sealed class TextEditOperationsTests
     [InlineData("script.PS1", null, "#")]
     [InlineData("query.sql", null, "--")]
     [InlineData("build.cmd", null, "REM")]
+    [InlineData("Module.vb", null, "'")]
+    [InlineData("untitled", "vb", "'")]
     [InlineData("Dockerfile", null, "#")]
     [InlineData("untitled", "python", "#")]
     public void CommentSyntaxResolvesLinePrefixes(string path, string? languageId, string prefix)

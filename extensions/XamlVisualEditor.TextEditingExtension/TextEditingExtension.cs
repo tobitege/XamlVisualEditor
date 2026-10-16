@@ -95,9 +95,9 @@ public sealed class TextEditingExtension : IXveExtension
     private static void RegisterDocumentCommands(ExtensionContext context)
     {
         RegisterEdit(context, TOGGLE_COMMENT_COMMAND_ID, TextEditingStrings.ToggleComment, null,
-            (text, selection, syntax) => syntax is null ? null : TextEditOperations.ToggleComment(text, selection, syntax));
+            (text, selection, syntax) => syntax is null ? null : TextEditOperations.ToggleComment(text, selection, syntax, GetTabSize(context)));
         RegisterEdit(context, COMMENT_COMMAND_ID, TextEditingStrings.CommentSelection, null,
-            (text, selection, syntax) => syntax is null ? null : TextEditOperations.Comment(text, selection, syntax));
+            (text, selection, syntax) => syntax is null ? null : TextEditOperations.Comment(text, selection, syntax, GetTabSize(context)));
         RegisterEdit(context, UNCOMMENT_COMMAND_ID, TextEditingStrings.UncommentSelection, null,
             (text, selection, syntax) => syntax is null ? null : TextEditOperations.Uncomment(text, selection, syntax));
         RegisterEdit(context, UPPERCASE_COMMAND_ID, TextEditingStrings.MakeUppercase, "Ctrl+Shift+U",
@@ -168,8 +168,20 @@ public sealed class TextEditingExtension : IXveExtension
             List<string> fonts = FontManager.Current.SystemFonts.Select(family => family.Name).ToList();
             using TextEditorOptionsViewModel dialog = new(original, fonts, view.SetOptions);
             using IDisposable preview = persistence.Pause();
-            bool? saved = await context.DialogHost.ShowDialogAsync<bool?>(OPTIONS_DIALOG_ID, dialog, CancellationToken.None);
-            view.SetOptions(saved == true && dialog.Result is { } result ? result : original);
+            TextEditorViewOptions chosen = original;
+            try
+            {
+                bool? saved = await context.DialogHost.ShowDialogAsync<bool?>(OPTIONS_DIALOG_ID, dialog, CancellationToken.None);
+                if (saved == true && dialog.Result is { } result)
+                {
+                    chosen = result;
+                }
+            }
+            finally
+            {
+                // Runs before the pause ends, so that a failed dialog never saves its preview.
+                view.SetOptions(chosen);
+            }
         }));
         RegisterMetadata(context, OPTIONS_COMMAND_ID, TextEditingStrings.EditorOptions, null, when: null);
     }
@@ -246,6 +258,12 @@ public sealed class TextEditingExtension : IXveExtension
         {
             KeybindingScope = CommandKeybindingScope.TextEditor
         }));
+    }
+
+    // The editor draws a tab as wide as one indentation level.
+    private static int GetTabSize(ExtensionContext context)
+    {
+        return context.TextEditorView?.Options.IndentationSize ?? TextEditOperations.DEFAULT_TAB_SIZE;
     }
 
     private static string GetIndentUnit(TextEditorViewOptions? options)

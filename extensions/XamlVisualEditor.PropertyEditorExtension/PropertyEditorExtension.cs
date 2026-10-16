@@ -49,6 +49,20 @@ public sealed class PropertyEditorExtension : IXveExtension
             ViewId,
             new PropertyEditorPanelViewProvider(viewModel)));
 
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleViewCommandId,
+            new CommandMetadata(
+                Title: UiStrings.TogglePropertiesCommand,
+                Category: UiStrings.Properties,
+                Priority: 80)));
+
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            new[]
+            {
+                new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleProperties, UiStrings.Properties)
+            }));
+
         EventHandler<DesignerSelectionChangedEventArgs> selectionHandler = (_, e) =>
         {
             RunBackground(viewModel.HandleSelectionChangedAsync(e.SelectedNodes, CancellationToken.None));

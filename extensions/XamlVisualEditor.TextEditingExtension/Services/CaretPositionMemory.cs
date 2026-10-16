@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using XamlVisualEditor.Extensions;
 
@@ -7,7 +8,7 @@ namespace XamlVisualEditor.TextEditingExtension.Services;
 public sealed record CaretPosition(string FilePath, int Line, int Column);
 
 /// <summary>
-/// Remembers the caret line and column per file and restores them when a file becomes active for the first time.
+/// Remembers the caret line and column per file and restores them when an opened file becomes active for the first time.
 /// Changes are collected in memory and written together after a short delay, away from the UI thread.
 /// </summary>
 public sealed class CaretPositionMemory : IDisposable
@@ -28,10 +29,15 @@ public sealed class CaretPositionMemory : IDisposable
 
     // Keyed by the full path; the first entry is the most recent one.
     private readonly OrderedDictionary<string, CaretPosition> _positions = new(PathComparer);
-    private readonly HashSet<string> _restored = new(PathComparer);
+
+    // Every opening of a file gets its own document object, so a file that is opened again is restored again.
+    private readonly ConditionalWeakTable<IEditorDocument, object> _restored = new();
     private readonly CancellationTokenSource _shutdown = new();
     private Task _pendingSave = Task.CompletedTask;
     private bool _saveScheduled;
+
+    // Saving before the saved positions were read would replace them with the positions of this session only.
+    private bool _loaded;
     private IEditorDocument? _active;
     private IEditorDocument? _pendingRestore;
     private bool _disposed;
@@ -68,7 +74,10 @@ public sealed class CaretPositionMemory : IDisposable
         }
     }
 
-    /// <summary>Reads the saved positions and starts following the active document.</summary>
+    /// <summary>
+    /// Reads the saved positions and starts following the active document. Saved positions that cannot be parsed are
+    /// replaced; while the storage cannot be read, nothing is saved, so that the saved positions stay as they are.
+    /// </summary>
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -81,11 +90,21 @@ public sealed class CaretPositionMemory : IDisposable
                 {
                     _positions.TryAdd(GetKey(position.FilePath), position);
                 }
+
+                _loaded = true;
             }
         }
-        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException error)
         {
             _logger.Warn("Saved caret positions are unreadable: " + error.Message);
+            lock (_gate)
+            {
+                _loaded = true;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warn("Saved caret positions cannot be read; positions are not saved in this session: " + error.Message);
         }
 
         _editor.ActiveDocumentChanged += OnActiveDocumentChanged;
@@ -119,6 +138,11 @@ public sealed class CaretPositionMemory : IDisposable
             Task previous;
             lock (_gate)
             {
+                if (!_loaded)
+                {
+                    return;
+                }
+
                 previous = _pendingSave;
             }
 
@@ -207,7 +231,7 @@ public sealed class CaretPositionMemory : IDisposable
             }
         }
 
-        if (document is null || string.IsNullOrWhiteSpace(document.FilePath) || !_restored.Add(GetKey(document.FilePath)))
+        if (document is null || string.IsNullOrWhiteSpace(document.FilePath) || !_restored.TryAdd(document, document))
         {
             return;
         }
@@ -293,7 +317,7 @@ public sealed class CaretPositionMemory : IDisposable
     {
         lock (_gate)
         {
-            if (_saveScheduled || _disposed)
+            if (_saveScheduled || _disposed || !_loaded)
             {
                 return;
             }

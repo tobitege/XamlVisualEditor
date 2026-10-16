@@ -3,6 +3,100 @@
 All notable changes to XamlVisualEditor are documented in this file. The project
 uses Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+
+- Added a coordinate strip below the design surface and the external previewer. It shows, in logical pixels relative to the root element, the pixel under the pointer (also outside the root within the viewport), the element under the pointer as `Type#Name`, the position and size of the selection with its change while moving or resizing, a distance measured with the new measure tool, and the zoom level. A click copies a value as `x,y`, `x,y,width,height` or `dx,dy`. The rulers mark the pixel under the pointer.
+- The viewport toolbar has toggle buttons for the grid, the rulers and the coordinate strip, and the viewport settings set the grid size. The visible grid and snapping use the same size; at small zoom levels the grid thins out its lines. Grid, snapping, grid size, rulers and coordinate strip are stored as `DesignerViewport` in `editor-options.json` and apply to all designer documents.
+- The zoom level keeps whole percentages; fitting to the viewport rounds down.
+- The context menu of a file document tab offers "Open in File Explorer", "Open in Solution Explorer", "Copy Path" and "Copy File Name", in the tabbed and the MDI layout. The two "Open in" commands show the File Explorer or Solution Explorer panel, expand its tree to the file and select it; the status bar tells when the file is not part of the tree. Extension trees take part through `IExtensionTreeItemPathProvider`, which the File Explorer entries implement.
+- Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
+- Saving a file that changed on disk since the editor read it asks whether to overwrite it with the editor text or to reload it from disk. Declining keeps the editor text, and automatic saves of that document stop asking until it is saved manually.
+- Added the option to reopen the last workspace or folder at startup.
+- Added the option to list folders before files in the File Explorer (Options, File Explorer; on by default). It also holds when the File Explorer sorts by its column header, in both directions; the setting is stored as `FileExplorerFoldersBeforeFiles`.
+- Added the Window menu with the window layout commands, which leave the View menu, and a Manage Layouts dialog that renames and deletes saved layouts.
+- Extensions can contribute to the editor context menu (`ExtensionMenuLocations.EditorContext`), group menu items into submenus (`ExtensionMenuContribution.Submenu` and `SubmenuGroup`), show check marks that follow a condition (`ExtensionMenuContribution.CheckedWhen`) over their own context keys (`ExtensionContext.ContextKeys`), set selection and caret in one step (`IEditorDocument.SetSelection`), limit a keybinding to the focused text editor (`CommandMetadata.KeybindingScope`) and set editor view options and actions through `ExtensionContext.TextEditorView`; `textEditor.hasActiveEditor` tells whether the active document shows an editor.
+- Read-only files show a banner and a title marker in the editor.
+- The status bar shows startup work, extension activation and the language-service warmup of a loaded workspace while they run, and shows "Ready" only after the last of them ended. Extensions announce their own background work through `ExtensionContext.BackgroundActivities`.
+- Extensions can redirect a file the user opens to another file through `ExtensionContext.DocumentOpenInterceptors`, for example to open a generated file in place of its source; navigation into a file is not redirected. `ConfirmationDialogRequest.CancelText` labels the declining button.
+- The XAML code editor marks the element selected in the designer with an arrow at its first line and a bar along its lines in the gutter, and a selection in the designer scrolls the element start away from the viewport edge. The "Follow" toggle in the code editor toolbar turns this off.
+- An interceptor cancels the open by throwing `OperationCanceledException`. Extensions show a modal, cancellable progress dialog through `ProgressDialogRequest` while long work runs.
+- The Problems panel restates common XAML loader errors of the external previewer in plain words and points to their source position: an invalid value names its attribute and, for an enumeration, the allowed values; an unknown property or element names the misspelled name; text that a panel or a single-child element cannot hold is named and marked; a second child of a single-child element names the property that takes it.
+
+### Changed
+
+- Tool tabs no longer scroll: all tabs of a dock stay visible, and tabs that do not fit shrink and shorten their titles with an ellipsis.
+- The splitter between design surface and XAML code and the splitters between docked panels show a muted accent color at rest and the full accent under the pointer and while dragging; a splitter beside a collapsed dock stays transparent.
+- The word wrap and line number toggles and the font size of a document are editor options: a change in one document applies to every editor and persists.
+- Loading a layout no longer adds panels on its own: a debugger tool or extension panel that the saved layout does not contain stays closed until the view menu opens it. An extension panel with `PersistDockState = false` therefore starts closed after a restart.
+- A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
+- The first start and the reset layout command use the Debugging preset instead of a layout with every panel. A layout preset contains only the panels it lists, instead of hiding the others.
+- The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
+- Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
+- Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
+- Fixed the external previewer reporting "Design tree unavailable: Ambiguous match found" for controls that hide an inherited property with `new`, such as a Padding of their own type: the design tree reader walks the type hierarchy and takes the Avalonia Thickness declaration of Padding.
+- A workspace remembers its session independently of the dock layout: opening it again reopens the documents that were open, in their order and including files outside the workspace, activates the document that was active and restores the startup project. The sessions of the 50 most recently used workspaces are kept in `workspace-sessions.json`; closing a workspace keeps its session.
+- The Solution Explorer marks only the startup project, like Visual Studio: its name is bold after the ▶ marker, and the "RUN" label of other executable projects is gone. A tooltip on a project node tells whether it is the startup project or an executable project, and "Set as Startup Project" is available for executable projects only. The references folder is the first child of a project, whatever the sort option, and its name follows the editor language.
+- Added the option "Show the full file path in the window title" (off by default) under Window in the Options dialog; the window title also follows a "Save As" of the active document. The tooltip of a document tab always shows the full path of its file.
+- The Solution Explorer no longer sorts by a click on its column header and always lists folders before files, like Visual Studio. The File Explorer keeps its header sorting.
+- Opening a problem from the Problems panel in a XAML code editor marks its location like a designer selection, but in the error color: a red bar and arrow in the gutter along the start tag that contains the diagnostic (or along its line outside a start tag), scrolled into the middle of the editor with the caret at the diagnostic. The marker disappears with the next edit. Extensions open a diagnostic location this way through `IEditorServices.OpenDiagnosticLocationAsync`.
+- Fixed the external previewer failing with "Could not load file or assembly 'System.Xaml'" when the previewed project references a .NET Framework library: the previewer host no longer preloads project references whose assembly-level attributes come from an assembly the runtime cannot load, because the XAML compiler reads those attributes of every loaded assembly.
+- `DesignPreviewHookRegistry.Register` ignores a hook that is already registered: the hook runs once per preview, the repeated registration's disposal does nothing, and the first registration keeps owning the hook.
+- Breaking: `IDesignPreviewHook` no longer takes part in control instantiation. The design surface loads the document with the Avalonia runtime XAML loader and calls `PostProcess(Control root, MutableAstObjectNode rootNode)` once for the rendered root; `TryCreateControl` and the per-node post-processing in `ControlFactory` are gone. `DesignPreviewHookRegistry.Apply` runs the hooks and reports a failing hook without stopping the others.
+- Installed extension packages are activated from the installation directory the package store extracts them to. `InstalledExtensionPackages.ResolveMainAssemblyPath` takes the package info, and `ExtractContent` is gone.
+- The design artboard sizes a document without an explicit size from a measurement of the rendered root, bounded by `DesignCanvasSizing.MeasureConstraint`, and has no padding around the document; `DesignCanvasSizing.ArtboardPadding` is gone.
+- The dock factory no longer keeps a list of closed tools (`IsToolClosed`, `MarkToolClosed`, `MarkToolReopened`, `ClearClosedTools`, `ReopenBuiltInTool`): a loaded layout keeps closed panels closed on its own.
+- Tests isolate every persisted shell settings file through `ShellSettingsPaths.RootOverride`, which replaces `XamlEditorDockFactory.SettingsRootOverride`.
+- Updated Avalonia from 12.1.1 to 12.1.3, Dock from 12.0.0.2 to 12.1.0.7, ReactiveUI from 23.2.28 to 26.0.1 with ReactiveUI.Avalonia 12.1.6, and System.Reactive from 6.1.0 to 7.0.0; commands and interactions use `RxVoid` instead of `Unit`.
+- The external previewer and the design surface show their preview state (out of date, disconnected, waiting for the first frame, unavailable) in the coordinate strip below the preview instead of over the rendered frame, in the editor language; a long state wraps to two lines and keeps its full text as tooltip.
+- Grid columns can be widened beyond the width of their panel: pressing a column header keeps the current column widths in pixels, so dragging a column edge scrolls the grid instead of squeezing the columns to its right. The message column of the Problems panel keeps a minimum width of 100 pixels.
+- The design theme messages in the Output panel follow the editor language.
+- Messages, comments and documentation that were still German are English.
+- SourceLink is enabled only inside a git working copy, so the solution also builds from a copy without `.git`.
+- Installed extension packages are extracted into their version directory when they are installed instead of on activation. Packages installed by an earlier version are converted the first time the installed list is read; a damaged package is skipped and logged instead of hiding all other packages.
+- MCP consent is stored per workspace as an access level: a client that reconnects to a workspace with stored consent is granted without a new prompt, and revoking the consent ends the running sessions of that workspace. Session tokens are created per session and are no longer stored or shown in the MCP panel. HTTP sessions end after one hour without requests.
+- An extension package that registers document open interceptors has to declare `"capabilities": ["documentOpenInterceptors"]` in `xve.extension.json`.
+- The undo history keeps the newest 100 steps.
+- The MCP server negotiates the protocol version with the client (2025-11-25, 2025-06-18 and 2025-03-26 over HTTP, additionally 2024-11-05 over stdio) and accepts JSON-RPC batches.
+- The IDE bridge binds sessions to the open workspace and stores consent per workspace as an access level; session tokens are no longer stored or shown in the IDE bridge panel. Consent stored by an earlier version is read as read-only access.
+- Discarding changes in the Git panel restores the working file from the index and keeps staged changes and staged new files; unstaging no longer asks for confirmation.
+- The extension manager shows the capabilities an extension declares.
+- The CDP debug diagnostics are enabled with the MSBuild property `EnableCdpDiagnostics=true` instead of the Debug configuration and require the token written to the log at startup.
+- At most four external previewer hosts run at the same time: the active document and the three most recently active ones.
+
+### Fixed
+
+- Fixed moving a control with a row or column span in a Grid of the design surface: the move keeps the spans inside the grid.
+- Fixed the File Explorer freezing the window on folders with thousands of entries; a loaded folder level is added to the tree in one step.
+- Fixed the Solution Explorer search missing files in collapsed folders: the search matches any part of a name, ignoring case, and opens the folders above every match while the tree keeps its structure; clearing the search restores the folders that were open before.
+- Fixed the Solution Explorer missing the XAML files of an SDK-style project that lists other items, such as a `None Update` of a text file: the default XAML files of the project folder are always part of the tree unless `EnableDefaultItems` or `EnableDefaultAvaloniaItems` is false, and `AvaloniaXaml Remove` patterns still exclude files. The tree search and "Open in Solution Explorer" find these files now.
+- Fixed the output naming the line of the previewer's internal preview copy for a XAML error of the external previewer: the entry now names the position in the source document, like the Problems panel, and the log no longer repeats the error with its stack trace. Exceptions without a XAML position are still logged in full.
+- Fixed `IEditorServices.OpenLocationAsync` failing with "Call from invalid thread" when the file was not open yet: after opening the document, the caret and selection are set on the UI thread.
+- Fixed the line and column in the status bar, which stayed at 1, 1 for XAML documents.
+- Fixed the selection in the designer, which stayed after a click on the empty area around the document.
+- Fixed previews that failed with an unresolved `using:` namespace when no code had loaded the referenced library yet; the previewer now loads the application libraries the project references before it compiles the XAML.
+- Fixed Solution Explorer entries such as `Y:` or `..` for files outside the project folder; these files no longer appear in the tree.
+- Fixed the pointer cursor over the selection: resize handles show the resize direction, and the selection border shows the move cursor and moves the selection.
+- Opening files, folders and workspaces rejects paths that are not fully qualified in the canonical syntax of the operating system; on Windows only drive paths and UNC paths with backslashes are accepted. Recent entries with such paths are dropped and removed from the stored history.
+- Fixed binding errors of the tool chrome when the last tool of a dock closes, gets pinned or leaves the auto-hide preview.
+- Fixed the status bar showing line and column while no text editor is visible.
+- Fixed text and XAML editors that showed a newly opened file without syntax colors until the view scrolled.
+- Fixed opening a file with many diagnostics freezing the editor: the problems list is rebuilt once per result instead of once per diagnostic.
+- Fixed unreadable text of a selected row under the mouse in the explorer and other lists.
+- Fixed C# files outside a loaded project reporting every reference to another assembly as an error; they report syntax errors only.
+- Fixed a C# file outside the loaded projects pushing the project workspace aside, after which files of the projects lost their references as well.
+- Fixed saving a window layout while several documents were open: the focus moved to another open document during the save and was written into the layout, which then failed to load and was replaced by the default layout. Such a layout file loads again without the document.
+- Fixed panels whose list stopped following the selection after their tab was hidden and shown again.
+- Fixed the C# language service writing documents to disk, which crashed the application for read-only files.
+- Fixed missing satellite resource assemblies being reported as unresolved workspace assemblies.
+- Fixed closing the editor logging a binding error for every tab, pin button and document: the dock views let go of their dockables before the layout is saved.
+- Fixed the references panel and the extension manager keeping their subscriptions after the shell was disposed; the throttled references filter still reached the UI dispatcher afterwards.
+- Fixed a panel shown again from the View menu staying invisible after its side dock had been emptied: the side dock gets its default width back.
+- Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
+- Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
+- Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
+
 ## [0.2.0] - 2026-09-01
 
 ### Added

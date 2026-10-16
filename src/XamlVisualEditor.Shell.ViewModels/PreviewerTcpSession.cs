@@ -34,6 +34,11 @@ public sealed class PreviewerTcpSession : IDisposable
     private string? _pendingXaml;
     private string? _latestXaml;
     private readonly Queue<string> _submittedXaml = new();
+    // A full reload replaces the preview window, and the new window numbers its frames from 1 and sends the next frame
+    // only after the acknowledgement of its last one. An acknowledgement of a frame of the replaced window that reaches
+    // the new window stops it for good, so frames that arrive while a reload is outstanding are acknowledged only when
+    // the reload fails and the previous window stays.
+    private long? _withheldFrame;
     private string? _pendingAssemblyPath;
     private string? _pendingProjectPath;
     private double? _pendingViewportWidth;
@@ -345,6 +350,7 @@ public sealed class PreviewerTcpSession : IDisposable
             _connection?.Dispose();
             _connection = connection;
             _submittedXaml.Clear();
+            _withheldFrame = null;
         }
 
         _log?.Invoke("Info", "Previewer transport connected");
@@ -398,17 +404,21 @@ public sealed class PreviewerTcpSession : IDisposable
         if (message is FrameMessage frame)
         {
             bool valid = IsValidFrame(frame);
+            bool withhold;
             lock (_gate)
             {
                 if (!ReferenceEquals(connection, _connection)) return;
                 if (valid) _lastFrame = frame;
+                withhold = _submittedXaml.Count > 0;
+                if (withhold) _withheldFrame = frame.SequenceId;
             }
 
             // An invalid frame is acknowledged as well, so the previewer goes on sending frames.
-            connection.Send(new FrameReceivedMessage
-            {
-                SequenceId = frame.SequenceId
-            });
+            if (!withhold)
+                connection.Send(new FrameReceivedMessage
+                {
+                    SequenceId = frame.SequenceId
+                });
 
             if (!valid)
             {
@@ -436,12 +446,22 @@ public sealed class PreviewerTcpSession : IDisposable
         if (message is UpdateXamlResultMessage updateResult)
         {
             string? xaml;
+            bool current;
+            long? acknowledge = null;
             lock (_gate)
             {
                 if (!ReferenceEquals(connection, _connection)) return;
                 xaml = _submittedXaml.Count > 0 ? _submittedXaml.Dequeue() : null;
-                if (xaml != _latestXaml) return;
+                current = xaml == _latestXaml;
+                if (_submittedXaml.Count == 0 && _withheldFrame is { } withheld)
+                {
+                    _withheldFrame = null;
+                    if (!string.IsNullOrWhiteSpace(updateResult.Error)) acknowledge = withheld;
+                }
             }
+            if (acknowledge is { } sequenceId)
+                connection.Send(new FrameReceivedMessage { SequenceId = sequenceId });
+            if (!current) return;
             if (!string.IsNullOrWhiteSpace(updateResult.Error))
             {
                 PreviewerErrorInfo error = CreateXamlError(updateResult, xaml, _xamlFilePath);

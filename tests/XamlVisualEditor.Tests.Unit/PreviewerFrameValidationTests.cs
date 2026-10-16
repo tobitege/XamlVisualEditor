@@ -71,6 +71,45 @@ public sealed class PreviewerFrameValidationTests
         Assert.Equal(2, session.LastFrame?.SequenceId);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Frames_of_a_replaced_window_are_acknowledged_only_when_the_reload_fails(bool reloadFails)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using PreviewerTcpSession session = new("Reload.axaml", log: null);
+        using IAvaloniaRemoteTransportConnection connection = await new BsonTcpTransport().Connect(IPAddress.Loopback, session.Port);
+        Channel<long> acknowledged = Channel.CreateUnbounded<long>();
+        TaskCompletionSource<bool> reloadRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.OnMessage += (_, message) =>
+        {
+            if (message is FrameReceivedMessage received) acknowledged.Writer.TryWrite(received.SequenceId);
+            if (message is Avalonia.Remote.Protocol.Designer.UpdateXamlMessage) reloadRequested.TrySetResult(true);
+        };
+        connection.Start();
+        Task SendFrame(long sequenceId) => connection.Send(new FrameMessage
+        {
+            SequenceId = sequenceId, Width = 2, Height = 2, Stride = 8, Format = PixelFormat.Bgra8888, Data = new byte[16]
+        });
+        Task<long> NextAcknowledgement() =>
+            acknowledged.Reader.ReadAsync(cancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+
+        await SendFrame(41);
+        Assert.Equal(41, await NextAcknowledgement());
+
+        await session.SendUpdateXamlAsync("<UserControl />", "Views.dll", "Views.axaml", 160, 80);
+        await reloadRequested.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        // The previous window sends another frame before the host answers the reload. A successful reload replaces
+        // that window by one that numbers its frames from 1; a failed one keeps it.
+        await SendFrame(42);
+        await connection.Send(new Avalonia.Remote.Protocol.Designer.UpdateXamlResultMessage { Error = reloadFails ? "Invalid XAML" : null });
+        await SendFrame(reloadFails ? 43 : 1);
+
+        // Messages keep their order, so an acknowledgement of frame 42 would arrive before the next one.
+        Assert.Equal(reloadFails ? 42 : 1, await NextAcknowledgement());
+        if (reloadFails) Assert.Equal(43, await NextAcknowledgement());
+    }
+
     [Fact]
     public async Task Waiting_for_a_stable_frame_ignores_the_stale_frame_and_frames_without_size()
     {

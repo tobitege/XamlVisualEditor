@@ -2,14 +2,19 @@
 
 ## Stand
 
-Planungsdokument des Forks; geht nicht upstream. Ziel ist ein Upstream-PR mit einem Commit je Phase.
-Umgesetzt wird im TFVC-Arbeitsstand `XamlVisualEditor`, exportiert per Abgleichskript nach
-`xve-form-editing`; jede Phase endet mit grünem Build, grünen Tests und einem Livetest per CDP.
+Planungsdokument des Forks; geht nicht upstream und liegt nur auf `xve-form-editing`. Ziel ist ein Upstream-PR mit
+einem Commit je Phase.
+
+Arbeitsweise: Die Git-Integration wird komplett im Fork umgesetzt, auf dem PR-Branch `git-integration` (Basis
+`upstream/main`, Worktree `github\XamlVisualEditor-git`). Kein Abgleich mit dem TFVC-Arbeitsstand während der Arbeit;
+erst nach dem Upstream-Merge wird der Stand in einem Schritt übernommen. Jede Phase endet mit grünem Build, grünen
+Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem Remote
+`xve-demo\GitDemo-remote.git`.
 
 | Phase | Stand |
 |---|---|
 | 0 CLI-Fundament | erledigt, live geprüft |
-| 1 Session, Statusleiste, Kommandos | in Arbeit |
+| 1 Session, Statusleiste, Kommandos | umgesetzt, Livetest offen |
 | 2 Branches und Sync | offen |
 | 3 Verlauf, Commit-Details, Tags | offen |
 | 4 Explorer-API | offen |

@@ -456,6 +456,8 @@ public sealed class McpIntegrationTests
 
         public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
 
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
+
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => new InMemoryStatusBarItem();
     }
 

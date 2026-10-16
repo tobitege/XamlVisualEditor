@@ -67,7 +67,8 @@ public sealed class InMemoryWindow : IWindow
             name,
             message => OutputChannelMessage?.Invoke(this, message),
             cleared => OutputChannelCleared?.Invoke(this, cleared),
-            () => RemoveChannel(info));
+            () => RemoveChannel(info),
+            shown => OutputChannelShowRequested?.Invoke(this, shown));
 
         _channels[name] = channel;
         OutputChannelCreated?.Invoke(this, new OutputChannelEventArgs(info));
@@ -93,6 +94,8 @@ public sealed class InMemoryWindow : IWindow
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 #pragma warning restore CS0067
 
     /// <inheritdoc />
@@ -155,19 +158,22 @@ public sealed class InMemoryOutputChannel : IOutputChannel
     private readonly Action<OutputChannelMessageEventArgs>? _messageCallback;
     private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
     private readonly Action? _disposedCallback;
+    private readonly Action<OutputChannelEventArgs>? _showCallback;
 
     /// <summary>Creates a channel.</summary>
     public InMemoryOutputChannel(
         string name,
         Action<OutputChannelMessageEventArgs>? messageCallback = null,
         Action<OutputChannelClearedEventArgs>? clearedCallback = null,
-        Action? disposedCallback = null)
+        Action? disposedCallback = null,
+        Action<OutputChannelEventArgs>? showCallback = null)
     {
         Name = name;
         _info = new OutputChannelInfo(name);
         _messageCallback = messageCallback;
         _clearedCallback = clearedCallback;
         _disposedCallback = disposedCallback;
+        _showCallback = showCallback;
     }
 
     /// <inheritdoc />
@@ -202,6 +208,7 @@ public sealed class InMemoryOutputChannel : IOutputChannel
     /// <inheritdoc />
     public void Show()
     {
+        _showCallback?.Invoke(new OutputChannelEventArgs(_info));
     }
 
     /// <inheritdoc />
@@ -328,6 +335,8 @@ internal sealed class NullWindow : IWindow
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 #pragma warning restore CS0067
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)

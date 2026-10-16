@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="ChangesViewTitle" xml:space="preserve"><value>Git-Änderungen</value></data>
+  <data name="ToggleChangesViewCommand" xml:space="preserve"><value>Git-Änderungen ein-/ausblenden</value></data>
+  <data name="ShowChangesCommand" xml:space="preserve"><value>Git-Änderungen öffnen</value></data>
+  <data name="RefreshCommand" xml:space="preserve"><value>Git-Status aktualisieren</value></data>
+  <data name="ShowOutputCommand" xml:space="preserve"><value>Git-Ausgabe anzeigen</value></data>
+  <data name="InitCommand" xml:space="preserve"><value>Repository initialisieren</value></data>
+  <data name="ToggleAutoRefreshCommand" xml:space="preserve"><value>Arbeitsordner überwachen</value></data>
+  <data name="StageCommand" xml:space="preserve"><value>Stagen</value></data>
+  <data name="UnstageCommand" xml:space="preserve"><value>Aus dem Stage nehmen</value></data>
+  <data name="DiscardCommand" xml:space="preserve"><value>Änderungen verwerfen …</value></data>
+  <data name="StageAllCommand" xml:space="preserve"><value>Alles stagen</value></data>
+  <data name="UnstageAllCommand" xml:space="preserve"><value>Alles aus dem Stage nehmen</value></data>
+  <data name="CommitCommand" xml:space="preserve"><value>Committen …</value></data>
+  <data name="NoTargetPath" xml:space="preserve"><value>Öffne eine Datei des Repositorys oder übergib dem Kommando einen Pfad.</value></data>
+  <data name="PathOutsideRepositoryFormat" xml:space="preserve"><value>{0} liegt nicht im Repository {1}.</value></data>
+  <data name="NoChangesToStageFormat" xml:space="preserve"><value>{0} hat keine Änderungen zum Stagen.</value></data>
+  <data name="NoChangesToUnstageFormat" xml:space="preserve"><value>{0} hat keine gestagten Änderungen.</value></data>
+  <data name="NoChangesToDiscardFormat" xml:space="preserve"><value>{0} hat keine Änderungen, die sich verwerfen lassen. Unversionierte Dateien werden nicht gelöscht.</value></data>
+  <data name="NothingToStage" xml:space="preserve"><value>Es gibt keine Änderungen zum Stagen.</value></data>
+  <data name="NothingToUnstage" xml:space="preserve"><value>Es gibt keine gestagten Änderungen.</value></data>
+  <data name="NothingToCommit" xml:space="preserve"><value>Stage zuerst die Änderungen, die du committen willst.</value></data>
+  <data name="DiscardManyPromptFormat" xml:space="preserve"><value>Änderungen an {0} Dateien unter {1} verwerfen? Die Dateien werden auf ihren gestagten oder committeten Stand zurückgesetzt; gestagte Änderungen bleiben erhalten.</value></data>
+  <data name="CommitInputTitle" xml:space="preserve"><value>Committen</value></data>
+  <data name="CommitInputPrompt" xml:space="preserve"><value>Commit-Nachricht</value></data>
+  <data name="InitNoWorkspace" xml:space="preserve"><value>Öffne zuerst einen Ordner oder Workspace.</value></data>
+  <data name="InitUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann keine Repositorys anlegen.</value></data>
+  <data name="InitializedFormat" xml:space="preserve"><value>Git-Repository in {0} angelegt.</value></data>
+  <data name="InitAlreadyRepositoryFormat" xml:space="preserve"><value>{0} gehört bereits zum Git-Repository in {1}; es wurde kein Repository angelegt.</value></data>
+  <data name="StatusBarBranchFormat" xml:space="preserve"><value>Branch {0}</value></data>
+  <data name="StatusBarDetachedFormat" xml:space="preserve"><value>Detached HEAD bei {0}</value></data>
+  <data name="StatusBarUpstreamFormat" xml:space="preserve"><value>Upstream {0}: {1} voraus, {2} zurück</value></data>
+  <data name="StatusBarNoUpstream" xml:space="preserve"><value>Kein Upstream-Branch</value></data>
+  <data name="StatusBarChangesFormat" xml:space="preserve"><value>{0} geänderte Dateien</value></data>
+  <data name="StatusBarClickHint" xml:space="preserve"><value>Klick öffnet die Git-Änderungen.</value></data>
+  <data name="LogGitUnavailable" xml:space="preserve"><value>git wurde nicht gefunden. Installiere Git oder nimm es in den PATH auf.</value></data>
+  <data name="LogRefreshFailed" xml:space="preserve"><value>Das Lesen des Git-Status ist fehlgeschlagen.</value></data>
+  <data name="LogWorkingTreeWatcherFailedFormat" xml:space="preserve"><value>Die Überwachung des Arbeitsordners {0} ist fehlgeschlagen: {1} Der Git-Status wird weiter aktualisiert, wenn sich der Git-Ordner ändert, nach Git-Kommandos dieser Anwendung und beim Aktualisieren.</value></data>
+  <data name="LogGitDirectoryWatcherFailedFormat" xml:space="preserve"><value>Die Überwachung des Git-Ordners {0} ist fehlgeschlagen: {1} Der Git-Status wird nach Git-Kommandos dieser Anwendung und beim Aktualisieren neu gelesen.</value></data>
+  <data name="LogSettingsFailed" xml:space="preserve"><value>Die Git-Einstellungen ließen sich nicht lesen oder speichern.</value></data>
+</root>

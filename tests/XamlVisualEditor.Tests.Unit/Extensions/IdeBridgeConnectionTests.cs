@@ -217,6 +217,8 @@ public sealed class IdeBridgeConnectionTests
         public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
         public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 #pragma warning restore CS0067
 
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => new InMemoryStatusBarItem();

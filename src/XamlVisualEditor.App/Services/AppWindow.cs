@@ -83,7 +83,8 @@ public sealed class AppWindow : IWindow
                 info,
                 message => OutputChannelMessage?.Invoke(this, message),
                 cleared => OutputChannelCleared?.Invoke(this, cleared),
-                () => RemoveChannel(info));
+                () => RemoveChannel(info),
+                () => OutputChannelShowRequested?.Invoke(this, new OutputChannelEventArgs(info)));
 
             _channels[name] = channel;
             OutputChannelCreated?.Invoke(this, new OutputChannelEventArgs(info));
@@ -112,6 +113,8 @@ public sealed class AppWindow : IWindow
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
     {
@@ -242,18 +245,21 @@ public sealed class AppWindow : IWindow
         private readonly Action<OutputChannelMessageEventArgs>? _messageCallback;
         private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
         private readonly Action? _disposedCallback;
+        private readonly Action _showCallback;
         private readonly List<string> _lines = new();
 
         public AppOutputChannel(
             OutputChannelInfo info,
             Action<OutputChannelMessageEventArgs>? messageCallback,
             Action<OutputChannelClearedEventArgs>? clearedCallback,
-            Action? disposedCallback)
+            Action? disposedCallback,
+            Action showCallback)
         {
             Info = info;
             _messageCallback = messageCallback;
             _clearedCallback = clearedCallback;
             _disposedCallback = disposedCallback;
+            _showCallback = showCallback;
         }
 
         public OutputChannelInfo Info { get; }
@@ -283,6 +289,7 @@ public sealed class AppWindow : IWindow
 
         public void Show()
         {
+            _showCallback();
         }
 
         public void Hide()

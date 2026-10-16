@@ -101,6 +101,7 @@ This is the current native .NET extension API surface. All types live in the
   - `OutputChannelRemoved` event
   - `OutputChannelMessage` event
   - `OutputChannelCleared` event
+  - `OutputChannelShowRequested` event (raised by `IOutputChannel.Show()`; the Output panel shows itself with that channel selected)
   - `CreateStatusBarItem(StatusBarAlignment alignment, int priority)`
 
 - `IExtensionPermissions`

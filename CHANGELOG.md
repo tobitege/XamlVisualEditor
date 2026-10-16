@@ -5,6 +5,21 @@ uses Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- The Git extension shows the branch of the workspace repository in the status bar, with the commits ahead of and behind its upstream and the number of changed files, for example `main ↑1 ↓2 · 5`; a click opens the Git Changes panel. The panel is listed under View › Panels, Ctrl+Shift+G opens it, and the Extensions › Git submenu and the Command Palette offer refresh, the "Git" output channel, stage all, unstage all, commit and creating a repository. Stage, unstage and discard (after a confirmation) are also in the Git submenu of the editor context menu and work on the active document; the output channel lists every git command the extension runs, with user names and passwords in URLs masked. Extensions can read the context keys `git.available`, `git.isRepository`, `git.hasRemote`, `git.hasUpstream`, `git.isMerging`, `git.hasConflicts` and `git.autoRefresh`.
+- `IOutputChannel.Show()` of an extension shows the Output panel in front with that channel selected. The panel learns of it through the new `IWindow.OutputChannelShowRequested` event; implementations of `IWindow` add this event.
+
+### Changed
+
+- The Command Palette lists only the commands whose `When` clause holds when it opens, as the menus enable only those, and does not run a selected command whose clause no longer holds.
+
+- The Git panel shows the status without being switched on first: the status refreshes when the git folder changes, for example after a branch switch in a terminal, and after every Git command of the editor. The panel switch, now "Watch: On/Off" and the menu item Extensions › Git › Watch Working Folder, only controls the watcher of the working folder, which is off by default and remembered. The panel is titled "Git Changes", and its buttons show icons.
+
+### Fixed
+
+- Fixed the Git panel listing files whose names contain characters outside ASCII, such as umlauts, as quoted escape sequences, after which staging, unstaging and discarding them failed: Git writes the names unquoted and its output is read as UTF-8. Reading the status no longer writes the Git index. Commit messages reach Git through standard input, so their length is not limited by the command line.
+
 ## [0.2.0] - 2026-10-16
 
 ### Added
@@ -109,7 +124,6 @@ uses Semantic Versioning.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
 - Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
 - Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
-- Fixed the Git panel listing files whose names contain characters outside ASCII, such as umlauts, as quoted escape sequences, after which staging, unstaging and discarding them failed: Git writes the names unquoted and its output is read as UTF-8. Reading the status no longer writes the Git index. Commit messages reach Git through standard input, so their length is not limited by the command line.
 - Fixed the preview theme selector showing the raw provider id of a saved theme before the previewer reported its themes: the entry names the theme and says that it waits for the preview, and it shows the theme as unavailable once the previewer exits, fails to start or its start is cancelled at the trust prompt without reporting it, also after switching document tabs, until a previewer starts again. When several theme providers are registered, or the saved theme belongs to another provider than the registered one, the entry also names the provider. Selecting another entry removes the waiting entry.
 - Fixed the preview strip waiting for a first frame after the previewer start was cancelled at the trust prompt; it says that the start was cancelled until a previewer starts again. Switching back to the document no longer asks for trust again; turning the previewer off and on starts it again.
 - Fixed the untranslated "Theme default" entry of the preview theme selector; it reads "Project default" and follows the UI language ("Projektstandard" in German).

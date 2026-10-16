@@ -39,6 +39,11 @@ public interface IWindow
     /// <summary>Raised when an output channel is cleared.</summary>
     event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
 
+    /// <summary>
+    /// Raised when <see cref="IOutputChannel.Show"/> is called; the output view shows itself with that channel selected.
+    /// </summary>
+    event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
+
     /// <summary>Creates a status bar item.</summary>
     IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority);
 }
@@ -114,7 +119,7 @@ public interface IOutputChannel : IDisposable
     /// <summary>Appends text with a newline.</summary>
     void AppendLine(string value);
 
-    /// <summary>Shows the output channel.</summary>
+    /// <summary>Shows the output view with this channel selected.</summary>
     void Show();
 
     /// <summary>Hides the output channel.</summary>

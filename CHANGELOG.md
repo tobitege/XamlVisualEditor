@@ -102,6 +102,10 @@ uses Semantic Versioning.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
 - Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
 - Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
+- Fixed the preview theme selector showing the raw provider id of a saved theme before the previewer reported its themes: the entry names the theme and says that it waits for the preview, and it shows the theme as unavailable once the previewer exits, fails to start or its start is cancelled at the trust prompt without reporting it, also after switching document tabs, until a previewer starts again. When several theme providers are registered, or the saved theme belongs to another provider than the registered one, the entry also names the provider. Selecting another entry removes the waiting entry.
+- Fixed the preview strip waiting for a first frame after the previewer start was cancelled at the trust prompt; it says that the start was cancelled until a previewer starts again. Switching back to the document no longer asks for trust again; turning the previewer off and on starts it again.
+- Fixed the untranslated "Theme default" entry of the preview theme selector; it reads "Project default" and follows the UI language ("Projektstandard" in German).
+- Fixed German messages that addressed the user formally; all German texts use the informal form.
 - Fixed disposing a replaced command handler, command metadata or view provider registration, which removed its replacement.
 - Fixed a theme package with an unreadable manifest or a taken provider ID breaking the extension list: the package is logged as a problem and stays unregistered, and its other provider kind is not registered either.
 

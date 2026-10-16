@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Avalonia.Markup.Xaml;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Shell.ViewModels;
@@ -78,7 +79,8 @@ public sealed class DesignerThemeWorkflowTests
             ComboBox combo = toolbar.FindControl<ComboBox>("LibraryThemeSelector")!;
             Assert.True(combo.IsVisible);
             Assert.True(combo.IsEnabled);
-            Assert.Equal(new[] { "Theme default", "Clay", "Harbor" }, document.DesignSurface.PreviewThemes.Select(theme => theme.DisplayName));
+            Assert.Equal(new[] { DesignerThemeChoice.ProjectDefault.DisplayName, "Clay", "Harbor" },
+                document.DesignSurface.PreviewThemes.Select(theme => theme.DisplayName));
             combo.SelectedIndex = 2;
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             Assert.Equal(new DesignerThemeSelection(provider.Id, "harbor"), document.PreviewThemeRequest.Selection);

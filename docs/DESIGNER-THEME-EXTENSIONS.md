@@ -65,12 +65,23 @@ own theme.
 - An editor theme from the same package uses the preview theme with the same ID.
 - The builtin editor themes `light` and `dark` use the preview theme of the same name;
   `system` resolves to the variant the editor currently shows.
+- When the catalog the preview reports for a document does not offer the derived
+  theme, for example because the target application excludes it or the provider
+  failed, the document keeps the project default.
 - A theme picked in the designer is stored for the workspace and wins. Picking the
   project default while the options supply a theme is stored as well; picking the
   supplied theme returns to following the options.
 
 A theme that follows the options does not switch the document to the external
 previewer; an explicit pick does.
+
+Until the preview reports its catalog, the selector lists a selected theme by its ID
+with the note that it waits for the preview. Once the previewer exits or fails to
+start, the entry reads "Unavailable" until a previewer starts again; a catalog that
+does not offer the theme shows it the same way. When more than one provider is
+registered, or the selection names another provider than the registered one, the
+entry starts with the provider name, or with the provider ID when no registration
+names it, because two providers can offer the same theme ID.
 
 ## Lifecycle
 

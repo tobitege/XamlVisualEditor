@@ -82,10 +82,79 @@ internal static class GitCommandTarget
         return change.WorkTreeStatus != GitChangeKind.None || IsUntracked(change);
     }
 
-    /// <summary>Returns whether the index differs from HEAD.</summary>
+    /// <summary>
+    /// Returns whether the index differs from HEAD. A conflicted file is not staged: it belongs to the working tree
+    /// changes until staging it marks the conflict as resolved.
+    /// </summary>
     public static bool HasStagedChange(GitFileChange change)
     {
-        return change.IndexStatus != GitChangeKind.None && !IsUntracked(change);
+        return change.IndexStatus != GitChangeKind.None && !IsUntracked(change) && !change.IsConflicted;
+    }
+
+    /// <summary>Returns the pathspec of a repository path: the path itself, or <c>.</c> for the repository root.</summary>
+    public static string ToPathspec(string repositoryPath)
+    {
+        return repositoryPath.Length == 0 ? "." : repositoryPath;
+    }
+
+    /// <summary>Returns the paths of the changes.</summary>
+    public static IReadOnlyList<string> PathsOf(IReadOnlyList<GitFileChange> changes)
+    {
+        string[] paths = new string[changes.Count];
+        for (int i = 0; i < changes.Count; i++)
+        {
+            paths[i] = changes[i].Path;
+        }
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Returns the paths that stage the changes found below <paramref name="repositoryPath"/>: git's own paths of the
+    /// changes, which match the index also when the path on disk differs in case, and for a folder the folder
+    /// itself, so files that appeared below it after the last refresh are staged too; <c>.</c> for the repository
+    /// root.
+    /// </summary>
+    public static IReadOnlyList<string> StagePathsOf(IReadOnlyList<GitFileChange> changes, string repositoryPath)
+    {
+        if (repositoryPath.Length == 0)
+        {
+            return [ToPathspec(repositoryPath)];
+        }
+
+        List<string> paths = new(changes.Count + 1);
+        bool isChangedFile = false;
+        foreach (GitFileChange change in changes)
+        {
+            paths.Add(change.Path);
+            isChangedFile |= string.Equals(change.Path, repositoryPath, FileSystemPathComparison.Comparison);
+        }
+
+        if (!isChangedFile)
+        {
+            paths.Add(repositoryPath);
+        }
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Returns the paths that unstage the changes: a staged rename also needs its old path, otherwise the deletion
+    /// of the old path stays staged.
+    /// </summary>
+    public static IReadOnlyList<string> UnstagePathsOf(IReadOnlyList<GitFileChange> changes)
+    {
+        List<string> paths = new(changes.Count);
+        foreach (GitFileChange change in changes)
+        {
+            paths.Add(change.Path);
+            if (change.IsRenamed && !string.IsNullOrEmpty(change.OldPath))
+            {
+                paths.Add(change.OldPath);
+            }
+        }
+
+        return paths;
     }
 
     /// <summary>Returns whether discarding can restore the working file from the index.</summary>

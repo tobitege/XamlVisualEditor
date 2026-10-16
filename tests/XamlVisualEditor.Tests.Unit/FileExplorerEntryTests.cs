@@ -188,8 +188,6 @@ public sealed class FileExplorerEntryTests
 
         public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
 
-        public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
-
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
         {
             throw new NotSupportedException();

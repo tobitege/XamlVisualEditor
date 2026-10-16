@@ -231,15 +231,7 @@ public sealed class App : Application
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
         services.AddSingleton<IDotNetCli, DotNetCliRunner>();
         services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();
-        services.AddSingleton<GitService>();
-        services.AddSingleton<IGitService>(sp => sp.GetRequiredService<GitService>());
-        services.AddSingleton<IGitRepositoryService>(sp => sp.GetRequiredService<GitService>());
-        services.AddSingleton<IGitCommandLog>(sp => sp.GetRequiredService<GitService>());
-        services.AddSingleton(sp => new GitServiceSet(sp.GetRequiredService<IGitService>())
-        {
-            Repository = sp.GetRequiredService<IGitRepositoryService>(),
-            CommandLog = sp.GetRequiredService<IGitCommandLog>()
-        });
+        services.AddSingleton<IGitService, GitService>();
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
         services.AddSingleton<IPtyProvider>(_ => PtyProviderFactory.CreateDefault());

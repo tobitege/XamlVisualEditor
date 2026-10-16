@@ -2,6 +2,7 @@ using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
@@ -135,7 +136,8 @@ public sealed class OutputExtension : IXveExtension
         EventHandler<OutputChannelEventArgs> showRequestedHandler = (_, args) =>
         {
             viewModel.HandleChannelShowRequested(args.Channel);
-            _ = context.ViewHost.ActivateAsync(ViewId, CancellationToken.None);
+            // Show may be called on any thread; the view host works on the UI thread.
+            Dispatcher.UIThread.Post(() => _ = context.ViewHost.ActivateAsync(ViewId, CancellationToken.None));
         };
 
         context.Window.OutputChannelCreated += createdHandler;

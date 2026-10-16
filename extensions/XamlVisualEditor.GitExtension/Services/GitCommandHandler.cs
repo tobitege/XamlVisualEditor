@@ -9,7 +9,7 @@ using XamlVisualEditor.GitExtension.Localization;
 namespace XamlVisualEditor.GitExtension.Services;
 
 /// <summary>Executes the Git commands registered by <see cref="GitCommands.RegisterCommands"/>.</summary>
-internal sealed class GitCommandHandler
+internal sealed partial class GitCommandHandler
 {
     private readonly GitSession _session;
     private readonly IExtensionViewHost _viewHost;
@@ -55,7 +55,7 @@ internal sealed class GitCommandHandler
     public Task ShowChangesAsync(CommandContext context) =>
         _viewHost.ShowAsync(GitCommands.CHANGES_VIEW_ID, CancellationToken.None);
 
-    public Task RefreshAsync(CommandContext context) => _session.RefreshAsync();
+    public Task RefreshAsync(CommandContext context) => _session.RefreshAllAsync();
 
     public Task ShowOutputAsync(CommandContext context)
     {
@@ -92,19 +92,22 @@ internal sealed class GitCommandHandler
         }
     }
 
+    // Git's paths of the changes are staged, because git matches the paths exactly also on a file system that ignores
+    // case; a folder target is added for files that appeared below it after the last refresh.
     public Task StageAsync(CommandContext context) =>
         RunOnTargetAsync(
             context,
             GitCommandTarget.HasWorkingTreeChange,
             GitStrings.NoChangesToStageFormat,
-            (git, root, paths, ct) => git.StageAsync(root, paths, ct));
+            (git, root, target, changes, ct) => git.StageAsync(root, GitCommandTarget.StagePathsOf(changes, target), ct));
 
+    // The staged files are unstaged one by one: git reset of a folder would also reset conflicted files to HEAD.
     public Task UnstageAsync(CommandContext context) =>
         RunOnTargetAsync(
             context,
             GitCommandTarget.HasStagedChange,
             GitStrings.NoChangesToUnstageFormat,
-            (git, root, paths, ct) => git.UnstageAsync(root, paths, ct));
+            (git, root, target, changes, ct) => git.UnstageAsync(root, GitCommandTarget.UnstagePathsOf(changes), ct));
 
     public async Task DiscardAsync(CommandContext context)
     {
@@ -135,24 +138,20 @@ internal sealed class GitCommandHandler
             return;
         }
 
-        string[] paths = PathsOf(changes);
+        // Exactly the confirmed files are discarded, never a file that changed after the last refresh.
+        IReadOnlyList<string> paths = GitCommandTarget.PathsOf(changes);
         await RunGitAsync((git, root, ct) => git.DiscardAsync(root, paths, ct));
     }
 
     public async Task StageAllAsync(CommandContext context)
     {
-        IReadOnlyList<GitFileChange> changes = GitCommandTarget.FindChanges(
-            _session.Current.Changes,
-            string.Empty,
-            GitCommandTarget.HasWorkingTreeChange);
-        if (changes.Count == 0)
+        if (GitCommandTarget.FindChanges(_session.Current.Changes, string.Empty, GitCommandTarget.HasWorkingTreeChange).Count == 0)
         {
             await ShowInformationAsync(GitStrings.NothingToStage);
             return;
         }
 
-        string[] paths = PathsOf(changes);
-        await RunGitAsync((git, root, ct) => git.StageAsync(root, paths, ct));
+        await RunGitAsync((git, root, ct) => git.StageAsync(root, [GitCommandTarget.ToPathspec(string.Empty)], ct));
     }
 
     public async Task UnstageAllAsync(CommandContext context)
@@ -167,7 +166,7 @@ internal sealed class GitCommandHandler
             return;
         }
 
-        string[] paths = PathsOf(changes);
+        IReadOnlyList<string> paths = GitCommandTarget.UnstagePathsOf(changes);
         await RunGitAsync((git, root, ct) => git.UnstageAsync(root, paths, ct));
     }
 
@@ -201,8 +200,13 @@ internal sealed class GitCommandHandler
             return;
         }
 
+        // Hooks such as pre-commit can run long; the progress dialog cancels the commit.
         string commitMessage = message;
-        if (await RunGitAsync((git, root, ct) => git.CommitAsync(root, commitMessage, ct)) && fromPanel && panel is not null)
+        bool committed = await RunWithProgressAsync(
+            GitStrings.CommitInputTitle,
+            GitStrings.CommitProgress,
+            (services, root, ct) => services.Service.CommitAsync(root, commitMessage, ct));
+        if (committed && fromPanel && panel is not null)
         {
             ClearCommitMessage(panel);
         }
@@ -212,7 +216,7 @@ internal sealed class GitCommandHandler
         CommandContext context,
         Func<GitFileChange, bool> predicate,
         string noChangesFormat,
-        Func<IGitService, string, IReadOnlyList<string>, CancellationToken, Task> operation)
+        Func<IGitService, string, string, IReadOnlyList<GitFileChange>, CancellationToken, Task> operation)
     {
         if (await ResolveTargetAsync(context) is not { } target)
         {
@@ -229,8 +233,7 @@ internal sealed class GitCommandHandler
             return;
         }
 
-        string[] paths = PathsOf(changes);
-        await RunGitAsync((git, root, ct) => operation(git, root, paths, ct));
+        await RunGitAsync((git, root, ct) => operation(git, root, target.RepositoryPath, changes, ct));
     }
 
     private async Task<GitCommandTargetPath?> ResolveTargetAsync(CommandContext context)
@@ -280,10 +283,20 @@ internal sealed class GitCommandHandler
 
     private async Task ReportFailureAsync(InvalidOperationException exception)
     {
-        string message = string.Format(CultureInfo.CurrentCulture, UiStrings.GitCommandFailed, exception.Message);
+        string message = string.Format(
+            CultureInfo.CurrentCulture,
+            UiStrings.GitCommandFailed,
+            GitOutputLogger.MaskCredentials(GitRemoteErrorClassifier.SelectDecisiveLine(exception.Message)));
         _logger?.Error(message);
-        await _window.ShowErrorMessageAsync(message, CancellationToken.None);
+        await _window.ShowErrorMessageAsync(AppendOutputHint(message), CancellationToken.None);
     }
+
+    /// <summary>
+    /// Adds the hint that the Git output channel holds git's complete output, which the failure messages shorten to
+    /// the decisive line; unchanged without output channel.
+    /// </summary>
+    private string AppendOutputHint(string message) =>
+        _outputChannel is null ? message : message + Environment.NewLine + Environment.NewLine + GitStrings.SeeGitOutput;
 
     private Task ShowInformationAsync(string message) =>
         _window.ShowInformationMessageAsync(message, CancellationToken.None);
@@ -298,17 +311,6 @@ internal sealed class GitCommandHandler
         {
             Dispatcher.UIThread.Post(() => panel.CommitMessage = string.Empty);
         }
-    }
-
-    private static string[] PathsOf(IReadOnlyList<GitFileChange> changes)
-    {
-        string[] paths = new string[changes.Count];
-        for (int i = 0; i < changes.Count; i++)
-        {
-            paths[i] = changes[i].Path;
-        }
-
-        return paths;
     }
 
     private sealed record GitCommandTargetPath(string RepositoryPath, string DisplayPath);

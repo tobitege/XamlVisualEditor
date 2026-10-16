@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Tests.Unit.Git;
 
@@ -26,6 +27,16 @@ internal sealed class FakeGitService : IGitService
 
     public string? CommitMessage { get; private set; }
 
+    /// <summary>Gets or sets whether a commit waits until it is cancelled, like a commit with a hanging hook.</summary>
+    public bool BlockCommit { get; set; }
+
+    /// <summary>Gets or sets the error of the status, which is thrown as <see cref="InvalidOperationException"/>; null reads the status.</summary>
+    public string? StatusError { get; set; }
+
+    public int StatusCalls => Volatile.Read(ref _statusCalls);
+
+    private int _statusCalls;
+
     public IReadOnlyList<(string Command, string[] Paths)> Calls
     {
         get
@@ -39,21 +50,42 @@ internal sealed class FakeGitService : IGitService
 
     public Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default) => Task.FromResult<string?>(RepositoryRoot);
 
-    public Task<GitRepositoryStatus> GetStatusAsync(string repoPath, CancellationToken ct = default) => Task.FromResult(Status);
+    public Task<GitRepositoryStatus> GetStatusAsync(string repoPath, CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _statusCalls);
+        return StatusError is null
+            ? Task.FromResult(Status)
+            : Task.FromException<GitRepositoryStatus>(new InvalidOperationException(StatusError));
+    }
 
     public Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default) =>
         Task.FromResult(new GitDiff { Files = Array.Empty<GitDiffFile>() });
 
-    public Task StageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default) => Record("stage", paths);
+    /// <summary>Gets or sets git's error output of a failing stage, thrown as <see cref="InvalidOperationException"/>; null stages.</summary>
+    public string? StageError { get; set; }
+
+    public async Task StageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
+    {
+        await Record("stage", paths);
+        if (StageError is not null)
+        {
+            throw new InvalidOperationException(StageError);
+        }
+    }
 
     public Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default) => Record("unstage", paths);
 
     public Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default) => Record("discard", paths);
 
-    public Task CommitAsync(string repoPath, string message, CancellationToken ct = default)
+    public async Task CommitAsync(string repoPath, string message, CancellationToken ct = default)
     {
+        await Record("commit", Array.Empty<string>());
+        if (BlockCommit)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+        }
+
         CommitMessage = message;
-        return Record("commit", Array.Empty<string>());
     }
 
     private Task Record(string command, IReadOnlyList<string> paths)
@@ -64,6 +96,162 @@ internal sealed class FakeGitService : IGitService
         }
 
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>A repository service without processes whose git directories are fixed paths.</summary>
+internal sealed class FixedRepositoryService : IGitRepositoryService
+{
+    public FixedRepositoryService(string gitDirectory)
+    {
+        GitDirectory = gitDirectory;
+    }
+
+    public string GitDirectory { get; }
+
+    public Task<string?> GetGitDirectoryAsync(string repoPath, CancellationToken ct = default) => Task.FromResult<string?>(GitDirectory);
+
+    public Task<string?> GetCommonDirectoryAsync(string repoPath, CancellationToken ct = default) => Task.FromResult<string?>(GitDirectory);
+
+    public Task<IReadOnlyList<string>> GetRemoteNamesAsync(string repoPath, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+    public Task InitAsync(string path, CancellationToken ct = default) => throw new NotSupportedException();
+}
+
+/// <summary>A remote service without processes: it records the operations and returns scripted results.</summary>
+internal sealed class ScriptedRemoteService : IGitRemoteService
+{
+    private readonly object _gate = new();
+    private readonly List<string> _calls = new();
+
+    /// <summary>Gets or sets the result of an operation by its name: fetch, pull or push.</summary>
+    public Func<string, GitRemoteResult> Respond { get; set; } = _ => GitRemoteResult.Succeeded(string.Empty);
+
+    /// <summary>Gets or sets whether operations wait until they are cancelled.</summary>
+    public bool Block { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a blocked operation returns its result when it is cancelled, like git that ended at the
+    /// moment it was to be killed.
+    /// </summary>
+    public bool FinishWhenCancelled { get; set; }
+
+    public bool WasCancelled { get; private set; }
+
+    public IReadOnlyList<string> Calls
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _calls.ToArray();
+            }
+        }
+    }
+
+    public Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<GitRemote>>([new GitRemote("origin", "remote", "remote")]);
+
+    public Task<GitRemoteResult> FetchAsync(string repoPath, CancellationToken ct = default) => RunAsync("fetch", ct);
+
+    public Task<GitRemoteResult> PullAsync(string repoPath, CancellationToken ct = default) => RunAsync("pull", ct);
+
+    public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
+        RunAsync(setUpstreamRemote is null ? "push" : "push -u " + setUpstreamRemote, ct);
+
+    private async Task<GitRemoteResult> RunAsync(string operation, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            _calls.Add(operation);
+        }
+
+        if (Block)
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                WasCancelled = true;
+                if (!FinishWhenCancelled)
+                {
+                    throw;
+                }
+            }
+        }
+
+        return Respond(operation.Split(' ')[0]);
+    }
+}
+
+/// <summary>How <see cref="GitDialogHost"/> shows a progress dialog; public because test theories take it as data.</summary>
+public enum ProgressDialogMode
+{
+    /// <summary>The dialog stays open until its token is cancelled, then completes with null.</summary>
+    StayOpen,
+
+    /// <summary>The user cancels at once: the dialog completes with true.</summary>
+    Cancel,
+
+    /// <summary>The dialog completes with null at once, like the editor's host without main window.</summary>
+    CompleteAtOnce,
+
+    /// <summary>Showing the dialog fails.</summary>
+    Fail
+}
+
+/// <summary>
+/// Answers confirmations through a callback and shows progress dialogs like the editor, as set by
+/// <see cref="ProgressMode"/>.
+/// </summary>
+internal sealed class GitDialogHost : IDialogHost
+{
+    private readonly Func<string, object?, object?> _respond;
+
+    public GitDialogHost(Func<string, object?, object?> respond)
+    {
+        _respond = respond;
+    }
+
+    public List<(string DialogId, object? ViewModel)> Requests { get; } = new();
+
+    /// <summary>Gets or sets how a progress dialog behaves.</summary>
+    public ProgressDialogMode ProgressMode { get; set; }
+
+    public IEnumerable<ConfirmationDialogRequest> Confirmations => Requests.Select(request => request.ViewModel).OfType<ConfirmationDialogRequest>();
+
+    public IEnumerable<ProgressDialogRequest> Progress => Requests.Select(request => request.ViewModel).OfType<ProgressDialogRequest>();
+
+    public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory) => throw new NotSupportedException();
+
+    public async Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
+    {
+        Requests.Add((dialogId, viewModel));
+        if (dialogId != ProgressDialogRequest.DialogId)
+        {
+            return _respond(dialogId, viewModel) is T result ? result : default;
+        }
+
+        switch (ProgressMode)
+        {
+            case ProgressDialogMode.Cancel:
+                return (T?)(object?)true;
+            case ProgressDialogMode.CompleteAtOnce:
+                return default;
+            case ProgressDialogMode.Fail:
+                throw new InvalidOperationException("Dialog factory must return a Window instance.");
+        }
+
+        TaskCompletionSource closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using (cancellationToken.Register(() => closed.TrySetResult()))
+        {
+            await closed.Task;
+        }
+
+        return default;
     }
 }
 

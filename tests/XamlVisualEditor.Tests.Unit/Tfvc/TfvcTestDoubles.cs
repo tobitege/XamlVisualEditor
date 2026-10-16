@@ -432,8 +432,16 @@ internal sealed class RecordingWindow : IWindow
 
     public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult(InputBoxResult);
 
+    /// <summary>Gets or sets what the quick pick returns for its items; null cancels every quick pick.</summary>
+    public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? QuickPick { get; set; }
+
+    public List<(IReadOnlyList<QuickPickItem> Items, QuickPickOptions Options)> QuickPicks { get; } = new();
+
     public Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, QuickPickOptions options, CancellationToken cancellationToken)
-        => Task.FromResult<QuickPickItem?>(null);
+    {
+        QuickPicks.Add((items, options));
+        return Task.FromResult(QuickPick?.Invoke(items));
+    }
 
     public IOutputChannel CreateOutputChannel(string name) => throw new NotSupportedException();
 
@@ -445,7 +453,6 @@ internal sealed class RecordingWindow : IWindow
     public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
-    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 #pragma warning restore CS0067
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => throw new NotSupportedException();

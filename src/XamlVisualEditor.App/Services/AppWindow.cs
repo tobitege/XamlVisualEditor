@@ -246,7 +246,6 @@ public sealed class AppWindow : IWindow
         private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
         private readonly Action? _disposedCallback;
         private readonly Action _showCallback;
-        private readonly List<string> _lines = new();
 
         public AppOutputChannel(
             OutputChannelInfo info,
@@ -266,24 +265,14 @@ public sealed class AppWindow : IWindow
 
         public string Name => Info.Name;
 
+        // The output view keeps the text; the channel only passes it on and may be written from any thread.
         public void Append(string value)
         {
-            if (_lines.Count == 0)
-            {
-                _lines.Add(value);
-            }
-            else
-            {
-                int last = _lines.Count - 1;
-                _lines[last] = _lines[last] + value;
-            }
-
             _messageCallback?.Invoke(new OutputChannelMessageEventArgs(Info, value, false));
         }
 
         public void AppendLine(string value)
         {
-            _lines.Add(value);
             _messageCallback?.Invoke(new OutputChannelMessageEventArgs(Info, value, true));
         }
 
@@ -298,7 +287,6 @@ public sealed class AppWindow : IWindow
 
         public void Clear()
         {
-            _lines.Clear();
             _clearedCallback?.Invoke(new OutputChannelClearedEventArgs(Info));
         }
 

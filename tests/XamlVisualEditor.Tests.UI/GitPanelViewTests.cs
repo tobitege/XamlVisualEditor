@@ -16,15 +16,18 @@ using ReactiveUI;
 using Xunit;
 using XamlVisualEditor.GitExtension;
 using XamlVisualEditor.GitExtension.Controls;
+using XamlVisualEditor.GitExtension.Services;
 using XamlVisualEditor.GitExtension.Views;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
 using GitChangeKind = XamlVisualEditor.Core.GitChangeKind;
+using GitConflictKind = XamlVisualEditor.Core.GitConflictKind;
 using GitDiff = XamlVisualEditor.Core.GitDiff;
 using GitDiffRequest = XamlVisualEditor.Core.GitDiffRequest;
 using GitFileChange = XamlVisualEditor.Core.GitFileChange;
 using GitRepositoryStatus = XamlVisualEditor.Core.GitRepositoryStatus;
+using GitServiceSet = XamlVisualEditor.Core.GitServiceSet;
 
 namespace XamlVisualEditor.Tests.UI;
 
@@ -36,15 +39,15 @@ public sealed class GitPanelViewTests
     public async Task Git_refresh_coalesces_overlapping_requests()
     {
         ControlledGitService gitService = new();
-        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo());
+        using PanelFixture panel = new(gitService);
 
-        // The panel's own session reads the status on creation; that first status call blocks.
+        Task first = panel.ViewModel.RefreshAsync();
         await gitService.FirstStatusStarted.Task.WaitAsync(WaitLimit);
-        Task second = vm.RefreshAsync();
-        Task third = vm.RefreshAsync();
+        Task second = panel.ViewModel.RefreshAsync();
+        Task third = panel.ViewModel.RefreshAsync();
         Assert.Equal(1, gitService.StatusCalls);
         gitService.ReleaseFirstStatus.TrySetResult(true);
-        await Task.WhenAll(second, third).WaitAsync(WaitLimit);
+        await Task.WhenAll(first, second, third).WaitAsync(WaitLimit);
 
         Assert.Equal(1, gitService.RootCalls);
         Assert.Equal(2, gitService.StatusCalls);
@@ -52,34 +55,39 @@ public sealed class GitPanelViewTests
     }
 
     [AvaloniaFact]
-    public async Task Status_is_read_without_the_working_folder_watcher_and_dispose_cancels_a_running_scan()
+    public async Task Disposing_the_session_cancels_a_running_status()
     {
-        ControlledGitService blocked = new();
-        GitPanelViewModel scanning = new(blocked, new TestWorkspaceInfo());
-        await blocked.FirstStatusStarted.Task.WaitAsync(WaitLimit);
-        Assert.False(scanning.IsGitMonitoringEnabled);
-        scanning.Dispose();
-        await blocked.FirstStatusCancelledSignal.Task.WaitAsync(WaitLimit);
-        Assert.True(blocked.FirstStatusCancelled);
-        Assert.Equal(1, blocked.RootCalls);
-        Assert.Equal(1, blocked.StatusCalls);
+        ControlledGitService gitService = new();
+        PanelFixture panel = new(gitService);
+        _ = panel.ViewModel.RefreshAsync();
+        await gitService.FirstStatusStarted.Task.WaitAsync(WaitLimit);
 
+        panel.Dispose();
+
+        Assert.True(await gitService.FirstStatusCancelled.Task.WaitAsync(WaitLimit));
+        Assert.Equal(1, gitService.StatusCalls);
+    }
+
+    [AvaloniaFact]
+    public async Task Status_is_read_without_the_working_folder_watcher_and_lists_each_change_once()
+    {
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
-        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo());
-        await vm.WhenAnyValue(x => x.IsRepository).FirstAsync(isRepository => isRepository).Timeout(WaitLimit);
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
 
         Assert.False(vm.IsGitMonitoringEnabled);
         Assert.Equal(1, gitService.StatusCalls);
-        Assert.Equal(2, vm.StagedCount);
-        Assert.Equal(2, vm.UnstagedCount);
+        Assert.Equal(new[] { "a.cs", "b.cs" }, vm.StagedItems.Select(item => item.Path));
+        // The conflicted file is only in the working tree list, where staging marks it as resolved.
+        Assert.Equal(new[] { "c.cs", "conflict.cs", "new.txt" }, vm.UnstagedItems.Select(item => item.Path));
     }
 
     [AvaloniaFact]
     public async Task Watcher_switch_only_controls_the_working_folder_watcher()
     {
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
-        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo());
-        await vm.WhenAnyValue(x => x.IsRepository).FirstAsync(isRepository => isRepository).Timeout(WaitLimit);
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
         Assert.Equal(UiStrings.GitMonitoringOff, vm.GitMonitoringLabel);
 
         await vm.ToggleMonitoringCommand.Execute().ToTask();
@@ -98,67 +106,116 @@ public sealed class GitPanelViewTests
     }
 
     [AvaloniaFact]
-    public async Task Unstage_runs_without_confirmation_because_it_keeps_the_working_files()
+    public async Task Buttons_run_the_git_commands_with_the_selected_path()
     {
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
-        RecordingDialogHost dialogs = new();
-        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
-        await vm.RefreshAsync();
-        await Dispatcher.UIThread.InvokeAsync(() => { });
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
 
         vm.SelectedStagedChange = Assert.Single(vm.StagedItems, item => item.Path == "a.cs");
         await vm.UnstageCommand.Execute().ToTask();
-        Assert.Equal(1, gitService.UnstageCalls);
-        Assert.Equal("a.cs", Assert.Single(gitService.LastUnstagedPaths));
-
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
+        await vm.StageCommand.Execute().ToTask();
+        await vm.DiscardCommand.Execute().ToTask();
+        await vm.StageAllCommand.Execute().ToTask();
         await vm.UnstageAllCommand.Execute().ToTask();
-        Assert.Equal(2, gitService.UnstageCalls);
-        Assert.Equal(2, gitService.LastUnstagedPaths.Count);
-        Assert.Empty(dialogs.Requests);
+        vm.CommitMessage = "Message";
+        await vm.CommitCommand.Execute().ToTask();
+
+        Assert.Equal(
+            new (string, string?)[]
+            {
+                (GitCommands.UNSTAGE, "a.cs"),
+                (GitCommands.STAGE, "c.cs"),
+                (GitCommands.DISCARD, "c.cs"),
+                (GitCommands.STAGE_ALL, null),
+                (GitCommands.UNSTAGE_ALL, null),
+                (GitCommands.COMMIT, null)
+            },
+            panel.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
     }
 
     [AvaloniaFact]
-    public async Task Discard_requires_confirmation_and_never_removes_untracked_files()
+    public async Task Discard_is_disabled_for_untracked_and_conflicted_files()
     {
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
-        RecordingDialogHost dialogs = new();
-        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
-        await vm.RefreshAsync();
-        await Dispatcher.UIThread.InvokeAsync(() => { });
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
 
         vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "new.txt");
-        Assert.False(((System.Windows.Input.ICommand)vm.DiscardCommand).CanExecute(null));
+        Assert.False(((ICommand)vm.DiscardCommand).CanExecute(null));
+        Assert.True(((ICommand)vm.StageCommand).CanExecute(null));
+
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "conflict.cs");
+        Assert.False(((ICommand)vm.DiscardCommand).CanExecute(null));
+        Assert.True(((ICommand)vm.StageCommand).CanExecute(null));
 
         vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
-        await vm.DiscardCommand.Execute().ToTask();
-        Assert.Equal(0, gitService.DiscardCalls);
-        Assert.Equal(string.Format(UiStrings.GitDiscardWorkingChangesPrompt, "c.cs"), dialogs.Requests[^1].Message);
-        Assert.True(dialogs.Requests[^1].IsDestructive);
-
-        dialogs.Confirm = true;
-        await vm.DiscardCommand.Execute().ToTask();
-        Assert.Equal(1, gitService.DiscardCalls);
-        Assert.Equal("c.cs", Assert.Single(gitService.LastDiscardedPaths));
+        Assert.True(((ICommand)vm.DiscardCommand).CanExecute(null));
     }
 
     [AvaloniaFact]
-    public async Task Failed_discard_is_shown_in_the_panel_after_the_refresh()
+    public async Task A_failing_command_is_shown_in_the_panel()
     {
-        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false)
-        {
-            DiscardFailure = "error: unable to unlink c.cs"
-        };
-        RecordingDialogHost dialogs = new() { Confirm = true };
-        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
-        await vm.RefreshAsync();
-        await Dispatcher.UIThread.InvokeAsync(() => { });
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService, failure: new System.IO.IOException("pipe broken"));
+        GitPanelViewModel vm = panel.ViewModel;
 
         vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
-        await vm.DiscardCommand.Execute().ToTask();
-        await Dispatcher.UIThread.InvokeAsync(() => { });
+        Task<string?> shown = vm.WhenAnyValue(x => x.ErrorMessage)
+            .FirstAsync(message => message is not null)
+            .Timeout(WaitLimit)
+            .ToTask();
+        await Assert.ThrowsAsync<System.IO.IOException>(() => vm.StageCommand.Execute().ToTask());
 
-        Assert.Equal(1, gitService.DiscardCalls);
-        Assert.Equal(string.Format(UiStrings.GitCommandFailed, "error: unable to unlink c.cs"), vm.ErrorMessage);
+        // ReactiveUI reports the failure through ThrownExceptions on the UI thread after the execution ends.
+        Assert.Equal(string.Format(UiStrings.GitCommandFailed, "pipe broken"), await shown);
+    }
+
+    [AvaloniaFact]
+    public async Task The_diff_of_the_selected_file_reloads_after_a_refresh_with_an_equal_status()
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false) { DiffText = "first" };
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
+        Task<string> first = vm.WhenAnyValue(x => x.DiffText).FirstAsync(text => text == "first").Timeout(WaitLimit).ToTask();
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
+        await first;
+        int diffCalls = gitService.DiffCalls;
+
+        // The file changed again, but its status stays " M", so the session publishes no new snapshot.
+        gitService.DiffText = "second";
+        Task<string> second = vm.WhenAnyValue(x => x.DiffText).FirstAsync(text => text == "second").Timeout(WaitLimit).ToTask();
+        await vm.RefreshAsync().WaitAsync(WaitLimit);
+
+        Assert.Equal("second", await second);
+        Assert.Equal(diffCalls + 1, gitService.DiffCalls);
+        Assert.Equal("c.cs", vm.SelectedUnstagedChange?.Path);
+    }
+
+    [AvaloniaFact]
+    public async Task A_diff_that_finishes_after_another_file_was_selected_is_not_shown()
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false) { DiffText = "diff of new.txt" };
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
+        TaskCompletionSource<GitDiff> slowDiff = new();
+        gitService.GatedDiffs["c.cs"] = slowDiff;
+        int diffCalls = gitService.DiffCalls;
+
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "c.cs");
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "new.txt");
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("diff of new.txt", vm.DiffText);
+
+        // The diff of c.cs completes after new.txt was selected and its diff is shown.
+        slowDiff.SetResult(ControlledGitService.CreateDiff("diff of c.cs"));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(slowDiff.Task.IsCompletedSuccessfully);
+        Assert.Equal("diff of new.txt", vm.DiffText);
+        Assert.Equal("new.txt", vm.SelectedUnstagedChange?.Path);
+        Assert.Equal(diffCalls + 2, gitService.DiffCalls);
     }
 
     private static GitRepositoryStatus CreateStatus() => new()
@@ -169,6 +226,13 @@ public sealed class GitPanelViewTests
             new GitFileChange { Path = "a.cs", IndexStatus = GitChangeKind.Modified },
             new GitFileChange { Path = "b.cs", IndexStatus = GitChangeKind.Modified },
             new GitFileChange { Path = "c.cs", WorkTreeStatus = GitChangeKind.Modified },
+            new GitFileChange
+            {
+                Path = "conflict.cs",
+                IndexStatus = GitChangeKind.Unmerged,
+                WorkTreeStatus = GitChangeKind.Unmerged,
+                ConflictKind = GitConflictKind.BothModified
+            },
             new GitFileChange { Path = "new.txt", WorkTreeStatus = GitChangeKind.Untracked, IsUntracked = true }
         }
     };
@@ -176,7 +240,8 @@ public sealed class GitPanelViewTests
     [AvaloniaFact]
     public async Task GitPanelView_Renders_Diff_Lines()
     {
-        GitPanelViewModel vm = new();
+        using PanelFixture panel = new(new ControlledGitService(blockFirstStatus: false));
+        GitPanelViewModel vm = panel.ViewModel;
         vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.FileHeader, "diff --git a/a.txt b/a.txt", string.Empty, null, null));
         vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.HunkHeader, "@@ -1 +1 @@", "@@", null, null));
         vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.Added, "added", "+", null, 1));
@@ -207,14 +272,14 @@ public sealed class GitPanelViewTests
         finally
         {
             await Dispatcher.UIThread.InvokeAsync(() => window.Close());
-            vm.Dispose();
         }
     }
 
     [AvaloniaFact]
     public async Task Diff_pane_hides_and_restores_the_resized_width()
     {
-        using GitPanelViewModel vm = new();
+        using PanelFixture panel = new(new ControlledGitService(blockFirstStatus: false));
+        GitPanelViewModel vm = panel.ViewModel;
         GitPanelView view = new() { DataContext = vm };
         Window window = await ShowInWindowAsync(view);
         try
@@ -251,7 +316,8 @@ public sealed class GitPanelViewTests
     [AvaloniaFact]
     public async Task Every_panel_button_has_an_icon_a_label_and_a_tooltip()
     {
-        using GitPanelViewModel vm = new();
+        using PanelFixture panel = new(new ControlledGitService(blockFirstStatus: false));
+        GitPanelViewModel vm = panel.ViewModel;
         GitPanelView view = new() { DataContext = vm };
         Window window = await ShowInWindowAsync(view, width: 1400);
         try
@@ -297,6 +363,41 @@ public sealed class GitPanelViewTests
         return window;
     }
 
+    /// <summary>A Changes panel over a session of a git service; the commands it runs are recorded.</summary>
+    private sealed class PanelFixture : IDisposable
+    {
+        public PanelFixture(IGitService git, Exception? failure = null)
+        {
+            Session = new GitSession(GitServiceSet.FromService(git), new TestWorkspaceInfo());
+            ViewModel = new GitPanelViewModel(Session, (commandId, arguments) =>
+            {
+                Executed.Add((commandId, arguments));
+                return failure is null ? Task.CompletedTask : Task.FromException(failure);
+            });
+        }
+
+        public GitSession Session { get; }
+
+        public GitPanelViewModel ViewModel { get; }
+
+        public List<(string CommandId, IReadOnlyList<object?>? Arguments)> Executed { get; } = new();
+
+        /// <summary>Creates the panel and shows the first status.</summary>
+        public static async Task<PanelFixture> CreateAsync(IGitService git, Exception? failure = null)
+        {
+            PanelFixture panel = new(git, failure);
+            await panel.ViewModel.RefreshAsync().WaitAsync(WaitLimit);
+            await panel.ViewModel.WhenAnyValue(x => x.IsRepository).FirstAsync(isRepository => isRepository).Timeout(WaitLimit);
+            return panel;
+        }
+
+        public void Dispose()
+        {
+            ViewModel.Dispose();
+            Session.Dispose();
+        }
+    }
+
     private sealed class TestWorkspaceInfo : IWorkspaceInfo
     {
         public string? WorkspacePath => "test-workspace";
@@ -320,14 +421,9 @@ public sealed class GitPanelViewTests
         public int RootCalls { get; private set; }
         public int StatusCalls { get; private set; }
         public int MaxConcurrentStatusCalls { get; private set; }
-        public int UnstageCalls { get; private set; }
-        public int DiscardCalls { get; private set; }
-        public IReadOnlyList<string> LastUnstagedPaths { get; private set; } = Array.Empty<string>();
-        public IReadOnlyList<string> LastDiscardedPaths { get; private set; } = Array.Empty<string>();
-        public bool FirstStatusCancelled { get; private set; }
-        public TaskCompletionSource<bool> FirstStatusCancelledSignal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> FirstStatusStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> ReleaseFirstStatus { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> FirstStatusCancelled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default)
         {
@@ -351,8 +447,7 @@ public sealed class GitPanelViewTests
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
-                        FirstStatusCancelled = true;
-                        FirstStatusCancelledSignal.TrySetResult(true);
+                        FirstStatusCancelled.TrySetResult(true);
                         throw;
                     }
                 }
@@ -364,40 +459,30 @@ public sealed class GitPanelViewTests
             }
         }
 
-        public Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default) =>
-            Task.FromResult(new GitDiff { Files = Array.Empty<XamlVisualEditor.Core.GitDiffFile>() });
+        /// <summary>Gets or sets the raw text of every diff.</summary>
+        public string DiffText { get; set; } = string.Empty;
+
+        public int DiffCalls { get; private set; }
+
+        /// <summary>
+        /// Gets the diffs of these paths, which complete only when the test sets their result; the cancellation token is
+        /// ignored, like a git process that ends before it is killed.
+        /// </summary>
+        public Dictionary<string, TaskCompletionSource<GitDiff>> GatedDiffs { get; } = new();
+
+        public Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default)
+        {
+            DiffCalls++;
+            return request.Path is { } path && GatedDiffs.TryGetValue(path, out TaskCompletionSource<GitDiff>? gate)
+                ? gate.Task
+                : Task.FromResult(CreateDiff(DiffText));
+        }
+
+        public static GitDiff CreateDiff(string text) =>
+            new() { Files = Array.Empty<XamlVisualEditor.Core.GitDiffFile>(), RawText = text };
         public Task StageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
-        {
-            UnstageCalls++;
-            LastUnstagedPaths = paths.ToArray();
-            return Task.CompletedTask;
-        }
-        public string? DiscardFailure { get; set; }
-        public Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
-        {
-            DiscardCalls++;
-            LastDiscardedPaths = paths.ToArray();
-            return DiscardFailure is null
-                ? Task.CompletedTask
-                : Task.FromException(new InvalidOperationException(DiscardFailure));
-        }
+        public Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default) => throw new NotSupportedException();
         public Task CommitAsync(string repoPath, string message, CancellationToken ct = default) => throw new NotSupportedException();
-    }
-
-    private sealed class RecordingDialogHost : IDialogHost
-    {
-        public bool Confirm { get; set; }
-        public List<ConfirmationDialogRequest> Requests { get; } = new();
-
-        public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory) =>
-            System.Reactive.Disposables.Disposable.Empty;
-
-        public Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
-        {
-            Assert.Equal(ConfirmationDialogRequest.DialogId, dialogId);
-            Requests.Add(Assert.IsType<ConfirmationDialogRequest>(viewModel));
-            return Task.FromResult<T?>((T)(object)Confirm);
-        }
     }
 }

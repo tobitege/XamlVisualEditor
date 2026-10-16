@@ -33,6 +33,26 @@ public sealed class GitStatusBarTests
     }
 
     [Fact]
+    public void Failed_status_stays_visible_with_git_error_in_the_tooltip()
+    {
+        RecordingStatusBarItem item = new();
+
+        GitStatusBar.Update(item, new GitSnapshot
+        {
+            State = GitSessionState.StatusFailed,
+            RepositoryRoot = "repo",
+            ErrorMessage = "fatal: .git/index: index file smaller than expected"
+        });
+
+        Assert.True(item.IsVisible);
+        Assert.Equal(GitStrings.StatusBarStatusFailed, item.Text);
+        Assert.Equal(
+            "fatal: .git/index: index file smaller than expected" + Environment.NewLine + GitStrings.StatusBarClickHint,
+            item.Tooltip);
+        Assert.Equal(GitCommands.SHOW_CHANGES, item.CommandId);
+    }
+
+    [Fact]
     public void Clean_branch_without_upstream_shows_only_the_branch()
     {
         RecordingStatusBarItem item = new();

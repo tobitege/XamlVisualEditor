@@ -13,6 +13,7 @@ public static class GitStatusParser
     /// </summary>
     /// <param name="repoPath">The repository root used for the status call.</param>
     /// <param name="statusOutput">The output of `git status --porcelain=v1 -b`.</param>
+    [Obsolete("The editor reads the status as porcelain v2; use ParsePorcelainV2.")]
     public static GitRepositoryStatus ParseStatus(string repoPath, string statusOutput)
     {
         string normalized = NormalizeLineEndings(statusOutput);
@@ -72,6 +73,8 @@ public static class GitStatusParser
         bool isUnborn = false;
         int aheadBy = 0;
         int behindBy = 0;
+        // Git writes branch.ab only when the upstream exists; branch.upstream alone means it is gone.
+        bool hasAheadBehind = false;
 
         List<GitFileChange> changes = new();
 
@@ -86,6 +89,7 @@ public static class GitStatusParser
             switch (entry[0])
             {
                 case '#':
+                    hasAheadBehind |= entry.StartsWith("# branch.ab ", StringComparison.Ordinal);
                     ParseV2Header(
                         entry,
                         ref branchName,
@@ -138,6 +142,7 @@ public static class GitStatusParser
             UpstreamName = upstreamName,
             AheadBy = aheadBy,
             BehindBy = behindBy,
+            IsUpstreamGone = upstreamName is not null && !hasAheadBehind,
             HeadSha = headSha,
             IsDetached = isDetached,
             IsUnborn = isUnborn,

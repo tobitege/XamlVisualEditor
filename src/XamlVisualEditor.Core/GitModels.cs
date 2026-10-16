@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace XamlVisualEditor.Core;
 
 /// <summary>
-/// Represents a git repository status snapshot.
+/// Represents a git repository status snapshot. Two statuses are equal when all values and the changes, in order,
+/// are equal.
 /// </summary>
-public sealed class GitRepositoryStatus
+public sealed record GitRepositoryStatus
 {
     public required string RepositoryRoot { get; init; }
 
@@ -17,6 +19,12 @@ public sealed class GitRepositoryStatus
     public int AheadBy { get; init; }
 
     public int BehindBy { get; init; }
+
+    /// <summary>
+    /// Gets whether the branch has an upstream whose remote-tracking branch no longer exists, for example because the
+    /// branch was deleted on the remote and a fetch pruned it. <see cref="UpstreamName"/> still holds its name.
+    /// </summary>
+    public bool IsUpstreamGone { get; init; }
 
     public bool IsRepository { get; init; } = true;
 
@@ -38,6 +46,31 @@ public sealed class GitRepositoryStatus
 
     /// <summary>Gets the merge, rebase, cherry-pick or revert that is in progress.</summary>
     public GitRepositoryOperation Operation { get; init; }
+
+    /// <inheritdoc />
+    public bool Equals(GitRepositoryStatus? other)
+    {
+        return other is not null
+            && RepositoryRoot == other.RepositoryRoot
+            && BranchName == other.BranchName
+            && UpstreamName == other.UpstreamName
+            && AheadBy == other.AheadBy
+            && BehindBy == other.BehindBy
+            && IsUpstreamGone == other.IsUpstreamGone
+            && IsRepository == other.IsRepository
+            && ErrorMessage == other.ErrorMessage
+            && HeadSha == other.HeadSha
+            && IsDetached == other.IsDetached
+            && IsUnborn == other.IsUnborn
+            && Operation == other.Operation
+            && Changes.SequenceEqual(other.Changes);
+    }
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(RepositoryRoot, BranchName, HeadSha, AheadBy, BehindBy, Operation, Changes.Count);
+    }
 }
 
 /// <summary>
@@ -53,9 +86,9 @@ public enum GitRepositoryOperation
 }
 
 /// <summary>
-/// Describes a file change entry in git status.
+/// Describes a file change entry in git status; two entries with the same values are equal.
 /// </summary>
-public sealed class GitFileChange
+public sealed record GitFileChange
 {
     public required string Path { get; init; }
 

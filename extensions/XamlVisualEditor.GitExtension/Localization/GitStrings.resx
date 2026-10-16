@@ -43,4 +43,88 @@
   <data name="LogWorkingTreeWatcherFailedFormat" xml:space="preserve"><value>Watching the working folder {0} failed: {1} The Git status still refreshes when the git folder changes, after Git commands of this application and on Refresh.</value></data>
   <data name="LogGitDirectoryWatcherFailedFormat" xml:space="preserve"><value>Watching the git folder {0} failed: {1} The Git status refreshes after Git commands of this application and on Refresh.</value></data>
   <data name="LogSettingsFailed" xml:space="preserve"><value>Reading or saving the Git settings failed.</value></data>
+  <data name="RepositoryViewTitle" xml:space="preserve"><value>Git Repository</value></data>
+  <data name="ToggleRepositoryViewCommand" xml:space="preserve"><value>Show or Hide Git Repository</value></data>
+  <data name="CheckoutCommand" xml:space="preserve"><value>Switch Branch…</value></data>
+  <data name="CreateBranchCommand" xml:space="preserve"><value>Create Branch…</value></data>
+  <data name="DeleteBranchCommand" xml:space="preserve"><value>Delete Branch…</value></data>
+  <data name="FetchCommand" xml:space="preserve"><value>Fetch</value></data>
+  <data name="PullCommand" xml:space="preserve"><value>Pull</value></data>
+  <data name="PushCommand" xml:space="preserve"><value>Push</value></data>
+  <data name="SyncCommand" xml:space="preserve"><value>Synchronize</value></data>
+  <data name="BranchesTab" xml:space="preserve"><value>Branches</value></data>
+  <data name="LocalBranchesGroup" xml:space="preserve"><value>Local</value></data>
+  <data name="RemoteBranchesGroup" xml:space="preserve"><value>Remote</value></data>
+  <data name="RefreshBranches" xml:space="preserve"><value>Refresh</value></data>
+  <data name="NewBranch" xml:space="preserve"><value>New Branch…</value></data>
+  <data name="SwitchToBranch" xml:space="preserve"><value>Switch to Branch</value></data>
+  <data name="NewBranchFromHere" xml:space="preserve"><value>New Branch from Here…</value></data>
+  <data name="CurrentBranch" xml:space="preserve"><value>Current branch</value></data>
+  <data name="UpstreamGoneFormat" xml:space="preserve"><value>Upstream {0} no longer exists</value></data>
+  <data name="NoBranches" xml:space="preserve"><value>There are no branches yet. Create the first commit.</value></data>
+  <data name="BranchesUnavailable" xml:space="preserve"><value>The git service of this application cannot list branches.</value></data>
+  <data name="RemotesUnavailable" xml:space="preserve"><value>The git service of this application cannot fetch, pull or push.</value></data>
+  <data name="LoadBranchesFailedFormat" xml:space="preserve"><value>Reading the branches failed: {0}</value></data>
+  <data name="CheckoutPickTitle" xml:space="preserve"><value>Switch to branch</value></data>
+  <data name="CurrentBranchDescription" xml:space="preserve"><value>current</value></data>
+  <data name="RemoteBranchDescription" xml:space="preserve"><value>remote branch</value></data>
+  <data name="AlreadyOnBranchFormat" xml:space="preserve"><value>{0} is already the current branch.</value></data>
+  <data name="BranchNotFoundFormat" xml:space="preserve"><value>The branch {0} does not exist.</value></data>
+  <data name="CreateBranchTitle" xml:space="preserve"><value>Create Branch</value></data>
+  <data name="CreateBranchPrompt" xml:space="preserve"><value>Name of the new branch</value></data>
+  <data name="CreateBranchFromPromptFormat" xml:space="preserve"><value>Name of the new branch, starting at {0}</value></data>
+  <data name="CreateBranchModeTitleFormat" xml:space="preserve"><value>Create branch {0}</value></data>
+  <data name="CreateAndSwitch" xml:space="preserve"><value>Create and switch to it</value></data>
+  <data name="CreateOnly" xml:space="preserve"><value>Create only</value></data>
+  <data name="DeleteBranchPickTitle" xml:space="preserve"><value>Delete branch</value></data>
+  <data name="NoBranchToDelete" xml:space="preserve"><value>There is no other local branch to delete.</value></data>
+  <data name="CannotDeleteCurrentFormat" xml:space="preserve"><value>{0} is the current branch and cannot be deleted. Switch to another branch first.</value></data>
+  <data name="CannotDeleteRemoteFormat" xml:space="preserve"><value>{0} is a remote branch; only local branches can be deleted here.</value></data>
+  <data name="DeleteBranchConfirmTitle" xml:space="preserve"><value>Delete Branch</value></data>
+  <data name="DeleteBranchPromptFormat" xml:space="preserve"><value>Delete the local branch {0}?</value></data>
+  <data name="DeleteBranchConfirm" xml:space="preserve"><value>Delete</value></data>
+  <data name="DeleteUnmergedPromptFormat" xml:space="preserve"><value>The branch {0} is not fully merged. Delete it anyway? Its commits that are on no other branch are lost.</value></data>
+  <data name="DeleteUnmergedConfirm" xml:space="preserve"><value>Delete Anyway</value></data>
+  <data name="BranchDeletedFormat" xml:space="preserve"><value>Deleted the branch {0}.</value></data>
+  <data name="FetchProgress" xml:space="preserve"><value>Fetching from the remotes…</value></data>
+  <data name="PullProgressFormat" xml:space="preserve"><value>Pulling {0}…</value></data>
+  <data name="PushProgressFormat" xml:space="preserve"><value>Pushing {0}…</value></data>
+  <data name="SyncProgressFormat" xml:space="preserve"><value>Synchronizing {0} with {1}…</value></data>
+  <data name="FetchSucceeded" xml:space="preserve"><value>Fetch finished.</value></data>
+  <data name="PullUpToDateFormat" xml:space="preserve"><value>{0} was already up to date with {1}; there was nothing to pull.</value></data>
+  <data name="PullFastForwardOneFormat" xml:space="preserve"><value>Pulled 1 commit from {1} into {0}.</value></data>
+  <data name="PullFastForwardManyFormat" xml:space="preserve"><value>Pulled {2} commits from {1} into {0}.</value></data>
+  <data name="PullSucceededFormat" xml:space="preserve"><value>Pulled {1} into {0}.</value></data>
+  <data name="PushSucceededFormat" xml:space="preserve"><value>Pushed {0} to {1}.</value></data>
+  <data name="SyncSucceededFormat" xml:space="preserve"><value>{0} is synchronized with {1}.</value></data>
+  <data name="OperationCancelledFormat" xml:space="preserve"><value>{0} was cancelled.</value></data>
+  <data name="PushSetUpstreamPromptFormat" xml:space="preserve"><value>The branch {0} has no upstream branch. Push it to {1} and make {1}/{0} its upstream?</value></data>
+  <data name="PushSetUpstreamConfirm" xml:space="preserve"><value>Push and Set Upstream</value></data>
+  <data name="DetachedHeadCannotPush" xml:space="preserve"><value>HEAD is detached. Switch to a branch before you push.</value></data>
+  <data name="NoRemote" xml:space="preserve"><value>The repository has no remote.</value></data>
+  <data name="NoUpstream" xml:space="preserve"><value>The current branch has no upstream branch. Push it first, which sets its upstream.</value></data>
+  <data name="AuthenticationFailedHint" xml:space="preserve"><value>Sign-in failed. Set up a credential helper (for example Git Credential Manager) or load your SSH key into the agent.</value></data>
+  <data name="HostKeyHint" xml:space="preserve"><value>The SSH host key of the server is unknown. Connect to the server once in a terminal, for example with ssh -T, check the key and accept it; the editor does not accept host keys by itself.</value></data>
+  <data name="PushRejectedHint" xml:space="preserve"><value>The remote rejected the push. Usually it has commits your branch does not have yet: pull first, then push again.</value></data>
+  <data name="PullDivergedHint" xml:space="preserve"><value>Your branch and its upstream have diverged, so a fast-forward is not possible. Merge or rebase in a terminal for now.</value></data>
+  <data name="TimeoutHint" xml:space="preserve"><value>Git did not finish in time and was stopped. Check the network connection and try again.</value></data>
+  <data name="RemoteFailureFormat" xml:space="preserve"><value>{0} Git reported: {1}</value></data>
+  <data name="CommitProgress" xml:space="preserve"><value>Committing…</value></data>
+  <data name="StatusBarStatusFailed" xml:space="preserve"><value>Git status failed</value></data>
+  <data name="FetchPartlyFailedFormat" xml:space="preserve"><value>Fetched {0}; the other remotes failed. {1}</value></data>
+  <data name="SyncPushFailedFormat" xml:space="preserve"><value>The pull of {1} into {0} completed, but the push failed. {2}</value></data>
+  <data name="LogProgressDialogFailed" xml:space="preserve"><value>The progress dialog could not be shown; the Git command runs without it.</value></data>
+  <data name="ForbiddenHint" xml:space="preserve"><value>The server accepted the sign-in but denies access to the repository. Check your permissions on the remote.</value></data>
+  <data name="NetworkHint" xml:space="preserve"><value>The server could not be reached. Check the network connection and the remote URL.</value></data>
+  <data name="RemoteRejectedHint" xml:space="preserve"><value>The remote declined the push, for example because the branch is protected or a server hook refused it. Pulling does not help; push to another branch or ask the owner of the repository.</value></data>
+  <data name="UpstreamGone" xml:space="preserve"><value>gone</value></data>
+  <data name="LocalBranchExistsTitleFormat" xml:space="preserve"><value>The local branch {0} does not track {1}</value></data>
+  <data name="SwitchToLocalBranchFormat" xml:space="preserve"><value>Switch to the local branch {0}</value></data>
+  <data name="TracksUpstreamFormat" xml:space="preserve"><value>tracks {0}</value></data>
+  <data name="NoUpstreamDescription" xml:space="preserve"><value>no upstream</value></data>
+  <data name="CreateBranchFromRemoteFormat" xml:space="preserve"><value>Create a new branch from {0}</value></data>
+  <data name="CheckoutDetachedFormat" xml:space="preserve"><value>Check out {0} without a branch (detached HEAD)</value></data>
+  <data name="UpstreamGoneHint" xml:space="preserve"><value>The upstream branch no longer exists on the remote, for example because it was deleted after a merge. Push the branch to create it again, or switch to another branch.</value></data>
+  <data name="InvalidBranchNameFormat" xml:space="preserve"><value>"{0}" is not a valid branch name. Branch names must not start with "-" and must not contain spaces, "..", "~", "^", ":", "?", "*", "[" or "\".</value></data>
+  <data name="SeeGitOutput" xml:space="preserve"><value>The complete Git output is in the Git output channel.</value></data>
 </root>

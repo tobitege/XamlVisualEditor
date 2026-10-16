@@ -41,8 +41,13 @@ public interface IWindow
 
     /// <summary>
     /// Raised when <see cref="IOutputChannel.Show"/> is called; the output view shows itself with that channel selected.
+    /// Windows that cannot show output channels keep this default, which never raises the event.
     /// </summary>
-    event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
+    event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested
+    {
+        add { }
+        remove { }
+    }
 
     /// <summary>Creates a status bar item.</summary>
     IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority);

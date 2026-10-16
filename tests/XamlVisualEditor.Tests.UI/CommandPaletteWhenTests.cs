@@ -16,9 +16,10 @@ public sealed class CommandPaletteWhenTests
 {
     private const string COMMAND_ID = "paletteProbe.run";
     private const string CONTEXT_KEY = "paletteProbe.enabled";
+    private const string HOST_COMMAND_ID = "editing.undo";
 
     [AvaloniaFact]
-    public async Task The_palette_offers_and_runs_a_command_only_while_its_when_clause_holds()
+    public async Task The_palette_offers_and_runs_a_command_only_while_it_is_enabled()
     {
         PaletteProbeExtension probe = new();
         using ExtensionCommandMenuIntegrationTests.ExtensionMenuTestHost host = new(additionalExtension: probe);
@@ -44,6 +45,10 @@ public sealed class CommandPaletteWhenTests
 
         Assert.Contains(COMMAND_ID, offered);
         Assert.Equal(1, probe.Runs);
+        // Like its menu item, a host command is offered only while the host can run it; without a document
+        // there is nothing to undo.
+        Assert.Contains(host.ViewModel.CommandPaletteItems, item => item.CommandId == HOST_COMMAND_ID);
+        Assert.DoesNotContain(HOST_COMMAND_ID, offered);
 
         // The context key turns false while the palette is open, so the selected item is stale.
         beforeSelection = () => host.ContextKeys.Set(CONTEXT_KEY, false);
@@ -79,7 +84,10 @@ public sealed class CommandPaletteWhenTests
                 new CommandMetadata("Run Palette Probe", "Probe", When: CONTEXT_KEY)));
             context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
                 context.ExtensionId,
-                [new ExtensionCommandPaletteContribution(COMMAND_ID, "Run Palette Probe", "Probe")]));
+                [
+                    new ExtensionCommandPaletteContribution(COMMAND_ID, "Run Palette Probe", "Probe"),
+                    new ExtensionCommandPaletteContribution(HOST_COMMAND_ID, "Undo Probe", "Probe")
+                ]));
             return Task.CompletedTask;
         }
     }

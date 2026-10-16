@@ -4873,12 +4873,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return _extensionViews.TryGetValue(viewId, out viewModel);
     }
 
-    // The palette offers the commands whose When clause holds when it opens, and runs the selection only if its
-    // When clause still holds.
+    // The palette offers the commands that are enabled as menu items are when it opens, and runs the selection only
+    // if it is still enabled.
     private async System.Threading.Tasks.Task ShowCommandPaletteAsync()
     {
         List<ExtensionCommandPaletteItemViewModel> items = CommandPaletteItems
-            .Where(item => IsExtensionCommandWhenSatisfied(item.CommandId))
+            .Where(item => IsExtensionCommandEnabled(item.CommandId))
             .ToList();
         if (items.Count == 0)
         {
@@ -4893,7 +4893,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (!IsExtensionCommandWhenSatisfied(selected.CommandId))
+        if (!IsExtensionCommandEnabled(selected.CommandId))
         {
             StatusText = string.Format(UiStrings.ExtensionCommandUnavailable, selected.CommandId);
             return;
@@ -4901,11 +4901,6 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         await ExecuteExtensionCommandAsync(selected.CommandId);
     }
-
-    private bool IsExtensionCommandWhenSatisfied(string commandId) =>
-        _commandMetadata is null
-        || !_commandMetadata.TryGet(commandId, out CommandMetadata metadata)
-        || EvaluateWhenExpressionForContext(metadata.When);
 
     private async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId)
     {
@@ -5606,7 +5601,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private bool IsExtensionCommandEnabled(string commandId)
     {
-        if (!IsExtensionCommandWhenSatisfied(commandId))
+        if (_commandMetadata is not null
+            && _commandMetadata.TryGet(commandId, out CommandMetadata metadata)
+            && !EvaluateWhenExpressionForContext(metadata.When))
         {
             return false;
         }

@@ -165,8 +165,18 @@ public sealed class InMemoryOutputChannel : IOutputChannel
         string name,
         Action<OutputChannelMessageEventArgs>? messageCallback = null,
         Action<OutputChannelClearedEventArgs>? clearedCallback = null,
-        Action? disposedCallback = null,
-        Action<OutputChannelEventArgs>? showCallback = null)
+        Action? disposedCallback = null)
+        : this(name, messageCallback, clearedCallback, disposedCallback, null)
+    {
+    }
+
+    /// <summary>Creates a channel whose <see cref="Show"/> calls <paramref name="showCallback"/>.</summary>
+    public InMemoryOutputChannel(
+        string name,
+        Action<OutputChannelMessageEventArgs>? messageCallback,
+        Action<OutputChannelClearedEventArgs>? clearedCallback,
+        Action? disposedCallback,
+        Action<OutputChannelEventArgs>? showCallback)
     {
         Name = name;
         _info = new OutputChannelInfo(name);
@@ -335,8 +345,6 @@ internal sealed class NullWindow : IWindow
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
-
-    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 #pragma warning restore CS0067
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)

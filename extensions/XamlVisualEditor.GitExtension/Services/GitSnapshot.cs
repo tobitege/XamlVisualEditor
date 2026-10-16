@@ -18,12 +18,19 @@ public enum GitSessionState
     NotRepository,
 
     /// <summary>The workspace is inside a git repository and <see cref="GitSnapshot.Status"/> holds its status.</summary>
-    Repository
+    Repository,
+
+    /// <summary>
+    /// The workspace is inside a git repository, but reading its status failed, for example because of a damaged
+    /// index; <see cref="GitSnapshot.ErrorMessage"/> holds git's error output and <see cref="GitSnapshot.Status"/>
+    /// is null. The repository stays watched, so the next change refreshes the status again.
+    /// </summary>
+    StatusFailed
 }
 
 /// <summary>
 /// An immutable state of the Git session: the repository of the workspace, its status, branch, upstream and the
-/// switch of the working folder watcher.
+/// switch of the working folder watcher. Two snapshots with the same values and changes are equal.
 /// </summary>
 public sealed record GitSnapshot
 {
@@ -36,11 +43,17 @@ public sealed record GitSnapshot
     /// <summary>Gets the workspace path the snapshot was taken for.</summary>
     public string? WorkspacePath { get; init; }
 
-    /// <summary>Gets the root of the repository; null unless <see cref="State"/> is <see cref="GitSessionState.Repository"/>.</summary>
+    /// <summary>Gets the root of the repository; null unless <see cref="IsRepository"/> is true.</summary>
     public string? RepositoryRoot { get; init; }
 
     /// <summary>Gets the absolute git directory, or null when it is unknown.</summary>
     public string? GitDirectory { get; init; }
+
+    /// <summary>
+    /// Gets the absolute common git directory with the branches, which differs from <see cref="GitDirectory"/> only
+    /// in linked worktrees, or null when it is unknown.
+    /// </summary>
+    public string? CommonDirectory { get; init; }
 
     /// <summary>Gets the repository status; null unless <see cref="State"/> is <see cref="GitSessionState.Repository"/>.</summary>
     public GitRepositoryStatus? Status { get; init; }
@@ -54,11 +67,18 @@ public sealed record GitSnapshot
     /// <summary>Gets whether the working folder watcher is switched on.</summary>
     public bool IsWorkingTreeWatcherEnabled { get; init; }
 
+    /// <summary>
+    /// Gets a number that grows when branches may have been created, deleted or moved without a change of HEAD: a
+    /// change below <c>refs</c> or of <c>packed-refs</c> in the watched git directories, a command run through
+    /// <see cref="GitSession.RunWithServicesAsync{T}"/>, or <see cref="GitSession.RefreshAllAsync"/>.
+    /// </summary>
+    public int RefsVersion { get; init; }
+
     /// <summary>Gets whether git could be started; true until a refresh found it missing.</summary>
     public bool IsGitAvailable => State != GitSessionState.GitUnavailable;
 
-    /// <summary>Gets whether the workspace is inside a git repository.</summary>
-    public bool IsRepository => State == GitSessionState.Repository;
+    /// <summary>Gets whether the workspace is inside a git repository, also when reading its status failed.</summary>
+    public bool IsRepository => State is GitSessionState.Repository or GitSessionState.StatusFailed;
 
     /// <summary>Gets the branch name, or the abbreviated commit id when HEAD is detached.</summary>
     public string BranchName => Status?.BranchName ?? string.Empty;
@@ -68,6 +88,9 @@ public sealed record GitSnapshot
 
     /// <summary>Gets whether the branch has an upstream branch.</summary>
     public bool HasUpstream => !string.IsNullOrEmpty(Status?.UpstreamName);
+
+    /// <summary>Gets whether the upstream branch is configured but no longer exists, for example after it was deleted on the remote.</summary>
+    public bool IsUpstreamGone => Status?.IsUpstreamGone ?? false;
 
     /// <summary>Gets the number of commits the branch is ahead of its upstream.</summary>
     public int AheadBy => Status?.AheadBy ?? 0;

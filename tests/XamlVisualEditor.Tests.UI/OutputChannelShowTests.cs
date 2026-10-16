@@ -50,7 +50,8 @@ public sealed class OutputChannelShowTests
         });
         Assert.Equal(PROBLEMS_VIEW_ID, GetActiveBottomViewId(host));
 
-        git.Show();
+        // Git writes to its channel on thread-pool threads.
+        await Task.Run(git.Show);
         await host.FlushAsync();
 
         Assert.Equal(OUTPUT_VIEW_ID, GetActiveBottomViewId(host));

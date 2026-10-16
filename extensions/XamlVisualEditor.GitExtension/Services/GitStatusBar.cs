@@ -23,8 +23,17 @@ internal static class GitStatusBar
             return;
         }
 
-        item.Text = FormatText(snapshot);
-        item.Tooltip = FormatTooltip(snapshot);
+        if (snapshot.State == GitSessionState.StatusFailed)
+        {
+            item.Text = GitStrings.StatusBarStatusFailed;
+            item.Tooltip = snapshot.ErrorMessage + Environment.NewLine + GitStrings.StatusBarClickHint;
+        }
+        else
+        {
+            item.Text = FormatText(snapshot);
+            item.Tooltip = FormatTooltip(snapshot);
+        }
+
         item.CommandId = GitCommands.SHOW_CHANGES;
         item.Show();
     }
@@ -59,9 +68,11 @@ internal static class GitStatusBar
             culture,
             snapshot.IsDetached ? GitStrings.StatusBarDetachedFormat : GitStrings.StatusBarBranchFormat,
             BranchOrHead(snapshot));
-        string upstream = snapshot.HasUpstream
-            ? string.Format(culture, GitStrings.StatusBarUpstreamFormat, snapshot.UpstreamName, snapshot.AheadBy, snapshot.BehindBy)
-            : GitStrings.StatusBarNoUpstream;
+        string upstream = !snapshot.HasUpstream
+            ? GitStrings.StatusBarNoUpstream
+            : snapshot.IsUpstreamGone
+                ? string.Format(culture, GitStrings.UpstreamGoneFormat, snapshot.UpstreamName)
+                : string.Format(culture, GitStrings.StatusBarUpstreamFormat, snapshot.UpstreamName, snapshot.AheadBy, snapshot.BehindBy);
         string changes = string.Format(culture, GitStrings.StatusBarChangesFormat, snapshot.ChangeCount);
         return branch + Environment.NewLine + upstream + Environment.NewLine + changes + Environment.NewLine
             + GitStrings.StatusBarClickHint;

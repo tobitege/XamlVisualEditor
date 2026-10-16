@@ -52,6 +52,33 @@ public static class GitCommands
     /// <summary>Commits the staged changes with the message of the panel or an entered message.</summary>
     public const string COMMIT = "git.commit";
 
+    /// <summary>View id of the Git Repository panel with the branches.</summary>
+    public const string REPOSITORY_VIEW_ID = "git.repository";
+
+    /// <summary>Shows or hides the Git Repository panel.</summary>
+    public const string TOGGLE_REPOSITORY_VIEW = "git.repository.toggleView";
+
+    /// <summary>Switches to the branch in argument 0 (full or short name), otherwise to one picked from a list.</summary>
+    public const string CHECKOUT = "git.checkout";
+
+    /// <summary>Creates a branch at argument 0, otherwise at HEAD, with an entered name, and optionally switches to it.</summary>
+    public const string CREATE_BRANCH = "git.createBranch";
+
+    /// <summary>Deletes the local branch in argument 0, otherwise one picked from a list, after a confirmation.</summary>
+    public const string DELETE_BRANCH = "git.deleteBranch";
+
+    /// <summary>Fetches the branches of all remotes.</summary>
+    public const string FETCH = "git.fetch";
+
+    /// <summary>Fast-forwards the current branch to its upstream.</summary>
+    public const string PULL = "git.pull";
+
+    /// <summary>Pushes the current branch; without upstream it asks to set one.</summary>
+    public const string PUSH = "git.push";
+
+    /// <summary>Pulls and then pushes the current branch.</summary>
+    public const string SYNC = "git.sync";
+
     /// <summary>Context key: git can be started.</summary>
     public const string AVAILABLE_CONTEXT_KEY = "git.available";
 
@@ -77,7 +104,11 @@ public static class GitCommands
     private const string VIEW_GROUP = "1_view";
     private const string CHANGES_GROUP = "2_changes";
     private const string REPOSITORY_GROUP = "3_repository";
+    private const string BRANCHES_GROUP = "4_branches";
+    private const string SYNC_GROUP = "5_sync";
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
+    private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
+    private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
 
     /// <summary>Registers the command handlers and their metadata.</summary>
     internal static void RegisterCommands(
@@ -111,6 +142,22 @@ public static class GitCommands
             new CommandMetadata(GitStrings.UnstageAllCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 110));
         Register(COMMIT, handler.CommitAsync,
             new CommandMetadata(GitStrings.CommitCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 120));
+        Register(TOGGLE_REPOSITORY_VIEW, handler.ToggleRepositoryViewAsync,
+            new CommandMetadata(GitStrings.ToggleRepositoryViewCommand, CATEGORY, Priority: 130));
+        Register(CHECKOUT, handler.CheckoutAsync,
+            new CommandMetadata(GitStrings.CheckoutCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 140));
+        Register(CREATE_BRANCH, handler.CreateBranchAsync,
+            new CommandMetadata(GitStrings.CreateBranchCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 150));
+        Register(DELETE_BRANCH, handler.DeleteBranchAsync,
+            new CommandMetadata(GitStrings.DeleteBranchCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 160));
+        Register(FETCH, handler.FetchAsync,
+            new CommandMetadata(GitStrings.FetchCommand, CATEGORY, When: REMOTE_WHEN, Priority: 170));
+        Register(PULL, handler.PullAsync,
+            new CommandMetadata(GitStrings.PullCommand, CATEGORY, When: UPSTREAM_WHEN, Priority: 180));
+        Register(PUSH, handler.PushAsync,
+            new CommandMetadata(GitStrings.PushCommand, CATEGORY, When: REMOTE_WHEN, Priority: 190));
+        Register(SYNC, handler.SyncAsync,
+            new CommandMetadata(GitStrings.SyncCommand, CATEGORY, When: UPSTREAM_WHEN, Priority: 200));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -120,7 +167,7 @@ public static class GitCommands
     }
 
     /// <summary>
-    /// Registers the menu and Command Palette entries: the panel under View › Panels, the repository commands in
+    /// Registers the menu and Command Palette entries: the panels under View › Panels, the repository commands in
     /// the Extensions › Git submenu and the file commands in the Git submenu of the editor context menu.
     /// </summary>
     internal static void RegisterMenuAndPaletteItems(
@@ -143,6 +190,14 @@ public static class GitCommands
                 ExtensionsItem(UNSTAGE_ALL, GitStrings.UnstageAllCommand, CHANGES_GROUP, 60),
                 ExtensionsItem(COMMIT, GitStrings.CommitCommand, CHANGES_GROUP, 70),
                 ExtensionsItem(INIT, GitStrings.InitCommand, REPOSITORY_GROUP, 80),
+                new ExtensionMenuContribution(TOGGLE_REPOSITORY_VIEW, GitStrings.RepositoryViewTitle, ExtensionMenuLocations.View, "views.left", 50),
+                ExtensionsItem(CHECKOUT, GitStrings.CheckoutCommand, BRANCHES_GROUP, 90),
+                ExtensionsItem(CREATE_BRANCH, GitStrings.CreateBranchCommand, BRANCHES_GROUP, 100),
+                ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
+                ExtensionsItem(FETCH, GitStrings.FetchCommand, SYNC_GROUP, 120),
+                ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
+                ExtensionsItem(PUSH, GitStrings.PushCommand, SYNC_GROUP, 140),
+                ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 EditorContextItem(STAGE, GitStrings.StageCommand, 10),
                 EditorContextItem(UNSTAGE, GitStrings.UnstageCommand, 20),
                 EditorContextItem(DISCARD, GitStrings.DiscardCommand, 30)
@@ -161,7 +216,15 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(DISCARD, GitStrings.DiscardCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STAGE_ALL, GitStrings.StageAllCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(UNSTAGE_ALL, GitStrings.UnstageAllCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(COMMIT, GitStrings.CommitCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(COMMIT, GitStrings.CommitCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(TOGGLE_REPOSITORY_VIEW, GitStrings.ToggleRepositoryViewCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(CHECKOUT, GitStrings.CheckoutCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(CREATE_BRANCH, GitStrings.CreateBranchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(DELETE_BRANCH, GitStrings.DeleteBranchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(FETCH, GitStrings.FetchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(PULL, GitStrings.PullCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(PUSH, GitStrings.PushCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SYNC, GitStrings.SyncCommand, CATEGORY)
             ]));
 
         static ExtensionMenuContribution ExtensionsItem(string commandId, string title, string submenuGroup, int priority) =>

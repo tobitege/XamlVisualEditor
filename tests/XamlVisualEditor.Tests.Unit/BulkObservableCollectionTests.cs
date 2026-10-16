@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using XamlVisualEditor.PropertyEditorExtension;
 using Xunit;
 
@@ -28,5 +29,33 @@ public sealed class BulkObservableCollectionTests
         collection.ReplaceAll(System.Array.Empty<string>());
 
         Assert.Empty(collection);
+    }
+
+    [Fact]
+    public void InsertRange_And_RemoveRange_RaiseOneNotificationWithAllItems()
+    {
+        BulkObservableCollection<int> collection = new() { 1, 5 };
+        List<NotifyCollectionChangedEventArgs> changes = new();
+        collection.CollectionChanged += (_, e) => changes.Add(e);
+
+        collection.InsertRange(1, new[] { 2, 3, 4 });
+        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, collection);
+        NotifyCollectionChangedEventArgs added = Assert.Single(changes);
+        Assert.Equal(NotifyCollectionChangedAction.Add, added.Action);
+        Assert.Equal(1, added.NewStartingIndex);
+        Assert.Equal(new[] { 2, 3, 4 }, added.NewItems!.Cast<int>());
+
+        changes.Clear();
+        collection.RemoveRange(1, 3);
+        Assert.Equal(new[] { 1, 5 }, collection);
+        NotifyCollectionChangedEventArgs removed = Assert.Single(changes);
+        Assert.Equal(NotifyCollectionChangedAction.Remove, removed.Action);
+        Assert.Equal(1, removed.OldStartingIndex);
+        Assert.Equal(new[] { 2, 3, 4 }, removed.OldItems!.Cast<int>());
+
+        changes.Clear();
+        collection.InsertRange(0, System.Array.Empty<int>());
+        collection.RemoveRange(0, 0);
+        Assert.Empty(changes);
     }
 }

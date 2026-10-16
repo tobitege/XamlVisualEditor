@@ -1152,4 +1152,106 @@
   <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' could not be renamed: {1}</value></data>
   <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' could not be deleted: {1}</value></data>
   <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Fix the XAML errors before editing the document here.</value></data>
+  <data name="ActionsForFormat" xml:space="preserve"><value>Actions for {0}</value></data>
+  <data name="AddChild" xml:space="preserve"><value>Add child</value></data>
+  <data name="AddColumn" xml:space="preserve"><value>Add column</value></data>
+  <data name="AddProperty" xml:space="preserve"><value>Add property</value></data>
+  <data name="AddRow" xml:space="preserve"><value>Add row</value></data>
+  <data name="AddSibling" xml:space="preserve"><value>Add sibling</value></data>
+  <data name="AllCategories" xml:space="preserve"><value>All categories</value></data>
+  <data name="ApplyHandlerHint" xml:space="preserve"><value>Enter or leave the field to apply; Escape to cancel. An empty field removes the assignment.</value></data>
+  <data name="ArgbExample" xml:space="preserve"><value>#AARRGGBB</value></data>
+  <data name="AttachedPropertyNameHelp" xml:space="preserve"><value>Use Owner.Property for an attached property.</value></data>
+  <data name="AttributeExample" xml:space="preserve"><value>Attribute, e.g. x:Key or Width</value></data>
+  <data name="AttributeValueHint" xml:space="preserve"><value>Value or binding expression; empty is a local value</value></data>
+  <data name="BindingResourceExpression" xml:space="preserve"><value>Binding or resource expression</value></data>
+  <data name="BrushValueExample" xml:space="preserve"><value>Color, Transparent, or {DynamicResource key}</value></data>
+  <data name="BrushValueHint" xml:space="preserve"><value>Enter a color, Transparent, or {DynamicResource resourceKey} for a theme resource. Reset removes the local assignment; Set null keeps an explicit local null.</value></data>
+  <data name="CategoryFormat" xml:space="preserve"><value>Category: {0}</value></data>
+  <data name="ChooseMetadataType" xml:space="preserve"><value>Choose a type from the project metadata.</value></data>
+  <data name="ClearCollectionExpression" xml:space="preserve"><value>Clear the existing collection expression before adding a definition.</value></data>
+  <data name="ClearDraftContentHint" xml:space="preserve"><value>Explicitly removes the selected node&apos;s content from this draft</value></data>
+  <data name="ClearScalarBeforeInsert" xml:space="preserve"><value>Clear the scalar content explicitly before inserting an object.</value></data>
+  <data name="ClearSelectedContent" xml:space="preserve"><value>Clear selected content</value></data>
+  <data name="CollapseOtherPropertyCategories" xml:space="preserve"><value>Collapse other categories on selection</value></data>
+  <data name="CornerRadiusOrder" xml:space="preserve"><value>TopLeft,TopRight,BottomRight,BottomLeft</value></data>
+  <data name="DraftChangesHint" xml:space="preserve"><value>Changes remain in this draft until you choose Apply. Cancel leaves the document unchanged.</value></data>
+  <data name="EditCollectionItems" xml:space="preserve"><value>Edit collection items</value></data>
+  <data name="EditDialog" xml:space="preserve"><value>Edit...</value></data>
+  <data name="EditProperty" xml:space="preserve"><value>Edit {0}</value></data>
+  <data name="EditTemplateContent" xml:space="preserve"><value>Edit template content</value></data>
+  <data name="EnterAttributeName" xml:space="preserve"><value>Enter the attribute name.</value></data>
+  <data name="EnterPropertyName" xml:space="preserve"><value>Enter the property name.</value></data>
+  <data name="EssentialProperties" xml:space="preserve"><value>Essentials</value></data>
+  <data name="EventDefinitionOpenFailed" xml:space="preserve"><value>The handler definition could not be opened.</value></data>
+  <data name="EventDraftDocumentChanged" xml:space="preserve"><value>The document changed before the handler was applied. The draft is retained.</value></data>
+  <data name="EventHandlerApplyFailed" xml:space="preserve"><value>The handler could not be assigned to this event.</value></data>
+  <data name="EventHandlerCanceled" xml:space="preserve"><value>The handler change was canceled. The draft is retained.</value></data>
+  <data name="Events" xml:space="preserve"><value>Events</value></data>
+  <data name="ExplicitNullUnsupported" xml:space="preserve"><value>The designer host does not support explicit null values.</value></data>
+  <data name="FindTypeOrAssembly" xml:space="preserve"><value>Find a type or assembly...</value></data>
+  <data name="FontFamily" xml:space="preserve"><value>Font family</value></data>
+  <data name="GridCollectionMissing" xml:space="preserve"><value>The Grid definition collection wrapper is missing.</value></data>
+  <data name="GridDefinitionChangesHint" xml:space="preserve"><value>Controls follow their cells when definitions are inserted, removed or moved.</value></data>
+  <data name="GridLengthAlternatives" xml:space="preserve"><value>Auto | * | 2* | 120</value></data>
+  <data name="GridLengthExample" xml:space="preserve"><value>Auto, 120, * or 2*</value></data>
+  <data name="GridLengthHelp" xml:space="preserve"><value>Auto size, fixed pixels, or proportional star (*) sizing</value></data>
+  <data name="Grouped" xml:space="preserve"><value>Grouped</value></data>
+  <data name="Handler" xml:space="preserve"><value>Handler</value></data>
+  <data name="HandlerName" xml:space="preserve"><value>Handler name</value></data>
+  <data name="HttpsExample" xml:space="preserve"><value>https://...</value></data>
+  <data name="InspectSelectionFailed" xml:space="preserve"><value>Cannot inspect {0} in {1}: {2}</value></data>
+  <data name="LoadingPropertiesEvents" xml:space="preserve"><value>Loading properties and events...</value></data>
+  <data name="LocalOnly" xml:space="preserve"><value>Local Only</value></data>
+  <data name="MarkupExtensionExpression" xml:space="preserve"><value>Markup extension expression</value></data>
+  <data name="MoveDown" xml:space="preserve"><value>Move down</value></data>
+  <data name="MoveUp" xml:space="preserve"><value>Move up</value></data>
+  <data name="NamespacePrefixUndeclared" xml:space="preserve"><value>The namespace prefix is not declared in this document.</value></data>
+  <data name="NamespacesManagedByPicker" xml:space="preserve"><value>Namespace declarations are managed by the type picker.</value></data>
+  <data name="NestedPropertyExample" xml:space="preserve"><value>Nested property, e.g. Resources</value></data>
+  <data name="OpenHandlerDefinitionHint" xml:space="preserve"><value>Validate the assignment and open the C# handler definition</value></data>
+  <data name="Properties" xml:space="preserve"><value>Properties</value></data>
+  <data name="PropertyActions" xml:space="preserve"><value>Property actions</value></data>
+  <data name="PropertyDraftDocumentChanged" xml:space="preserve"><value>The document changed before this value was applied. The draft is retained.</value></data>
+  <data name="PropertyElementExists" xml:space="preserve"><value>This property element already exists.</value></data>
+  <data name="PropertyRootCannotRemove" xml:space="preserve"><value>The property root cannot be removed. Use Reset in the property inspector.</value></data>
+  <data name="PropertyRootNoSibling" xml:space="preserve"><value>The property root has no sibling.</value></data>
+  <data name="PropertyValueApplyFailed" xml:space="preserve"><value>The value could not be applied to this property.</value></data>
+  <data name="ReadOnlyFormat" xml:space="preserve"><value>Read-only: {0}</value></data>
+  <data name="RectangleOrder" xml:space="preserve"><value>X,Y,Width,Height</value></data>
+  <data name="RemoveAttribute" xml:space="preserve"><value>Remove attribute</value></data>
+  <data name="RemoveHandlerHint" xml:space="preserve"><value>Remove the event handler assignment</value></data>
+  <data name="ResetProperty" xml:space="preserve"><value>Reset to style/default</value></data>
+  <data name="ResetPropertyHint" xml:space="preserve"><value>Remove the local value and use the style or default value</value></data>
+  <data name="SearchProperties" xml:space="preserve"><value>Search properties...</value></data>
+  <data name="SelectAttributeToRemove" xml:space="preserve"><value>Select an attribute to remove.</value></data>
+  <data name="SelectedFormat" xml:space="preserve"><value>Selected: {0}</value></data>
+  <data name="SelectedNodeAttributes" xml:space="preserve"><value>Attributes of the selected node</value></data>
+  <data name="SelectGridDefinition" xml:space="preserve"><value>Select a row or column definition first.</value></data>
+  <data name="Selection" xml:space="preserve"><value>selection</value></data>
+  <data name="SelectObjectNotProperty" xml:space="preserve"><value>Select an object, not a property element.</value></data>
+  <data name="SelectStructureNode" xml:space="preserve"><value>Select a structure node first.</value></data>
+  <data name="SetAttribute" xml:space="preserve"><value>Set attribute</value></data>
+  <data name="SetNull" xml:space="preserve"><value>Set null</value></data>
+  <data name="SetNullHint" xml:space="preserve"><value>Set an explicit local null value without removing the assignment</value></data>
+  <data name="SetSize" xml:space="preserve"><value>Set size</value></data>
+  <data name="SinglePropertyRoot" xml:space="preserve"><value>This property accepts only one root object.</value></data>
+  <data name="SizeOrder" xml:space="preserve"><value>Width,Height</value></data>
+  <data name="StructureEditorRequiresWindow" xml:space="preserve"><value>The structure editor requires a desktop window.</value></data>
+  <data name="TextContent" xml:space="preserve"><value>Text content</value></data>
+  <data name="ThicknessOrder" xml:space="preserve"><value>Left,Top,Right,Bottom</value></data>
+  <data name="TimeFormatExample" xml:space="preserve"><value>hh:mm:ss</value></data>
+  <data name="ValidatedEventsUnsupported" xml:space="preserve"><value>The designer host does not support validated event assignments.</value></data>
+  <data name="ValueSourceDefault" xml:space="preserve"><value>Style/default: no local assignment.</value></data>
+  <data name="ValueSourceDynamic" xml:space="preserve"><value>Dynamic resource: follows changes to the referenced theme resource.</value></data>
+  <data name="ValueSourceExpression" xml:space="preserve"><value>Local binding or resource expression.</value></data>
+  <data name="ValueSourceLocal" xml:space="preserve"><value>Local value: overrides the style/default.</value></data>
+  <data name="ValueSourceNull" xml:space="preserve"><value>Explicit null: the local value is null. Reset restores the style/default.</value></data>
+  <data name="ValueSourceTransparent" xml:space="preserve"><value>Local transparent brush: the background behind this control remains visible.</value></data>
+  <data name="FlagsDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="GridLengthUnitNeedsValidSize" xml:space="preserve"><value>Enter a valid grid size before changing its unit.</value></data>
+  <data name="ValueSourceMixed" xml:space="preserve"><value>Mixed: the selected controls have different local values. Reset removes them from every selected control.</value></data>
+  <data name="MixedValuesPlaceholder" xml:space="preserve"><value>Mixed values</value></data>
+  <data name="ToggleProperties" xml:space="preserve"><value>Toggle Properties</value></data>
+  <data name="TogglePropertiesCommand" xml:space="preserve"><value>View: Toggle Properties</value></data>
 </root>

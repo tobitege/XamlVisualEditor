@@ -2,6 +2,7 @@ using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
@@ -13,7 +14,7 @@ public sealed class PropertyEditorExtension : IXveExtension
 
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
-        PropertyEditorPanelViewModel viewModel = new(context.Designer, context.PropertyEditors);
+        PropertyEditorPanelViewModel viewModel = new(context.Designer, context.PropertyEditors, context.Settings);
 
         context.Subscriptions.Add(context.Commands.Register(ToggleViewCommandId, _ =>
             context.ViewHost.ToggleAsync(ViewId, CancellationToken.None)));
@@ -24,7 +25,7 @@ public sealed class PropertyEditorExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     ViewId,
-                    "Properties",
+                    UiStrings.Properties,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Right,
                     20,
@@ -37,7 +38,7 @@ public sealed class PropertyEditorExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleViewCommandId,
-                    "Properties",
+                    UiStrings.Properties,
                     ExtensionMenuLocations.View,
                     "views.right",
                     10)
@@ -46,6 +47,20 @@ public sealed class PropertyEditorExtension : IXveExtension
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             ViewId,
             new PropertyEditorPanelViewProvider(viewModel)));
+
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleViewCommandId,
+            new CommandMetadata(
+                Title: UiStrings.TogglePropertiesCommand,
+                Category: UiStrings.View,
+                Priority: 80)));
+
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            new[]
+            {
+                new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleProperties, UiStrings.View)
+            }));
 
         EventHandler<DesignerSelectionChangedEventArgs> selectionHandler = (_, e) =>
         {

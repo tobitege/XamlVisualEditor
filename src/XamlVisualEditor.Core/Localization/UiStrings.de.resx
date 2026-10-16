@@ -1152,4 +1152,106 @@
   <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht umbenannt werden: {1}</value></data>
   <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gelöscht werden: {1}</value></data>
   <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Beheben Sie die XAML-Fehler, bevor Sie das Dokument hier bearbeiten.</value></data>
+  <data name="ActionsForFormat" xml:space="preserve"><value>Aktionen für {0}</value></data>
+  <data name="AddChild" xml:space="preserve"><value>Unterelement hinzufügen</value></data>
+  <data name="AddColumn" xml:space="preserve"><value>Spalte hinzufügen</value></data>
+  <data name="AddProperty" xml:space="preserve"><value>Eigenschaft hinzufügen</value></data>
+  <data name="AddRow" xml:space="preserve"><value>Zeile hinzufügen</value></data>
+  <data name="AddSibling" xml:space="preserve"><value>Nachbarelement hinzufügen</value></data>
+  <data name="AllCategories" xml:space="preserve"><value>Alle Kategorien</value></data>
+  <data name="ApplyHandlerHint" xml:space="preserve"><value>Mit Enter oder beim Verlassen des Felds übernehmen, mit Escape abbrechen. Ein leeres Feld entfernt die Zuweisung.</value></data>
+  <data name="ArgbExample" xml:space="preserve"><value>#AARRGGBB</value></data>
+  <data name="AttachedPropertyNameHelp" xml:space="preserve"><value>Verwende Owner.Property für eine angefügte Eigenschaft.</value></data>
+  <data name="AttributeExample" xml:space="preserve"><value>Attribut, z. B. x:Key oder Width</value></data>
+  <data name="AttributeValueHint" xml:space="preserve"><value>Wert oder Binding-Ausdruck; leer gilt als lokaler Wert</value></data>
+  <data name="BindingResourceExpression" xml:space="preserve"><value>Binding- oder Ressourcenausdruck</value></data>
+  <data name="BrushValueExample" xml:space="preserve"><value>Farbe, Transparent oder {DynamicResource key}</value></data>
+  <data name="BrushValueHint" xml:space="preserve"><value>Farbe, Transparent oder {DynamicResource resourceKey} für eine Theme-Ressource eingeben. Zurücksetzen entfernt die lokale Zuweisung; null setzen behält einen lokalen null-Wert.</value></data>
+  <data name="CategoryFormat" xml:space="preserve"><value>Kategorie: {0}</value></data>
+  <data name="ChooseMetadataType" xml:space="preserve"><value>Wähle einen Typ aus den Projektmetadaten.</value></data>
+  <data name="ClearCollectionExpression" xml:space="preserve"><value>Leere den vorhandenen Sammlungsausdruck, bevor du eine Definition hinzufügst.</value></data>
+  <data name="ClearDraftContentHint" xml:space="preserve"><value>Entfernt den Inhalt des ausgewählten Knotens aus diesem Entwurf</value></data>
+  <data name="ClearScalarBeforeInsert" xml:space="preserve"><value>Leere den skalaren Inhalt ausdrücklich, bevor du ein Objekt einfügst.</value></data>
+  <data name="ClearSelectedContent" xml:space="preserve"><value>Ausgewählten Inhalt leeren</value></data>
+  <data name="CollapseOtherPropertyCategories" xml:space="preserve"><value>Andere Kategorien bei Auswahl einklappen</value></data>
+  <data name="CornerRadiusOrder" xml:space="preserve"><value>Oben links,Oben rechts,Unten rechts,Unten links</value></data>
+  <data name="DraftChangesHint" xml:space="preserve"><value>Änderungen werden erst mit Anwenden übernommen. Abbrechen lässt das Dokument unverändert.</value></data>
+  <data name="EditCollectionItems" xml:space="preserve"><value>Sammlungseinträge bearbeiten</value></data>
+  <data name="EditDialog" xml:space="preserve"><value>Bearbeiten...</value></data>
+  <data name="EditProperty" xml:space="preserve"><value>{0} bearbeiten</value></data>
+  <data name="EditTemplateContent" xml:space="preserve"><value>Template-Inhalt bearbeiten</value></data>
+  <data name="EnterAttributeName" xml:space="preserve"><value>Gib den Attributnamen ein.</value></data>
+  <data name="EnterPropertyName" xml:space="preserve"><value>Gib den Eigenschaftsnamen ein.</value></data>
+  <data name="EssentialProperties" xml:space="preserve"><value>Wichtige Eigenschaften</value></data>
+  <data name="EventDefinitionOpenFailed" xml:space="preserve"><value>Die Handler-Definition konnte nicht geöffnet werden.</value></data>
+  <data name="EventDraftDocumentChanged" xml:space="preserve"><value>Das Dokument wurde vor dem Übernehmen des Handlers geändert. Der Entwurf bleibt erhalten.</value></data>
+  <data name="EventHandlerApplyFailed" xml:space="preserve"><value>Der Handler konnte diesem Ereignis nicht zugewiesen werden.</value></data>
+  <data name="EventHandlerCanceled" xml:space="preserve"><value>Die Handler-Änderung wurde abgebrochen. Der Entwurf bleibt erhalten.</value></data>
+  <data name="Events" xml:space="preserve"><value>Ereignisse</value></data>
+  <data name="ExplicitNullUnsupported" xml:space="preserve"><value>Der Designer-Host unterstützt keine expliziten Nullwerte.</value></data>
+  <data name="FindTypeOrAssembly" xml:space="preserve"><value>Typ oder Assembly suchen...</value></data>
+  <data name="FontFamily" xml:space="preserve"><value>Schriftfamilie</value></data>
+  <data name="GridCollectionMissing" xml:space="preserve"><value>Das Sammlungselement für die Grid-Definitionen fehlt.</value></data>
+  <data name="GridDefinitionChangesHint" xml:space="preserve"><value>Controls behalten ihre Zellzuordnung, wenn Definitionen eingefügt, entfernt oder verschoben werden.</value></data>
+  <data name="GridLengthAlternatives" xml:space="preserve"><value>Auto | * | 2* | 120</value></data>
+  <data name="GridLengthExample" xml:space="preserve"><value>Auto, 120, * oder 2*</value></data>
+  <data name="GridLengthHelp" xml:space="preserve"><value>Automatische Größe, feste Pixel oder proportionale Sternchengröße (*)</value></data>
+  <data name="Grouped" xml:space="preserve"><value>Gruppiert</value></data>
+  <data name="Handler" xml:space="preserve"><value>Handler</value></data>
+  <data name="HandlerName" xml:space="preserve"><value>Handlername</value></data>
+  <data name="HttpsExample" xml:space="preserve"><value>https://...</value></data>
+  <data name="InspectSelectionFailed" xml:space="preserve"><value>{0} in {1} kann nicht untersucht werden: {2}</value></data>
+  <data name="LoadingPropertiesEvents" xml:space="preserve"><value>Eigenschaften und Ereignisse werden geladen...</value></data>
+  <data name="LocalOnly" xml:space="preserve"><value>Nur lokal</value></data>
+  <data name="MarkupExtensionExpression" xml:space="preserve"><value>Markup-Extension-Ausdruck</value></data>
+  <data name="MoveDown" xml:space="preserve"><value>Nach unten</value></data>
+  <data name="MoveUp" xml:space="preserve"><value>Nach oben</value></data>
+  <data name="NamespacePrefixUndeclared" xml:space="preserve"><value>Das Namespace-Präfix ist in diesem Dokument nicht deklariert.</value></data>
+  <data name="NamespacesManagedByPicker" xml:space="preserve"><value>Namespace-Deklarationen werden über die Typauswahl verwaltet.</value></data>
+  <data name="NestedPropertyExample" xml:space="preserve"><value>Verschachtelte Eigenschaft, z. B. Resources</value></data>
+  <data name="OpenHandlerDefinitionHint" xml:space="preserve"><value>Zuweisung prüfen und C#-Handlerdefinition öffnen</value></data>
+  <data name="Properties" xml:space="preserve"><value>Eigenschaften</value></data>
+  <data name="PropertyActions" xml:space="preserve"><value>Eigenschaftsaktionen</value></data>
+  <data name="PropertyDraftDocumentChanged" xml:space="preserve"><value>Das Dokument wurde vor dem Übernehmen des Werts geändert. Der Entwurf bleibt erhalten.</value></data>
+  <data name="PropertyElementExists" xml:space="preserve"><value>Dieses Eigenschaftselement ist bereits vorhanden.</value></data>
+  <data name="PropertyRootCannotRemove" xml:space="preserve"><value>Das Wurzelelement der Eigenschaft kann nicht entfernt werden. Verwende Zurücksetzen im Eigenschaftenfenster.</value></data>
+  <data name="PropertyRootNoSibling" xml:space="preserve"><value>Das Wurzelelement der Eigenschaft hat kein Geschwisterelement.</value></data>
+  <data name="PropertyValueApplyFailed" xml:space="preserve"><value>Der Wert konnte nicht für diese Eigenschaft übernommen werden.</value></data>
+  <data name="ReadOnlyFormat" xml:space="preserve"><value>Schreibgeschützt: {0}</value></data>
+  <data name="RectangleOrder" xml:space="preserve"><value>X,Y,Breite,Höhe</value></data>
+  <data name="RemoveAttribute" xml:space="preserve"><value>Attribut entfernen</value></data>
+  <data name="RemoveHandlerHint" xml:space="preserve"><value>Zuweisung des Ereignishandlers entfernen</value></data>
+  <data name="ResetProperty" xml:space="preserve"><value>Auf Style/Standard zurücksetzen</value></data>
+  <data name="ResetPropertyHint" xml:space="preserve"><value>Lokalen Wert entfernen und den Style- oder Standardwert verwenden</value></data>
+  <data name="SearchProperties" xml:space="preserve"><value>Eigenschaften suchen...</value></data>
+  <data name="SelectAttributeToRemove" xml:space="preserve"><value>Wähle ein Attribut zum Entfernen aus.</value></data>
+  <data name="SelectedFormat" xml:space="preserve"><value>Ausgewählt: {0}</value></data>
+  <data name="SelectedNodeAttributes" xml:space="preserve"><value>Attribute des ausgewählten Knotens</value></data>
+  <data name="SelectGridDefinition" xml:space="preserve"><value>Wähle zuerst eine Zeilen- oder Spaltendefinition aus.</value></data>
+  <data name="Selection" xml:space="preserve"><value>Auswahl</value></data>
+  <data name="SelectObjectNotProperty" xml:space="preserve"><value>Wähle ein Objekt statt eines Eigenschaftselements.</value></data>
+  <data name="SelectStructureNode" xml:space="preserve"><value>Wähle zuerst einen Strukturknoten aus.</value></data>
+  <data name="SetAttribute" xml:space="preserve"><value>Attribut setzen</value></data>
+  <data name="SetNull" xml:space="preserve"><value>null setzen</value></data>
+  <data name="SetNullHint" xml:space="preserve"><value>Einen lokalen null-Wert setzen, ohne die Zuweisung zu entfernen</value></data>
+  <data name="SetSize" xml:space="preserve"><value>Größe setzen</value></data>
+  <data name="SinglePropertyRoot" xml:space="preserve"><value>Diese Eigenschaft akzeptiert nur ein Wurzelobjekt.</value></data>
+  <data name="SizeOrder" xml:space="preserve"><value>Breite,Höhe</value></data>
+  <data name="StructureEditorRequiresWindow" xml:space="preserve"><value>Der Struktureditor benötigt ein Desktopfenster.</value></data>
+  <data name="TextContent" xml:space="preserve"><value>Textinhalt</value></data>
+  <data name="ThicknessOrder" xml:space="preserve"><value>Links,Oben,Rechts,Unten</value></data>
+  <data name="TimeFormatExample" xml:space="preserve"><value>hh:mm:ss</value></data>
+  <data name="ValidatedEventsUnsupported" xml:space="preserve"><value>Der Designer-Host unterstützt keine validierten Ereigniszuweisungen.</value></data>
+  <data name="ValueSourceDefault" xml:space="preserve"><value>Style/Standard: kein lokal zugewiesener Wert.</value></data>
+  <data name="ValueSourceDynamic" xml:space="preserve"><value>Dynamische Ressource: folgt Änderungen der referenzierten Theme-Ressource.</value></data>
+  <data name="ValueSourceExpression" xml:space="preserve"><value>Lokales Binding oder Ressourcenausdruck.</value></data>
+  <data name="ValueSourceLocal" xml:space="preserve"><value>Lokaler Wert: überschreibt den Style-/Standardwert.</value></data>
+  <data name="ValueSourceNull" xml:space="preserve"><value>Explizit null: Der lokale Wert ist null. Zurücksetzen stellt den Style-/Standardwert wieder her.</value></data>
+  <data name="ValueSourceTransparent" xml:space="preserve"><value>Lokaler transparenter Brush: Der Hintergrund hinter diesem Control bleibt sichtbar.</value></data>
+  <data name="FlagsDefault" xml:space="preserve"><value>Standard</value></data>
+  <data name="GridLengthUnitNeedsValidSize" xml:space="preserve"><value>Gib eine gültige Größe ein, bevor du die Einheit änderst.</value></data>
+  <data name="ValueSourceMixed" xml:space="preserve"><value>Gemischt: Die ausgewählten Controls haben unterschiedliche lokale Werte. Zurücksetzen entfernt sie bei allen ausgewählten Controls.</value></data>
+  <data name="MixedValuesPlaceholder" xml:space="preserve"><value>Unterschiedliche Werte</value></data>
+  <data name="ToggleProperties" xml:space="preserve"><value>Eigenschaften ein-/ausblenden</value></data>
+  <data name="TogglePropertiesCommand" xml:space="preserve"><value>Ansicht: Eigenschaften ein-/ausblenden</value></data>
 </root>

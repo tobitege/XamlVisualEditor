@@ -52,6 +52,7 @@ using PropertyEditorExtensionEntry = XamlVisualEditor.PropertyEditorExtension.Pr
 using OutputExtensionEntry = XamlVisualEditor.OutputExtension.OutputExtension;
 using XamlEditorExtensionEntry = XamlVisualEditor.XamlEditorExtension.XamlEditorExtension;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
+using TextEditingExtensionEntry = XamlVisualEditor.TextEditingExtension.TextEditingExtension;
 
 namespace XamlVisualEditor.App;
 
@@ -322,6 +323,7 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, DebugSettingsExtensionEntry>();
         services.AddSingleton<IXveExtension, LspSettingsExtensionEntry>();
         services.AddSingleton<IXveExtension, WorkspaceExtensionEntry>();
+        services.AddSingleton<IXveExtension, TextEditingExtensionEntry>();
         services.AddSingleton<IXveExtension, DapDebuggingExtensionEntry>();
         services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();
 

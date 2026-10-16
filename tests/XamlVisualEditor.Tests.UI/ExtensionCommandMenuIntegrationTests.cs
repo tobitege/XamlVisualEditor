@@ -26,6 +26,7 @@ using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Language;
 using XamlVisualEditor.Shell.ViewModels;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
+using TextEditingExtensionEntry = XamlVisualEditor.TextEditingExtension.TextEditingExtension;
 
 namespace XamlVisualEditor.Tests.UI;
 
@@ -54,6 +55,114 @@ public sealed class ExtensionCommandMenuIntegrationTests
         finally
         {
             InstalledPackageProbe.TryDeleteDirectory(root);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Text_Editing_Extension_Edits_The_Active_Document_And_Checks_Toggles_In_Place()
+    {
+        string filePath = Path.Combine(Path.GetTempPath(), $"xve-text-editing-{Guid.NewGuid():N}.cs");
+        await File.WriteAllTextAsync(filePath, "int a;\nint b;\n");
+
+        try
+        {
+            using ExtensionMenuTestHost host = new(withTextEditing: true);
+            await host.ActivateAsync();
+            await host.OpenFileAsync(filePath);
+            TextDocumentViewModel document = host.ViewModel.ActiveTextDocument!;
+            document.SetSelection(0, "int a;\nint b;".Length, "int a;\nint b;".Length);
+
+            await host.ExecuteCommandAsync("textEditing.toggleComment");
+
+            Assert.Equal("// int a;\n// int b;\n", await host.GetActiveTextAsync());
+            Assert.Equal((0, "// int a;\n// int b;".Length), (document.SelectionStart, document.SelectionLength));
+            Assert.Equal(document.SelectionStart + document.SelectionLength, document.CaretOffset);
+
+            await host.ExecuteCommandAsync("editing.undo");
+            Assert.Equal("int a;\nint b;\n", await host.GetActiveTextAsync());
+
+            ExtensionMenuItemViewModel format = host.ViewModel.EditorContextMenuItems.Single(item => item.Title == "Format");
+            Assert.Contains(format.Children, item => item.CommandId == "textEditing.toggleComment");
+            Assert.Contains(format.Children, item => item.IsSeparator);
+            ExtensionMenuItemViewModel wordWrap = host.ViewModel.EditorContextMenuItems
+                .SelectMany(item => item.Children)
+                .Single(item => item.CommandId == "textEditing.toggle.wordWrap");
+            Assert.True(wordWrap.IsToggle);
+            Assert.False(wordWrap.IsChecked);
+
+            int contributionChanges = 0;
+            host.Contributions.Changed += (_, _) => contributionChanges++;
+            await host.ExecuteCommandAsync("textEditing.toggle.wordWrap");
+
+            Assert.True(host.TextEditorView.Options.WordWrap);
+            Assert.True(wordWrap.IsChecked);
+            Assert.Same(wordWrap, host.ViewModel.EditorContextMenuItems.SelectMany(item => item.Children)
+                .Single(item => item.CommandId == "textEditing.toggle.wordWrap"));
+            Assert.Equal(0, contributionChanges);
+
+            Assert.Equal(CommandKeybindingScope.TextEditor,
+                host.ViewModel.ExtensionKeyBindings.Single(binding => binding.CommandId == "textEditing.find").Scope);
+            Assert.Equal(CommandKeybindingScope.Window,
+                host.ViewModel.ExtensionKeyBindings.Single(binding => binding.CommandId == "editing.undo").Scope);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Text_Editor_Keybindings_Apply_Only_While_An_Editor_Has_The_Focus()
+    {
+        string filePath = Path.Combine(Path.GetTempPath(), $"xve-keys-{Guid.NewGuid():N}.cs");
+        await File.WriteAllTextAsync(filePath, "ALPHA");
+        Application application = Application.Current!;
+        Avalonia.Themes.Fluent.FluentTheme theme = new();
+        StyleInclude editorTheme = new(new Uri("avares://AvaloniaEdit/"))
+        {
+            Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml")
+        };
+        application.Styles.Add(theme);
+        application.Styles.Add(editorTheme);
+        XamlVisualEditor.App.MainWindow? window = null;
+
+        try
+        {
+            using ExtensionMenuTestHost host = new(withTextEditing: true);
+            await host.ActivateAsync();
+            await host.OpenFileAsync(filePath);
+            host.ViewModel.ActiveTextDocument!.SetSelection(0, 5, 5);
+            TextBox input = new() { Text = "SEARCH", Width = 200 };
+            AvaloniaEdit.TextEditor editor = new() { Text = "editor", Width = 300, Height = 80 };
+            window = new XamlVisualEditor.App.MainWindow(host.ViewModel)
+            {
+                Content = new StackPanel { Children = { input, editor } },
+                Width = 520, Height = 240
+            };
+            WindowLayoutBehavior.SetIsEnabled(window, false);
+            window.Show();
+            window.UpdateLayout();
+            KeyBinding lowerCase = window.KeyBindings.Single(binding =>
+                binding.Gesture.Key == Key.U && binding.Gesture.KeyModifiers == KeyModifiers.Control);
+
+            Assert.True(input.Focus());
+            Assert.False(lowerCase.Command.CanExecute(null));
+            window.KeyPress(Key.U, RawInputModifiers.Control, PhysicalKey.U, null);
+            await host.FlushAsync();
+            Assert.Equal("ALPHA", await host.GetActiveTextAsync());
+
+            Assert.True(editor.TextArea.Focus());
+            Assert.True(lowerCase.Command.CanExecute(null));
+            window.KeyPress(Key.U, RawInputModifiers.Control, PhysicalKey.U, null);
+            await host.FlushAsync();
+            Assert.Equal("alpha", await host.GetActiveTextAsync());
+        }
+        finally
+        {
+            window?.Close();
+            application.Styles.Remove(editorTheme);
+            application.Styles.Remove(theme);
+            File.Delete(filePath);
         }
     }
 
@@ -493,7 +602,7 @@ public sealed class ExtensionCommandMenuIntegrationTests
         private readonly WorkspaceModelAdapter _workspaceModel;
         private readonly BuiltInExtensionHost _extensionHost;
 
-        public ExtensionMenuTestHost(IExtensionPackageStore? packageStore = null,
+        public ExtensionMenuTestHost(bool withTextEditing = false, IExtensionPackageStore? packageStore = null,
             IExtensionStateStore? stateStore = null, BackgroundActivityTracker? backgroundActivities = null,
             IXveExtension? additionalExtension = null, IDocumentOpenInterceptors? documentOpenInterceptors = null,
             IXveExtension? secondExtension = null)
@@ -524,7 +633,9 @@ public sealed class ExtensionCommandMenuIntegrationTests
             _viewHost = new ExtensionViewHostAdapter(ViewModel);
             _workspaceModel = new WorkspaceModelAdapter(_workspaceInfo, ViewModel, _workspaceService);
 
-            IXveExtension[] extensions = [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo)];
+            IXveExtension[] extensions = withTextEditing
+                ? [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo), new TextEditingExtensionEntry()]
+                : [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo)];
             if (additionalExtension is not null)
                 extensions = [.. extensions, additionalExtension];
             if (secondExtension is not null)

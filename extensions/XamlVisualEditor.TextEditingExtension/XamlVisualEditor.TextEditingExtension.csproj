@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
+    <!-- The extension ships inside the application and is not packed, so the set of release packages stays unchanged. -->
+    <IsPackable>false</IsPackable>
+    <RootNamespace>XamlVisualEditor.TextEditingExtension</RootNamespace>
+    <Description>Text editing commands, editor context menu and editor options for the text and code editors</Description>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.SourceGenerators" PrivateAssets="all" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Localization\TextEditingStrings.resx">
+      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+      <StronglyTypedNamespace>XamlVisualEditor.TextEditingExtension.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>TextEditingStrings</StronglyTypedClassName>
+      <StronglyTypedFileName>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\TextEditingStrings.g.cs</StronglyTypedFileName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+  </ItemGroup>
+</Project>

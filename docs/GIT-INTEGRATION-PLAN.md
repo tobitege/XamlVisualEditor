@@ -14,8 +14,8 @@ Tests und einem Livetest per CDP. Testrepository: `D:\xve-demo\GitDemo` mit loka
 | Phase | Stand |
 |---|---|
 | 0 CLI-Fundament | erledigt, live geprüft |
-| 1 Session, Statusleiste, Kommandos | umgesetzt, Livetest offen |
-| 2 Branches und Sync | offen |
+| 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
+| 2 Branches und Sync | in Arbeit |
 | 3 Verlauf, Commit-Details, Tags | offen |
 | 4 Explorer-API | offen |
 | 5 Editor-API, Vergleich, Blame | offen |

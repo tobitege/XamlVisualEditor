@@ -39,6 +39,63 @@ public sealed class HostServicesTests
     }
 
     [Fact]
+    public async Task CommandRegistryKeepsTheReplacementWhenTheReplacedRegistrationIsDisposed()
+    {
+        var registry = new CommandRegistry();
+        Func<CommandContext, Task> handler = _ => Task.CompletedTask;
+
+        IDisposable replaced = registry.Register("test.command", handler);
+        using IDisposable current = registry.Register("test.command", handler);
+        replaced.Dispose();
+        replaced.Dispose();
+
+        await registry.ExecuteAsync("test.command", null, CancellationToken.None);
+    }
+
+    [Fact]
+    public void CommandMetadataRegistryKeepsTheReplacementWhenTheReplacedRegistrationIsDisposed()
+    {
+        var registry = new CommandMetadataRegistry();
+        CommandMetadata metadata = new(Title: "Title");
+        int changedCount = 0;
+
+        IDisposable replaced = registry.Register("test.command", metadata);
+        using IDisposable current = registry.Register("test.command", metadata);
+        registry.Changed += (_, _) => changedCount++;
+        replaced.Dispose();
+        replaced.Dispose();
+
+        Assert.True(registry.TryGet("test.command", out CommandMetadata stored));
+        Assert.Same(metadata, stored);
+        Assert.Equal(0, changedCount);
+        current.Dispose();
+        Assert.False(registry.TryGet("test.command", out _));
+        Assert.Equal(1, changedCount);
+    }
+
+    [Fact]
+    public void ExtensionViewRegistryKeepsTheReplacementWhenTheReplacedRegistrationIsDisposed()
+    {
+        var registry = new ExtensionViewRegistry();
+        ICustomViewProvider provider = new NullCustomViewProvider();
+
+        IDisposable replaced = registry.RegisterCustomViewProvider("test.view", provider);
+        using IDisposable current = registry.RegisterCustomViewProvider("test.view", provider);
+        replaced.Dispose();
+        replaced.Dispose();
+
+        Assert.True(registry.TryGetCustomViewProvider("test.view", out ICustomViewProvider stored));
+        Assert.Same(provider, stored);
+        current.Dispose();
+        Assert.False(registry.TryGetCustomViewProvider("test.view", out _));
+    }
+
+    private sealed class NullCustomViewProvider : ICustomViewProvider
+    {
+        public object? CreateViewModel() => null;
+    }
+
+    [Fact]
     public async Task SettingsStoreUsesWorkspaceOverride()
     {
         var settings = new InMemorySettingsStore();

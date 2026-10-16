@@ -229,10 +229,6 @@ public sealed class TfvcExtension : IXveExtension
     /// Registers all menu and Command Palette entries of the extension: the panels under View › Panels and the
     /// offline commands in the Extensions › TFVC submenu.
     /// </summary>
-    /// <remarks>
-    /// The contribution registry keeps one menu list and one palette list per extension, so each list is
-    /// registered in a single call.
-    /// </remarks>
     internal static void RegisterMenuAndPaletteItems(
         string extensionId,
         IExtensionContributionRegistry contributions,

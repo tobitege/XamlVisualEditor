@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="ChangesViewTitle" xml:space="preserve"><value>Git Changes</value></data>
+  <data name="ToggleChangesViewCommand" xml:space="preserve"><value>Show or Hide Git Changes</value></data>
+  <data name="ShowChangesCommand" xml:space="preserve"><value>Open Git Changes</value></data>
+  <data name="RefreshCommand" xml:space="preserve"><value>Refresh Git Status</value></data>
+  <data name="ShowOutputCommand" xml:space="preserve"><value>Show Git Output</value></data>
+  <data name="InitCommand" xml:space="preserve"><value>Initialize Repository</value></data>
+  <data name="ToggleAutoRefreshCommand" xml:space="preserve"><value>Watch Working Folder</value></data>
+  <data name="StageCommand" xml:space="preserve"><value>Stage</value></data>
+  <data name="UnstageCommand" xml:space="preserve"><value>Unstage</value></data>
+  <data name="DiscardCommand" xml:space="preserve"><value>Discard Changes…</value></data>
+  <data name="StageAllCommand" xml:space="preserve"><value>Stage All Changes</value></data>
+  <data name="UnstageAllCommand" xml:space="preserve"><value>Unstage All Changes</value></data>
+  <data name="CommitCommand" xml:space="preserve"><value>Commit…</value></data>
+  <data name="NoTargetPath" xml:space="preserve"><value>Open a file of the repository or pass a path to the command.</value></data>
+  <data name="PathOutsideRepositoryFormat" xml:space="preserve"><value>{0} is not inside the repository {1}.</value></data>
+  <data name="NoChangesToStageFormat" xml:space="preserve"><value>{0} has no changes to stage.</value></data>
+  <data name="NoChangesToUnstageFormat" xml:space="preserve"><value>{0} has no staged changes.</value></data>
+  <data name="NoChangesToDiscardFormat" xml:space="preserve"><value>{0} has no changes that can be discarded. Untracked files are not removed.</value></data>
+  <data name="NothingToStage" xml:space="preserve"><value>There are no changes to stage.</value></data>
+  <data name="NothingToUnstage" xml:space="preserve"><value>There are no staged changes.</value></data>
+  <data name="NothingToCommit" xml:space="preserve"><value>Stage the changes you want to commit first.</value></data>
+  <data name="DiscardManyPromptFormat" xml:space="preserve"><value>Discard working-file changes in {0} files below {1}? The files are reset to their staged or committed version; staged changes are kept.</value></data>
+  <data name="CommitInputTitle" xml:space="preserve"><value>Commit</value></data>
+  <data name="CommitInputPrompt" xml:space="preserve"><value>Commit message</value></data>
+  <data name="InitNoWorkspace" xml:space="preserve"><value>Open a folder or workspace first.</value></data>
+  <data name="InitUnavailable" xml:space="preserve"><value>The git service of this application cannot create repositories.</value></data>
+  <data name="InitializedFormat" xml:space="preserve"><value>Created a git repository in {0}.</value></data>
+  <data name="StatusBarBranchFormat" xml:space="preserve"><value>Branch {0}</value></data>
+  <data name="StatusBarDetachedFormat" xml:space="preserve"><value>Detached HEAD at {0}</value></data>
+  <data name="StatusBarUpstreamFormat" xml:space="preserve"><value>Upstream {0}: {1} ahead, {2} behind</value></data>
+  <data name="StatusBarNoUpstream" xml:space="preserve"><value>No upstream branch</value></data>
+  <data name="StatusBarChangesFormat" xml:space="preserve"><value>{0} changed files</value></data>
+  <data name="StatusBarClickHint" xml:space="preserve"><value>Click to open Git Changes.</value></data>
+  <data name="LogGitUnavailable" xml:space="preserve"><value>git was not found. Install Git or add it to PATH.</value></data>
+  <data name="LogRefreshFailed" xml:space="preserve"><value>Reading the Git status failed.</value></data>
+  <data name="LogWorkingTreeWatcherFailedFormat" xml:space="preserve"><value>Watching the working folder {0} failed: {1} The Git status still refreshes when the git folder changes, after Git commands of this application and on Refresh.</value></data>
+  <data name="LogGitDirectoryWatcherFailedFormat" xml:space="preserve"><value>Watching the git folder {0} failed: {1} The Git status refreshes after Git commands of this application and on Refresh.</value></data>
+  <data name="LogSettingsFailed" xml:space="preserve"><value>Reading or saving the Git settings failed.</value></data>
+</root>

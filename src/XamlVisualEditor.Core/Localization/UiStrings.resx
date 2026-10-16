@@ -927,9 +927,9 @@
   <data name="GitShowDiff" xml:space="preserve"><value>Show Diff</value></data>
   <data name="GitHideDiff" xml:space="preserve"><value>Hide Diff</value></data>
   <data name="GitResizeDiff" xml:space="preserve"><value>Resize Diff pane</value></data>
-  <data name="GitMonitoringOn" xml:space="preserve"><value>Git: On</value></data>
-  <data name="GitMonitoringOff" xml:space="preserve"><value>Git: Off</value></data>
-  <data name="GitMonitoringToggle" xml:space="preserve"><value>Enable or disable Git status and file monitoring</value></data>
+  <data name="GitMonitoringOn" xml:space="preserve"><value>Watch: On</value></data>
+  <data name="GitMonitoringOff" xml:space="preserve"><value>Watch: Off</value></data>
+  <data name="GitMonitoringToggle" xml:space="preserve"><value>Watch the working folder and refresh the Git status after file changes. Changes in the git folder and Git commands always refresh the status.</value></data>
   <data name="WorkspaceNotGitRepository" xml:space="preserve"><value>Workspace is not a git repository</value></data>
   <data name="XamlRootMissing" xml:space="preserve"><value>XAML document has no root element.</value></data>
   <data name="XamlTagsRepaired" xml:space="preserve"><value>Document was repaired automatically (unclosed tags).</value></data>

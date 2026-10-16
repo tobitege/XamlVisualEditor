@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,7 +15,7 @@ namespace XamlVisualEditor.Workspace;
 /// <summary>
 /// Git CLI-backed service for repository status and diff operations.
 /// </summary>
-public sealed class GitService : IGitService
+public sealed class GitService : IGitService, IGitRepositoryService, IGitCommandLog
 {
     private readonly ILogger<GitService> _logger;
     private readonly GitProcessRunner _runner;
@@ -29,6 +30,9 @@ public sealed class GitService : IGitService
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GitService>.Instance;
         _runner = new GitProcessRunner(options ?? GitProcessOptions.Default);
     }
+
+    /// <inheritdoc />
+    public event EventHandler<GitCommandLogEntry>? CommandCompleted;
 
     public async Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default)
     {
@@ -175,10 +179,33 @@ public sealed class GitService : IGitService
         return gitDirectory is null ? GitRepositoryOperation.None : DetectOperation(gitDirectory);
     }
 
-    /// <summary>
-    /// Returns the git directory of the repository, which is a folder outside <c>.git</c> for linked worktrees.
-    /// </summary>
-    private async Task<string?> GetGitDirectoryAsync(string repoPath, CancellationToken ct)
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetRemoteNamesAsync(string repoPath, CancellationToken ct = default)
+    {
+        GitProcessResult result = await RunGitAsync(
+            repoPath,
+            new[] { "remote" },
+            isReadOnly: true,
+            ct,
+            allowNonZeroExitCode: true);
+        if (result.ExitCode != 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return result.StandardOutput.Split(
+            new[] { '\r', '\n' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    /// <inheritdoc />
+    public Task InitAsync(string path, CancellationToken ct = default)
+    {
+        return RunGitCheckedAsync(path, new[] { "init" }, standardInput: null, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetGitDirectoryAsync(string repoPath, CancellationToken ct = default)
     {
         if (_gitDirectories.TryGetValue(repoPath, out string? cached))
         {
@@ -292,6 +319,7 @@ public sealed class GitService : IGitService
             await WarnIfOutdatedAsync(workingDirectory, ct);
         }
 
+        long started = Stopwatch.GetTimestamp();
         GitProcessResult result = await _runner.RunAsync(
             new GitProcessRequest
             {
@@ -301,6 +329,12 @@ public sealed class GitService : IGitService
                 StandardInput = standardInput
             },
             ct);
+        CommandCompleted?.Invoke(this, new GitCommandLogEntry(
+            workingDirectory,
+            args,
+            result.ExitCode,
+            Stopwatch.GetElapsedTime(started),
+            result.StandardError.Trim()));
 
         if (!allowNonZeroExitCode && result.ExitCode != 0)
         {

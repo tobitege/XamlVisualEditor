@@ -68,6 +68,7 @@
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.CollaborationExtension\XamlVisualEditor.CollaborationExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.DebugSettingsExtension\XamlVisualEditor.DebugSettingsExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.LspSettingsExtension\XamlVisualEditor.LspSettingsExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.TextEditingExtension\XamlVisualEditor.TextEditingExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.XamlEditorExtension\XamlVisualEditor.XamlEditorExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.TreeInspectorExtension\XamlVisualEditor.TreeInspectorExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />

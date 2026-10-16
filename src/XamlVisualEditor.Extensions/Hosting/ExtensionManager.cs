@@ -1,5 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
@@ -13,7 +15,11 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
     private readonly Lazy<IReadOnlyList<ExtensionPackageInfo>> _builtInPackages;
     private readonly Lazy<HashSet<string>> _builtInIds;
     private readonly IExtensionContributionRegistry? _contributions;
+    private readonly ILogger<ExtensionManager> _logger;
     private readonly SemaphoreSlim _operations = new(1, 1);
+    private sealed record ThemeProviders(IReadOnlyList<DesignerThemeProviderRegistration> Preview,
+        IReadOnlyList<EditorThemeProviderRegistration> Editor);
+
     private sealed record ThemePackage(IReadOnlyList<DesignerThemeProviderRegistration> Providers,
         IReadOnlyList<EditorThemeProviderRegistration> EditorProviders, IDisposable DesignerRegistration, IDisposable EditorRegistration) : IDisposable
     {
@@ -34,12 +40,14 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
         IExtensionStateStore stateStore,
         IExtensionUpdateService updateService,
         IServiceProvider services,
-        IExtensionContributionRegistry? contributions = null)
+        IExtensionContributionRegistry? contributions = null,
+        ILogger<ExtensionManager>? logger = null)
     {
         _store = store;
         _stateStore = stateStore;
         _updateService = updateService;
         _contributions = contributions;
+        _logger = logger ?? NullLogger<ExtensionManager>.Instance;
         _builtInPackages = new Lazy<IReadOnlyList<ExtensionPackageInfo>>(() =>
         {
             IEnumerable<IXveExtension> extensions = services.GetServices<IXveExtension>();
@@ -152,32 +160,79 @@ public sealed class ExtensionManager : IExtensionManager, IExtensionThemeProvide
         return _updateService.CheckForUpdatesAsync(ct);
     }
 
+    /// <summary>
+    /// Brings the theme provider registrations in line with the enabled packages. Every outdated registration is
+    /// removed before any package registers, so no registration collides with an ID that the same synchronization
+    /// releases. A package whose theme contributions cannot be read, or whose provider IDs another registration holds,
+    /// is logged as a package problem and stays unregistered; the next synchronization tries it again.
+    /// </summary>
     private async Task SynchronizeThemeProvidersAsync(IReadOnlyList<ExtensionPackageInfo> packages, CancellationToken ct)
     {
         if (_contributions is null) return;
-        Dictionary<string, (IReadOnlyList<DesignerThemeProviderRegistration> Preview, IReadOnlyList<EditorThemeProviderRegistration> Editor)> desired = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, ThemeProviders> desired = new(StringComparer.OrdinalIgnoreCase);
         foreach (ExtensionPackageInfo package in packages)
         {
-            if (!await _stateStore.GetEnabledAsync(package.Manifest.ExtensionId, ct).ConfigureAwait(false)) continue;
-            var providers = DesignerThemePackageContributions.Read(package);
-            var editorProviders = DesignerThemePackageContributions.ReadEditor(package);
-            if (providers.Count > 0 || editorProviders.Count > 0) desired[package.Manifest.ExtensionId] = (providers, editorProviders);
-        }
-        foreach (string id in _themePackages.Keys.Union(desired.Keys, StringComparer.OrdinalIgnoreCase).ToArray())
-        {
-            bool hasProviders = desired.TryGetValue(id, out var providers);
-            if (_themePackages.TryGetValue(id, out var previous) && hasProviders
-                && previous.Providers.SequenceEqual(providers.Preview) && previous.EditorProviders.SequenceEqual(providers.Editor)) continue;
+            string extensionId = package.Manifest.ExtensionId;
+            if (!await _stateStore.GetEnabledAsync(extensionId, ct).ConfigureAwait(false)) continue;
+            ThemeProviders providers;
             try
             {
-                await NotifyAsync(ThemeProvidersChanging, id, ct).ConfigureAwait(false);
-                if (_themePackages.Remove(id, out previous)) previous.Dispose();
-                if (hasProviders)
-                    _themePackages[id] = new(providers.Preview, providers.Editor,
-                        _contributions.RegisterDesignerThemeProviders(id, providers.Preview),
-                        _contributions.RegisterEditorThemeProviders(id, providers.Editor));
+                providers = new(DesignerThemePackageContributions.Read(package), DesignerThemePackageContributions.ReadEditor(package));
             }
-            finally { await NotifyAsync(ThemeProvidersChanged, id, CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "Extension package {ExtensionId}: theme providers could not be read", extensionId);
+                continue;
+            }
+
+            if (providers.Preview.Count > 0 || providers.Editor.Count > 0) desired[extensionId] = providers;
+        }
+
+        string[] changed = _themePackages.Keys.Union(desired.Keys, StringComparer.OrdinalIgnoreCase)
+            .Where(id => !IsRegistered(id, desired))
+            .ToArray();
+        List<string> released = new(changed.Length);
+        try
+        {
+            foreach (string id in changed)
+            {
+                await NotifyAsync(ThemeProvidersChanging, id, ct).ConfigureAwait(false);
+                released.Add(id);
+                if (_themePackages.Remove(id, out ThemePackage? previous)) previous.Dispose();
+            }
+        }
+        finally
+        {
+            foreach (string id in released)
+            {
+                if (desired.TryGetValue(id, out ThemeProviders? providers)) RegisterThemePackage(id, providers);
+            }
+
+            foreach (string id in released)
+            {
+                await NotifyAsync(ThemeProvidersChanged, id, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private bool IsRegistered(string id, Dictionary<string, ThemeProviders> desired) =>
+        _themePackages.TryGetValue(id, out ThemePackage? current) && desired.TryGetValue(id, out ThemeProviders? providers)
+        && current.Providers.SequenceEqual(providers.Preview) && current.EditorProviders.SequenceEqual(providers.Editor);
+
+    /// <summary>Registers both provider kinds of one package, or neither of them.</summary>
+    private void RegisterThemePackage(string id, ThemeProviders providers)
+    {
+        IDisposable? previewRegistration = null;
+        try
+        {
+            previewRegistration = _contributions!.RegisterDesignerThemeProviders(id, providers.Preview);
+            IDisposable editorRegistration = _contributions.RegisterEditorThemeProviders(id, providers.Editor);
+            _themePackages[id] = new(providers.Preview, providers.Editor, previewRegistration, editorRegistration);
+        }
+        catch (ArgumentException exception)
+        {
+            previewRegistration?.Dispose();
+            _logger.LogWarning(exception, "Extension package {ExtensionId}: theme providers were not registered", id);
         }
     }
 

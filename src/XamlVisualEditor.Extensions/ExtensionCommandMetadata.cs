@@ -31,6 +31,13 @@ public interface ICommandMetadataRegistry
     event EventHandler? Changed;
 
     /// <summary>Registers metadata for a command.</summary>
+    /// <remarks>
+    /// A command has one metadata entry: a later registration for the same command id replaces the earlier one.
+    /// </remarks>
+    /// <returns>
+    /// A handle that removes this registration when disposed. Disposing a replaced registration, or disposing
+    /// again, has no effect.
+    /// </returns>
     IDisposable Register(string commandId, CommandMetadata metadata);
 
     /// <summary>Gets metadata for a command, if available.</summary>

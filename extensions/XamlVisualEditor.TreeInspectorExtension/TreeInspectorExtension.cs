@@ -93,6 +93,18 @@ public sealed class TreeInspectorExtension : IXveExtension
                 Title: UiStrings.LogicalRefresh,
                 Category: UiStrings.Tree,
                 Priority: 80)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            VisualToggleCommandId,
+            new CommandMetadata(
+                Title: UiStrings.ToggleVisualTreeCommand,
+                Category: UiStrings.View,
+                Priority: 90)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            LogicalToggleCommandId,
+            new CommandMetadata(
+                Title: UiStrings.ToggleLogicalTreeCommand,
+                Category: UiStrings.View,
+                Priority: 100)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
@@ -101,7 +113,9 @@ public sealed class TreeInspectorExtension : IXveExtension
                 new ExtensionCommandPaletteContribution(VisualRevealCommandId, UiStrings.VisualRevealSelection, UiStrings.Tree),
                 new ExtensionCommandPaletteContribution(LogicalRevealCommandId, UiStrings.LogicalRevealSelection, UiStrings.Tree),
                 new ExtensionCommandPaletteContribution(VisualRefreshCommandId, UiStrings.VisualRefresh, UiStrings.Tree),
-                new ExtensionCommandPaletteContribution(LogicalRefreshCommandId, UiStrings.LogicalRefresh, UiStrings.Tree)
+                new ExtensionCommandPaletteContribution(LogicalRefreshCommandId, UiStrings.LogicalRefresh, UiStrings.Tree),
+                new ExtensionCommandPaletteContribution(VisualToggleCommandId, UiStrings.ToggleVisualTree, UiStrings.View),
+                new ExtensionCommandPaletteContribution(LogicalToggleCommandId, UiStrings.ToggleLogicalTree, UiStrings.View)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(

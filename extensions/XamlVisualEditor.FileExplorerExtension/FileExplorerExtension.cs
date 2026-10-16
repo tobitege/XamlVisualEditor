@@ -107,9 +107,21 @@ public sealed class FileExplorerExtension : IXveExtension
             new(OpenFolderCommandId, UiStrings.OpenWorkspaceFolderDialog, UiStrings.File),
             new(ToggleHiddenCommandId, UiStrings.ToggleHiddenFiles, UiStrings.View),
             new(SetIconProviderCommandId, UiStrings.FileExplorerIconsDialog, UiStrings.View),
-            new(SetViewLocationCommandId, UiStrings.FileExplorerDockDialog, UiStrings.View)
+            new(SetViewLocationCommandId, UiStrings.FileExplorerDockDialog, UiStrings.View),
+            new(ToggleViewCommandId, UiStrings.ToggleFileExplorer, UiStrings.View)
         };
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(context.ExtensionId, paletteItems));
+
+        context.Subscriptions.Add(context.CommandMetadata.Register(OpenFolderCommandId,
+            new CommandMetadata(Title: UiStrings.OpenWorkspaceFolderDialog, Category: UiStrings.File, Priority: 5)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(ToggleHiddenCommandId,
+            new CommandMetadata(Title: UiStrings.ToggleHiddenFiles, Category: UiStrings.View, Priority: 10)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(SetIconProviderCommandId,
+            new CommandMetadata(Title: UiStrings.FileExplorerIconsDialog, Category: UiStrings.View, Priority: 20)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(SetViewLocationCommandId,
+            new CommandMetadata(Title: UiStrings.FileExplorerDockDialog, Category: UiStrings.View, Priority: 30)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(ToggleViewCommandId,
+            new CommandMetadata(Title: UiStrings.ToggleFileExplorerCommand, Category: UiStrings.View, Priority: 4)));
 
         return Task.CompletedTask;
     }

@@ -12,6 +12,12 @@ public sealed class InMemoryWindow : IWindow
     /// <summary>Gets recorded messages.</summary>
     public IReadOnlyList<string> Messages => _messages;
 
+    /// <summary>
+    /// Gets or sets the choice of <see cref="ShowQuickPickAsync"/> from the offered items;
+    /// <see langword="null"/> cancels every quick pick.
+    /// </summary>
+    public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? QuickPickChoice { get; set; }
+
     /// <inheritdoc />
     public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken)
     {
@@ -45,7 +51,7 @@ public sealed class InMemoryWindow : IWindow
         QuickPickOptions options,
         CancellationToken cancellationToken)
     {
-        return Task.FromResult<QuickPickItem?>(null);
+        return Task.FromResult(QuickPickChoice?.Invoke(items));
     }
 
     /// <inheritdoc />

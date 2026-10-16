@@ -119,18 +119,60 @@ public interface IExtensionContributionRegistry
     IReadOnlyList<EditorThemeProviderRegistration> EditorThemeProviders { get; }
 
     /// <summary>Registers editor themes independently of the preview themes.</summary>
+    /// <remarks>
+    /// Each call adds a registration. Provider IDs must be unique within the call and across all active editor theme
+    /// registrations; a duplicate ID throws <see cref="ArgumentException"/> and registers nothing.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterEditorThemeProviders(string extensionId, IReadOnlyList<EditorThemeProviderRegistration> providers);
 
     /// <summary>Registers globally unique provider IDs without loading their assemblies in the editor.</summary>
+    /// <remarks>
+    /// Each call adds a registration. Provider IDs must be unique within the call and across all active preview theme
+    /// registrations; a duplicate ID throws <see cref="ArgumentException"/> and registers nothing.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers);
 
+    /// <summary>Registers menu items.</summary>
+    /// <remarks>
+    /// Each call adds a registration; earlier registrations of the same extension stay. <see cref="MenuItems"/>
+    /// keeps the registrations of one extension in call order; the order of different extensions is unspecified.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterMenuItems(string extensionId, IReadOnlyList<ExtensionMenuContribution> items);
 
+    /// <summary>Registers toolbar items.</summary>
+    /// <remarks>
+    /// Each call adds a registration; earlier registrations of the same extension stay. <see cref="ToolbarItems"/>
+    /// keeps the registrations of one extension in call order; the order of different extensions is unspecified.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterToolbarItems(string extensionId, IReadOnlyList<ExtensionToolbarContribution> items);
 
+    /// <summary>Registers Command Palette items.</summary>
+    /// <remarks>
+    /// Each call adds a registration; earlier registrations of the same extension stay.
+    /// <see cref="CommandPaletteItems"/> keeps the registrations of one extension in call order; the order of
+    /// different extensions is unspecified.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterCommandPaletteItems(string extensionId, IReadOnlyList<ExtensionCommandPaletteContribution> items);
 
+    /// <summary>Registers property editor contributions.</summary>
+    /// <remarks>
+    /// Each call adds a registration; earlier registrations of the same extension stay. <see cref="PropertyEditors"/>
+    /// keeps the registrations of one extension in call order; the order of different extensions is unspecified.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterPropertyEditors(string extensionId, IReadOnlyList<ExtensionPropertyEditorContribution> editors);
 
+    /// <summary>Registers view contributions.</summary>
+    /// <remarks>
+    /// Each call adds a registration; earlier registrations of the same extension stay.
+    /// <see cref="ViewContributions"/> keeps the registrations of one extension in call order; the order of
+    /// different extensions is unspecified.
+    /// </remarks>
+    /// <returns>A handle that removes exactly this registration when disposed; disposing it again has no effect.</returns>
     IDisposable RegisterViews(string extensionId, IReadOnlyList<ExtensionViewContribution> views);
 }

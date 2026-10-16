@@ -6,7 +6,7 @@ namespace XamlVisualEditor.Extensions.Hosting;
 public sealed class CommandRegistry : ICommands
 {
     private readonly object _gate = new();
-    private readonly Dictionary<string, Func<CommandContext, Task>> _handlers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Entry> _handlers = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
     public IDisposable Register(string commandId, Func<CommandContext, Task> handler)
@@ -21,30 +21,31 @@ public sealed class CommandRegistry : ICommands
             throw new ArgumentNullException(nameof(handler));
         }
 
+        Entry entry = new(handler);
         lock (_gate)
         {
-            _handlers[commandId] = handler;
+            _handlers[commandId] = entry;
         }
 
-        return new Registration(() => Unregister(commandId));
+        return new Registration(() => Unregister(commandId, entry));
     }
 
     /// <inheritdoc />
     public async Task ExecuteAsync(string commandId, IReadOnlyList<object?>? args, CancellationToken cancellationToken)
     {
-        Func<CommandContext, Task>? handler;
+        Entry? entry;
         lock (_gate)
         {
-            _handlers.TryGetValue(commandId, out handler);
+            _handlers.TryGetValue(commandId, out entry);
         }
 
-        if (handler is null)
+        if (entry is null)
         {
             throw new InvalidOperationException("Command not found: " + commandId);
         }
 
         var context = new CommandContext(args, new NullWorkspace(), new NullWindow());
-        await handler(context).ConfigureAwait(false);
+        await entry.Handler(context).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -62,12 +63,26 @@ public sealed class CommandRegistry : ICommands
         return Task.FromResult<IReadOnlyList<string>>(commands);
     }
 
-    private void Unregister(string commandId)
+    private void Unregister(string commandId, Entry entry)
     {
         lock (_gate)
         {
-            _handlers.Remove(commandId);
+            if (_handlers.TryGetValue(commandId, out Entry? current) && ReferenceEquals(current, entry))
+            {
+                _handlers.Remove(commandId);
+            }
         }
+    }
+
+    /// <summary>Gives each registration its own identity, so a replaced registration cannot remove its successor.</summary>
+    private sealed class Entry
+    {
+        public Entry(Func<CommandContext, Task> handler)
+        {
+            Handler = handler;
+        }
+
+        public Func<CommandContext, Task> Handler { get; }
     }
 
     private sealed class Registration : IDisposable

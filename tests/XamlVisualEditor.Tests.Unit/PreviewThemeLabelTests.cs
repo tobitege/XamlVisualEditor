@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
@@ -164,6 +166,61 @@ public sealed class PreviewThemeLabelTests : IDisposable
 
         document.PreviewerState = PreviewerState.Starting;
         Assert.Equal(HarborPending, document.DesignSurface.SelectedPreviewTheme?.DisplayName);
+    }
+
+    [AvaloniaFact(Timeout = 60000)]
+    public async Task CanceledPreviewerStartShowsTheUnavailableLabelAndTheCancelStatusUntilTheNextStart()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using CultureScope culture = new("en");
+        string projectPath = Path.Combine(_root, "Views.csproj");
+        await File.WriteAllTextAsync(projectPath, "<Project />", cancellationToken);
+        string xamlPath = Path.Combine(_root, "Canceled.axaml");
+        await File.WriteAllTextAsync(xamlPath, Xaml, cancellationToken);
+        WorkspaceModel workspace = new()
+        {
+            Projects = new[]
+            {
+                new ProjectModel
+                {
+                    Name = "Views", ProjectPath = projectPath, OutputAssemblyPath = Path.Combine(_root, "missing", "Views.dll"),
+                    XamlFiles = new[] { new XamlFileModel { FilePath = xamlPath, RelativePath = "Canceled.axaml" } },
+                    Files = Array.Empty<ProjectFileModel>(), References = Array.Empty<AssemblyReference>()
+                }
+            }
+        };
+        using MainWindowViewModel main = new(
+            workspaceService: new FixedWorkspaceService(workspace),
+            metadataService: new TypeMetadataService(),
+            recentFilesPath: Path.Combine(_root, "recent.json"),
+            workspaceSessions: new WorkspaceSessionStore(Path.Combine(_root, "sessions.json")));
+        using IDisposable trust = main.PreviewerTrustInteraction.RegisterHandler(context => context.SetOutput(PreviewerTrustDecision.Cancel));
+        await main.OpenFileAsync(projectPath).WaitAsync(cancellationToken);
+        Assert.True(main.HasWorkspace);
+        await main.OpenFileAsync(xamlPath).WaitAsync(cancellationToken);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDocument);
+
+        // A document of a project starts its previewer once loaded; declining the trust prompt cancels that start.
+        Task canceled = WaitForStateAsync(document, PreviewerState.Canceled);
+        if (document.PreviewerState != PreviewerState.Canceled) await canceled.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        document.SetPreviewThemeSelection(Harbor, activatePreviewer: false);
+        PreviewerSurfaceControl surface = new() { Document = document, Width = 200, Height = 100 };
+        Window window = new() { Content = surface, Width = 300, Height = 200 };
+        try
+        {
+            window.Show();
+
+            Assert.Equal(HarborUnavailable, document.DesignSurface.SelectedPreviewTheme?.DisplayName);
+            Assert.Equal(UiStrings.PreviewerStartCanceled, surface.StatusText);
+
+            document.PreviewerState = PreviewerState.Starting;
+            Assert.Equal(HarborPending, document.DesignSurface.SelectedPreviewTheme?.DisplayName);
+            Assert.Equal(UiStrings.PreviewStatusWaiting, surface.StatusText);
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -345,6 +402,17 @@ public sealed class PreviewThemeLabelTests : IDisposable
     private static string Message(DesignerDocumentViewModel document, params DesignerTheme[] themes) =>
         DesignerThemeProtocol.CatalogPrefix + JsonSerializer.Serialize(new DesignerThemeCatalog(document.PreviewThemeRequest!.RequestId,
             new[] { new DesignerThemeProviderCatalog(ProviderId, "Sample", themes) }));
+
+    private sealed class FixedWorkspaceService(WorkspaceModel workspace) : XamlVisualEditor.Core.Interfaces.IWorkspaceService
+    {
+        public Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default) =>
+            Task.FromResult(workspace);
+
+        public Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default) =>
+            Task.FromResult(workspace);
+
+        public WorkspaceModel CreateStandaloneWorkspace(string xamlFilePath) => workspace;
+    }
 
     private sealed class CultureScope : IDisposable
     {

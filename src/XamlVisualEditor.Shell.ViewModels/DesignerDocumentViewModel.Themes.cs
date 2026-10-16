@@ -80,10 +80,11 @@ public sealed partial class DesignerDocumentViewModel
     }
 
     /// <summary>
-    /// False once the previewer process exited or failed to start; until a previewer starts again, no catalog can list
-    /// the pending selection.
+    /// False once the previewer process exited, failed to start or its start was canceled; until a previewer starts
+    /// again, no catalog can list the pending selection.
     /// </summary>
-    private bool CanPreviewerReportThemes => PreviewerState is not (PreviewerState.Exited or PreviewerState.Failed);
+    private bool CanPreviewerReportThemes =>
+        PreviewerState is not (PreviewerState.Exited or PreviewerState.Failed or PreviewerState.Canceled);
 
     private DesignerThemeChoice CreateUncatalogedThemeChoice(DesignerThemeSelection selection, bool unavailable) =>
         new(selection, string.Format(unavailable ? UiStrings.PreviewThemeUnavailable : UiStrings.PreviewThemePending,

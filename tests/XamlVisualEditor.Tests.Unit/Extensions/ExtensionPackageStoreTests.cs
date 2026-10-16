@@ -152,8 +152,7 @@ public sealed class ExtensionPackageStoreTests
                 {
                     if (Path.GetFileName(source).Contains(".installing-", StringComparison.Ordinal))
                         throw new IOException("Simulated rename failure.");
-                    Directory.Move(source, destination);
-                    return Task.CompletedTask;
+                    return MoveFreshDirectoryAsync(source, destination);
                 });
 
             Assert.Empty(await store.GetInstalledAsync(CancellationToken.None));
@@ -180,8 +179,7 @@ public sealed class ExtensionPackageStoreTests
                 {
                     if (string.Equals(destination, versionDirectory, StringComparison.OrdinalIgnoreCase))
                         throw new IOException("Simulated rename failure.");
-                    Directory.Move(source, destination);
-                    return Task.CompletedTask;
+                    return MoveFreshDirectoryAsync(source, destination);
                 });
             Assert.Empty(await failingStore.GetInstalledAsync(CancellationToken.None));
             string retired = Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(versionDirectory)!, "1.0.0.retired-*"));
@@ -239,7 +237,7 @@ public sealed class ExtensionPackageStoreTests
                     await Task.Delay(50, ct);
                     if (Path.GetFileName(source).Contains(".installing-", StringComparison.Ordinal))
                         Interlocked.Increment(ref migrations);
-                    Directory.Move(source, destination);
+                    await MoveFreshDirectoryAsync(source, destination);
                 });
 
             IReadOnlyList<ExtensionPackageInfo>[] results = await Task.WhenAll(
@@ -344,6 +342,8 @@ public sealed class ExtensionPackageStoreTests
             string assemblyPath = Path.Combine(installed.InstallationDirectory!, "lib", "net10.0", "Loaded.dll");
             File.Copy(typeof(ExtensionPackageLoader).Assembly.Location, assemblyPath);
             holder.Load(assemblyPath);
+            // Windows keeps a loaded assembly from being deleted, which a plain directory delete would run into.
+            if (OperatingSystem.IsWindows()) Assert.Throws<UnauthorizedAccessException>(() => File.Delete(assemblyPath));
 
             await store.UninstallAsync("example.sample-extension", CancellationToken.None);
 

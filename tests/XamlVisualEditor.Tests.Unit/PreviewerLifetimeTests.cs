@@ -114,6 +114,34 @@ public sealed class PreviewerLifetimeTests : IDisposable
     }
 
     [AvaloniaFact(Timeout = 60000)]
+    public async Task A_document_follows_the_session_of_a_restarted_host_and_drops_it_when_the_restart_fails()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        string path = Path.Combine(_root, "View.axaml");
+        await File.WriteAllTextAsync(path, Xaml, cancellationToken);
+        await main.OpenFileAsync(path).WaitAsync(cancellationToken);
+        DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDocument);
+        PreviewerTcpSession replaced = new(path, log: null);
+        document.PreviewerSession = replaced;
+        PreviewerTcpSession restarted = new(path, log: null);
+        main.PreviewerLaunchService.AddRunningInstance(path, s_emptyWorkspace, null, null, restarted);
+
+        main.ApplyPreviewerUpdateResult(document, new PreviewerLaunchResult(true, null, null));
+        Assert.Same(restarted, document.PreviewerSession);
+
+        // An update that fails while the host still runs keeps the session.
+        main.ApplyPreviewerUpdateResult(document, PreviewerLaunchResult.Fail("The document was not sent."));
+        Assert.Same(restarted, document.PreviewerSession);
+
+        main.PreviewerLaunchService.StopPreviewer(path);
+        main.ApplyPreviewerUpdateResult(document, PreviewerLaunchResult.Fail("The host did not start."));
+        Assert.Null(document.PreviewerSession);
+        Assert.Equal(UiStrings.PreviewerStartFailed, main.StatusText);
+        replaced.Dispose();
+    }
+
+    [AvaloniaFact(Timeout = 60000)]
     public async Task Exporting_a_preview_keeps_the_live_previewer_of_the_document()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -147,6 +175,8 @@ public sealed class PreviewerLifetimeTests : IDisposable
         Assert.True(main.HasWorkspace);
         await main.OpenFileAsync(xamlPath).WaitAsync(cancellationToken);
         DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDocument);
+        document.SetPreviewThemeSelection(new DesignerThemeSelection("provider", "theme"), activatePreviewer: false);
+        Assert.NotNull(document.PreviewThemeRequest);
         PreviewerTcpSession session = new(xamlPath, log: null);
         main.PreviewerLaunchService.AddRunningInstance(xamlPath, workspace, projectPath, null, session);
         document.PreviewerSession = session;
@@ -155,8 +185,10 @@ public sealed class PreviewerLifetimeTests : IDisposable
         XamlVisualEditor.Extensions.PreviewExportResult result = await main.ExportPreviewAsync(
             xamlPath, Path.Combine(_root, "View.png"), timeoutMs: 300).WaitAsync(cancellationToken);
 
+        // The previewer assets are missing, so the export cannot send the document and reports that instead of waiting.
         Assert.False(result.Success);
-        Assert.Equal(UiStrings.PreviewerFrameTimeout, result.Error);
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+        Assert.NotEqual(UiStrings.PreviewerFrameTimeout, result.Error);
         Assert.True(main.PreviewerLaunchService.TryGetSession(xamlPath, out PreviewerTcpSession? live));
         Assert.Same(session, live);
         Assert.Same(session, document.PreviewerSession);

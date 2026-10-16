@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
@@ -12,6 +13,9 @@ using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
+using AnimationResourceReader = XamlVisualEditor.Animation.AnimationResourceReader;
+using MutableAstDocument = XamlVisualEditor.Xaml.Ast.MutableAstDocument;
+using SyncSource = XamlVisualEditor.Core.SyncSource;
 
 namespace XamlVisualEditor.Tests.UI;
 
@@ -178,6 +182,69 @@ public sealed class AnimationEditorLayoutTests
         {
             window.Close();
             Application.Current!.Styles.Remove(theme);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ResourceEditsAreRefusedWhileTheDocumentHasXamlErrors()
+    {
+        const string xaml = """
+            <UserControl xmlns="https://github.com/avaloniaui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <Border Name="Target" />
+            </UserControl>
+            """;
+        string path = Path.Combine(Path.GetTempPath(), $"xve-animation-xaml-errors-{Guid.NewGuid():N}.axaml");
+        await File.WriteAllTextAsync(path, xaml);
+        try
+        {
+            using MainWindowViewModel main = new();
+            await main.OpenFileAsync(path);
+            DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDesignerDocument);
+            AnimationEditorViewModel editor = main.AnimationEditor;
+            await Idle();
+            Assert.Same(document, editor.ActiveDocument);
+
+            // A resource created while the document is valid gives the update and delete edits a target.
+            await editor.AddTimelineCommand.Execute();
+            editor.NewTrackPropertyName = "Opacity";
+            await editor.AddTrackCommand.Execute();
+            await editor.AddKeyframeCommand.Execute();
+            editor.SelectedKeyframe!.Value = "0.5";
+            await editor.CreateResourceCommand.Execute();
+            AnimationResourceEntryViewModel resource = Assert.Single(editor.AvailableResources);
+            editor.SelectedResource = resource;
+
+            string valid = document.SyncEngine.GetCurrentText();
+            string broken = valid[..valid.LastIndexOf("</UserControl>", StringComparison.Ordinal)];
+            document.SyncEngine.NotifyTextChanged(broken, SyncSource.CodeEditor);
+            await Idle();
+            Assert.False(document.SyncEngine.CanEditAst);
+            MutableAstDocument ast = Assert.IsType<MutableAstDocument>(document.SyncEngine.CurrentDocument);
+            Assert.NotNull(ast.Root);
+            int animations = AnimationResourceReader.LoadAnimations(ast).Count;
+
+            await AssertRefusedAsync(async () => await editor.CreateResourceCommand.Execute());
+            await AssertRefusedAsync(async () => await editor.UpdateResourceCommand.Execute());
+            await AssertRefusedAsync(async () => await editor.DeleteResourceCommand.Execute());
+
+            async Task AssertRefusedAsync(Func<Task> edit)
+            {
+                await editor.StopPreviewCommand.Execute();
+                Assert.Equal(UiStrings.PreviewStopped, editor.StatusMessage);
+
+                await edit();
+
+                Assert.Equal(UiStrings.DocumentHasXamlErrors, editor.StatusMessage);
+                Assert.Same(ast, document.SyncEngine.CurrentDocument);
+                Assert.Equal(animations, AnimationResourceReader.LoadAnimations(ast).Count);
+                Assert.Equal(broken, document.SyncEngine.GetCurrentText());
+                Assert.Same(resource, editor.SelectedResource);
+            }
+        }
+        finally
+        {
+            File.Delete(path);
         }
     }
 

@@ -101,5 +101,10 @@ public sealed class PreviewerFrameValidationTests
         await SendAndWaitAsync(3, 2, 2);
         FrameMessage? frame = await MainWindowViewModel.WaitForStableFrameAsync(session, 10000, stale);
         Assert.Equal(3, frame?.SequenceId);
+
+        // A frame without size that arrives while waiting passes the same filter.
+        Task<FrameMessage?> waiting = MainWindowViewModel.WaitForStableFrameAsync(session, 2500, frame);
+        await SendAndWaitAsync(4, 0, 0);
+        Assert.Null(await waiting);
     }
 }

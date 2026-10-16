@@ -211,6 +211,42 @@ public sealed class PreviewerLaunchServiceTests : IDisposable
         Assert.Null(result.Process);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async System.Threading.Tasks.Task AnotherThemeReplacesTheHostAndReportsAFailedRestart(bool throughStart)
+    {
+        using PreviewerLaunchService service = new();
+        WorkspaceModel workspace = new() { Projects = Array.Empty<ProjectModel>() };
+        PreviewerTcpSession session = new("View.axaml", log: null);
+        service.AddRunningInstance("View.axaml", workspace, null, null, session, appliedThemeRequestId: Guid.NewGuid());
+        DesignerThemeRequest other = new(Guid.NewGuid(), Array.Empty<DesignerThemeProviderRegistration>(), null);
+
+        PreviewerLaunchResult result = throughStart
+            ? await service.StartPreviewerAsync("View.axaml", "<UserControl />", workspace, null, null, null, other)
+            : await service.SendUpdateXamlAsync("View.axaml", "<UserControl />", workspace, null, themeRequest: other);
+
+        // The replacement cannot start without a project; its failure reaches the caller instead of the old host's success.
+        Assert.False(result.Success);
+        Assert.Contains(UiStrings.NoProjectForXaml, result.ErrorMessage);
+        Assert.False(service.TryGetSession("View.axaml", out _));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task TheSameThemeKeepsTheHost()
+    {
+        using PreviewerLaunchService service = new();
+        WorkspaceModel workspace = new() { Projects = Array.Empty<ProjectModel>() };
+        PreviewerTcpSession session = new("View.axaml", log: null);
+        DesignerThemeRequest applied = new(Guid.NewGuid(), Array.Empty<DesignerThemeProviderRegistration>(), null);
+        service.AddRunningInstance("View.axaml", workspace, null, null, session, appliedThemeRequestId: applied.RequestId);
+
+        await service.SendUpdateXamlAsync("View.axaml", "<UserControl />", workspace, null, themeRequest: applied);
+
+        Assert.True(service.TryGetSession("View.axaml", out PreviewerTcpSession? current));
+        Assert.Same(session, current);
+    }
+
     [Fact]
     public void StructuredPreviewErrorMapsRepeatedElementsBackToOriginalSource()
     {

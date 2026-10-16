@@ -70,8 +70,10 @@ public sealed partial class MainWindowViewModel
         return await TrySaveBeforeCloseAsync(modified);
     }
 
+    // Every document is tried, so one that cannot be saved does not leave the others unsaved.
     private async Task<bool> TrySaveBeforeCloseAsync(IEnumerable<IEditorDocumentViewModel> documents)
     {
+        bool allSaved = true;
         foreach (IEditorDocumentViewModel document in documents)
         {
             bool saved = !HasWorkspace && IsUntitledDocument(document)
@@ -80,11 +82,11 @@ public sealed partial class MainWindowViewModel
             // A document reloaded from disk instead of saved has no changes left to lose.
             if (!saved && document.IsModified)
             {
-                return false;
+                allSaved = false;
             }
         }
 
-        return true;
+        return allSaved;
     }
 
     /// <summary>Confirms the modified documents before the application closes.</summary>

@@ -8809,21 +8809,35 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (string.IsNullOrWhiteSpace(xaml)) return;
         try
         {
-            await _previewerLaunchService.SendUpdateXamlAsync(document.FilePath, xaml, workspace,
+            PreviewerLaunchResult result = await _previewerLaunchService.SendUpdateXamlAsync(document.FilePath, xaml, workspace,
                 (level, message) => LogOutput(level, message), workspacePath, document.PreviewThemeRequest);
             if (!document.IsDisposed && ReferenceEquals(workspace, _workspace))
-            {
-                document.SetPreviewerLaunchError(null);
-                // A theme change restarts the host with a new session.
-                if (_previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session)
-                    && !ReferenceEquals(session, document.PreviewerSession))
-                    document.PreviewerSession = session;
-            }
+                ApplyPreviewerUpdateResult(document, result);
         }
         catch (Exception) when (document.IsDisposed || !Documents.Contains(document) || !ReferenceEquals(workspace, _workspace))
         {
             // Closing a document or replacing its workspace invalidates pending transport work.
         }
+    }
+
+    // A theme change restarts the host with a new session. A failed update keeps a host that still runs; only a host
+    // that failed to restart leaves the document without a session.
+    internal void ApplyPreviewerUpdateResult(DesignerDocumentViewModel document, PreviewerLaunchResult result)
+    {
+        bool hasSession = _previewerLaunchService.TryGetSession(document.FilePath, out PreviewerTcpSession? session);
+        if (hasSession && !ReferenceEquals(session, document.PreviewerSession))
+            document.PreviewerSession = session;
+        if (result.Success)
+        {
+            document.SetPreviewerLaunchError(null);
+            return;
+        }
+
+        document.SetPreviewerLaunchError(result.ErrorMessage ?? UiStrings.PreviewerStartFailedText);
+        if (!string.IsNullOrWhiteSpace(result.ErrorMessage)) LogOutput("Error", result.ErrorMessage);
+        if (hasSession) return;
+        document.PreviewerSession = null;
+        if (ReferenceEquals(ActiveDesignerDocument, document)) SetPersistentStatus(UiStrings.PreviewerStartFailed);
     }
 
     private static string? GetPreviewerXaml(DesignerDocumentViewModel document)
@@ -9001,7 +9015,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             _workspacePath,
             command => RunWorkspaceCommandAsync(command),
             (level, message) => LogOutput(level, message),
-            doc.PreviewThemeRequest);
+            doc.PreviewThemeRequest,
+            // An unchanged document gives no new frame on an incremental update; the full render does.
+            fullRender: true);
         if (!launch.Success)
         {
             return new(false, launch.ErrorMessage ?? UiStrings.PreviewerStartFailedText, 0, 0, outputPath);

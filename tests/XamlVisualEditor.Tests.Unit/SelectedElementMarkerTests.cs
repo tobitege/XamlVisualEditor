@@ -220,6 +220,59 @@ public sealed class SelectedElementMarkerTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task A_Designer_Change_Before_Pending_Typing_Enters_At_Its_Own_Offset_And_Shifts_The_Caret()
+    {
+        using DesignerDocumentViewModel document = await LoadAsync();
+        string before = document.CodeEditor.Document.Text;
+        const string typed = "<!-- typed -->";
+        document.CodeEditor.Document.Insert(before.Length, typed);
+        document.CodeEditor.CaretOffset = before.Length + typed.Length;
+        Assert.True(document.CodeEditor.HasPendingTextChanges);
+        string designerText = before.Replace("Text=\"First\"", "Text=\"Changed\"", StringComparison.Ordinal);
+        List<(int Offset, int RemovalLength, string Inserted)> changes = new();
+        document.CodeEditor.Document.Changed += (_, change) =>
+            changes.Add((change.Offset, change.RemovalLength, change.InsertedText.Text));
+
+        document.SyncEngine.NotifyTextChanged(designerText, SyncSource.DesignSurface);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+        Assert.Equal((before.IndexOf("First\"", StringComparison.Ordinal), "First".Length, "Changed"), Assert.Single(changes));
+        Assert.Equal(designerText + typed, document.CodeEditor.Document.Text);
+        Assert.Equal(designerText.Length + typed.Length, document.CodeEditor.CaretOffset);
+        Assert.True(document.CodeEditor.HasPendingTextChanges);
+
+        document.CodeEditor.FlushPendingTextChanges();
+
+        Assert.Equal(designerText + typed, document.SyncEngine.CurrentText);
+    }
+
+    [AvaloniaFact]
+    public async Task Pending_Typing_Wins_Over_A_Designer_Change_Of_The_Same_Text()
+    {
+        using DesignerDocumentViewModel document = await LoadAsync();
+        string before = document.CodeEditor.Document.Text;
+        int first = before.IndexOf("First\"", StringComparison.Ordinal);
+        document.CodeEditor.Document.Replace(first, "First".Length, "Typed");
+        string typedText = document.CodeEditor.Document.Text;
+        Assert.True(document.CodeEditor.HasPendingTextChanges);
+        string designerText = before.Replace("Text=\"First\"", "Text=\"Changed\"", StringComparison.Ordinal);
+        int changes = 0;
+        document.CodeEditor.Document.Changed += (_, _) => changes++;
+
+        document.SyncEngine.NotifyTextChanged(designerText, SyncSource.DesignSurface);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+
+        Assert.Equal(0, changes);
+        Assert.Equal(typedText, document.CodeEditor.Document.Text);
+        Assert.True(document.CodeEditor.HasPendingTextChanges);
+
+        document.CodeEditor.FlushPendingTextChanges();
+
+        Assert.Equal(typedText, document.SyncEngine.CurrentText);
+        Assert.DoesNotContain("Changed", document.SyncEngine.CurrentText, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
     public async Task Designer_Document_Reports_Caret_Position_Changes()
     {
         using DesignerDocumentViewModel document = await LoadAsync();

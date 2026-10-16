@@ -195,6 +195,8 @@ public sealed class PreviewerLaunchTests
         foreach (PreviewerLaunchResult result in results) Assert.True(result.Success, result.ErrorMessage);
         Process firstProcess = Assert.IsType<Process>(results[0].Process);
         Assert.Same(firstProcess, results[1].Process);
+        // The service disposes its process object when it replaces the host; the test watches the host through its own.
+        using Process firstHost = Process.GetProcessById(firstProcess.Id);
 
         PreviewerTcpSession firstSession = GetSession(previewerService, xamlFilePath);
         PreviewerTcpSession CurrentSession() => GetSession(previewerService, xamlFilePath);
@@ -223,6 +225,7 @@ public sealed class PreviewerLaunchTests
         Assert.Equal("Content", rootNode.Layout?.Kind);
         Assert.Equal(160, snapshot.Width);
         Assert.Equal(80, snapshot.Height);
+        string lastThemedXaml = xaml;
         foreach (string theme in new[] { "Light", "Dark", "Light" })
         {
             string themedXaml = xaml.Replace("Name=\"PreviewRoot\"",
@@ -233,7 +236,21 @@ public sealed class PreviewerLaunchTests
                 () => previewerService.SendUpdateXamlAsync(xamlFilePath, themedXaml, workspace, null), red, green, blue, hostMessages);
             Assert.Same(firstSession, GetSession(previewerService, xamlFilePath));
             Assert.False(firstProcess.HasExited);
+            lastThemedXaml = themedXaml;
         }
+        // An export sends the unchanged document again; the full render makes the host send a new frame.
+        TaskCompletionSource<bool> exportFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnExportFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame) => exportFrame.TrySetResult(true);
+        firstSession.FrameReceived += OnExportFrame;
+        try
+        {
+            PreviewerLaunchResult export = await previewerService.StartPreviewerAsync(
+                xamlFilePath, lastThemedXaml, workspace, null, null, null, fullRender: true);
+            Assert.True(export.Success, export.ErrorMessage);
+            Assert.Same(firstProcess, export.Process);
+            await exportFrame.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        }
+        finally { firstSession.FrameReceived -= OnExportFrame; }
         TypeMetadataService previewMetadata = new();
         previewMetadata.LoadAssembly(typeof(Avalonia.Controls.Control).Assembly.Location);
         previewMetadata.LoadAssembly(typeof(Avalonia.Media.Brush).Assembly.Location);
@@ -345,8 +362,9 @@ public sealed class PreviewerLaunchTests
                 Assert.Equal(original, new XamlVisualEditor.Xaml.Serialization.XamlSerializationService().Serialize(previewDocument));
             }
         }
-        // A different theme replaces a host that already applied one.
+        // A different theme replaces a host that already applied one, and the replaced host ends.
         Assert.NotSame(firstSession, CurrentSession());
+        Assert.True(firstHost.WaitForExit(10000), "The replaced previewer host is still running.");
         DesignerThemeProviderRegistration unavailable = provider with
         {
             Id = "missing.provider", Name = "Missing", AssemblyPath = Path.Combine(Path.GetDirectoryName(provider.AssemblyPath)!, "MissingThemeProvider.dll")

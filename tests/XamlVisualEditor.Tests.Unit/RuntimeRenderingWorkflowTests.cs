@@ -4,12 +4,15 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using XamlVisualEditor.Designer.Rendering;
+using DesignerDocumentViewModel = XamlVisualEditor.Shell.ViewModels.DesignerDocumentViewModel;
+using DesignSurfaceView = XamlVisualEditor.App.Views.DesignSurfaceView;
 using LibraryGrid = XamlVisualEditor.TestControls.LibraryGrid;
 using XamlVisualEditor.Workspace;
 using XamlVisualEditor.Xaml.Ast;
@@ -354,6 +357,74 @@ public sealed class RuntimeRenderingWorkflowTests
         Assert.False(closed);
         surface.Dispose();
         Assert.True(closed);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Rerendering_a_window_document_disposes_the_previous_window_host()
+    {
+        const string xaml = """
+            <Window xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    Title="Rerendered" Width="320" Height="200">
+              <Border Name="Body" Background="Tomato" />
+            </Window>
+            """;
+        string path = Path.Combine(Path.GetTempPath(), "xve-rerender-" + Guid.NewGuid().ToString("N") + ".axaml");
+        await File.WriteAllTextAsync(path, xaml);
+        TypeMetadataService metadata = new();
+        metadata.LoadAssembly(typeof(Control).Assembly.Location);
+        metadata.LoadAssembly(typeof(Brush).Assembly.Location);
+        using DesignerDocumentViewModel document = new(path, metadata);
+        await document.LoadAsync();
+        DesignSurfaceView view = new() { DataContext = document.DesignSurface };
+        DockPanel content = new() { DataContext = document };
+        content.Children.Add(view);
+        Window host = new() { Content = content, Width = 800, Height = 600 };
+        List<Window> previewWindows = new();
+        List<Window> closedWindows = new();
+        try
+        {
+            host.Show();
+            await RenderPassAsync();
+            DesignWindowContentHost previous = TrackCurrentHost();
+
+            for (int rerender = 1; rerender <= 2; rerender++)
+            {
+                // A full rebuild replaces the surface; its owner must dispose the replaced host.
+                document.DesignSurface.RequestRebuild();
+                await RenderPassAsync();
+                DesignWindowContentHost current = TrackCurrentHost();
+
+                Assert.NotSame(previous, current);
+                Assert.Empty(previous.GetLogicalChildren());
+                Assert.Equal(previewWindows.Take(rerender), closedWindows);
+                Assert.Null(previewWindows[rerender - 1].Content);
+                Assert.IsType<Border>(previewWindows[rerender].Content);
+                previous = current;
+            }
+        }
+        finally
+        {
+            host.Close();
+            File.Delete(path);
+        }
+
+        async Task RenderPassAsync()
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            host.UpdateLayout();
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        }
+
+        DesignWindowContentHost TrackCurrentHost()
+        {
+            DesignWindowContentHost current = Assert.Single(view.GetVisualDescendants().OfType<DesignWindowContentHost>());
+            Window window = Assert.IsType<Window>(Assert.Single(current.GetLogicalChildren()));
+            Assert.DoesNotContain(window, previewWindows);
+            window.Closed += (_, _) => closedWindows.Add(window);
+            previewWindows.Add(window);
+            return current;
+        }
     }
 
     [AvaloniaFact]

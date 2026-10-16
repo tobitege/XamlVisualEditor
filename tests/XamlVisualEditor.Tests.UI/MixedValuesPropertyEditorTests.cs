@@ -55,6 +55,9 @@ public sealed class MixedValuesPropertyEditorTests
             using MainWindowViewModel main = new(metadataService: metadata);
             main.Documents.Add(document);
             main.ActiveDocument = document;
+            // Activating the document posts the tree selection to it on the dispatcher, which clears the design surface
+            // selection; the selection below is set after that pass, so the 500 ms selection poll of the panel finds it unchanged.
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             MutableAstObjectNode root = document.SyncEngine.CurrentDocument!.Root!;
             MutableAstObjectNode[] buttons = root.Children.OfType<MutableAstObjectNode>().ToArray();
             DesignItem[] buttonItems = buttons.Select(node => new DesignItem(node)).ToArray();
@@ -69,6 +72,7 @@ public sealed class MixedValuesPropertyEditorTests
             window = new Window { Content = view, Width = 600, Height = 800 };
             window.Show();
             await FlushAsync(window);
+            Assert.Equal(2, document.DesignSurface.Selection.SelectedItems.Count);
             TextBox search = Assert.Single(view.GetVisualDescendants().OfType<TextBox>(),
                 control => control.PlaceholderText == UiStrings.SearchProperties);
             string mixed = UiStrings.MixedValuesPlaceholder;
@@ -103,7 +107,8 @@ public sealed class MixedValuesPropertyEditorTests
             Point center = isDefault.TranslatePoint(new Point(isDefault.Bounds.Width / 2, isDefault.Bounds.Height / 2), window)!.Value;
             window.MouseDown(center, MouseButton.Left);
             window.MouseUp(center, MouseButton.Left);
-            await document.WhenAnyValue(value => value.IsModified).Where(value => value)
+            // The commit clears the mixed state after it has written every selected control.
+            await isDefaultEntry.WhenAnyValue(value => value.IsMixed).Where(value => !value)
                 .FirstAsync().Timeout(TimeSpan.FromSeconds(5)).ToTask();
             Assert.Equal(new string?[] { "False", "False" },
                 buttons.Select(node => node.GetPropertyValue("IsDefault")).ToArray());
@@ -123,8 +128,10 @@ public sealed class MixedValuesPropertyEditorTests
         string propertyName)
         where TControl : Control
     {
+        // The search filters the entries synchronously; the layout pass realizes the rows of the remaining entries.
         search.Text = propertyName;
         await FlushAsync(window);
+        Assert.Equal("Button (2)", Assert.IsType<PropertyEditorPanelViewModel>(view.DataContext).SelectedTypeName);
         return Assert.Single(view.GetVisualDescendants().OfType<TControl>(),
             control => control.DataContext is PropertyEntryViewModel entry && entry.Name == propertyName
                 && control.IsEffectivelyVisible);

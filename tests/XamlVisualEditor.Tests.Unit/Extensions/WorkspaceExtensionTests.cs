@@ -96,6 +96,94 @@ public sealed class WorkspaceExtensionTests
     }
 
     [Fact]
+    public async Task SetStartupProjectCommand_WithoutArguments_WarnsWhenTheWorkspaceHasNoProjects()
+    {
+        var commands = new CommandRegistry();
+        var contributions = new ExtensionContributionRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
+
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
+        await extension.ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("workspace.setStartupProject", null, CancellationToken.None);
+
+        Assert.Contains(XamlVisualEditor.Core.Localization.UiStrings.WorkspaceHasNoProjects, window.Messages);
+        Assert.DoesNotContain(XamlVisualEditor.Core.Localization.UiStrings.StartupProjectPathRequired, window.Messages);
+        Assert.Equal(0, workspaceCommands.SetStartupProjectCalls);
+    }
+
+    [Fact]
+    public async Task SetStartupProjectCommand_WithoutArguments_SetsThePickedProjectAndMarksTheCurrentOne()
+    {
+        var commands = new CommandRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        var workspaceModel = new StubWorkspaceModel(
+            new WorkspaceProjectInfo("App", "/tmp/App/App.csproj", "net10.0", IsStartupProject: true),
+            new WorkspaceProjectInfo("Lib", "/tmp/Lib/Lib.csproj", "net8.0", IsStartupProject: false));
+        IReadOnlyList<QuickPickItem> offered = Array.Empty<QuickPickItem>();
+        // The choice is an equal-path copy without the description, so the pick maps back by project path.
+        window.QuickPickChoice = items => { offered = items; return items[1] with { Description = null }; };
+        ExtensionContext context = CreateContext(commands, new ExtensionContributionRegistry(), window, workspaceInfo,
+            workspaceCommands, workspaceModel);
+        await new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo).ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("workspace.setStartupProject", null, CancellationToken.None);
+
+        Assert.Equal(new[] { "net10.0 " + XamlVisualEditor.Core.Localization.UiStrings.CurrentStartupProjectMarker, "net8.0" },
+            offered.Select(item => item.Description));
+        Assert.Equal(1, workspaceCommands.SetStartupProjectCalls);
+        Assert.Equal("/tmp/Lib/Lib.csproj", workspaceCommands.LastStartupProjectPath);
+        Assert.Equal("net8.0", workspaceCommands.LastStartupProjectTargetFramework);
+        Assert.Empty(window.Messages);
+    }
+
+    [Fact]
+    public async Task SetStartupProjectCommand_WithoutArguments_DoesNothingWhenThePickIsCanceled()
+    {
+        var commands = new CommandRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        var workspaceModel = new StubWorkspaceModel(
+            new WorkspaceProjectInfo("App", "/tmp/App/App.csproj", "net10.0", IsStartupProject: true));
+        int pickCount = 0;
+        window.QuickPickChoice = _ => { pickCount++; return null; };
+        ExtensionContext context = CreateContext(commands, new ExtensionContributionRegistry(), window, workspaceInfo,
+            workspaceCommands, workspaceModel);
+        await new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo).ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("workspace.setStartupProject", null, CancellationToken.None);
+
+        Assert.Equal(1, pickCount);
+        Assert.Equal(0, workspaceCommands.SetStartupProjectCalls);
+        Assert.Empty(window.Messages);
+    }
+
+    [Fact]
+    public async Task SetStartupProjectCommand_WithoutArguments_ShowsTheNoWorkspaceMessageWithoutAWorkspace()
+    {
+        var commands = new CommandRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo();
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = false };
+        int pickCount = 0;
+        window.QuickPickChoice = _ => { pickCount++; return null; };
+        ExtensionContext context = CreateContext(commands, new ExtensionContributionRegistry(), window, workspaceInfo, workspaceCommands);
+        await new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo).ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("workspace.setStartupProject", null, CancellationToken.None);
+
+        Assert.Equal(new[] { XamlVisualEditor.Core.Localization.UiStrings.NoWorkspaceLoaded }, window.Messages);
+        Assert.Equal(0, pickCount);
+        Assert.Equal(0, workspaceCommands.SetStartupProjectCalls);
+    }
+
+    [Fact]
     public async Task NewTerminalCommand_IsRegistered_AndInvoked()
     {
         var commands = new CommandRegistry();
@@ -158,7 +246,8 @@ public sealed class WorkspaceExtensionTests
         IExtensionContributionRegistry contributions,
         IWindow window,
         IWorkspaceInfo workspaceInfo,
-        IWorkspaceCommands workspaceCommands)
+        IWorkspaceCommands workspaceCommands,
+        IWorkspaceModel? workspaceModel = null)
     {
         var editorServices = new StubEditorServices();
         var commandMetadata = new CommandMetadataRegistry();
@@ -170,7 +259,7 @@ public sealed class WorkspaceExtensionTests
         var debugSettingsHost = new StubDebugSettingsHost();
         var lspSettingsHost = new StubLspSettingsHost();
         var viewHost = new StubExtensionViewHost();
-        var workspaceModel = new WorkspaceModelAdapter(workspaceInfo, workspaceCommands, new StubWorkspaceService());
+        workspaceModel ??= new WorkspaceModelAdapter(workspaceInfo, workspaceCommands, new StubWorkspaceService());
         var propertyEditors = new PropertyEditorRegistry();
         var permissions = new StubExtensionPermissions();
 
@@ -208,6 +297,38 @@ public sealed class WorkspaceExtensionTests
             new InMemoryExtensionStorage(),
             new StubExtensionLogger(),
             new List<IDisposable>());
+    }
+
+    private sealed class StubWorkspaceModel : IWorkspaceModel
+    {
+        private readonly IReadOnlyList<WorkspaceProjectInfo> _projects;
+
+        public StubWorkspaceModel(params WorkspaceProjectInfo[] projects)
+        {
+            _projects = projects;
+        }
+
+        public bool HasWorkspace => true;
+
+        public string? WorkspacePath => "workspace.sln";
+
+        public event EventHandler<WorkspaceModelChangedEventArgs>? Changed;
+
+        public Task<IReadOnlyList<WorkspaceProjectInfo>> GetProjectsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(_projects);
+
+        public Task LoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task RestoreAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task BuildAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task RebuildAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task CleanAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The extension sets the startup project through the workspace commands.");
     }
 
     private sealed class StubSystemIconService : ISystemIconService

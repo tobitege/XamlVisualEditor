@@ -36,6 +36,7 @@ uses Semantic Versioning.
 - A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
 - The first start and the reset layout command use the Debugging preset instead of a layout with every panel. A layout preset contains only the panels it lists, instead of hiding the others.
 - The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
+- The Command Palette lists every command of the built-in extensions with a title, including the panel toggles of the View menu, the edit and navigation commands and the debugger panels. "Set Startup Project" asks for the project when it runs without one.
 - Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
 - Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
 - Fixed the external previewer reporting "Design tree unavailable: Ambiguous match found" for controls that hide an inherited property with `new`, such as a Padding of their own type: the design tree reader walks the type hierarchy and takes the Avalonia Thickness declaration of Padding.
@@ -67,6 +68,7 @@ uses Semantic Versioning.
 - The extension manager shows the capabilities an extension declares.
 - The CDP debug diagnostics are enabled with the MSBuild property `EnableCdpDiagnostics=true` instead of the Debug configuration and require the token written to the log at startup.
 - At most four external previewer hosts run at the same time: the active document and the three most recently active ones.
+- Extension SDK: registering menu, toolbar, Command Palette, view or property editor contributions again adds a registration instead of replacing the earlier one of the same extension, and disposing a registration removes only its own items. To replace contributions, dispose the previous registration before registering again. The lists keep the registrations of one extension in call order; the order of different extensions is unspecified. A theme provider ID that is already registered or appears twice in one registration throws `ArgumentException`, so a theme package whose provider ID another extension already registered is reported as a package problem instead of being listed twice.
 
 ### Fixed
 
@@ -100,6 +102,8 @@ uses Semantic Versioning.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
 - Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
 - Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
+- Fixed disposing a replaced command handler, command metadata or view provider registration, which removed its replacement.
+- Fixed a theme package with an unreadable manifest or a taken provider ID breaking the extension list: the package is logged as a problem and stays unregistered, and its other provider kind is not registered either.
 
 ## [0.2.0] - 2026-09-01
 

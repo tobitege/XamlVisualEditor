@@ -541,6 +541,7 @@
   <data name="DebuggerDownloadFailed" xml:space="preserve"><value>netcoredbg download failed: {0}</value></data>
   <data name="StartupProjectCleared" xml:space="preserve"><value>Startup project cleared</value></data>
   <data name="StartupProjectStatus" xml:space="preserve"><value>Startup project: {0}</value></data>
+  <data name="CurrentStartupProjectMarker" xml:space="preserve"><value>(startup project)</value></data>
   <data name="DebuggingStopped" xml:space="preserve"><value>Debugging stopped</value></data>
   <data name="DebugStopFailed" xml:space="preserve"><value>Debug stop failed: {0}</value></data>
   <data name="RunNeedsWorkspace" xml:space="preserve"><value>Running requires a loaded workspace.</value></data>
@@ -1298,4 +1299,31 @@
   <data name="ToggleToolbox" xml:space="preserve"><value>Toggle Toolbox</value></data>
   <data name="ToggleToolboxCommand" xml:space="preserve"><value>View: Toggle Toolbox</value></data>
   <data name="ToolboxSelectionRequired" xml:space="preserve"><value>No toolbox item selected. Select a control in the toolbox first.</value></data>
+  <data name="ToggleAcp" xml:space="preserve"><value>Toggle ACP</value></data>
+  <data name="ToggleAcpCommand" xml:space="preserve"><value>View: Toggle ACP</value></data>
+  <data name="ToggleBreakpoints" xml:space="preserve"><value>Toggle Breakpoints</value></data>
+  <data name="ToggleBreakpointsCommand" xml:space="preserve"><value>View: Toggle Breakpoints</value></data>
+  <data name="ToggleCallStack" xml:space="preserve"><value>Toggle Call Stack</value></data>
+  <data name="ToggleCallStackCommand" xml:space="preserve"><value>View: Toggle Call Stack</value></data>
+  <data name="ToggleCollaboration" xml:space="preserve"><value>Toggle Collaboration</value></data>
+  <data name="ToggleFileExplorer" xml:space="preserve"><value>Toggle File Explorer</value></data>
+  <data name="ToggleFileExplorerCommand" xml:space="preserve"><value>View: Toggle File Explorer</value></data>
+  <data name="ToggleLocals" xml:space="preserve"><value>Toggle Locals</value></data>
+  <data name="ToggleLocalsCommand" xml:space="preserve"><value>View: Toggle Locals</value></data>
+  <data name="ToggleLogicalTree" xml:space="preserve"><value>Toggle Logical Tree</value></data>
+  <data name="ToggleLogicalTreeCommand" xml:space="preserve"><value>View: Toggle Logical Tree</value></data>
+  <data name="ToggleMcp" xml:space="preserve"><value>Toggle MCP</value></data>
+  <data name="ToggleMcpCommand" xml:space="preserve"><value>View: Toggle MCP</value></data>
+  <data name="ToggleOutput" xml:space="preserve"><value>Toggle Output</value></data>
+  <data name="ToggleOutputCommand" xml:space="preserve"><value>View: Toggle Output</value></data>
+  <data name="ToggleProblems" xml:space="preserve"><value>Toggle Problems</value></data>
+  <data name="ToggleProblemsCommand" xml:space="preserve"><value>View: Toggle Problems</value></data>
+  <data name="ToggleReferences" xml:space="preserve"><value>Toggle References</value></data>
+  <data name="ToggleSolutionExplorer" xml:space="preserve"><value>Toggle Solution Explorer</value></data>
+  <data name="ToggleSolutionExplorerCommand" xml:space="preserve"><value>View: Toggle Solution Explorer</value></data>
+  <data name="ToggleVisualTree" xml:space="preserve"><value>Toggle Visual Tree</value></data>
+  <data name="ToggleVisualTreeCommand" xml:space="preserve"><value>View: Toggle Visual Tree</value></data>
+  <data name="ToggleWatches" xml:space="preserve"><value>Toggle Watches</value></data>
+  <data name="ToggleWatchesCommand" xml:space="preserve"><value>View: Toggle Watches</value></data>
+  <data name="WorkspaceHasNoProjects" xml:space="preserve"><value>The workspace contains no projects.</value></data>
 </root>

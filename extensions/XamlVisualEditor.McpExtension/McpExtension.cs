@@ -49,6 +49,12 @@ public sealed class McpExtension : IXveExtension
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
             context.ExtensionId,
             new[] { new ExtensionMenuContribution(ToggleViewCommandId, UiStrings.Mcp, ExtensionMenuLocations.ViewServers, "servers", 36) }));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleViewCommandId,
+            new CommandMetadata(Title: UiStrings.ToggleMcpCommand, Category: UiStrings.View, Priority: 91)));
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            new[] { new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleMcp, UiStrings.View) }));
 
         IDisposable viewRegistration = context.Contributions.RegisterViews(context.ExtensionId, new[] { view });
         IDisposable providerRegistration = context.Views.RegisterCustomViewProvider(ViewId, new McpViewProvider(_viewModel));

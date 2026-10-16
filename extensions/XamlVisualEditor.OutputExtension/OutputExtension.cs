@@ -62,6 +62,12 @@ public sealed class OutputExtension : IXveExtension
                 When: "hasWorkspace",
                 Keybinding: "Shift+F8",
                 Priority: 38)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleOutputCommandId,
+            new CommandMetadata(UiStrings.ToggleOutputCommand, UiStrings.View, Priority: 34)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleProblemsCommandId,
+            new CommandMetadata(UiStrings.ToggleProblemsCommand, UiStrings.View, Priority: 35)));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(
             context.ExtensionId,
@@ -104,6 +110,8 @@ public sealed class OutputExtension : IXveExtension
             context.ExtensionId,
             new[]
             {
+                new ExtensionCommandPaletteContribution(ToggleOutputCommandId, UiStrings.ToggleOutput, UiStrings.View),
+                new ExtensionCommandPaletteContribution(ToggleProblemsCommandId, UiStrings.ToggleProblems, UiStrings.View),
                 new ExtensionCommandPaletteContribution(ShowProblemsCommandId, UiStrings.ShowProblemsCommand, UiStrings.View),
                 new ExtensionCommandPaletteContribution(NextProblemCommandId, UiStrings.NextProblemCommand, UiStrings.Navigation),
                 new ExtensionCommandPaletteContribution(PreviousProblemCommandId, UiStrings.PreviousProblemCommand, UiStrings.Navigation)

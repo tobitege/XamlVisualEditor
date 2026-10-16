@@ -61,6 +61,12 @@ public sealed class AcpExtension : IXveExtension
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
             context.ExtensionId,
             new[] { new ExtensionMenuContribution(ToggleViewCommandId, UiStrings.Acp, ExtensionMenuLocations.ViewServers, "servers", 30) }));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleViewCommandId,
+            new CommandMetadata(Title: UiStrings.ToggleAcpCommand, Category: UiStrings.View, Priority: 90)));
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            new[] { new ExtensionCommandPaletteContribution(ToggleViewCommandId, UiStrings.ToggleAcp, UiStrings.View) }));
 
         IDisposable viewRegistration = context.Contributions.RegisterViews(
             context.ExtensionId,

@@ -581,7 +581,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
         }
     }
 
-    private sealed class ExtensionMenuTestHost : IDisposable
+    /// <summary>The shell view model with the built-in extension host; <see cref="CommandPaletteCoverageTests" /> uses it too.</summary>
+    internal sealed class ExtensionMenuTestHost : IDisposable
     {
         private readonly IWorkspaceService _workspaceService = new StubWorkspaceService();
         private readonly WorkspaceInfoService _workspaceInfo = new();
@@ -605,7 +606,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
         public ExtensionMenuTestHost(bool withTextEditing = false, IExtensionPackageStore? packageStore = null,
             IExtensionStateStore? stateStore = null, BackgroundActivityTracker? backgroundActivities = null,
             IXveExtension? additionalExtension = null, IDocumentOpenInterceptors? documentOpenInterceptors = null,
-            IXveExtension? secondExtension = null)
+            IXveExtension? secondExtension = null,
+            Func<ExtensionMenuTestHost, IXveExtension[]>? builtInExtensions = null)
         {
             _languageRegistry = new LanguageServiceRegistry(Array.Empty<ILanguageIntellisenseService>());
             ViewModel = new MainWindowViewModel(
@@ -633,9 +635,9 @@ public sealed class ExtensionCommandMenuIntegrationTests
             _viewHost = new ExtensionViewHostAdapter(ViewModel);
             _workspaceModel = new WorkspaceModelAdapter(_workspaceInfo, ViewModel, _workspaceService);
 
-            IXveExtension[] extensions = withTextEditing
+            IXveExtension[] extensions = builtInExtensions?.Invoke(this) ?? (withTextEditing
                 ? [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo), new TextEditingExtensionEntry()]
-                : [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo)];
+                : [new WorkspaceExtensionEntry(ViewModel, _workspaceInfo)]);
             if (additionalExtension is not null)
                 extensions = [.. extensions, additionalExtension];
             if (secondExtension is not null)
@@ -668,7 +670,7 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 new PropertyEditorRegistry(),
                 _terminalBridge,
                 _viewHost,
-                new InMemorySettingsStore(),
+                Settings,
                 textEditorView: TextEditorView,
                 contextKeys: ContextKeys,
                 packageStore: packageStore,
@@ -686,6 +688,14 @@ public sealed class ExtensionCommandMenuIntegrationTests
         public ExtensionContributionRegistry Contributions => _contributions;
 
         public CommandRegistry Commands => _commands;
+
+        public CommandMetadataRegistry CommandMetadata => _commandMetadata;
+
+        public InMemorySettingsStore Settings { get; } = new();
+
+        public WorkspaceInfoService WorkspaceInfo => _workspaceInfo;
+
+        public IEditorServices Editor => _editor;
 
         public async Task ActivateAsync()
         {

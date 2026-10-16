@@ -4,16 +4,20 @@ using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
+/// <summary>
+/// Keeps every registration as its own list per extension. The published lists keep the registrations of one
+/// extension in call order; the order of different extensions is unspecified.
+/// </summary>
 public sealed class ExtensionContributionRegistry : IExtensionContributionRegistry
 {
     private readonly object _gate = new();
-    private readonly Dictionary<string, List<ExtensionMenuContribution>> _menuByExtension = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<ExtensionToolbarContribution>> _toolbarByExtension = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<ExtensionCommandPaletteContribution>> _paletteByExtension = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<ExtensionPropertyEditorContribution>> _propertyEditorsByExtension = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<ExtensionViewContribution>> _viewsByExtension = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<DesignerThemeProviderRegistration>> _themesByExtension = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<EditorThemeProviderRegistration>> _editorThemesByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<ExtensionMenuContribution>>> _menuByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<ExtensionToolbarContribution>>> _toolbarByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<ExtensionCommandPaletteContribution>>> _paletteByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<ExtensionPropertyEditorContribution>>> _propertyEditorsByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<ExtensionViewContribution>>> _viewsByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<DesignerThemeProviderRegistration>>> _themesByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<List<EditorThemeProviderRegistration>>> _editorThemesByExtension = new(StringComparer.Ordinal);
     private List<ExtensionMenuContribution> _menuItems = new();
     private List<ExtensionToolbarContribution> _toolbarItems = new();
     private List<ExtensionCommandPaletteContribution> _paletteItems = new();
@@ -41,31 +45,34 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     public IDisposable RegisterEditorThemeProviders(string extensionId, IReadOnlyList<EditorThemeProviderRegistration> providers)
     {
         ArgumentNullException.ThrowIfNull(providers);
-        HashSet<string> ids = new(StringComparer.Ordinal);
         foreach (EditorThemeProviderRegistration provider in providers)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Id);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.TypeName);
-            if (!ids.Add(provider.Id) || !System.IO.Path.IsPathFullyQualified(provider.AssemblyPath))
-                throw new ArgumentException("Theme providers require unique IDs and absolute assembly paths.", nameof(providers));
+            ValidateThemeProvider(provider.Id, provider.Name, provider.TypeName, provider.AssemblyPath, nameof(providers));
         }
-        return RegisterItems(extensionId, providers, _editorThemesByExtension, () => _editorThemeItems = BuildList(_editorThemesByExtension));
+        return RegisterItems(extensionId, providers, _editorThemesByExtension,
+            () => _editorThemeItems = BuildList(_editorThemesByExtension),
+            new UniqueIds<EditorThemeProviderRegistration>("Editor theme provider", nameof(providers), provider => provider.Id));
     }
 
     public IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers)
     {
         ArgumentNullException.ThrowIfNull(providers);
-        HashSet<string> ids = new(StringComparer.Ordinal);
         foreach (DesignerThemeProviderRegistration provider in providers)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Id);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.TypeName);
-            if (!ids.Add(provider.Id) || !System.IO.Path.IsPathFullyQualified(provider.AssemblyPath))
-                throw new ArgumentException("Theme providers require unique IDs and absolute assembly paths.", nameof(providers));
+            ValidateThemeProvider(provider.Id, provider.Name, provider.TypeName, provider.AssemblyPath, nameof(providers));
         }
-        return RegisterItems(extensionId, providers, _themesByExtension, () => _themeItems = BuildList(_themesByExtension));
+        return RegisterItems(extensionId, providers, _themesByExtension,
+            () => _themeItems = BuildList(_themesByExtension),
+            new UniqueIds<DesignerThemeProviderRegistration>("Preview theme provider", nameof(providers), provider => provider.Id));
+    }
+
+    private static void ValidateThemeProvider(string id, string name, string typeName, string assemblyPath, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(typeName);
+        if (!System.IO.Path.IsPathFullyQualified(assemblyPath))
+            throw new ArgumentException("Theme providers require absolute assembly paths.", parameterName);
     }
 
     public IDisposable RegisterMenuItems(string extensionId, IReadOnlyList<ExtensionMenuContribution> items)
@@ -93,11 +100,16 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         return RegisterItems(extensionId, views, _viewsByExtension, RebuildViews);
     }
 
+    /// <summary>
+    /// Adds one registration; <paramref name="uniqueIds"/> rejects an ID that appears twice in the registration or
+    /// that an active registration already holds.
+    /// </summary>
     private IDisposable RegisterItems<T>(
         string extensionId,
         IReadOnlyList<T> items,
-        Dictionary<string, List<T>> target,
-        Action rebuild)
+        Dictionary<string, List<List<T>>> target,
+        Action rebuild,
+        UniqueIds<T>? uniqueIds = null)
     {
         if (string.IsNullOrWhiteSpace(extensionId))
         {
@@ -109,7 +121,18 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         List<T> registration = new(items);
         lock (_gate)
         {
-            target[extensionId] = registration;
+            if (uniqueIds is not null)
+            {
+                EnsureIdsAreFree(target, registration, uniqueIds);
+            }
+
+            if (!target.TryGetValue(extensionId, out List<List<T>>? registrations))
+            {
+                registrations = new();
+                target.Add(extensionId, registrations);
+            }
+
+            registrations.Add(registration);
             rebuild();
         }
 
@@ -118,15 +141,62 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         return new Registration(() => Unregister(extensionId, target, rebuild, registration));
     }
 
-    private void Unregister<T>(string extensionId, Dictionary<string, List<T>> target, Action rebuild, List<T> expected)
+    private static void EnsureIdsAreFree<T>(Dictionary<string, List<List<T>>> target, List<T> registration, UniqueIds<T> uniqueIds)
+    {
+        HashSet<string> ids = new(StringComparer.Ordinal);
+        foreach (T item in registration)
+        {
+            string id = uniqueIds.GetId(item);
+            if (!ids.Add(id))
+            {
+                throw uniqueIds.Duplicate(id);
+            }
+        }
+
+        foreach (List<List<T>> registrations in target.Values)
+        {
+            foreach (List<T> existing in registrations)
+            {
+                foreach (T item in existing)
+                {
+                    string id = uniqueIds.GetId(item);
+                    if (ids.Contains(id))
+                    {
+                        throw uniqueIds.Duplicate(id);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Names the items whose IDs must be unique, for the message of a rejected registration.</summary>
+    private sealed record UniqueIds<T>(string Subject, string ParameterName, Func<T, string> GetId)
+    {
+        public ArgumentException Duplicate(string id) =>
+            new(Subject + " ID is not unique: " + id, ParameterName);
+    }
+
+    private void Unregister<T>(string extensionId, Dictionary<string, List<List<T>>> target, Action rebuild, List<T> registration)
     {
         lock (_gate)
         {
-            if (!target.TryGetValue(extensionId, out List<T>? current) || !ReferenceEquals(current, expected))
+            if (!target.TryGetValue(extensionId, out List<List<T>>? registrations))
             {
                 return;
             }
-            target.Remove(extensionId);
+
+            int index = registrations.FindIndex(current => ReferenceEquals(current, registration));
+            if (index < 0)
+            {
+                return;
+            }
+
+            registrations.RemoveAt(index);
+            if (registrations.Count == 0)
+            {
+                target.Remove(extensionId);
+            }
+
             rebuild();
         }
 
@@ -158,12 +228,15 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         _viewItems = BuildList(_viewsByExtension);
     }
 
-    private static List<T> BuildList<T>(Dictionary<string, List<T>> map)
+    private static List<T> BuildList<T>(Dictionary<string, List<List<T>>> map)
     {
         List<T> results = new();
-        foreach (List<T> items in map.Values)
+        foreach (List<List<T>> registrations in map.Values)
         {
-            results.AddRange(items);
+            foreach (List<T> items in registrations)
+            {
+                results.AddRange(items);
+            }
         }
 
         return results;

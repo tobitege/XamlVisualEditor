@@ -93,3 +93,48 @@ Before changing or removing a provider, XVE stops affected preview processes to
 release their assemblies. Previously running previews restart after registration
 changes. Disabled packages contribute no themes. Missing providers remain
 reported rather than silently replacing a saved selection with another theme.
+
+## Flowery.NET adapter
+
+`extensions/XamlVisualEditor.FloweryThemeExtension` contains an optional provider built against Flowery.NET 3.4.0.
+The editor application does not reference this project or Flowery.NET.
+
+Every preview receives all enabled providers, and the preview host loads each of them and reads its catalog,
+even without a selection. The preview provider offers themes only to projects that use Flowery.NET 3.2.0 or later,
+the first version with `DaisyThemeManager.GetPaletteFactory`:
+
+- In a project that references Flowery.NET, the provider uses the target project's Flowery.NET assembly, because
+  the preview host resolves dependencies from the target output before the package directory.
+- In a project whose loaded assemblies do not reference Flowery.NET, the catalog reports the error
+  `The project does not reference Flowery.NET.` The provider then neither loads the `Flowery.NET.dll` of the package
+  nor adds Flowery styles. A derived theme falls back to the project default; a theme picked explicitly for the
+  workspace is rejected for that document, which keeps its own theme.
+- With a Flowery.NET older than 3.2.0 the catalog reports that version as unsupported, with the same consequences.
+
+Build the package from the repository root:
+
+```powershell
+dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.FloweryThemeExtension.csproj -c Release -o artifacts/packages
+```
+
+The command builds the extension itself; install the resulting package from `artifacts/packages` through Extensions.
+The provider ID is `xamlvisualeditor.flowery-themes/palette`; the provider requires `Flowery.NET`.
+
+The catalog uses the target application's registered themes, exclusions, and preferred order.
+IDs use lowercase registered names. Labels use registered names, not private dropdown display aliases.
+The provider adds `DaisyUITheme` only when the target application has no such style.
+
+Palettes use a temporary resource layer. The provider records the resources, variant and theme name when it applies
+its first palette, and project default restores them. Flowery.NET cannot clear the current theme name, so an
+application that started without one keeps the name of the last preview theme.
+The provider does not call `CustomThemeApplicator`, which can persist application settings.
+
+Applying a palette and restoring a recorded theme name call `DaisyThemeManager.SetCurrentTheme`, which raises
+`ThemeChanged` inside the preview process. In Flowery.NET 3.4.0 the subscribers change the rendered controls of the
+document, never its source: `DaisyThemeController` sets `IsChecked` and writes the theme name into `CheckedTheme` and
+`CheckedLabel`, `DaisyThemeDropdown` and `DaisyProductThemeDropdown` select the matching item, `DaisyThemeRadio` and
+`DaisyThemeSwap` update their checked state, and controls with theme-dependent visuals reapply them.
+
+The package contains the adapter and every runtime dependency except Avalonia and the packages Avalonia depends on
+(SkiaSharp, HarfBuzzSharp and MicroCom.Runtime), which the editor and the preview host supply. With Flowery.NET 3.4.0
+this is `Flowery.NET.dll`. The package does not contain the editor SDK.

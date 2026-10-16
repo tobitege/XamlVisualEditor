@@ -2,6 +2,8 @@
   <PropertyGroup>
     <RootNamespace>XamlVisualEditor.Tests.Unit</RootNamespace>
     <IsPackable>false</IsPackable>
+    <!-- The Flowery theme extension is not part of the solution; it builds in this project's configuration. -->
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
@@ -19,6 +21,7 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.TestControls\XamlVisualEditor.TestControls.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.FloweryThemeExtension\XamlVisualEditor.FloweryThemeExtension.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.DotNetTemplatesExtension\XamlVisualEditor.DotNetTemplatesExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.FileExplorerExtension\XamlVisualEditor.FileExplorerExtension.csproj" />

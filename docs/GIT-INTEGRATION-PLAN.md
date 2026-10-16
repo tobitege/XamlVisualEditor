@@ -59,6 +59,17 @@ Offene Befunde des Reviews von Phase 2 (Stand 862dd40), Behebung nach den Korrek
 12. Anzeige: Detached HEAD im Panel, „gone“ sichtbar, Fetch- und Pull-Icon unterscheidbar.
 13. Tests: echte Repos für 1-3, „gone“ mit `fetch --prune`, Sync-Teilfehler, Hook-Klassifizierung, `GIT_ALLOW_PROTOCOL` neutralisieren, Enkelprozess beim Abbruch prüfen.
 
+Phase-2-Befunde sind mit e9dfd0c behoben. Offene Punkte aus dem Review dieser Korrekturen und dem Livetest (in Arbeit):
+1. Stage mit anders geschriebenem Pfad (Windows) tut nichts: git-eigene Pfade der Treffer übergeben.
+2. Diff der ausgewählten Datei veraltet, weil gleiche Snapshots unterdrückt werden: eigenes Refresh-Signal fürs Diff.
+3. Gelöschtes Repository bleibt `StatusFailed`: bei Statusfehler Root-Cache leeren und `rev-parse` neu fragen.
+4. `--no-track` nur bei abweichendem Namen, sonst Tracking behalten.
+5. `--prune` mit expliziter Refspec (sonst gehen lokale Tags verloren), `skipFetchAll` respektieren.
+6. Runner: nach normalem Ende begrenzt auf Ausgabe warten; Windows-Job-Object, damit Abbruch auch Hook-Kindprozesse beendet.
+7. Gelöschter Upstream erkennen und Pull/Sync sperren oder erklären; getrennte Tokens für Sperre und Prozess.
+8. Livetest: Pull-Meldung unterscheidet Fast-Forward und „schon aktuell“; Fehlerdialoge ohne `hint:`-Zeilen, voller Text im Git-Kanal;
+   Meldungstext im Host-Dialog markierbar und kopierbar; Branch-Name vor git prüfen, übersetzte Meldung.
+
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 
 Entscheidung zu 1.4: Der `.git`-Watcher und das Aktualisieren nach eigenen Kommandos laufen immer; der rekursive

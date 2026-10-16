@@ -163,7 +163,8 @@ public sealed class ToolboxCatalogWorkflowTests
             Assert.DoesNotContain(model.AssemblyGroups, group => group.AssemblyName == libraryName || group.AssemblyName == secondLibraryName);
             Assert.NotEmpty(model.AssemblyGroups);
             Assert.All(model.Items, item => Assert.True(item.IsStandardControl));
-            Assert.True(model.SelectedItem?.IsStandardControl);
+            // The selected project control is gone; no other control is selected in its place.
+            Assert.Null(model.SelectedItem);
             Assert.All(view.GetVisualDescendants().OfType<Expander>(), expander =>
                 Assert.All(Assert.IsType<ToolboxAssemblyGroup>(expander.DataContext).Items, item => Assert.True(item.IsStandardControl)));
         }

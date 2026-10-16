@@ -105,7 +105,12 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
     /// <summary>Version of the current library catalog.</summary>
     public string? AssemblyVersion { get; private set; }
     public string Description => AssemblyVersion is null ? DisplayName : DisplayName + " · " + AssemblyVersion;
-    public bool CanEditPreferences => _owner.CanEditAssemblyPreferences;
+    /// <summary>Gets whether the library can be shown or hidden.</summary>
+    public bool CanEditIncluded => _owner.CanEditAssemblyVisibility;
+    /// <summary>Gets whether the library can be expanded or collapsed.</summary>
+    public bool CanEditExpanded => _owner.CanEditCollapsedAssemblies;
+    /// <summary>Gets whether the library can be added to or removed from the favorites.</summary>
+    public bool CanEditFavorite => _owner.CanEditFavoriteAssemblies;
     public string FavoriteGlyph => IsFavorite ? "\u2605" : "\u2606";
     public string FavoriteToolTip => IsFavorite ? UiStrings.FavoriteAssemblyRemove : UiStrings.FavoriteAssemblyKeep;
 
@@ -149,7 +154,9 @@ public sealed class ToolboxAssemblyGroup : ReactiveObject
         this.RaisePropertyChanged(nameof(IsFavorite));
         this.RaisePropertyChanged(nameof(FavoriteGlyph));
         this.RaisePropertyChanged(nameof(FavoriteToolTip));
-        this.RaisePropertyChanged(nameof(CanEditPreferences));
+        this.RaisePropertyChanged(nameof(CanEditIncluded));
+        this.RaisePropertyChanged(nameof(CanEditExpanded));
+        this.RaisePropertyChanged(nameof(CanEditFavorite));
     }
 
     public bool IsExpanded
@@ -205,6 +212,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private readonly ISettings _settings;
     private readonly IControlCatalog? _catalog;
     private readonly IDesignerHost? _designer;
+    private readonly IEditorServices? _editor;
     private readonly ISequencer _uiScheduler;
     private readonly ToolboxFilterOption _allLibraries = new(null, UiStrings.AllLibraries);
     private readonly ToolboxFilterOption _allCategories = new(null, UiStrings.AllCategories);
@@ -233,25 +241,29 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     public ToolboxPanelViewModel(ICommands commands, ISettings settings,
         IControlCatalog? catalog = null, ISequencer? uiScheduler = null,
-        IWorkspaceInfo? workspaceInfo = null, IExtensionStorage? storage = null, IDesignerHost? designer = null)
+        IWorkspaceInfo? workspaceInfo = null, IExtensionStorage? storage = null, IDesignerHost? designer = null,
+        IEditorServices? editor = null)
     {
         _commands = commands;
         _settings = settings;
         _catalog = catalog;
         _designer = designer;
+        _editor = editor;
         _uiScheduler = uiScheduler ?? RxSchedulers.MainThreadScheduler;
+        StatusDismissalScheduler = _uiScheduler;
         _workspaceInfo = workspaceInfo;
         _preferenceStorage = storage;
         _preferencesReady = storage is null;
         if (_workspaceInfo is not null) _workspaceInfo.WorkspaceChanged += OnPreferencesWorkspaceChanged;
         if (_designer is not null) _designer.ActiveDocumentChanged += OnInsertDocumentChanged;
+        if (_editor is not null) _editor.ActiveDocumentChanged += OnEditorDocumentChanged;
 
         ReplaceItems(TryLoadCatalogFromSettings());
         StatusText = catalog is null ? UiStrings.ControlCatalogUnavailable : UiStrings.ControlCatalogNotLoaded;
 
-        IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.IsLoading,
-            x => x.CanEditAssemblyPreferences, x => x.HasInsertTarget,
-            (item, loading, ready, hasTarget) => item is not null && !loading && ready && hasTarget);
+        // Inserting depends only on the selection and the designer document, not on catalog loads or preferences.
+        IObservable<bool> canInsert = this.WhenAnyValue(x => x.SelectedItem, x => x.HasInsertTarget,
+            (item, hasTarget) => item is not null && hasTarget);
         InsertSelectedCommand = ReactiveCommand.CreateFromTask(InsertSelectedAsync, canInsert);
         RetryLoadCommand = ReactiveCommand.CreateFromTask(
             () => ReloadAsync(includeProjectControls: _lastIncludeProjectControls),
@@ -272,13 +284,13 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             SetAllAssembliesIncluded(true);
         });
         ShowAllAssembliesCommand = ReactiveCommand.Create(() => SetAllAssembliesIncluded(true),
-            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+            this.WhenAnyValue(x => x.CanEditAssemblyVisibility));
         HideAllAssembliesCommand = ReactiveCommand.Create(() => SetAllAssembliesIncluded(false),
-            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+            this.WhenAnyValue(x => x.CanEditAssemblyVisibility));
         CollapseAllCommand = ReactiveCommand.Create(() => SetAllGroupsExpanded(false),
-            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+            this.WhenAnyValue(x => x.CanEditCollapsedAssemblies));
         ExpandAllCommand = ReactiveCommand.Create(() => SetAllGroupsExpanded(true),
-            this.WhenAnyValue(x => x.CanEditAssemblyPreferences));
+            this.WhenAnyValue(x => x.CanEditCollapsedAssemblies));
         if (_catalog is not null)
         {
             _catalog.Changed += OnCatalogChanged;
@@ -341,9 +353,13 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
             this.RaiseAndSetIfChanged(ref _isLoading, value);
             this.RaisePropertyChanged(nameof(NoMatches));
             this.RaisePropertyChanged(nameof(HasLoadTask));
+            this.RaisePropertyChanged(nameof(IsLoadingProjectControls));
             NotifyPreferenceAvailability();
         }
     }
+
+    /// <summary>Gets whether the running load reads the project assemblies in addition to the standard controls.</summary>
+    public bool IsLoadingProjectControls => IsLoading && _lastIncludeProjectControls;
 
     /// <summary>Gets whether the running search has yet to confirm its cancellation.</summary>
     public bool IsCancelling
@@ -452,7 +468,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     private void SetAllGroupsExpanded(bool expanded)
     {
-        if (!CanEditAssemblyPreferences) return;
+        if (!CanEditCollapsedAssemblies) return;
         bool changed = false;
         foreach (ToolboxAssemblyGroup group in AssemblyGroups)
         {
@@ -462,10 +478,28 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         if (changed) SaveCollapsedAssemblies();
     }
 
-    /// <summary>Inserting and dragging need an active designer document.</summary>
-    public bool HasInsertTarget => !string.IsNullOrWhiteSpace(_designer?.ActiveDocumentPath);
+    /// <summary>
+    /// Inserting and dragging need the active designer document, the same document that the "hasDesignerDocument"
+    /// command condition requires.
+    /// </summary>
+    public bool HasInsertTarget => IsActiveDesignerDocument(_designer, _editor);
+
+    /// <summary>
+    /// Returns whether the designer host's document is the active editor document. While a text editor is active, the
+    /// designer host still reports a designer document in the background; that document is no insert target. A host
+    /// without editor services has no other document in front.
+    /// </summary>
+    internal static bool IsActiveDesignerDocument(IDesignerHost? designer, IEditorServices? editor)
+    {
+        string? path = designer?.ActiveDocumentPath;
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        return editor is null || XamlVisualEditor.Core.FileSystemPathComparison.Equals(editor.ActiveDocument?.FilePath, path);
+    }
 
     private void OnInsertDocumentChanged(object? sender, DesignerDocumentChangedEventArgs args) =>
+        _ = UpdateUiAsync(() => this.RaisePropertyChanged(nameof(HasInsertTarget)));
+
+    private void OnEditorDocumentChanged(object? sender, EditorActiveDocumentChangedEventArgs args) =>
         _ = UpdateUiAsync(() => this.RaisePropertyChanged(nameof(HasInsertTarget)));
 
     private async Task InsertSelectedAsync()
@@ -487,15 +521,42 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         }
     }
 
+    /// <summary>Gets the most recently started load of <see cref="LoadCatalogAsync"/>.</summary>
+    internal Task PendingCatalogLoad { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// Publishes the standard controls first and then adds the project controls, so a running project scan does not
+    /// hide the standard controls.
+    /// </summary>
+    public Task LoadCatalogAsync(CancellationToken cancellationToken = default) =>
+        PendingCatalogLoad = LoadCatalogCoreAsync(cancellationToken);
+
+    private async Task LoadCatalogCoreAsync(CancellationToken cancellationToken)
+    {
+        bool published = await ReloadCoreAsync(cancellationToken, includeProjectControls: false, forceRefresh: false)
+            .ConfigureAwait(false);
+        // A cancelled, failed or superseded base load ends the sequence. The catalog cache is keyed by the assembly
+        // files, so the project load reads changed assemblies without forcing a refresh.
+        if (published && _catalog is { HasProjectAssemblies: true })
+        {
+            await ReloadCoreAsync(cancellationToken, includeProjectControls: true, forceRefresh: false).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Refreshes the catalog while ignoring results superseded by another workspace.</summary>
-    public async Task ReloadAsync(CancellationToken cancellationToken = default, bool includeProjectControls = true,
-        bool forceRefresh = true)
+    public Task ReloadAsync(CancellationToken cancellationToken = default, bool includeProjectControls = true,
+        bool forceRefresh = true) => ReloadCoreAsync(cancellationToken, includeProjectControls, forceRefresh);
+
+    /// <summary>Returns whether this request published its snapshot.</summary>
+    private async Task<bool> ReloadCoreAsync(CancellationToken cancellationToken, bool includeProjectControls,
+        bool forceRefresh)
     {
         if (_disposed)
         {
-            return;
+            return false;
         }
         int version = Interlocked.Increment(ref _reloadVersion);
+        bool published = false;
         using CancellationTokenSource request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
@@ -507,15 +568,16 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 _statusDismissal.Disposable = null;
                 IsLoadStatusVisible = true;
                 _lastIncludeProjectControls = includeProjectControls;
+                this.RaisePropertyChanged(nameof(IsLoadingProjectControls));
                 HasLoadError = false;
                 LoadErrorDetails = null;
                 IsCancelling = false;
                 LoadProgress = 0;
                 IsProgressIndeterminate = true;
                 IsLoading = true;
-                StatusText = UiStrings.LoadingProjectControls;
+                StatusText = includeProjectControls ? UiStrings.LoadingProjectControls : UiStrings.LoadingStandardControls;
             }).ConfigureAwait(false);
-            if (!IsCurrent(version)) return;
+            if (!IsCurrent(version)) return false;
             request.Token.ThrowIfCancellationRequested();
             ControlCatalogSnapshot snapshot = _catalog is null
                 ? new ControlCatalogSnapshot(Array.Empty<ControlCatalogItem>(), Array.Empty<string>())
@@ -536,6 +598,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 {
                     StatusText += Environment.NewLine + string.Join(Environment.NewLine, snapshot.Diagnostics);
                 }
+                published = true;
             }).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)
@@ -567,6 +630,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 }
             }).ConfigureAwait(false);
         }
+        return published;
     }
 
     private bool IsCurrent(int version) => !_disposed && version == Volatile.Read(ref _reloadVersion);
@@ -596,9 +660,12 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     /// <summary>Gets or sets how long the status of a completed load stays visible.</summary>
     internal TimeSpan LoadStatusDismissDelay { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>Gets or sets the scheduler whose clock times the status dismissal; it runs its work on the UI thread.</summary>
+    internal ISequencer StatusDismissalScheduler { get; set; }
+
     private void ScheduleStatusDismissal()
     {
-        _statusDismissal.Disposable = _uiScheduler.Schedule(LoadStatusDismissDelay, () =>
+        _statusDismissal.Disposable = StatusDismissalScheduler.Schedule(LoadStatusDismissDelay, () =>
         {
             if (!_disposed && !HasLoadTask) IsLoadStatusVisible = false;
         });
@@ -622,10 +689,12 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        FlushPreferenceWrites();
         DisposeAssemblyPreferences();
         Interlocked.Increment(ref _reloadVersion);
         if (_catalog is not null) _catalog.Changed -= OnCatalogChanged;
         if (_designer is not null) _designer.ActiveDocumentChanged -= OnInsertDocumentChanged;
+        if (_editor is not null) _editor.ActiveDocumentChanged -= OnEditorDocumentChanged;
         _loadCancellation?.Cancel();
         _statusDismissal.Dispose();
         InsertSelectedCommand.Dispose();
@@ -722,11 +791,11 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
             SynchronizeGroups(AssemblyGroups, visibleGroups);
 
-            SelectedItem = visibleItems.FirstOrDefault(item => selected is not null
-                && item.AssemblyName == selected.AssemblyName && item.FullName == selected.FullName
+            // A selection the filter removed stays empty, so Insert never targets a control the user did not choose.
+            SelectedItem = selected is null ? null : visibleItems.FirstOrDefault(item =>
+                item.AssemblyName == selected.AssemblyName && item.FullName == selected.FullName
                 && item.DisplayName == selected.DisplayName && item.CommandId == selected.CommandId
-                && item.CommandArguments.SequenceEqual(selected.CommandArguments))
-                ?? visibleItems.FirstOrDefault(item => item.IsStandardControl) ?? visibleItems.FirstOrDefault();
+                && item.CommandArguments.SequenceEqual(selected.CommandArguments));
             foreach (ToolboxAssemblyGroup group in AssemblyGroups) group.NotifySelectionChanged();
         }
         finally

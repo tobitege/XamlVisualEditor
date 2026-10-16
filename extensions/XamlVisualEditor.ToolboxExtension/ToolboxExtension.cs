@@ -17,12 +17,13 @@ public sealed class ToolboxExtension : IXveExtension
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
         ToolboxPanelViewModel viewModel = new(context.Commands, context.Settings, context.ControlCatalog,
-            workspaceInfo: context.WorkspaceInfo, storage: context.Storage, designer: context.Designer);
+            workspaceInfo: context.WorkspaceInfo, storage: context.Storage, designer: context.Designer,
+            editor: context.Editor);
         context.Subscriptions.Add(viewModel);
         await viewModel.InitializePreferencesAsync(cancellationToken);
         // Extensions activate one after another; the view model reports loading progress and errors itself.
         if (context.ControlCatalog is not null)
-            _ = viewModel.ReloadAsync(cancellationToken, includeProjectControls: false, forceRefresh: false);
+            _ = viewModel.LoadCatalogAsync(cancellationToken);
 
         context.Subscriptions.Add(context.Commands.Register(InsertButtonCommandId, _ => InsertButtonAsync(context, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(InsertSelectedCommandId, commandContext =>
@@ -65,12 +66,20 @@ public sealed class ToolboxExtension : IXveExtension
                 When: "hasDesignerDocument",
                 Priority: 60)));
 
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ShowTaskCommandId,
+            new CommandMetadata(
+                Title: UiStrings.ToolboxShowLoadTask,
+                Category: UiStrings.Toolbox,
+                Priority: 70)));
+
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
             new[]
             {
                 new ExtensionCommandPaletteContribution(InsertButtonCommandId, UiStrings.ToolboxInsertButton, UiStrings.Toolbox),
-                new ExtensionCommandPaletteContribution(InsertSelectedCommandId, UiStrings.ToolboxInsertSelected, UiStrings.Toolbox)
+                new ExtensionCommandPaletteContribution(InsertSelectedCommandId, UiStrings.ToolboxInsertSelected, UiStrings.Toolbox),
+                new ExtensionCommandPaletteContribution(ShowTaskCommandId, UiStrings.ToolboxShowLoadTask, UiStrings.Toolbox)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
@@ -100,35 +109,32 @@ public sealed class ToolboxExtension : IXveExtension
         IStatusBarItem loadStatus = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, 30);
         loadStatus.CommandId = ShowTaskCommandId;
         context.Subscriptions.Add(loadStatus);
-        context.Subscriptions.Add(viewModel.WhenAnyValue(x => x.HasLoadTask, x => x.HasLoadError, x => x.IsLoading, x => x.StatusText)
+        context.Subscriptions.Add(viewModel.WhenAnyValue(x => x.HasLoadTask, x => x.HasLoadError, x => x.IsLoading,
+                x => x.IsLoadingProjectControls, x => x.StatusText)
             .Subscribe(state =>
             {
                 loadStatus.Text = UiStrings.Toolbox + ": " + (state.Property2 ? UiStrings.RetryControlDiscovery
-                    : state.Property3 ? UiStrings.LoadingProjectControls : UiStrings.LoadProjectControls);
-                loadStatus.Tooltip = state.Property4;
+                    : state.Property4 ? UiStrings.LoadingProjectControls
+                    : state.Property3 ? UiStrings.LoadingStandardControls : UiStrings.LoadProjectControls);
+                loadStatus.Tooltip = state.Property5;
                 if (state.Property1) loadStatus.Show();
                 else loadStatus.Hide();
             }));
-
-        if (context.ControlCatalog is { HasProjectAssemblies: true })
-        {
-            _ = viewModel.ReloadAsync(cancellationToken, includeProjectControls: true);
-        }
     }
 
     private static async Task InsertButtonAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
-        if (!HasInsertTarget(context)) return;
+        if (!await EnsureInsertTargetAsync(context, cancellationToken)) return;
         string? insertedNodeId = await context.Designer.InsertElementAsync(
             "Button",
             "https://github.com/avaloniaui",
             parentNodeId: null,
             cancellationToken);
 
-        if (insertedNodeId is null && HasInsertTarget(context))
+        if (insertedNodeId is null)
         {
             await context.Window.ShowWarningMessageAsync(
-                UiStrings.DesignerDocumentRequired,
+                UiStrings.ControlInsertFailed,
                 cancellationToken);
         }
     }
@@ -138,7 +144,7 @@ public sealed class ToolboxExtension : IXveExtension
         CommandContext commandContext,
         CancellationToken cancellationToken)
     {
-        if (!HasInsertTarget(context)) return;
+        if (!await EnsureInsertTargetAsync(context, cancellationToken)) return;
         if (!TryGetStringArg(commandContext.Arguments, 0, out string? typeName)
             || !TryGetStringArg(commandContext.Arguments, 1, out string? xmlNamespace))
         {
@@ -157,7 +163,7 @@ public sealed class ToolboxExtension : IXveExtension
             parentNodeId,
             cancellationToken);
 
-        if (insertedNodeId is null && HasInsertTarget(context))
+        if (insertedNodeId is null)
         {
             await context.Window.ShowWarningMessageAsync(
                 UiStrings.ControlInsertFailed,
@@ -165,8 +171,13 @@ public sealed class ToolboxExtension : IXveExtension
         }
     }
 
-    private static bool HasInsertTarget(ExtensionContext context) =>
-        !string.IsNullOrWhiteSpace(context.Designer.ActiveDocumentPath);
+    // Palette, menu and panel offer the commands only with an insert target; a direct call without one gets a warning.
+    private static async Task<bool> EnsureInsertTargetAsync(ExtensionContext context, CancellationToken cancellationToken)
+    {
+        if (ToolboxPanelViewModel.IsActiveDesignerDocument(context.Designer, context.Editor)) return true;
+        await context.Window.ShowWarningMessageAsync(UiStrings.DesignerDocumentRequired, cancellationToken);
+        return false;
+    }
 
     private static bool TryGetStringArg(IReadOnlyList<object?>? arguments, int index, out string? value)
     {

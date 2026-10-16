@@ -23,8 +23,9 @@ Tests und einem Livetest per CDP. Testrepository: `D:\xve-demo\GitDemo` mit loka
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
-Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben. Offene Befunde des Reviews von Phase 0/1
-(Stand 511cff6), Behebung nach dem Commit von Phase 2:
+Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben. Befunde des Reviews von Phase 0/1
+(Stand 511cff6) sind mit 0903d73 behoben (Abweichungen: Unstage nutzt die Liste der gestagten Änderungen statt `git reset`,
+weil `reset` einen laufenden Merge abbricht; Ordner-Discard verwirft nur die bestätigte Liste):
 1. Watcher: Zulassungsliste der Zustandsdateien statt Sperrliste (sonst Refresh-Endlosschleife mit `core.fsmonitor`);
    im verknüpften Worktree zusätzlich das Common-Dir (`rev-parse --git-common-dir`) für `refs/**`, `packed-refs`, `config`.
 2. Stage/Unstage All und Ordner: `git add -A`, `git reset -q`, Ordner als Pathspec, Listen über

@@ -20,6 +20,29 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
     private const string WindowsOnly = "ConPTY is only available on Windows.";
     private const string PowerShell7Missing = "PowerShell 7 is not installed under %ProgramFiles%\\PowerShell\\7.";
 
+    // Dock lays out the frame of a pinned tool before it creates the tool's content, so the terminal view is arranged
+    // in a later layout pass. The wait follows the layout passes; the limit only keeps a broken layout from hanging.
+    private static async Task<TerminalControl> WaitForArrangedTerminalAsync(Avalonia.Controls.Window window)
+    {
+        TaskCompletionSource<TerminalControl> arranged = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Check(object? sender, EventArgs e)
+        {
+            if (window.GetVisualDescendants().OfType<TerminalControl>().SingleOrDefault() is { Bounds.Height: > 0 } control)
+                arranged.TrySetResult(control);
+        }
+
+        window.LayoutUpdated += Check;
+        try
+        {
+            Check(null, EventArgs.Empty);
+            return await arranged.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            window.LayoutUpdated -= Check;
+        }
+    }
+
     private static string PowerShell7Path =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
 
@@ -170,9 +193,7 @@ public sealed class TerminalWorkflowTests(ITestOutputHelper output)
             using Process process = Process.GetProcessById(provider.ProcessId);
             await service.Ready.Task.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Contains("CWD-" + directory, service.Output);
-            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            window.UpdateLayout();
-            TerminalControl control = Assert.Single(window.GetVisualDescendants().OfType<TerminalControl>());
+            TerminalControl control = await WaitForArrangedTerminalAsync(window);
             Assert.True(control.IsVisible);
             Assert.True(control.Bounds.Height > 100);
             Assert.True(control.Focus());

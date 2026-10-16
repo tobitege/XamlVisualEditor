@@ -1,5 +1,8 @@
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Extensions.Hosting;
@@ -21,6 +24,7 @@ public sealed class ToolboxExtensionTests
         RecordingCommands commands = new();
         InMemoryWindow window = new();
         InMemorySettingsStore settings = new();
+        string assemblyName = Assert.IsType<string>(typeof(Avalonia.Controls.Border).Assembly.GetName().Name);
 
         await settings.UpdateAsync(
             "toolbox.catalog",
@@ -29,6 +33,7 @@ public sealed class ToolboxExtensionTests
                 new()
                 {
                     DisplayName = "Custom Border",
+                    AssemblyName = assemblyName,
                     CommandId = "toolbox.insertSelected",
                     CommandArguments = new List<string>
                     {
@@ -41,11 +46,14 @@ public sealed class ToolboxExtensionTests
             SettingsTarget.User,
             CancellationToken.None);
 
-        ToolboxPanelViewModel viewModel = new(commands, settings);
+        using ToolboxPanelViewModel viewModel = new(commands, settings,
+            workspaceInfo: new StubWorkspaceInfo { WorkspacePath = "test.csproj" }, designer: new StubDesignerHost());
         Assert.Single(viewModel.Items);
         Assert.Equal("Custom Border", viewModel.Items[0].DisplayName);
 
-        viewModel.SelectedItem = viewModel.Items[0];
+        ToolboxAssemblyGroup group = Assert.Single(viewModel.AssemblyGroups);
+        Assert.Equal(assemblyName, group.AssemblyName);
+        group.SelectedItem = Assert.Single(group.Items);
         await viewModel.InsertSelectedCommand.Execute().ToTask();
 
         Assert.Equal("toolbox.insertSelected", commands.LastCommandId);
@@ -53,6 +61,34 @@ public sealed class ToolboxExtensionTests
         Assert.Equal("Border", commands.LastArguments?[0] as string);
         Assert.Equal("https://github.com/avaloniaui", commands.LastArguments?[1] as string);
         Assert.Equal("11111111-1111-1111-1111-111111111111", commands.LastArguments?[2] as string);
+        viewModel.SearchText = "no matching custom entry";
+        Assert.Empty(viewModel.AssemblyGroups);
+        Assert.Null(viewModel.SelectedItem);
+        await viewModel.ClearFiltersCommand.Execute().ToTask();
+        Assert.Same(group, Assert.Single(viewModel.AssemblyGroups));
+        // The filter removed the selection; clearing the filter does not select a control on its own.
+        Assert.Null(viewModel.SelectedItem);
+        Assert.Null(group.SelectedItem);
+        Assert.False(await viewModel.InsertSelectedCommand.CanExecute.FirstAsync());
+    }
+
+    [Fact]
+    public async Task EveryToolboxCommandAppearsInTheCommandPalette()
+    {
+        ExtensionContext context = CreateContext(new CommandRegistry(), out _, out _);
+
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+
+        ExtensionContributionRegistry contributions = Assert.IsType<ExtensionContributionRegistry>(context.Contributions);
+        foreach (string commandId in new[]
+                 {
+                     "toolbox.insertButton", "toolbox.insertSelected", "toolbox.showLoadTask", "toolbox.toggleView"
+                 })
+        {
+            Assert.True(context.CommandMetadata.TryGet(commandId, out CommandMetadata metadata), commandId);
+            Assert.False(string.IsNullOrWhiteSpace(metadata.Title), commandId);
+            Assert.Contains(contributions.CommandPaletteItems, item => item.CommandId == commandId);
+        }
     }
 
     [Fact]
@@ -88,17 +124,200 @@ public sealed class ToolboxExtensionTests
             new object?[] { "Button" },
             CancellationToken.None);
 
-        Assert.Contains(window.Messages, message => message.Contains("expects arguments"));
+        Assert.Contains(UiStrings.ToolboxArgumentsRequired, window.Messages);
+    }
+
+    [Fact]
+    public async Task InsertSelected_WithoutArguments_InsertsTheControlSelectedInTheToolbox()
+    {
+        CommandRegistry commands = new();
+        ExtensionContext context = CreateContext(commands, out StubDesignerHost designerHost, out InMemoryWindow window);
+        await context.Settings.UpdateAsync("toolbox.catalog", new List<ToolboxCatalogEntry>
+        {
+            new() { DisplayName = "Button", CommandId = "toolbox.insertSelected",
+                CommandArguments = new List<string> { "Button", "https://github.com/avaloniaui" } }
+        }, SettingsTarget.User, CancellationToken.None);
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("toolbox.insertSelected", null, CancellationToken.None);
+        Assert.Contains(UiStrings.ToolboxSelectionRequired, window.Messages);
+        Assert.Null(designerHost.LastTypeName);
+
+        ExtensionViewRegistry views = Assert.IsType<ExtensionViewRegistry>(context.Views);
+        Assert.True(views.TryGetCustomViewProvider("toolbox.panel", out ICustomViewProvider provider));
+        ToolboxPanelViewModel viewModel = Assert.IsType<ToolboxPanelViewModel>(provider.CreateViewModel());
+        viewModel.SelectedItem = Assert.Single(viewModel.Items);
+        await commands.ExecuteAsync("toolbox.insertSelected", null, CancellationToken.None);
+
+        Assert.Equal("Button", designerHost.LastTypeName);
+        Assert.Equal("https://github.com/avaloniaui", designerHost.LastXmlNamespace);
+        Assert.Null(designerHost.LastParentNodeId);
+    }
+
+    [Fact]
+    public async Task InsertAvailabilityTracksTheDesignerDocumentWithOrWithoutAWorkspace()
+    {
+        RecordingCommands commands = new();
+        InMemorySettingsStore settings = new();
+        await settings.UpdateAsync("toolbox.catalog", new List<ToolboxCatalogEntry>
+        {
+            new() { DisplayName = "Button", CommandId = "toolbox.insertSelected",
+                CommandArguments = new List<string> { "Button", "https://github.com/avaloniaui" } }
+        }, SettingsTarget.User, CancellationToken.None);
+        StubWorkspaceInfo workspace = new();
+        StubDesignerHost designer = new();
+        designer.SetActiveDocument(null);
+        using ToolboxPanelViewModel model = new(commands, settings, uiScheduler: ImmediateSequencer.Instance,
+            workspaceInfo: workspace, designer: designer);
+        model.SelectedItem = Assert.Single(model.Items);
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        // A loose XAML file opened without a project can receive controls as well.
+        designer.SetActiveDocument("test.axaml");
+        Assert.True(model.HasInsertTarget);
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        await model.InsertSelectedCommand.Execute().ToTask();
+        Assert.Equal("toolbox.insertSelected", commands.LastCommandId);
+        workspace.SetWorkspace("test.csproj");
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        designer.SetActiveDocument(null);
+        Assert.False(model.HasInsertTarget);
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+    }
+
+    [Fact]
+    public async Task MissingInsertTargetShowsAWarningWhenTheCommandIsInvokedDirectly()
+    {
+        CommandRegistry commands = new();
+        ExtensionContext context = CreateContext(commands, out StubDesignerHost designer, out InMemoryWindow window);
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+        designer.SetActiveDocument(null);
+        await commands.ExecuteAsync("toolbox.insertSelected", new object?[] { "Button", "https://github.com/avaloniaui" },
+            CancellationToken.None);
+        await commands.ExecuteAsync("toolbox.insertButton", null, CancellationToken.None);
+        Assert.Equal(new[] { UiStrings.DesignerDocumentRequired, UiStrings.DesignerDocumentRequired }, window.Messages);
+        Assert.Null(designer.LastTypeName);
+        // Without a workspace the active designer document still receives the control.
+        designer.SetActiveDocument("test.axaml");
+        Assert.IsType<StubWorkspaceInfo>(context.WorkspaceInfo).SetWorkspace(null);
+        await commands.ExecuteAsync("toolbox.insertButton", null, CancellationToken.None);
+        Assert.Equal(2, window.Messages.Count);
+        Assert.Equal("Button", designer.LastTypeName);
+    }
+
+    [Fact]
+    public async Task ADesignerDocumentBehindTheActiveTextEditorIsNoInsertTarget()
+    {
+        RecordingCommands recording = new();
+        InMemorySettingsStore settings = await CreateButtonCatalogSettingsAsync();
+        StubDesignerHost designer = new();
+        StubEditorServices editor = new();
+        editor.SetActiveDocument("notes.txt");
+        using ToolboxPanelViewModel model = new(recording, settings, uiScheduler: ImmediateSequencer.Instance,
+            designer: designer, editor: editor);
+        model.SelectedItem = Assert.Single(model.Items);
+        Assert.Equal("test.axaml", designer.ActiveDocumentPath);
+        Assert.False(model.HasInsertTarget);
+        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        editor.SetActiveDocument("test.axaml");
+        Assert.True(model.HasInsertTarget);
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+
+        // The command follows the same rule as the panel when it is invoked directly.
+        CommandRegistry commands = new();
+        ExtensionContext context = CreateContext(commands, out StubDesignerHost contextDesigner, out InMemoryWindow window);
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+        Assert.IsType<StubEditorServices>(context.Editor).SetActiveDocument("notes.txt");
+        await commands.ExecuteAsync("toolbox.insertSelected", new object?[] { "Button", "https://github.com/avaloniaui" },
+            CancellationToken.None);
+        Assert.Null(contextDesigner.LastTypeName);
+        Assert.Equal(UiStrings.DesignerDocumentRequired, Assert.Single(window.Messages));
+    }
+
+    [Fact]
+    public async Task InsertWorksWhileTheCatalogLoadsAndAfterAFailedPreferenceLoad()
+    {
+        RecordingCommands commands = new();
+        InMemorySettingsStore settings = await CreateButtonCatalogSettingsAsync();
+        ControllableControlCatalog catalog = new();
+        using ToolboxPanelViewModel model = new(commands, settings, catalog, ImmediateSequencer.Instance,
+            storage: new InMemoryExtensionStorage(), designer: new StubDesignerHost());
+        // The immediate sequencer would wait out the status dismissal delay inside the reload.
+        model.StatusDismissalScheduler = new VirtualClock();
+        // A cancelled load leaves the stored lists unread, which locks them but not the insertion.
+        await model.InitializePreferencesAsync(new CancellationToken(canceled: true));
+        Assert.NotNull(model.PreferenceError);
+        Assert.False(model.CanEditAssemblyVisibility);
+        Assert.False(model.CanEditCollapsedAssemblies);
+        Assert.False(model.CanEditFavoriteAssemblies);
+        model.SelectedItem = Assert.Single(model.Items);
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+
+        Task loading = model.ReloadAsync();
+        ControllableControlCatalog.Request request = await catalog.WaitForRequestAsync(0).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(model.IsLoading);
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        await model.InsertSelectedCommand.Execute().ToTask();
+        Assert.Equal("toolbox.insertSelected", commands.LastCommandId);
+        request.Complete();
+        await loading.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task ActivationShowsTheStandardControlsBeforeTheProjectScanFinishes()
+    {
+        ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
+        ReactiveUI.RxSchedulers.MainThreadScheduler = AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
+        ControllableControlCatalog catalog = new() { HasProjectAssemblies = true };
+        ExtensionContext context = CreateContext(new CommandRegistry(), out _, out _, catalog);
+        try
+        {
+            await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+            Assert.True(Assert.IsType<ExtensionViewRegistry>(context.Views)
+                .TryGetCustomViewProvider("toolbox.panel", out ICustomViewProvider provider));
+            ToolboxPanelViewModel model = Assert.IsType<ToolboxPanelViewModel>(provider.CreateViewModel());
+
+            ControllableControlCatalog.Request baseRequest = await catalog.WaitForRequestAsync(0).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(baseRequest.IncludeProjectControls);
+            baseRequest.Complete(ControllableControlCatalog.StandardControl("Button"));
+            ControllableControlCatalog.Request projectRequest = await catalog.WaitForRequestAsync(1).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(projectRequest.IncludeProjectControls);
+            // The standard controls show while the project scan still runs.
+            Assert.Equal("Button", Assert.Single(model.Items).DisplayName);
+            Assert.True(model.IsLoadingProjectControls);
+
+            projectRequest.Complete(ControllableControlCatalog.StandardControl("Button"),
+                ControllableControlCatalog.ProjectControl("ProjectButton"));
+            await model.PendingCatalogLoad.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(new[] { "Button", "ProjectButton" }, model.Items.Select(item => item.DisplayName).ToArray());
+            Assert.False(model.IsLoading);
+        }
+        finally
+        {
+            foreach (IDisposable subscription in context.Subscriptions) subscription.Dispose();
+            ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler;
+        }
+    }
+
+    private static async Task<InMemorySettingsStore> CreateButtonCatalogSettingsAsync()
+    {
+        InMemorySettingsStore settings = new();
+        await settings.UpdateAsync("toolbox.catalog", new List<ToolboxCatalogEntry>
+        {
+            new() { DisplayName = "Button", CommandId = "toolbox.insertSelected",
+                CommandArguments = new List<string> { "Button", "https://github.com/avaloniaui" } }
+        }, SettingsTarget.User, CancellationToken.None);
+        return settings;
     }
 
     private static ExtensionContext CreateContext(
         ICommands commands,
         out StubDesignerHost designerHost,
-        out InMemoryWindow window)
+        out InMemoryWindow window,
+        IControlCatalog? catalog = null)
     {
         window = new InMemoryWindow();
         designerHost = new StubDesignerHost();
-        StubWorkspaceInfo workspaceInfo = new();
+        StubWorkspaceInfo workspaceInfo = new() { WorkspacePath = "test.csproj" };
         StubWorkspaceCommands workspaceCommands = new();
         StubEditorServices editorServices = new();
         StubNavigationService navigation = new();
@@ -143,7 +362,10 @@ public sealed class ToolboxExtensionTests
             new InMemorySettingsStore(),
             new InMemoryExtensionStorage(),
             new StubExtensionLogger(),
-            new List<IDisposable>());
+            new List<IDisposable>())
+        {
+            ControlCatalog = catalog
+        };
     }
 
     private sealed class StubSystemIconService : ISystemIconService
@@ -204,7 +426,13 @@ public sealed class ToolboxExtensionTests
         public string? LastXmlNamespace { get; private set; }
         public string? LastParentNodeId { get; private set; }
 
-        public string? ActiveDocumentPath => "test.axaml";
+        public string? ActiveDocumentPath { get; private set; } = "test.axaml";
+
+        public void SetActiveDocument(string? path)
+        {
+            ActiveDocumentPath = path;
+            ActiveDocumentChanged?.Invoke(this, new DesignerDocumentChangedEventArgs(path));
+        }
 
         public event EventHandler<DesignerDocumentChangedEventArgs>? ActiveDocumentChanged;
 
@@ -443,6 +671,12 @@ public sealed class ToolboxExtensionTests
     {
         public string? WorkspacePath { get; set; }
         public event EventHandler<WorkspaceChangedEventArgs>? WorkspaceChanged;
+
+        public void SetWorkspace(string? path)
+        {
+            WorkspacePath = path;
+            WorkspaceChanged?.Invoke(this, new WorkspaceChangedEventArgs(path));
+        }
     }
 
     private sealed class StubWorkspaceCommands : IWorkspaceCommands
@@ -483,14 +717,34 @@ public sealed class ToolboxExtensionTests
         public Task NewTerminalAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
+    /// <summary>Editor whose active document matches the default document of <see cref="StubDesignerHost"/>.</summary>
     private sealed class StubEditorServices : IEditorServices
     {
-        public IEditorDocument? ActiveDocument => null;
+        public IEditorDocument? ActiveDocument { get; private set; } = new StubEditorDocument("test.axaml");
         public IReadOnlyList<IEditorDocument> GetOpenDocuments() => Array.Empty<IEditorDocument>();
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct) => Task.FromResult<IEditorDocument?>(null);
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct) => Task.FromResult<IEditorDocument?>(null);
         public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct) => Task.FromResult(false);
         public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
+
+        public void SetActiveDocument(string? path)
+        {
+            ActiveDocument = path is null ? null : new StubEditorDocument(path);
+            ActiveDocumentChanged?.Invoke(this, new EditorActiveDocumentChangedEventArgs { Document = ActiveDocument });
+        }
+    }
+
+    private sealed class StubEditorDocument(string filePath) : IEditorDocument
+    {
+        public string FilePath { get; } = filePath;
+        public string? LanguageId => null;
+        public int CaretOffset { get; set; }
+        public int SelectionStart { get; set; }
+        public int SelectionLength { get; set; }
+        public Task<string> GetTextAsync(CancellationToken ct) => Task.FromResult(string.Empty);
+        public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct) => Task.CompletedTask;
+        public event EventHandler<EditorDocumentChangedEventArgs>? Changed;
+        public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
     }
 
     private sealed class StubDiagnostics : IDiagnosticsService

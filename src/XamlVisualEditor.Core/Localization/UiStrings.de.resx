@@ -1254,4 +1254,48 @@
   <data name="MixedValuesPlaceholder" xml:space="preserve"><value>Unterschiedliche Werte</value></data>
   <data name="ToggleProperties" xml:space="preserve"><value>Eigenschaften ein-/ausblenden</value></data>
   <data name="TogglePropertiesCommand" xml:space="preserve"><value>Ansicht: Eigenschaften ein-/ausblenden</value></data>
+  <data name="AllLibraries" xml:space="preserve"><value>Alle Bibliotheken</value></data>
+  <data name="Assemblies" xml:space="preserve"><value>Assemblies</value></data>
+  <data name="CannotInsertControl" xml:space="preserve"><value>{0} kann nicht eingefügt werden: {1}</value></data>
+  <data name="ClassifyingProjectControls" xml:space="preserve"><value>Verfügbare Controls werden ermittelt...</value></data>
+  <data name="CollapseAllAssemblies" xml:space="preserve"><value>Alle Assemblies zuklappen</value></data>
+  <data name="ControlCatalogNotLoaded" xml:space="preserve"><value>Controlkatalog noch nicht geladen.</value></data>
+  <data name="ControlCatalogUnavailable" xml:space="preserve"><value>In diesem Host ist kein Projekt-Controlkatalog verfügbar.</value></data>
+  <data name="ControlDiscoveryCanceled" xml:space="preserve"><value>Control-Ermittlung abgebrochen.</value></data>
+  <data name="ControlDiscoveryCancelling" xml:space="preserve"><value>Wird abgebrochen...</value></data>
+  <data name="ControlInsertFailed" xml:space="preserve"><value>Einfügen fehlgeschlagen. Prüfe, ob ein Designer-Dokument aktiv ist und die Argumente gültig sind.</value></data>
+  <data name="ControlsAvailable" xml:space="preserve"><value>{0} Controls verfügbar.</value></data>
+  <data name="CustomEntries" xml:space="preserve"><value>Eigene Einträge</value></data>
+  <data name="DesignerDocumentRequired" xml:space="preserve"><value>Kein aktives Designer-Dokument. Öffne zunächst ein XAML-Designer-Dokument.</value></data>
+  <data name="ExpandAllAssemblies" xml:space="preserve"><value>Alle Assemblies aufklappen</value></data>
+  <data name="FavoriteAssemblyKeep" xml:space="preserve"><value>Diese Assembly oben bei den Favoriten anzeigen</value></data>
+  <data name="FavoriteAssemblyRemove" xml:space="preserve"><value>Assembly aus den Favoriten entfernen</value></data>
+  <data name="FavoriteFormat" xml:space="preserve"><value>Favorit: {0}</value></data>
+  <data name="HideAll" xml:space="preserve"><value>Alle ausblenden</value></data>
+  <data name="InsertButton" xml:space="preserve"><value>Button einfügen</value></data>
+  <data name="InsertSelected" xml:space="preserve"><value>Auswahl einfügen</value></data>
+  <data name="InsertSelectedToolboxItem" xml:space="preserve"><value>Ausgewählten Toolbox-Eintrag einfügen</value></data>
+  <data name="LoadingProjectControls" xml:space="preserve"><value>Projekt-Controls werden geladen...</value></data>
+  <data name="LoadProjectControls" xml:space="preserve"><value>Projekt-Controls laden</value></data>
+  <data name="NoMatchingControls" xml:space="preserve"><value>Keine passenden Controls</value></data>
+  <data name="ReadingControlAssembly" xml:space="preserve"><value>Assembly {0} von {1}: {2}</value></data>
+  <data name="RetryControlDiscovery" xml:space="preserve"><value>Wiederholen</value></data>
+  <data name="SearchControlsHint" xml:space="preserve"><value>Controls, Namensräume, Assemblies und Kategorien suchen</value></data>
+  <data name="ShowAll" xml:space="preserve"><value>Alle anzeigen</value></data>
+  <data name="Toolbox" xml:space="preserve"><value>Toolbox</value></data>
+  <data name="ToolboxArgumentsRequired" xml:space="preserve"><value>toolbox.insertSelected erwartet folgende Argumente: [typeName, xmlNamespace, optional parentNodeId].</value></data>
+  <data name="ToolboxErrorDetails" xml:space="preserve"><value>Details...</value></data>
+  <data name="ToolboxFileReadFailed" xml:space="preserve"><value>Eine Assembly konnte nicht gelesen werden.</value></data>
+  <data name="ToolboxInsertButton" xml:space="preserve"><value>Toolbox: Button einfügen</value></data>
+  <data name="ToolboxInsertSelected" xml:space="preserve"><value>Toolbox: Auswahl einfügen</value></data>
+  <data name="ToolboxTaskFailed" xml:space="preserve"><value>Die Suche nach Projekt-Controls ist fehlgeschlagen.</value></data>
+  <data name="WorkspaceAssemblies" xml:space="preserve"><value>Assemblies in diesem Arbeitsbereich</value></data>
+  <data name="ToolboxAssembliesEnabled" xml:space="preserve"><value>{0} von {1} Assemblies für diesen Workspace aktiviert</value></data>
+  <data name="ToolboxPreferencesLoadFailed" xml:space="preserve"><value>Die Toolbox-Einstellungen können nicht geladen werden: {0}</value></data>
+  <data name="ToolboxPreferencesSaveFailed" xml:space="preserve"><value>Die Toolbox-Einstellungen können nicht gespeichert werden: {0}</value></data>
+  <data name="LoadingStandardControls" xml:space="preserve"><value>Standard-Controls werden geladen...</value></data>
+  <data name="ToolboxShowLoadTask" xml:space="preserve"><value>Toolbox: Control-Ermittlung anzeigen</value></data>
+  <data name="ToggleToolbox" xml:space="preserve"><value>Toolbox ein-/ausblenden</value></data>
+  <data name="ToggleToolboxCommand" xml:space="preserve"><value>Ansicht: Toolbox ein-/ausblenden</value></data>
+  <data name="ToolboxSelectionRequired" xml:space="preserve"><value>Kein Toolbox-Eintrag ausgewählt. Wähle zunächst ein Control in der Toolbox aus.</value></data>
 </root>

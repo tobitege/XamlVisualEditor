@@ -1254,4 +1254,48 @@
   <data name="MixedValuesPlaceholder" xml:space="preserve"><value>Mixed values</value></data>
   <data name="ToggleProperties" xml:space="preserve"><value>Toggle Properties</value></data>
   <data name="TogglePropertiesCommand" xml:space="preserve"><value>View: Toggle Properties</value></data>
+  <data name="AllLibraries" xml:space="preserve"><value>All libraries</value></data>
+  <data name="Assemblies" xml:space="preserve"><value>Assemblies</value></data>
+  <data name="CannotInsertControl" xml:space="preserve"><value>Cannot insert {0}: {1}</value></data>
+  <data name="ClassifyingProjectControls" xml:space="preserve"><value>Finding available controls...</value></data>
+  <data name="CollapseAllAssemblies" xml:space="preserve"><value>Collapse all assemblies</value></data>
+  <data name="ControlCatalogNotLoaded" xml:space="preserve"><value>Control catalog not loaded yet.</value></data>
+  <data name="ControlCatalogUnavailable" xml:space="preserve"><value>No project control catalog is available in this host.</value></data>
+  <data name="ControlDiscoveryCanceled" xml:space="preserve"><value>Control discovery cancelled.</value></data>
+  <data name="ControlDiscoveryCancelling" xml:space="preserve"><value>Cancelling...</value></data>
+  <data name="ControlInsertFailed" xml:space="preserve"><value>Insert failed. Ensure an active designer document is open and arguments are valid.</value></data>
+  <data name="ControlsAvailable" xml:space="preserve"><value>{0} controls available.</value></data>
+  <data name="CustomEntries" xml:space="preserve"><value>Custom entries</value></data>
+  <data name="DesignerDocumentRequired" xml:space="preserve"><value>No active designer document. Open a XAML designer document first.</value></data>
+  <data name="ExpandAllAssemblies" xml:space="preserve"><value>Expand all assemblies</value></data>
+  <data name="FavoriteAssemblyKeep" xml:space="preserve"><value>Keep this assembly with favorites at the top</value></data>
+  <data name="FavoriteAssemblyRemove" xml:space="preserve"><value>Remove assembly from favorites</value></data>
+  <data name="FavoriteFormat" xml:space="preserve"><value>Favorite {0}</value></data>
+  <data name="HideAll" xml:space="preserve"><value>Hide all</value></data>
+  <data name="InsertButton" xml:space="preserve"><value>Insert Button</value></data>
+  <data name="InsertSelected" xml:space="preserve"><value>Insert Selected</value></data>
+  <data name="InsertSelectedToolboxItem" xml:space="preserve"><value>Insert Selected Toolbox Item</value></data>
+  <data name="LoadingProjectControls" xml:space="preserve"><value>Loading project controls...</value></data>
+  <data name="LoadProjectControls" xml:space="preserve"><value>Load project controls</value></data>
+  <data name="NoMatchingControls" xml:space="preserve"><value>No matching controls</value></data>
+  <data name="ReadingControlAssembly" xml:space="preserve"><value>Assembly {0} of {1}: {2}</value></data>
+  <data name="RetryControlDiscovery" xml:space="preserve"><value>Retry</value></data>
+  <data name="SearchControlsHint" xml:space="preserve"><value>Search controls, namespaces, assemblies and categories</value></data>
+  <data name="ShowAll" xml:space="preserve"><value>Show all</value></data>
+  <data name="Toolbox" xml:space="preserve"><value>Toolbox</value></data>
+  <data name="ToolboxArgumentsRequired" xml:space="preserve"><value>toolbox.insertSelected expects arguments: [typeName, xmlNamespace, optional parentNodeId].</value></data>
+  <data name="ToolboxErrorDetails" xml:space="preserve"><value>Details...</value></data>
+  <data name="ToolboxFileReadFailed" xml:space="preserve"><value>An assembly could not be read.</value></data>
+  <data name="ToolboxInsertButton" xml:space="preserve"><value>Toolbox: Insert Button</value></data>
+  <data name="ToolboxInsertSelected" xml:space="preserve"><value>Toolbox: Insert Selected</value></data>
+  <data name="ToolboxTaskFailed" xml:space="preserve"><value>Project control discovery failed.</value></data>
+  <data name="WorkspaceAssemblies" xml:space="preserve"><value>Assemblies in this workspace</value></data>
+  <data name="ToolboxAssembliesEnabled" xml:space="preserve"><value>{0} of {1} assemblies enabled for this workspace</value></data>
+  <data name="ToolboxPreferencesLoadFailed" xml:space="preserve"><value>Cannot load the toolbox preferences: {0}</value></data>
+  <data name="ToolboxPreferencesSaveFailed" xml:space="preserve"><value>Cannot save the toolbox preferences: {0}</value></data>
+  <data name="LoadingStandardControls" xml:space="preserve"><value>Loading standard controls...</value></data>
+  <data name="ToolboxShowLoadTask" xml:space="preserve"><value>Toolbox: Show Control Discovery</value></data>
+  <data name="ToggleToolbox" xml:space="preserve"><value>Toggle Toolbox</value></data>
+  <data name="ToggleToolboxCommand" xml:space="preserve"><value>View: Toggle Toolbox</value></data>
+  <data name="ToolboxSelectionRequired" xml:space="preserve"><value>No toolbox item selected. Select a control in the toolbox first.</value></data>
 </root>

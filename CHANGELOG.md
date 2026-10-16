@@ -7,6 +7,20 @@ uses Semantic Versioning.
 
 ### Added
 
+- The Git extension shows the branch of the workspace repository in the status bar, with the commits ahead of and behind its upstream and the number of changed files, for example `main ↑1 ↓2 · 5`; a click opens the Git Changes panel. The panel is listed under View › Panels, Ctrl+Shift+G opens it, and the Extensions › Git submenu and the Command Palette offer refresh, the "Git" output channel, stage all, unstage all, commit and creating a repository. Stage, unstage and discard (after a confirmation) are also in the Git submenu of the editor context menu and work on the active document; the output channel lists every git command the extension runs, with user names and passwords in URLs masked. Extensions can read the context keys `git.available`, `git.isRepository`, `git.hasRemote`, `git.hasUpstream`, `git.isMerging`, `git.hasConflicts` and `git.autoRefresh`.
+
+### Changed
+
+- The Git panel shows the status without being switched on first: the status refreshes when the git folder changes, for example after a branch switch in a terminal, and after every Git command of the editor. The panel switch, now "Watch: On/Off" and the menu item Extensions › Git › Watch Working Folder, only controls the watcher of the working folder, which is off by default and remembered. The panel is titled "Git Changes", and its buttons show icons.
+
+### Fixed
+
+- Fixed the Git panel listing files whose names contain characters outside ASCII, such as umlauts, as quoted escape sequences, after which staging, unstaging and discarding them failed: Git writes the names unquoted and its output is read as UTF-8. Reading the status no longer writes the Git index. Commit messages reach Git through standard input, so their length is not limited by the command line.
+
+## [0.2.0] - 2026-10-16
+
+### Added
+
 - Added a coordinate strip below the design surface and the external previewer. It shows, in logical pixels relative to the root element, the pixel under the pointer (also outside the root within the viewport), the element under the pointer as `Type#Name`, the position and size of the selection with its change while moving or resizing, a distance measured with the new measure tool, and the zoom level. A click copies a value as `x,y`, `x,y,width,height` or `dx,dy`. The rulers mark the pixel under the pointer.
 - The viewport toolbar has toggle buttons for the grid, the rulers and the coordinate strip, and the viewport settings set the grid size. The visible grid and snapping use the same size; at small zoom levels the grid thins out its lines. Grid, snapping, grid size, rulers and coordinate strip are stored as `DesignerViewport` in `editor-options.json` and apply to all designer documents.
 - The zoom level keeps whole percentages; fitting to the viewport rounds down.
@@ -23,7 +37,6 @@ uses Semantic Versioning.
 - The categories of the Properties panel collapse and expand one by one or all at once, and a filter shows a single category, which stays selected when the selection changes. The option to collapse the other categories (`propertyEditor.collapseOtherCategories`, on by default) starts the panel with only the essential properties and the local values expanded. Flag enumerations are edited with check boxes, numbers and grid lengths with their unit, and a property can be set to null or reset; emptying the field of a value-type property removes its assignment. Property elements, collections, templates and Grid row and column definitions open in a structure editor that adds, moves and removes elements and attributes; the Events section sets, opens and removes event handlers. The local-values filter also keeps the unset essential properties, such as Width and Height, in the grouped and in the flat list, and the flat list starts with the essential properties in the order of their group. Text fields write their value on Enter or when they lose focus instead of on every keystroke.
 - Added the optional Flowery.NET theme extension, a separate extension package that offers the Flowery.NET palettes as editor themes and as preview themes; it does not change the editor's application theme and ships its own `Flowery.NET.dll`.
 - The Toolbox groups the controls by assembly with its version and lists the controls of the workspace's own projects separately from the standard controls. Library, category and search filters narrow the list. Assemblies can be marked as favorites, which applies to every workspace, and hidden or collapsed, which each workspace remembers. The standard controls are available while the project controls load; that load shows its progress and can be cancelled and retried. Inserting a control needs only the active designer document, also during a load.
-- The Command Palette lists every command of the built-in extensions with a title, including the panel toggles of the View menu, the edit and navigation commands and the debugger panels. "Set Startup Project" asks for the project when it runs without one.
 - Added the Window menu with the window layout commands, which leave the View menu, and a Manage Layouts dialog that renames and deletes saved layouts.
 - Extensions can contribute to the editor context menu (`ExtensionMenuLocations.EditorContext`), group menu items into submenus (`ExtensionMenuContribution.Submenu` and `SubmenuGroup`), show check marks that follow a condition (`ExtensionMenuContribution.CheckedWhen`) over their own context keys (`ExtensionContext.ContextKeys`), set selection and caret in one step (`IEditorDocument.SetSelection`), limit a keybinding to the focused text editor (`CommandMetadata.KeybindingScope`) and set editor view options and actions through `ExtensionContext.TextEditorView`; `textEditor.hasActiveEditor` tells whether the active document shows an editor.
 - Read-only files show a banner and a title marker in the editor.
@@ -32,7 +45,6 @@ uses Semantic Versioning.
 - The XAML code editor marks the element selected in the designer with an arrow at its first line and a bar along its lines in the gutter, and a selection in the designer scrolls the element start away from the viewport edge. The "Follow" toggle in the code editor toolbar turns this off.
 - An interceptor cancels the open by throwing `OperationCanceledException`. Extensions show a modal, cancellable progress dialog through `ProgressDialogRequest` while long work runs.
 - The Problems panel restates common XAML loader errors of the external previewer in plain words and points to their source position: an invalid value names its attribute and, for an enumeration, the allowed values; an unknown property or element names the misspelled name; text that a panel or a single-child element cannot hold is named and marked; a second child of a single-child element names the property that takes it.
-- The Git extension shows the branch of the workspace repository in the status bar, with the commits ahead of and behind its upstream and the number of changed files, for example `main ↑1 ↓2 · 5`; a click opens the Git Changes panel. The panel is listed under View › Panels, Ctrl+Shift+G opens it, and the Extensions › Git submenu and the Command Palette offer refresh, the "Git" output channel, stage all, unstage all, commit and creating a repository. Stage, unstage and discard (after a confirmation) are also in the Git submenu of the editor context menu and work on the active document; the output channel lists every git command the extension runs, with user names and passwords in URLs masked. Extensions can read the context keys `git.available`, `git.isRepository`, `git.hasRemote`, `git.hasUpstream`, `git.isMerging`, `git.hasConflicts` and `git.autoRefresh`.
 
 ### Changed
 
@@ -43,6 +55,7 @@ uses Semantic Versioning.
 - A tab keeps its view while it is hidden: switching tabs no longer rebuilds panels and editors, so scroll positions, expanded nodes and editor state stay. The view of a closed tab is released.
 - The first start and the reset layout command use the Debugging preset instead of a layout with every panel. A layout preset contains only the panels it lists, instead of hiding the others.
 - The edit menu separates its groups; the navigation commands follow the editing commands in the group `5.navigation` instead of `navigation`.
+- The Command Palette lists every command of the built-in extensions with a title, including the panel toggles of the View menu, the edit and navigation commands and the debugger panels. "Set Startup Project" asks for the project when it runs without one.
 - Tests that depend on file-system case sensitivity probe the test directory instead of assuming it from the operating system.
 - Fixed the external previewer failing with "Unable to resolve type DesignNodeIdentity" for projects whose output does not contain the editor assemblies: the previewer host now loads the assembly of the design node identity properties from the editor directory before it compiles the XAML.
 - Fixed the external previewer reporting "Design tree unavailable: Ambiguous match found" for controls that hide an inherited property with `new`, such as a Padding of their own type: the design tree reader walks the type hierarchy and takes the Avalonia Thickness declaration of Padding.
@@ -71,7 +84,6 @@ uses Semantic Versioning.
 - The MCP server negotiates the protocol version with the client (2025-11-25, 2025-06-18 and 2025-03-26 over HTTP, additionally 2024-11-05 over stdio) and accepts JSON-RPC batches.
 - The IDE bridge binds sessions to the open workspace and stores consent per workspace as an access level; session tokens are no longer stored or shown in the IDE bridge panel. Consent stored by an earlier version is read as read-only access.
 - Discarding changes in the Git panel restores the working file from the index and keeps staged changes and staged new files; unstaging no longer asks for confirmation.
-- The Git panel shows the status without being switched on first: the status refreshes when the git folder changes, for example after a branch switch in a terminal, and after every Git command of the editor. The panel switch, now "Watch: On/Off" and the menu item Extensions › Git › Watch Working Folder, only controls the watcher of the working folder, which is off by default and remembered. The panel is titled "Git Changes", and its buttons show icons.
 - The extension manager shows the capabilities an extension declares.
 - The CDP debug diagnostics are enabled with the MSBuild property `EnableCdpDiagnostics=true` instead of the Debug configuration and require the token written to the log at startup.
 - At most four external previewer hosts run at the same time: the active document and the three most recently active ones.
@@ -109,7 +121,6 @@ uses Semantic Versioning.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
 - Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
 - Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
-- Fixed the Git panel listing files whose names contain characters outside ASCII, such as umlauts, as quoted escape sequences, after which staging, unstaging and discarding them failed: Git writes the names unquoted and its output is read as UTF-8. Reading the status no longer writes the Git index. Commit messages reach Git through standard input, so their length is not limited by the command line.
 - Fixed the preview theme selector showing the raw provider id of a saved theme before the previewer reported its themes: the entry names the theme and says that it waits for the preview, and it shows the theme as unavailable once the previewer exits, fails to start or its start is cancelled at the trust prompt without reporting it, also after switching document tabs, until a previewer starts again. When several theme providers are registered, or the saved theme belongs to another provider than the registered one, the entry also names the provider. Selecting another entry removes the waiting entry.
 - Fixed the preview strip waiting for a first frame after the previewer start was cancelled at the trust prompt; it says that the start was cancelled until a previewer starts again. Switching back to the document no longer asks for trust again; turning the previewer off and on starts it again.
 - Fixed the untranslated "Theme default" entry of the preview theme selector; it reads "Project default" and follows the UI language ("Projektstandard" in German).
@@ -179,5 +190,6 @@ uses Semantic Versioning.
 - Linux, Windows, and macOS release archives for x64 and Arm64.
 - Source-linked NuGet packages and symbol packages.
 
-[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v0.1.0

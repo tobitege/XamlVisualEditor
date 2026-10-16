@@ -8,8 +8,8 @@ Umgesetzt wird im TFVC-Arbeitsstand `XamlVisualEditor`, exportiert per Abgleichs
 
 | Phase | Stand |
 |---|---|
-| 0 CLI-Fundament | in Arbeit |
-| 1 Session, Statusleiste, Kommandos | offen |
+| 0 CLI-Fundament | erledigt, live geprüft |
+| 1 Session, Statusleiste, Kommandos | in Arbeit |
 | 2 Branches und Sync | offen |
 | 3 Verlauf, Commit-Details, Tags | offen |
 | 4 Explorer-API | offen |
@@ -17,6 +17,8 @@ Umgesetzt wird im TFVC-Arbeitsstand `XamlVisualEditor`, exportiert per Abgleichs
 | 6 Feinere Commits, Stash | offen |
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
+
+UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 
 Entscheidung zu 1.4: Der `.git`-Watcher und das Aktualisieren nach eigenen Kommandos laufen immer; der rekursive
 Arbeitsverzeichnis-Watcher bleibt ein Schalter.
@@ -31,6 +33,7 @@ Analysiert am Quellstand des Branches `xve-form-editing`. Nichts wurde geändert
    - **Host-Erweiterungspunkte** (generisch, auch von TFVC nutzbar): Explorer-Dekorationen, Explorer-/Tab-Kontextmenüs, Editor-Zeilenmarker, Extension-Dokument-Tabs.
    - **UI-Bausteine** im neuen Projekt `src/XamlVisualEditor.SourceControl.UI`, weil `extensions/XamlVisualEditor.GitExtension/Controls/GitDiffTextEditor.cs` und `extensions/XamlVisualEditor.TfvcExtension/Controls/TfvcDiffTextEditor.cs` heute zu etwa 95 % identisch sind.
 4. **Live-Überwachung wird eine persistierte Einstellung `git.autoRefresh` (Vorgabe ein).** Statusleiste und Dekorationen brauchen einen Status. Der heutige Opt-in-Schalter (`GitPanelViewModel.IsGitMonitoringEnabled`, laut Commit 8545ffc aus Performance-Gründen eingeführt) bleibt als Schalter für den rekursiven Arbeitsverzeichnis-Watcher; der `.git`-Watcher (HEAD, index, refs) und das Aktualisieren nach eigenen Kommandos laufen immer. Diese Verhaltensänderung braucht deine Zustimmung, weil der Test `Git_remains_off_until_enabled_and_cancels_running_scan` angepasst werden muss.
+   Abweichung in Phase 1: `git.autoRefresh` steht in der Vorgabe auf aus, wie der bisherige Opt-in-Schalter, weil der Schalter nur noch den rekursiven Watcher steuert, dessen Kosten der Grund für das Opt-in waren; Status, Statusleiste und Context-Keys sind ohne ihn aktuell.
 5. **Merge passt in den ersten PR.** Konfliktlösung ist ohnehin gefordert, und `git merge --no-edit <branch>` ist billig. Rebase kommt später.
 6. **3-Wege-Merge-Editor ist nicht billig, kommt später.** Im ersten PR: Konfliktliste, „eigene/fremde Version übernehmen“ pro Datei, „als gelöst markieren“, Merge abbrechen, Konfliktmarker im Gutter.
 7. **Blame ist machbar:** `git blame --porcelain --contents -` mit dem Editorinhalt über stdin, damit auch ungespeicherte Zeilen korrekt als „noch nicht committet“ erscheinen. Anzeige als Dokument-Tab mit eigener Annotation-Margin.
@@ -62,6 +65,7 @@ Neue Interfaces in `Interfaces/`, jeweils mit `repoPath` pro Aufruf wie `IGitSer
 | `IGitContentService` | `GetFileContentAsync(repo, path, GitRevision.Index/Head/Sha)` → `byte[]?`, `IsLfsTrackedAsync` |
 | `IGitMergeService` | `MergeAsync(branch)` → `GitMergeResult`, `AbortAsync`, `TakeOursAsync/TakeTheirsAsync/MarkResolvedAsync(paths)` |
 | `IGitCommandLog` | Ereignis `CommandCompleted(GitCommandLogEntry)`; die Extension schreibt es in den Output-Kanal „Git“ |
+| `IGitRepositoryService` | `GetGitDirectoryAsync(repo)`, `GetRemoteNamesAsync(repo)`, `InitAsync(path)`; in Phase 1 ergänzt, weil Session (`.git`-Watcher, `git.hasRemote`) und `git.init` sie brauchen |
 
 Modelle: neue Datei `GitHistoryModels.cs` (`GitCommitInfo`, `GitCommitDetails`, `GitCommitFileChange`, `GitLogQuery`, `GitBranch`, `GitStashEntry`, `GitTag`, `GitBlameLine`, `GitRawDiff`, `GitRemoteResult`, `GitMergeResult`, `GitServiceSet` als Parameterobjekt mit den Interfaces). `GitModels.cs` additiv: `GitRepositoryStatus.HeadSha`, `IsDetached`, `IsUnborn`, `Operation` (None/Merging/Rebasing/CherryPicking/Reverting), `GitFileChange.IsConflicted` und `ConflictKind`.
 
@@ -190,7 +194,7 @@ Menüorte: EX = Explorer-Kontext, ED = Editor-Kontext, TAB = Tab-Kontext, jeweil
 | `git.refresh` | Git-Status aktualisieren | Ext › Git | 1 |
 | `git.showOutput` | Git-Ausgabe anzeigen | Ext › Git | 1 |
 | `git.init` | Repository initialisieren (When `!git.isRepository`) | Ext › Git | 1 |
-| `git.toggleAutoRefresh` | Live-Überwachung (CheckedWhen) | Ext › Git | 1 |
+| `git.toggleAutoRefresh` | Arbeitsordner überwachen (CheckedWhen; Titel statt „Live-Überwachung“, weil er nur den Arbeitsordner-Watcher schaltet) | Ext › Git | 1 |
 | `git.stage` / `git.unstage` | Datei stagen / Aus dem Stage nehmen | EX, ED, TAB | 1 |
 | `git.discard` | Änderungen verwerfen … (mit Bestätigung) | EX, ED | 1 |
 | `git.stageAll` / `git.unstageAll` | Alles stagen / Alles aus dem Stage nehmen | Ext › Git | 1 |

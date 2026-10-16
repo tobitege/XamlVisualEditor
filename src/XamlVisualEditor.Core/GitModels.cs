@@ -209,3 +209,18 @@ public enum GitDiffLineKind
     Removed,
     NoNewline
 }
+
+/// <summary>
+/// Describes a git command that finished, as reported by <see cref="Interfaces.IGitCommandLog"/>.
+/// </summary>
+/// <param name="WorkingDirectory">The folder git ran in.</param>
+/// <param name="Arguments">The arguments of the command, without the options every git process gets.</param>
+/// <param name="ExitCode">The exit code of git.</param>
+/// <param name="Duration">The time from the start of the process to its end.</param>
+/// <param name="ErrorOutput">The trimmed standard error output; empty when git wrote nothing there.</param>
+public sealed record GitCommandLogEntry(
+    string WorkingDirectory,
+    IReadOnlyList<string> Arguments,
+    int ExitCode,
+    TimeSpan Duration,
+    string ErrorOutput);

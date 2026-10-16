@@ -3,12 +3,16 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
+using System.Windows.Input;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ReactiveUI;
 using Xunit;
 using XamlVisualEditor.GitExtension;
 using XamlVisualEditor.GitExtension.Controls;
@@ -26,21 +30,21 @@ namespace XamlVisualEditor.Tests.UI;
 
 public sealed class GitPanelViewTests
 {
+    private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(10);
+
     [AvaloniaFact]
     public async Task Git_refresh_coalesces_overlapping_requests()
     {
         ControlledGitService gitService = new();
         using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo());
 
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
-        Task firstRefresh = vm.RefreshAsync();
-        await gitService.FirstStatusStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await vm.RefreshAsync();
-        await vm.RefreshAsync();
+        // The panel's own session reads the status on creation; that first status call blocks.
+        await gitService.FirstStatusStarted.Task.WaitAsync(WaitLimit);
+        Task second = vm.RefreshAsync();
+        Task third = vm.RefreshAsync();
         Assert.Equal(1, gitService.StatusCalls);
         gitService.ReleaseFirstStatus.TrySetResult(true);
-        await firstRefresh;
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
+        await Task.WhenAll(second, third).WaitAsync(WaitLimit);
 
         Assert.Equal(1, gitService.RootCalls);
         Assert.Equal(2, gitService.StatusCalls);
@@ -48,26 +52,49 @@ public sealed class GitPanelViewTests
     }
 
     [AvaloniaFact]
-    public async Task Git_remains_off_until_enabled_and_cancels_running_scan()
+    public async Task Status_is_read_without_the_working_folder_watcher_and_dispose_cancels_a_running_scan()
     {
-        ControlledGitService gitService = new();
+        ControlledGitService blocked = new();
+        GitPanelViewModel scanning = new(blocked, new TestWorkspaceInfo());
+        await blocked.FirstStatusStarted.Task.WaitAsync(WaitLimit);
+        Assert.False(scanning.IsGitMonitoringEnabled);
+        scanning.Dispose();
+        await blocked.FirstStatusCancelledSignal.Task.WaitAsync(WaitLimit);
+        Assert.True(blocked.FirstStatusCancelled);
+        Assert.Equal(1, blocked.RootCalls);
+        Assert.Equal(1, blocked.StatusCalls);
+
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
         using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo());
+        await vm.WhenAnyValue(x => x.IsRepository).FirstAsync(isRepository => isRepository).Timeout(WaitLimit);
 
         Assert.False(vm.IsGitMonitoringEnabled);
-        await vm.RefreshAsync();
-        Assert.Equal(0, gitService.RootCalls);
-
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
-        Task scan = vm.RefreshAsync();
-        await gitService.FirstStatusStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
-        await scan;
-        await vm.RefreshAsync();
-
-        Assert.False(vm.IsGitMonitoringEnabled);
-        Assert.Equal(1, gitService.RootCalls);
         Assert.Equal(1, gitService.StatusCalls);
-        Assert.True(gitService.FirstStatusCancelled);
+        Assert.Equal(2, vm.StagedCount);
+        Assert.Equal(2, vm.UnstagedCount);
+    }
+
+    [AvaloniaFact]
+    public async Task Watcher_switch_only_controls_the_working_folder_watcher()
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
+        using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo());
+        await vm.WhenAnyValue(x => x.IsRepository).FirstAsync(isRepository => isRepository).Timeout(WaitLimit);
+        Assert.Equal(UiStrings.GitMonitoringOff, vm.GitMonitoringLabel);
+
+        await vm.ToggleMonitoringCommand.Execute().ToTask();
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+        Assert.True(vm.IsGitMonitoringEnabled);
+        Assert.Equal(UiStrings.GitMonitoringOn, vm.GitMonitoringLabel);
+        // Switching the watcher on reads the status once, because files may have changed while it was off.
+        Assert.Equal(2, gitService.StatusCalls);
+
+        await vm.ToggleMonitoringCommand.Execute().ToTask();
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+        Assert.False(vm.IsGitMonitoringEnabled);
+        Assert.True(vm.IsRepository);
+        Assert.Equal(2, gitService.StatusCalls);
+        Assert.Equal(2, vm.StagedCount);
     }
 
     [AvaloniaFact]
@@ -76,7 +103,6 @@ public sealed class GitPanelViewTests
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
         RecordingDialogHost dialogs = new();
         using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
         await vm.RefreshAsync();
         await Dispatcher.UIThread.InvokeAsync(() => { });
 
@@ -97,7 +123,6 @@ public sealed class GitPanelViewTests
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
         RecordingDialogHost dialogs = new();
         using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
         await vm.RefreshAsync();
         await Dispatcher.UIThread.InvokeAsync(() => { });
 
@@ -125,7 +150,6 @@ public sealed class GitPanelViewTests
         };
         RecordingDialogHost dialogs = new() { Confirm = true };
         using GitPanelViewModel vm = new(gitService, new TestWorkspaceInfo(), dialogs);
-        await vm.ToggleMonitoringCommand.Execute().ToTask();
         await vm.RefreshAsync();
         await Dispatcher.UIThread.InvokeAsync(() => { });
 
@@ -166,11 +190,11 @@ public sealed class GitPanelViewTests
             {
                 view.ApplyTemplate();
                 ToggleButton toggle = Assert.Single(view.GetVisualDescendants().OfType<ToggleButton>(),
-                    button => Equals(button.Content, vm.GitMonitoringLabel));
+                    button => ReferenceEquals(button.Command, vm.ToggleMonitoringCommand));
                 Assert.False(toggle.IsChecked);
-                Assert.Equal(vm.GitMonitoringLabel, toggle.Content);
+                Assert.Contains(toggle.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == vm.GitMonitoringLabel);
                 Button discard = Assert.Single(view.GetVisualDescendants().OfType<Button>(),
-                    button => Equals(button.Content, UiStrings.Discard));
+                    button => ReferenceEquals(button.Command, vm.DiscardCommand));
                 Assert.True(ToolTip.GetShowOnDisabled(discard));
                 Assert.Equal(UiStrings.GitDiscardTooltip, ToolTip.GetTip(discard));
                 GitDiffTextEditor? editor = view.GetVisualDescendants().OfType<GitDiffTextEditor>().FirstOrDefault();
@@ -224,6 +248,41 @@ public sealed class GitPanelViewTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Every_panel_button_has_an_icon_a_label_and_a_tooltip()
+    {
+        using GitPanelViewModel vm = new();
+        GitPanelView view = new() { DataContext = vm };
+        Window window = await ShowInWindowAsync(view, width: 1400);
+        try
+        {
+            ICommand[] commands =
+            [
+                vm.RefreshCommand, vm.ToggleDiffCommand, vm.ToggleMonitoringCommand, vm.StageCommand,
+                vm.UnstageCommand, vm.DiscardCommand, vm.StageAllCommand, vm.UnstageAllCommand, vm.CommitCommand
+            ];
+            Button[] buttons = view.GetVisualDescendants().OfType<Button>()
+                .Where(button => button.Command is not null)
+                .ToArray();
+            Assert.Equal(commands.Length, buttons.Length);
+
+            foreach (ICommand command in commands)
+            {
+                Button button = Assert.Single(buttons, candidate => ReferenceEquals(candidate.Command, command));
+                PathIcon icon = Assert.Single(button.GetVisualDescendants().OfType<PathIcon>());
+                Assert.NotNull(icon.Data);
+                Assert.False(icon.IsSet(TemplatedControl.ForegroundProperty));
+                Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => !string.IsNullOrWhiteSpace(text.Text));
+                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
+                Assert.IsType<string>(ToolTip.GetTip(button));
+            }
+        }
+        finally
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => window.Close());
+        }
+    }
+
     private static async Task<Window> ShowInWindowAsync(Control control, double width = 900, double height = 600)
     {
         Window window = new()
@@ -266,6 +325,7 @@ public sealed class GitPanelViewTests
         public IReadOnlyList<string> LastUnstagedPaths { get; private set; } = Array.Empty<string>();
         public IReadOnlyList<string> LastDiscardedPaths { get; private set; } = Array.Empty<string>();
         public bool FirstStatusCancelled { get; private set; }
+        public TaskCompletionSource<bool> FirstStatusCancelledSignal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> FirstStatusStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> ReleaseFirstStatus { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -292,6 +352,7 @@ public sealed class GitPanelViewTests
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
                         FirstStatusCancelled = true;
+                        FirstStatusCancelledSignal.TrySetResult(true);
                         throw;
                     }
                 }

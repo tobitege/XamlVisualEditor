@@ -3,6 +3,7 @@
     <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.GitExtension</RootNamespace>
     <Description>Git panel extension views and ViewModels</Description>
+    <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
@@ -15,5 +16,18 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Localization\GitStrings.resx">
+      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+      <StronglyTypedNamespace>XamlVisualEditor.GitExtension.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>GitStrings</StronglyTypedClassName>
+      <StronglyTypedFileName>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\GitStrings.g.cs</StronglyTypedFileName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.UI" />
   </ItemGroup>
 </Project>

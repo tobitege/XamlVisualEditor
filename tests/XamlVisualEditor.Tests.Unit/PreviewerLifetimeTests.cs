@@ -141,23 +141,26 @@ public sealed class PreviewerLifetimeTests : IDisposable
         replaced.Dispose();
     }
 
-    [AvaloniaFact(Timeout = 60000)]
-    public async Task Exporting_a_preview_keeps_the_live_previewer_of_the_document()
+    [AvaloniaTheory(Timeout = 60000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Exporting_a_preview_keeps_the_live_previewer_of_the_document(bool useSnapshot)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         string projectPath = Path.Combine(_root, "Views.csproj");
         await File.WriteAllTextAsync(projectPath, "<Project />", cancellationToken);
         string xamlPath = Path.Combine(_root, "View.axaml");
         await File.WriteAllTextAsync(xamlPath, Xaml, cancellationToken);
-        string snapshot = Path.Combine(_root, "missing-snapshot");
+        string output = Path.Combine(_root, useSnapshot ? "missing-snapshot" : "missing-output");
         WorkspaceModel workspace = new()
         {
             Projects = new[]
             {
                 new ProjectModel
                 {
-                    Name = "Views", ProjectPath = projectPath, AssemblySnapshotDirectory = snapshot,
-                    OutputAssemblyPath = Path.Combine(snapshot, "Views.dll"),
+                    Name = "Views", ProjectPath = projectPath,
+                    AssemblySnapshotDirectory = useSnapshot ? output : null,
+                    OutputAssemblyPath = Path.Combine(output, "Views.dll"),
                     XamlFiles = new[] { new XamlFileModel { FilePath = xamlPath, RelativePath = "View.axaml" } },
                     Files = Array.Empty<ProjectFileModel>(), References = Array.Empty<AssemblyReference>()
                 }

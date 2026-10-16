@@ -144,40 +144,37 @@ public sealed class PreviewerLaunchServiceTests : IDisposable
             Assert.Equal(2, messages.Count(message => message.Contains("controls updated without rebuilding", StringComparison.Ordinal)));
             xaml = preview.ToString(SaveOptions.DisableFormatting);
 
-            if (useSnapshot)
+            string invalidXaml = originalXaml.Replace("lib:CaptionControl", "lib:MissingControl", StringComparison.Ordinal);
+            TaskCompletionSource<PreviewerErrorInfo> failed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnError(PreviewerErrorInfo error) => failed.TrySetResult(error);
+            session.ErrorReceived += OnError;
+            PreviewerErrorInfo error;
+            try
             {
-                string invalidXaml = originalXaml.Replace("lib:CaptionControl", "lib:MissingControl", StringComparison.Ordinal);
-                TaskCompletionSource<PreviewerErrorInfo> failed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                void OnError(PreviewerErrorInfo error) => failed.TrySetResult(error);
-                session.ErrorReceived += OnError;
-                PreviewerErrorInfo error;
-                try
-                {
-                    await service.SendUpdateXamlAsync(xamlPath, invalidXaml, workspace, log: null, workspacePath: projectPath);
-                    error = await failed.Task.WaitAsync(TimeSpan.FromSeconds(20));
-                }
-                finally { session.ErrorReceived -= OnError; }
-                Assert.Contains("MissingControl", error.Message);
-                Assert.DoesNotContain("TargetInvocationException", error.Message);
-                Assert.NotNull(error.ElementPath);
-                Assert.Equal("MissingControl", error.ElementPath[^1].Name);
-                Assert.Equal(6, DesignerDocumentViewModel.ResolvePreviewerErrorPosition(error, invalidXaml).Line);
-                Assert.NotNull(session.LastFrame);
-
-                TaskCompletionSource<bool> recovered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                void OnErrorChanged(PreviewerErrorInfo? current) { if (current is null) recovered.TrySetResult(true); }
-                session.ErrorChanged += OnErrorChanged;
-                try
-                {
-                    await service.SendUpdateXamlAsync(xamlPath, xaml, workspace, log: null, workspacePath: projectPath);
-                    await recovered.Task.WaitAsync(TimeSpan.FromSeconds(20));
-                }
-                finally { session.ErrorChanged -= OnErrorChanged; }
-                Assert.Null(session.LastErrorInfo);
-                Assert.True(service.TryGetSession(xamlPath, out PreviewerTcpSession? recoveredSession));
-                Assert.Same(session, recoveredSession);
-                Assert.False(lifetime.HasExited);
+                await service.SendUpdateXamlAsync(xamlPath, invalidXaml, workspace, log: null, workspacePath: projectPath);
+                error = await failed.Task.WaitAsync(TimeSpan.FromSeconds(20));
             }
+            finally { session.ErrorReceived -= OnError; }
+            Assert.Contains("MissingControl", error.Message);
+            Assert.DoesNotContain("TargetInvocationException", error.Message);
+            Assert.NotNull(error.ElementPath);
+            Assert.Equal("MissingControl", error.ElementPath[^1].Name);
+            Assert.Equal(6, DesignerDocumentViewModel.ResolvePreviewerErrorPosition(error, invalidXaml).Line);
+            Assert.NotNull(session.LastFrame);
+
+            TaskCompletionSource<bool> recovered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnErrorChanged(PreviewerErrorInfo? current) { if (current is null) recovered.TrySetResult(true); }
+            session.ErrorChanged += OnErrorChanged;
+            try
+            {
+                await service.SendUpdateXamlAsync(xamlPath, xaml, workspace, log: null, workspacePath: projectPath);
+                await recovered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+            finally { session.ErrorChanged -= OnErrorChanged; }
+            Assert.Null(session.LastErrorInfo);
+            Assert.True(service.TryGetSession(xamlPath, out PreviewerTcpSession? recoveredSession));
+            Assert.Same(session, recoveredSession);
+            Assert.False(lifetime.HasExited);
 
             string artifactDirectory = Path.Combine(Path.GetTempPath(), "XamlVisualEditor-preview-artifacts");
             Directory.CreateDirectory(artifactDirectory);

@@ -820,6 +820,8 @@
   <data name="ControlCatalogNotLoaded" xml:space="preserve"><value>Controlkatalog noch nicht geladen.</value></data>
   <data name="CannotInsertControl" xml:space="preserve"><value>{0} kann nicht eingefügt werden: {1}</value></data>
   <data name="LoadingProjectControls" xml:space="preserve"><value>Projekt-Controls werden geladen...</value></data>
+  <data name="LoadingStandardControls" xml:space="preserve"><value>Standard-Controls werden geladen...</value></data>
+  <data name="ToolboxShowLoadTask" xml:space="preserve"><value>Toolbox: Control-Ermittlung anzeigen</value></data>
   <data name="ControlsAvailable" xml:space="preserve"><value>{0} Controls verfügbar.</value></data>
   <data name="ControlDiscoveryCanceled" xml:space="preserve"><value>Control-Ermittlung abgebrochen.</value></data>
   <data name="ToggleAnimationViewCommand" xml:space="preserve"><value>Ansicht: Animationseditor ein-/ausblenden</value></data>

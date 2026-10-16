@@ -820,6 +820,8 @@
   <data name="ControlCatalogNotLoaded" xml:space="preserve"><value>Control catalog not loaded yet.</value></data>
   <data name="CannotInsertControl" xml:space="preserve"><value>Cannot insert {0}: {1}</value></data>
   <data name="LoadingProjectControls" xml:space="preserve"><value>Loading project controls...</value></data>
+  <data name="LoadingStandardControls" xml:space="preserve"><value>Loading standard controls...</value></data>
+  <data name="ToolboxShowLoadTask" xml:space="preserve"><value>Toolbox: Show Control Discovery</value></data>
   <data name="ControlsAvailable" xml:space="preserve"><value>{0} controls available.</value></data>
   <data name="ControlDiscoveryCanceled" xml:space="preserve"><value>Control discovery cancelled.</value></data>
   <data name="ToggleAnimationViewCommand" xml:space="preserve"><value>View: Toggle Animation Editor</value></data>

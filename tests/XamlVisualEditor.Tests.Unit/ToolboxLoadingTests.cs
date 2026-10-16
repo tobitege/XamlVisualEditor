@@ -7,6 +7,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -27,18 +28,64 @@ public sealed class ToolboxLoadingTests
         MetadataControlCatalog failure = new((_, _, _, _, _) => throw new IOException("Testfehler"));
         using ToolboxPanelViewModel completed = CreateModel(success);
         using ToolboxPanelViewModel failed = CreateModel(failure);
+        VirtualClock clock = new();
+        completed.StatusDismissalScheduler = clock;
+        failed.StatusDismissalScheduler = clock;
         Assert.Equal(TimeSpan.FromSeconds(10), completed.LoadStatusDismissDelay);
-        completed.LoadStatusDismissDelay = TimeSpan.FromMilliseconds(100);
-        failed.LoadStatusDismissDelay = TimeSpan.FromMilliseconds(100);
         await completed.ReloadAsync();
         await failed.ReloadAsync();
         Assert.True(completed.IsLoadStatusVisible);
         Assert.True(failed.IsLoadStatusVisible);
         Assert.False(await failed.DismissLoadStatusCommand.CanExecute.FirstAsync());
-        await completed.WhenAnyValue(model => model.IsLoadStatusVisible).Where(visible => !visible)
-            .FirstAsync().Timeout(TimeSpan.FromSeconds(10)).ToTask();
+        clock.AdvanceBy(completed.LoadStatusDismissDelay - TimeSpan.FromSeconds(1));
+        Assert.True(completed.IsLoadStatusVisible);
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        Assert.False(completed.IsLoadStatusVisible);
         Assert.True(failed.IsLoadStatusVisible);
         Assert.True(failed.HasLoadError);
+    }
+
+    [AvaloniaFact]
+    public async Task AnOlderReloadThatFinishesLastDoesNotReplaceTheNewerCatalog()
+    {
+        ControllableControlCatalog catalog = new();
+        using ToolboxPanelViewModel model = CreateModel(catalog);
+        Task older = model.ReloadAsync();
+        ControllableControlCatalog.Request olderRequest = await catalog.WaitForRequestAsync(0).WaitAsync(TimeSpan.FromSeconds(10));
+        Task newer = model.ReloadAsync();
+        ControllableControlCatalog.Request newerRequest = await catalog.WaitForRequestAsync(1).WaitAsync(TimeSpan.FromSeconds(10));
+
+        newerRequest.Complete(ControllableControlCatalog.StandardControl("NewerControl"));
+        await newer.WaitAsync(TimeSpan.FromSeconds(10));
+        olderRequest.Complete(ControllableControlCatalog.StandardControl("OlderControl"));
+        await older.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal("NewerControl", Assert.Single(model.Items).DisplayName);
+        Assert.False(model.IsLoading);
+        Assert.False(model.HasLoadError);
+        Assert.Equal(string.Format(UiStrings.ControlsAvailable, 1), model.StatusText);
+    }
+
+    [AvaloniaFact]
+    public async Task TheBaseCatalogLoadReportsStandardControlsInsteadOfProjectControls()
+    {
+        ControllableControlCatalog catalog = new();
+        using ToolboxPanelViewModel model = CreateModel(catalog);
+        Task loading = model.ReloadAsync(includeProjectControls: false);
+        ControllableControlCatalog.Request request = await catalog.WaitForRequestAsync(0).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(model.IsLoading);
+        Assert.False(model.IsLoadingProjectControls);
+        Assert.Equal(UiStrings.LoadingStandardControls, model.StatusText);
+        request.Complete(ControllableControlCatalog.StandardControl("Button"));
+        await loading.WaitAsync(TimeSpan.FromSeconds(10));
+
+        loading = model.ReloadAsync();
+        request = await catalog.WaitForRequestAsync(1).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(model.IsLoadingProjectControls);
+        Assert.Equal(UiStrings.LoadingProjectControls, model.StatusText);
+        request.Complete(ControllableControlCatalog.StandardControl("Button"));
+        await loading.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(model.IsLoadingProjectControls);
     }
 
     [AvaloniaFact]
@@ -65,7 +112,9 @@ public sealed class ToolboxLoadingTests
             Assert.Contains(original, item => item.FullName == typeof(CaptionControl).FullName);
             Flush(window);
             Border task = view.FindControl<Border>("ControlLoadTask")!;
-            Assert.Equal(140, task.Bounds.Height);
+            Assert.True(task.IsEffectivelyVisible);
+            double taskHeight = task.Bounds.Height;
+            Assert.True(taskHeight > 0);
             Assert.DoesNotContain(view.GetVisualDescendants().OfType<Avalonia.Controls.Button>(),
                 button => Equals(button.Content, UiStrings.LoadProjectControls));
             Avalonia.Controls.Button dismiss = view.FindControl<Avalonia.Controls.Button>("DismissControlLoad")!;
@@ -77,7 +126,8 @@ public sealed class ToolboxLoadingTests
             await model.ReloadAsync();
             Flush(window);
             Assert.True(model.HasLoadError);
-            Assert.Equal(140, task.Bounds.Height);
+            // The error state keeps the height of the task, so the controls below do not move.
+            Assert.Equal(taskHeight, task.Bounds.Height);
             Assert.Equal(original, model.Items);
             TextBlock status = view.FindControl<TextBlock>("ControlLoadStatus")!;
             Avalonia.Controls.Button retry = view.FindControl<Avalonia.Controls.Button>("RetryControlLoad")!;

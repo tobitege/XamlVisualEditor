@@ -29,27 +29,79 @@ public sealed class ToolboxStickyHeaderBehavior
         viewer.SetValue(TrackerProperty, args.NewValue is ContentControl header ? new Tracker(viewer, header) : null);
     }
 
+    /// <summary>
+    /// Updates the header after the layout pass that follows a scroll, a size change or a change of the library
+    /// containers. Only that one pass is observed, not every layout pass of the window.
+    /// </summary>
     private sealed class Tracker : IDisposable
     {
         private readonly ScrollViewer _viewer;
         private readonly ContentControl _header;
         private readonly TranslateTransform _translation = new();
+        private readonly IDisposable _contentSubscription;
+        private ItemsControl? _groups;
+        private bool _updatePending;
 
         public Tracker(ScrollViewer viewer, ContentControl header)
         {
             _viewer = viewer;
             _header = header;
             _header.RenderTransform = _translation;
-            _viewer.ScrollChanged += Update;
-            _viewer.LayoutUpdated += Update;
+            _viewer.ScrollChanged += RequestUpdate;
+            _viewer.SizeChanged += RequestUpdate;
+            _header.SizeChanged += RequestUpdate;
+            _viewer.AttachedToVisualTree += RequestUpdate;
             _viewer.DetachedFromVisualTree += Detached;
+            _contentSubscription = _viewer.GetObservable(ContentControl.ContentProperty).Subscribe(AttachGroups);
         }
 
-        private void Update(object? sender, EventArgs args)
+        private void AttachGroups(object? content)
+        {
+            DetachGroups();
+            _groups = content as ItemsControl;
+            if (_groups is not null)
+            {
+                _groups.ContainerPrepared += RequestUpdate;
+                _groups.ContainerClearing += RequestUpdate;
+                _groups.ContainerIndexChanged += RequestUpdate;
+            }
+            RequestUpdate(this, EventArgs.Empty);
+        }
+
+        private void DetachGroups()
+        {
+            if (_groups is null) return;
+            _groups.ContainerPrepared -= RequestUpdate;
+            _groups.ContainerClearing -= RequestUpdate;
+            _groups.ContainerIndexChanged -= RequestUpdate;
+            _groups = null;
+        }
+
+        // Every trigger comes with a layout pass that arranges the containers at their new positions.
+        private void RequestUpdate(object? sender, EventArgs args)
+        {
+            if (_updatePending) return;
+            _updatePending = true;
+            _viewer.LayoutUpdated += UpdateAfterLayout;
+        }
+
+        private void UpdateAfterLayout(object? sender, EventArgs args)
+        {
+            CancelUpdate();
+            Update();
+        }
+
+        private void CancelUpdate()
+        {
+            _viewer.LayoutUpdated -= UpdateAfterLayout;
+            _updatePending = false;
+        }
+
+        private void Update()
         {
             ToolboxAssemblyGroup? active = null;
             double bottom = 0;
-            if (_viewer.Content is ItemsControl groups)
+            if (_groups is { } groups)
             {
                 if (_header.Width != groups.Bounds.Width) _header.Width = groups.Bounds.Width;
                 // Visit only the library containers, not the individual control rows.
@@ -75,14 +127,20 @@ public sealed class ToolboxStickyHeaderBehavior
 
         private void Detached(object? sender, VisualTreeAttachmentEventArgs args)
         {
+            CancelUpdate();
             _header.Content = null;
             _header.IsVisible = false;
         }
 
         public void Dispose()
         {
-            _viewer.ScrollChanged -= Update;
-            _viewer.LayoutUpdated -= Update;
+            _contentSubscription.Dispose();
+            DetachGroups();
+            CancelUpdate();
+            _viewer.ScrollChanged -= RequestUpdate;
+            _viewer.SizeChanged -= RequestUpdate;
+            _header.SizeChanged -= RequestUpdate;
+            _viewer.AttachedToVisualTree -= RequestUpdate;
             _viewer.DetachedFromVisualTree -= Detached;
             _header.Content = null;
             _header.IsVisible = false;

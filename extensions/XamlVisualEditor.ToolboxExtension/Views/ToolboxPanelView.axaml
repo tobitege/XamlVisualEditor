@@ -13,7 +13,7 @@
     </DataTemplate>
     <DataTemplate x:Key="AssemblyFavoriteTemplate" x:DataType="vm:ToolboxAssemblyGroup">
       <ToggleButton Content="{CompiledBinding FavoriteGlyph}" IsChecked="{CompiledBinding IsFavorite, Mode=TwoWay}"
-                    IsVisible="{CompiledBinding CanFavorite}" IsEnabled="{CompiledBinding CanEditPreferences}"
+                    IsVisible="{CompiledBinding CanFavorite}" IsEnabled="{CompiledBinding CanEditFavorite}"
                     Width="24" Height="24" MinWidth="24" MinHeight="24" Padding="0" FontSize="16"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                     ToolTip.Tip="{CompiledBinding FavoriteToolTip}"
@@ -30,7 +30,7 @@
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" x:DataType="vm:ToolboxAssemblyGroup">
               <ToggleButton x:Name="PART_toggle" Theme="{StaticResource {x:Type Button}}"
                             IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
-                            IsEnabled="{CompiledBinding CanEditPreferences}"
+                            IsEnabled="{CompiledBinding CanEditExpanded}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Center" Padding="6,2" MinHeight="32"
                             ToolTip.Tip="{CompiledBinding Description}"
@@ -124,7 +124,7 @@
         <Button Grid.Column="1" Content="{x:Static loc:UiStrings.Assemblies}" ToolTip.Tip="{CompiledBinding AssemblyFilterSummary}">
           <Button.Flyout>
             <Flyout>
-              <StackPanel Width="320" Spacing="6" IsEnabled="{CompiledBinding CanEditAssemblyPreferences}">
+              <StackPanel Width="320" Spacing="6">
                 <TextBlock Text="{x:Static loc:UiStrings.WorkspaceAssemblies}" FontWeight="SemiBold" />
                 <TextBlock Text="{CompiledBinding AssemblyFilterSummary}" />
                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -138,7 +138,8 @@
                         <DockPanel>
                           <ContentControl DockPanel.Dock="Right" Content="{Binding}"
                                           ContentTemplate="{StaticResource AssemblyFavoriteTemplate}" />
-                          <CheckBox IsChecked="{CompiledBinding IsIncluded, Mode=TwoWay}">
+                          <CheckBox IsChecked="{CompiledBinding IsIncluded, Mode=TwoWay}"
+                                    IsEnabled="{CompiledBinding CanEditIncluded}">
                             <TextBlock Text="{CompiledBinding CatalogHeader}" TextTrimming="CharacterEllipsis"
                                        ToolTip.Tip="{CompiledBinding Description}" />
                           </CheckBox>

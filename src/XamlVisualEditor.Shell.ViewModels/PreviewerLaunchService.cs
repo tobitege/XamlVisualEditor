@@ -231,12 +231,38 @@ internal sealed class PreviewerLaunchService : IDisposable
         DesignerThemeRequest? themeRequest = null)
     {
         PreviewerInstance? instance;
+        PreviewerInstance? replacement = null;
         lock (_gate)
         {
             if (!_instances.TryGetValue(xamlFilePath, out instance) || !ReferenceEquals(instance.Workspace, workspace)) return;
-            instance.XamlText = xamlText;
-            instance.ThemeRequest = themeRequest;
-            if (instance.Session is null) return;
+            // A host keeps the resources and theme variant a provider applied, and a later theme does not reliably
+            // reach the controls it creates on every platform; a different theme therefore starts a fresh host,
+            // which applies the theme before it loads the document.
+            if (instance.LastSentThemeRequestId is { } applied && applied != themeRequest?.RequestId)
+            {
+                replacement = new PreviewerInstance
+                {
+                    Workspace = instance.Workspace, WorkspacePath = instance.WorkspacePath, Log = instance.Log,
+                    XamlText = xamlText, ThemeRequest = themeRequest
+                };
+                _instances[xamlFilePath] = replacement;
+            }
+            else
+            {
+                instance.XamlText = xamlText;
+                instance.ThemeRequest = themeRequest;
+                if (instance.Session is null) return;
+            }
+        }
+
+        if (replacement is not null)
+        {
+            instance.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer restarted for another theme."));
+            DisposeInstance(instance);
+            _ = StartInstanceAsync(xamlFilePath, replacement, workspace, workspacePath ?? replacement.WorkspacePath, null, replacement.Log);
+            await replacement.Started.Task;
+            log?.Invoke("Info", "Previewer restarted for the selected theme");
+            return;
         }
 
         if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))
@@ -341,10 +367,13 @@ internal sealed class PreviewerLaunchService : IDisposable
             await process.StandardInput.WriteLineAsync(DesignerThemeProtocol.RequestPrefix + JsonSerializer.Serialize(request));
             await process.StandardInput.FlushAsync();
             // A host that does not confirm must not hold back the document update; the load then reports the theme state.
-            await completion.Task.WaitAsync(ThemeConfirmationTimeout);
+            DesignerThemeResult result = await completion.Task.WaitAsync(ThemeConfirmationTimeout);
+            instance.Log?.Invoke("Info", $"Previewer applied theme request {request.RequestId}"
+                + (result.Error is { } error ? $": {error}" : string.Empty));
         }
         catch (TimeoutException)
         {
+            instance.Log?.Invoke("Warning", $"Previewer did not confirm theme request {request.RequestId} within {ThemeConfirmationTimeout.TotalSeconds:0} s");
         }
         finally
         {

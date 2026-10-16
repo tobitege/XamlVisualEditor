@@ -290,7 +290,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 Assert.Equal("search text", input.Text);
 
                 Assert.True(editor.TextArea.Focus());
-                Press(Key.A, PhysicalKey.A, RawInputModifiers.Control);
+                // AvaloniaEdit binds its editing gestures to Cmd on macOS and to Ctrl elsewhere.
+                Press(Key.A, PhysicalKey.A, OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control);
                 Assert.Equal("editor text", editor.SelectedText);
                 Press(Key.Delete, PhysicalKey.Delete);
                 Assert.Equal(string.Empty, editor.Text);

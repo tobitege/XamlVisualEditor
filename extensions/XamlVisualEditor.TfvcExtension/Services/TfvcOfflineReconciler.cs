@@ -47,9 +47,10 @@ public sealed class TfvcOfflineReconciler
 
         HashSet<string> candidates = new(StringComparer.OrdinalIgnoreCase);
         string? scope = GetScopeFolder();
+        string? scopeServerPath = scope is null ? null : workspace.TryGetServerPath(scope);
         if (scope is not null)
         {
-            candidates.UnionWith(await _session.Client.PreviewLocalChangesAsync(workspace, scope, cancellationToken));
+            candidates.UnionWith(await _session.Client.PreviewLocalChangesAsync(scope, cancellationToken));
         }
 
         foreach (string path in _session.OfflineEdits)
@@ -60,6 +61,10 @@ public sealed class TfvcOfflineReconciler
             }
         }
 
+        // One recursive query of the scope folder answers for every candidate inside it.
+        HashSet<string>? scopeItems = scopeServerPath is null || candidates.Count == 0
+            ? null
+            : await GetServerItemsAsync(collectionUrl, scopeServerPath, cancellationToken);
         List<TfvcOfflineChange> changes = new();
         foreach (string path in candidates)
         {
@@ -74,7 +79,7 @@ public sealed class TfvcOfflineReconciler
                 continue;
             }
 
-            bool isVersioned = await IsVersionedAsync(workspace, collectionUrl, path, cancellationToken);
+            bool isVersioned = await IsVersionedAsync(workspace, collectionUrl, path, scopeServerPath, scopeItems, cancellationToken);
             changes.Add(new TfvcOfflineChange(path, isVersioned ? TfvcOfflineChangeKind.Edit : TfvcOfflineChangeKind.Add));
         }
 
@@ -134,13 +139,45 @@ public sealed class TfvcOfflineReconciler
         }
     }
 
-    // The server decides; the offline edit record only counts when the server cannot be asked.
-    private async Task<bool> IsVersionedAsync(TfvcWorkspace workspace, string collectionUrl, string path, CancellationToken cancellationToken)
+    // Returns the server paths of the scope folder and everything below it, or null when the server cannot be asked.
+    private async Task<HashSet<string>?> GetServerItemsAsync(string collectionUrl, string scopeServerPath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
+            foreach (TfvcServerItem item in await _session.Server.GetItemsRecursiveAsync(collectionUrl, scopeServerPath, cancellationToken))
+            {
+                paths.Add(item.ServerPath);
+            }
+
+            return paths;
+        }
+        catch (TfvcServerException ex)
+        {
+            _logger.Warn(string.Format(CultureInfo.CurrentCulture, TfvcStrings.LogItemLookupFailedFormat, scopeServerPath, ex.Message));
+            return null;
+        }
+    }
+
+    // The server decides; the offline edit record only counts when the server cannot be asked. A path inside the scope
+    // folder is answered from its recursive query, any other path by a query of its own.
+    private async Task<bool> IsVersionedAsync(
+        TfvcWorkspace workspace,
+        string collectionUrl,
+        string path,
+        string? scopeServerPath,
+        HashSet<string>? scopeItems,
+        CancellationToken cancellationToken)
     {
         string? serverPath = workspace.TryGetServerPath(path);
         if (serverPath is null)
         {
             return false;
+        }
+
+        if (scopeServerPath is not null && TfvcWorkspace.IsSameOrChildServerPath(serverPath, TfvcWorkspace.NormalizeServerPath(scopeServerPath)))
+        {
+            return scopeItems is null ? _session.OfflineEdits.Contains(path) : scopeItems.Contains(serverPath);
         }
 
         try

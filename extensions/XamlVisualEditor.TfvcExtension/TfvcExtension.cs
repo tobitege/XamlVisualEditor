@@ -103,27 +103,32 @@ public sealed class TfvcExtension : IXveExtension
             new(HISTORY_VIEW_ID, TfvcStrings.HistoryTitle, ExtensionViewType.Custom, ExtensionViewLocation.Bottom, 60)
         ];
 
+        // Each panel has one view model, created when the panel is first shown and disposed with the extension, so
+        // showing a panel again neither loses its state nor leaves session subscriptions of an earlier view model behind.
+        Lazy<PendingChangesViewModel> pendingChanges = new(() => new PendingChangesViewModel(
+            session,
+            autoCheckOut,
+            context.Editor,
+            context.Window,
+            context.DialogHost,
+            context.SystemIcons,
+            showHistory,
+            changesetDetails));
+        Lazy<SourceControlExplorerViewModel> explorer = new(() => new SourceControlExplorerViewModel(
+            session,
+            autoCheckOut,
+            context.Editor,
+            context.DialogHost,
+            context.SystemIcons,
+            showHistory));
+
         context.Subscriptions.Add(context.Contributions.RegisterViews(context.ExtensionId, views));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             PENDING_CHANGES_VIEW_ID,
-            new DelegateViewProvider(() => new PendingChangesViewModel(
-                session,
-                autoCheckOut,
-                context.Editor,
-                context.Window,
-                context.DialogHost,
-                context.SystemIcons,
-                showHistory,
-                changesetDetails))));
+            new DelegateViewProvider(() => pendingChanges.Value)));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             SOURCE_CONTROL_EXPLORER_VIEW_ID,
-            new DelegateViewProvider(() => new SourceControlExplorerViewModel(
-                session,
-                autoCheckOut,
-                context.Editor,
-                context.DialogHost,
-                context.SystemIcons,
-                showHistory))));
+            new DelegateViewProvider(() => explorer.Value)));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             HISTORY_VIEW_ID,
             new DelegateViewProvider(() => history)));
@@ -133,6 +138,16 @@ public sealed class TfvcExtension : IXveExtension
             autoCheckOut.ActiveDocumentStateChanged -= statusHandler;
             session.StateChanged -= contextKeysHandler;
             changesetDetails.ChangesetUpdated -= changesetUpdatedHandler;
+            if (pendingChanges.IsValueCreated)
+            {
+                pendingChanges.Value.Dispose();
+            }
+
+            if (explorer.IsValueCreated)
+            {
+                explorer.Value.Dispose();
+            }
+
             offline.Dispose();
             autoCheckOut.Dispose();
             statusBarItem.Dispose();

@@ -17,6 +17,12 @@ namespace XamlVisualEditor.Tests.Integration;
 
 public sealed class PreviewerLaunchTests
 {
+#if DEBUG
+    private const string BuildConfiguration = "Debug";
+#else
+    private const string BuildConfiguration = "Release";
+#endif
+
     [Fact]
     public async Task FloweryThemePackageRendersTargetLibraryPalettes()
     {
@@ -135,8 +141,9 @@ public sealed class PreviewerLaunchTests
 
         // The editor application does not reference Flowery.NET. Its preview reports the missing reference in the
         // catalog, rejects an explicit Flowery theme and keeps rendering with its own background.
-        string appAssembly = FindOutputAssembly(Path.Combine(repoRoot, "src", "XamlVisualEditor.App"))
-            ?? throw new FileNotFoundException("The Debug output of XamlVisualEditor.App is missing.");
+        // The solution build of the tests also builds the editor application in the same configuration.
+        string appAssembly = FindOutputAssembly(Path.Combine(repoRoot, "src", "XamlVisualEditor.App"), BuildConfiguration)
+            ?? throw new FileNotFoundException($"The {BuildConfiguration} output of XamlVisualEditor.App is missing.");
         const string plainSource = """
             <UserControl xmlns="https://github.com/avaloniaui" Width="160" Height="80" Background="#EEF4FA">
               <Border Name="PlainPreview" Width="40" Height="20" />
@@ -529,9 +536,9 @@ public sealed class PreviewerLaunchTests
         }
     }
 
-    private static string? FindOutputAssembly(string projectDir)
+    private static string? FindOutputAssembly(string projectDir, string configuration = "Debug")
     {
-        string binRoot = Path.Combine(projectDir, "bin", "Debug");
+        string binRoot = Path.Combine(projectDir, "bin", configuration);
         if (!Directory.Exists(binRoot))
         {
             return null;

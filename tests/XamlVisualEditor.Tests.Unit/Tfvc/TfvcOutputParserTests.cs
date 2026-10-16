@@ -1,5 +1,9 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using XamlVisualEditor.TfvcExtension.Models;
 using XamlVisualEditor.TfvcExtension.Services;
@@ -102,6 +106,58 @@ public sealed class TfvcOutputParserTests
     public void TryParseChangesetId_ReadsOnlyTheSummaryOfMultiLineOutput(string output, int expected)
     {
         Assert.Equal(expected, TfvcOutputParser.TryParseChangesetId(output));
+    }
+
+    [Fact]
+    public void TryParseChangesetId_DoesNotGuessOtherSpellingsOfTheGermanWord()
+    {
+        Assert.Null(TfvcOutputParser.TryParseChangesetId("Aenderungssatz Nr. 42 eingecheckt."));
+        Assert.Null(TfvcOutputParser.TryParseChangesetId("\u00C3\u0084nderungssatz Nr. 42 eingecheckt."));
+    }
+
+    // The fixtures hold tf.exe output as bytes in Windows-1252, the ANSI code page of German Windows, where "Ä" is the
+    // single byte 0xC4 and "Ü" is 0xDC. They run through the decoding of the runner before they are parsed.
+    [Fact]
+    public async Task TryParseChangesetId_ReadsAnsiEncodedGermanSummary()
+    {
+        byte[] output =
+        [
+            .. Ascii("C:\\src\\Product:\r\nEinchecken von Bearbeiten: App.axaml\r\n\r\n"),
+            0xC4,
+            .. Ascii("nderungssatz Nr. 42 eingecheckt.\r\n")
+        ];
+
+        string text = await DecodeAnsiAsync(output);
+
+        Assert.Equal(42, TfvcOutputParser.TryParseChangesetId(text));
+    }
+
+    [Fact]
+    public async Task ParsePendingChanges_ReadsAnsiEncodedUmlautPath()
+    {
+        byte[] output =
+        [
+            .. Ascii("<Status><PendingSet name=\"DEV01\"><PendingChanges><PendingChange chg=\"Edit\" type=\"File\" local=\"C:\\src\\Product\\"),
+            0xDC,
+            .. Ascii("bersicht.cs\" item=\"$/Product/"),
+            0xDC,
+            .. Ascii("bersicht.cs\" ver=\"7\" /></PendingChanges></PendingSet></Status>\r\n")
+        ];
+
+        string text = await DecodeAnsiAsync(output);
+
+        TfvcPendingChange change = Assert.Single(TfvcOutputParser.ParsePendingChanges(text, "DEV01"));
+        Assert.Equal(@"C:\src\Product\Übersicht.cs", change.LocalPath);
+        Assert.Equal("$/Product/Übersicht.cs", change.ServerPath);
+    }
+
+    private static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
+
+    private static async Task<string> DecodeAnsiAsync(byte[] output)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        using MemoryStream stream = new(output);
+        return await TfCommandRunner.ReadOutputAsync(stream, Encoding.GetEncoding(1252), CancellationToken.None);
     }
 
     [Fact]

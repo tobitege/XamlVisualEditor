@@ -745,7 +745,7 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
         {
             await scanner.ScanAsync(cancellationToken);
             TfvcAddItemsDialogViewModel loaded = new(scanner, GetIcon);
-            await loaded.ShowFolderAsync(scanner.RootFolder, cancellationToken);
+            loaded.ShowFolder(scanner.RootFolder);
             dialog = loaded;
         });
         if (dialog is null)
@@ -762,29 +762,12 @@ public sealed partial class SourceControlExplorerViewModel : ReactiveObject, IDi
             return;
         }
 
-        // A selected folder is added with its content, so items below it are not added a second time.
-        List<string> folders = selected.Where(entry => entry.IsFolder).Select(entry => entry.LocalPath).ToList();
-        folders.RemoveAll(folder => folders.Any(other => IsBelow(folder, other)));
-        List<string> files = selected
-            .Where(entry => !entry.IsFolder && !folders.Any(folder => IsBelow(entry.LocalPath, folder)))
-            .Select(entry => entry.LocalPath)
-            .ToList();
-        await RunOperationAsync(async () =>
-        {
-            if (folders.Count > 0)
-            {
-                await _session.Client.AddFoldersAsync(workspace, folders, cancellationToken);
-            }
-
-            if (files.Count > 0)
-            {
-                await _session.Client.AddAsync(workspace, files, cancellationToken);
-            }
-        });
+        // The dialog returns each item to add on its own, folders included, and a folder is added without its content,
+        // so an item the user cleared is not added with its folder.
+        List<string> paths = selected.Select(entry => entry.LocalPath).ToList();
+        paths.Sort(StringComparer.OrdinalIgnoreCase);
+        await RunOperationAsync(() => _session.Client.AddAsync(workspace, paths, cancellationToken));
     }
-
-    private static bool IsBelow(string path, string folder) =>
-        path.StartsWith(Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     private async Task RunOperationAsync(Func<Task> operation)
     {

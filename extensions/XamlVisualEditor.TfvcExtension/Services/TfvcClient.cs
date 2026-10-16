@@ -27,20 +27,17 @@ public interface ITfvcClient
     /// <summary>Checks out local files for edit; with <paramref name="recursive"/> folders include all items below them.</summary>
     Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken);
 
-    /// <summary>Adds local files to version control.</summary>
+    /// <summary>Adds local files and folders to version control; a folder is added without its content.</summary>
     Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken);
-
-    /// <summary>Adds local folders with every item below them that version control does not ignore.</summary>
-    Task<TfCommandResult> AddFoldersAsync(TfvcWorkspace workspace, IReadOnlyList<string> localFolders, CancellationToken cancellationToken);
 
     /// <summary>Pends the deletion of files.</summary>
     Task<TfCommandResult> DeleteAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken);
 
     /// <summary>
     /// Lists the local paths below a folder that differ from the workspace without a pending change: added, deleted,
-    /// or changed without check-out. Ignored items are left out.
+    /// or changed without check-out. Ignored items are left out. tf.exe takes the workspace from the mapping of the folder.
     /// </summary>
-    Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(TfvcWorkspace workspace, string localFolder, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(string localFolder, CancellationToken cancellationToken);
 
     /// <summary>Undoes pending changes of the given items.</summary>
     Task<TfCommandResult> UndoAsync(TfvcWorkspace workspace, IReadOnlyList<string> itemSpecs, bool recursive, CancellationToken cancellationToken);
@@ -90,6 +87,20 @@ public sealed class TfCommandLineTooLongException : Exception
         : base("The tf.exe command line is too long.")
     {
     }
+}
+
+/// <summary>Raised when no mapped folder of a workspace exists locally, so tf.exe cannot resolve the workspace from it.</summary>
+public sealed class TfvcWorkspaceFolderNotFoundException : Exception
+{
+    /// <summary>Creates the exception.</summary>
+    public TfvcWorkspaceFolderNotFoundException(string workspaceName)
+        : base("No mapped folder of workspace " + workspaceName + " exists.")
+    {
+        WorkspaceName = workspaceName;
+    }
+
+    /// <summary>Gets the workspace name.</summary>
+    public string WorkspaceName { get; }
 }
 
 /// <summary>Implements workspace operations on top of tf.exe.</summary>
@@ -146,7 +157,10 @@ public sealed class TfvcClient : ITfvcClient
             "/noprompt",
             "$/"
         ];
-        TfCommandResult result = await RunQueryAsync(GetWorkingDirectory(workspace), arguments, cancellationToken).ConfigureAwait(false);
+
+        // The command names collection and workspace, so it does not depend on a mapped folder.
+        string workingDirectory = workspace.GetWorkingDirectory() ?? GetNeutralDirectory();
+        TfCommandResult result = await RunQueryAsync(workingDirectory, arguments, cancellationToken).ConfigureAwait(false);
         return TfvcOutputParser.ParsePendingChanges(result.StandardOutput, workspace.Name);
     }
 
@@ -172,19 +186,33 @@ public sealed class TfvcClient : ITfvcClient
     }
 
     /// <inheritdoc />
-    public Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
+    /// <remarks>Pending adds need no common transaction, so a list that exceeds one command line is added in several calls.</remarks>
+    public async Task<TfCommandResult> AddAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, CancellationToken cancellationToken)
     {
+        StringBuilder output = new();
+        StringBuilder error = new();
         List<string> arguments = ["add", "/noprompt"];
-        arguments.AddRange(localPaths);
-        return RunChangeAsync(workspace, arguments, cancellationToken);
-    }
+        foreach (string path in localPaths)
+        {
+            if (arguments.Count > 2 && TfCommandRunner.EstimateCommandLineLength([.. arguments, path]) > TfCommandRunner.MAX_COMMAND_LINE_LENGTH)
+            {
+                TfCommandResult part = await RunChangeAsync(workspace, arguments, cancellationToken).ConfigureAwait(false);
+                output.Append(part.StandardOutput);
+                error.Append(part.StandardError);
+                arguments = ["add", "/noprompt"];
+            }
 
-    /// <inheritdoc />
-    public Task<TfCommandResult> AddFoldersAsync(TfvcWorkspace workspace, IReadOnlyList<string> localFolders, CancellationToken cancellationToken)
-    {
-        List<string> arguments = ["add", "/recursive", "/noprompt"];
-        arguments.AddRange(localFolders);
-        return RunChangeAsync(workspace, arguments, cancellationToken);
+            arguments.Add(path);
+        }
+
+        if (arguments.Count > 2)
+        {
+            TfCommandResult part = await RunChangeAsync(workspace, arguments, cancellationToken).ConfigureAwait(false);
+            output.Append(part.StandardOutput);
+            error.Append(part.StandardError);
+        }
+
+        return new TfCommandResult(0, output.ToString(), error.ToString());
     }
 
     /// <inheritdoc />
@@ -196,10 +224,7 @@ public sealed class TfvcClient : ITfvcClient
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(
-        TfvcWorkspace workspace,
-        string localFolder,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<string>> PreviewLocalChangesAsync(string localFolder, CancellationToken cancellationToken)
     {
         List<string> arguments = ["reconcile", "/promote", "/adds", "/deletes", "/preview", "/recursive", "/noprompt", localFolder];
         TfCommandResult result = await _runner.RunAsync(localFolder, arguments, ChangeTimeout, cancellationToken).ConfigureAwait(false);
@@ -385,10 +410,11 @@ public sealed class TfvcClient : ITfvcClient
         return result;
     }
 
-    // tf.exe resolves the workspace of commands without /workspace from the working directory.
+    // tf.exe resolves the workspace of commands without /workspace from the working directory. Any other directory could
+    // resolve a different workspace or none, so a workspace without a local mapped folder fails here.
     private static string GetWorkingDirectory(TfvcWorkspace workspace)
     {
-        return workspace.GetWorkingDirectory() ?? GetNeutralDirectory();
+        return workspace.GetWorkingDirectory() ?? throw new TfvcWorkspaceFolderNotFoundException(workspace.Name);
     }
 
     private static string GetParentDirectory(string localPath)

@@ -117,6 +117,10 @@ public sealed class TfvcOfflineTests : IDisposable
         await reconciler.ApplyAsync(changes, CancellationToken.None);
 
         Assert.Equal(new[] { _root }, client.LocalChangeScopes);
+
+        // One recursive query of the scope folder answers for every candidate inside it.
+        Assert.Equal(["$/Product"], server.RecursiveItemRequests);
+        Assert.Empty(server.ItemRequests);
         Assert.Equal(TfvcOfflineChangeKind.Add, changes.Single(change => change.LocalPath == added).Kind);
         Assert.Equal(TfvcOfflineChangeKind.Delete, changes.Single(change => change.LocalPath == deleted).Kind);
         Assert.Equal(TfvcOfflineChangeKind.Edit, changes.Single(change => change.LocalPath == edited).Kind);
@@ -167,12 +171,23 @@ public sealed class TfvcOfflineTests : IDisposable
     }
 
     [Fact]
-    public async Task Coordinator_ProposesLocalChangesOnlyOnceWhenGoingOnline()
+    public async Task Coordinator_ProposesLocalChangesAgainUntilTheUserDecides()
     {
         FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace(localRoot: _root)] };
         FakeWorkspaceInfo workspaceInfo = new();
         using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), workspaceInfo);
-        ScriptedDialogHost dialogs = new((_, _) => null);
+        int proposals = 0;
+        ScriptedDialogHost dialogs = new((dialogId, _) =>
+        {
+            if (dialogId != TfvcReconcileDialogViewModel.DIALOG_ID)
+            {
+                return null;
+            }
+
+            // The first proposal is cancelled; the second is applied with every change cleared.
+            proposals++;
+            return proposals == 1 ? null : new List<TfvcOfflineChange>();
+        });
         using TfvcOfflineCoordinator coordinator = new(
             session,
             new TfvcOfflineReconciler(session, workspaceInfo, new NullExtensionLogger()),
@@ -181,17 +196,93 @@ public sealed class TfvcOfflineTests : IDisposable
             new NullExtensionLogger());
         await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
         await coordinator.GoOfflineAsync(CancellationToken.None);
-        await session.RecordOfflineEditAsync(CreateFile("Offline.cs"), CancellationToken.None);
+        string offlineFile = CreateFile("Offline.cs");
+        await session.RecordOfflineEditAsync(offlineFile, CancellationToken.None);
 
         await coordinator.GoOnlineAsync(CancellationToken.None);
+        Assert.Equal(1, proposals);
+        Assert.Equal(new[] { offlineFile }, session.OfflineEdits);
+
+        await coordinator.GoOfflineAsync(CancellationToken.None);
+        await coordinator.GoOnlineAsync(CancellationToken.None);
+        Assert.Equal(2, proposals);
+        Assert.Empty(session.OfflineEdits);
+
+        // The rejected change stays a local change to pend by hand and is not proposed again.
+        await coordinator.GoOfflineAsync(CancellationToken.None);
+        await coordinator.GoOnlineAsync(CancellationToken.None);
+        Assert.Equal(2, proposals);
+        Assert.Empty(client.Adds);
+        Assert.Empty(client.CheckOuts);
+    }
+
+    [Fact]
+    public async Task Coordinator_KeepsOfflineEditsWhenPendingFails()
+    {
+        FakeTfvcClient client = new()
+        {
+            Workspaces = [TfvcTestData.CreateWorkspace(localRoot: _root)],
+            AddFailure = new TfCommandException("add", new TfCommandResult(100, string.Empty, "TF10141: add failed."))
+        };
+        FakeWorkspaceInfo workspaceInfo = new();
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), workspaceInfo);
+        ScriptedDialogHost dialogs = new((dialogId, viewModel) => viewModel is TfvcReconcileDialogViewModel dialog
+            ? dialog.Items.Select(item => item.Change).ToList()
+            : null);
+        RecordingWindow window = new();
+        using TfvcOfflineCoordinator coordinator = new(
+            session,
+            new TfvcOfflineReconciler(session, workspaceInfo, new NullExtensionLogger()),
+            window,
+            dialogs,
+            new NullExtensionLogger());
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+        await coordinator.GoOfflineAsync(CancellationToken.None);
+        string offlineFile = CreateFile("Offline.cs");
+        await session.RecordOfflineEditAsync(offlineFile, CancellationToken.None);
+
+        await coordinator.GoOnlineAsync(CancellationToken.None);
+
+        Assert.Contains("TF10141", Assert.Single(window.Errors));
+        Assert.Equal(new[] { offlineFile }, session.OfflineEdits);
+
+        client.AddFailure = null;
         await coordinator.GoOfflineAsync(CancellationToken.None);
         await coordinator.GoOnlineAsync(CancellationToken.None);
 
-        // The cancelled proposal is not repeated: the file stays a local change to pend by hand.
-        Assert.Single(dialogs.Requests, request => request.DialogId == TfvcReconcileDialogViewModel.DIALOG_ID);
+        Assert.Equal(new[] { offlineFile }, client.Adds.Last());
         Assert.Empty(session.OfflineEdits);
-        Assert.Empty(client.Adds);
-        Assert.Empty(client.CheckOuts);
+    }
+
+    [Fact]
+    public async Task Coordinator_ReportsMissingTfExeInsteadOfOfferingOfflineWork()
+    {
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace(localRoot: _root)] };
+        InMemoryExtensionStorage storage = new();
+        using (TfvcSession first = TfvcSessionTests.CreateSession(client, storage, new FakeWorkspaceInfo()))
+        {
+            await first.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+        }
+
+        client.WorkspacesFailure = new TfExeNotFoundException("tf.exe was not found.");
+        FakeWorkspaceInfo workspaceInfo = new();
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, storage, workspaceInfo);
+        ScriptedDialogHost dialogs = new((_, _) => true);
+        RecordingWindow window = new();
+        using TfvcOfflineCoordinator coordinator = new(
+            session,
+            new TfvcOfflineReconciler(session, workspaceInfo, new NullExtensionLogger()),
+            window,
+            dialogs,
+            new NullExtensionLogger());
+        await session.InitializeAsync(CancellationToken.None);
+
+        await coordinator.HandleInitializedAsync(CancellationToken.None);
+
+        Assert.True(session.TfExeMissing);
+        Assert.Empty(dialogs.Requests);
+        Assert.False(session.IsOffline);
+        Assert.Equal(TfvcStrings.TfExeNotFound, Assert.Single(window.Errors));
     }
 
     private async Task<(TfvcSession Session, TfvcAutoCheckOutService Service, ScriptedDialogHost Dialogs)> CreateOfflineAsync(

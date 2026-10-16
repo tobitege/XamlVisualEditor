@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,14 +85,21 @@ public sealed class TfvcAutoCheckOutServiceTests
             Assert.Equal(TfvcFileStateKind.CheckedIn, (await service.GetStateAsync(readOnlyFile, CancellationToken.None)).Kind);
             await Assert.ThrowsAsync<TfCommandException>(() => service.GetStateAsync(writableFile, CancellationToken.None));
 
+            TaskCompletionSource checkedIn = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            service.ActiveDocumentStateChanged += (_, _) =>
+            {
+                if (service.ActiveDocumentState.Kind == TfvcFileStateKind.CheckedIn && !service.IsCheckingActiveDocument)
+                {
+                    checkedIn.TrySetResult();
+                }
+            };
+
             editor.Activate(new FakeEditorDocument(writableFile, "b"));
             Assert.Equal(TfvcFileStateKind.Unknown, service.ActiveDocumentState.Kind);
             client.FileStatusFailure = null;
-            for (int attempt = 0; attempt < 100 && service.ActiveDocumentState.Kind != TfvcFileStateKind.CheckedIn; attempt++)
-            {
-                await Task.Delay(30);
-            }
 
+            // The service retries once after the retry delay and publishes the new state.
+            await checkedIn.Task.WaitAsync(TimeSpan.FromSeconds(30));
             Assert.Equal(TfvcFileStateKind.CheckedIn, service.ActiveDocumentState.Kind);
         }
         finally
@@ -99,6 +107,147 @@ public sealed class TfvcAutoCheckOutServiceTests
             File.SetAttributes(readOnlyFile, FileAttributes.Normal);
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task FailedFileStatus_IsNotRepeatedWithinRetryDelay()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "tfvc-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string writableFile = Path.Combine(root, "Writable.cs");
+        File.WriteAllText(writableFile, "b");
+        try
+        {
+            FakeTfvcClient client = new()
+            {
+                Workspaces = [TfvcTestData.CreateWorkspace(localRoot: root)],
+                FileStatusFailure = new TfCommandException("status", new TfCommandResult(100, string.Empty, "TF400324"))
+            };
+            using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo());
+            await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+            RecordingExtensionLogger logger = new();
+            using TfvcAutoCheckOutService service = new(session, new FakeEditorServices(), new RecordingWindow(), logger, retryDelay: TimeSpan.FromHours(1));
+            service.Start();
+            FakeEditorDocument document = new(writableFile, "changed");
+
+            await Assert.ThrowsAsync<TfCommandException>(() => service.GetStateAsync(writableFile, CancellationToken.None));
+            await Assert.ThrowsAsync<TfCommandException>(() => service.GetStateAsync(writableFile, CancellationToken.None));
+            await service.HandleDocumentChangedAsync(document, CancellationToken.None);
+            await service.HandleDocumentChangedAsync(document, CancellationToken.None);
+
+            Assert.Equal(1, client.FileStatusQueries);
+            Assert.Single(logger.Entries, entry => entry.Contains(writableFile, StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(client.CheckOuts);
+
+            service.Invalidate(writableFile);
+            await Assert.ThrowsAsync<TfCommandException>(() => service.GetStateAsync(writableFile, CancellationToken.None));
+            Assert.Equal(2, client.FileStatusQueries);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("Rename")]
+    [InlineData("Branch")]
+    [InlineData("Merge")]
+    [InlineData("Undelete")]
+    [InlineData("Lock")]
+    public async Task PendingChangeWithoutEdit_IsCheckedOutOnFirstChange(string changeType)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        (TfvcSession session, FakeTfvcClient client, _, FakeEditorServices editor, TfvcAutoCheckOutService service, _) = await CreateAsync();
+        using (session)
+        using (service)
+        {
+            client.PendingChangesByLocalPath[FilePath] = [TfvcTestData.CreateChange(ServerPath, FilePath, changeType)];
+            FakeEditorDocument document = new(FilePath, "original");
+            editor.Activate(document);
+            Assert.Equal(TfvcFileStateKind.Pending, (await service.GetStateAsync(FilePath, CancellationToken.None)).Kind);
+            Assert.True(editor.ManagedWriteProtection[FilePath]);
+
+            document.Text = "changed";
+            await service.HandleDocumentChangedAsync(document, CancellationToken.None);
+            document.Text = "changed again";
+            await service.HandleDocumentChangedAsync(document, CancellationToken.None);
+
+            Assert.Equal([FilePath], Assert.Single(client.CheckOuts));
+            TfvcFileState state = await service.GetStateAsync(FilePath, CancellationToken.None);
+            Assert.True(state.PendingChange!.HasChangeType("Edit"));
+        }
+    }
+
+    [Theory]
+    [InlineData("Edit")]
+    [InlineData("Add")]
+    [InlineData("Delete")]
+    public async Task PendingEditAddOrDelete_IsNotCheckedOut(string changeType)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        (TfvcSession session, FakeTfvcClient client, _, FakeEditorServices editor, TfvcAutoCheckOutService service, _) = await CreateAsync();
+        using (session)
+        using (service)
+        {
+            client.PendingChangesByLocalPath[FilePath] = [TfvcTestData.CreateChange(ServerPath, FilePath, changeType)];
+            FakeEditorDocument document = new(FilePath, "changed");
+            editor.Activate(document);
+
+            await service.HandleDocumentChangedAsync(document, CancellationToken.None);
+
+            Assert.Empty(client.CheckOuts);
+        }
+    }
+
+    [Fact]
+    public void WithoutCollection_ChangesAreNotKeptAndNothingIsLogged()
+    {
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo());
+        FakeEditorServices editor = new();
+        RecordingExtensionLogger logger = new();
+        FakeEditorDocument document = new(FilePath, "original");
+        editor.Activate(document);
+        using TfvcAutoCheckOutService service = new(session, editor, new RecordingWindow(), logger, _ => "original");
+        service.Start();
+
+        document.Edit("changed");
+        editor.Activate(new FakeEditorDocument(@"C:\src\Product\src\Other.cs", "other"));
+        editor.Activate(document);
+
+        Assert.Equal(0, service.DeferredChangeCount);
+        Assert.Empty(logger.Entries);
+        Assert.Equal(0, client.FileStatusQueries);
+        Assert.Equal(TfvcFileStateKind.Unknown, service.ActiveDocumentState.Kind);
+    }
+
+    [Fact]
+    public async Task ClosingDocument_DropsItsWaitingChange()
+    {
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        TaskCompletionSource<IReadOnlyList<TfvcWorkspace>> connection = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WorkspacesGate = connection;
+        FakeTfvcServerClient server = new();
+        server.ExistingItems.Add(ServerPath);
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+        FakeEditorServices editor = new();
+        FakeEditorDocument document = new(FilePath, "original");
+        editor.Activate(document);
+        using TfvcAutoCheckOutService service = new(session, editor, new RecordingWindow(), new NullExtensionLogger(), _ => "original");
+        service.Start();
+        Task connecting = session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+
+        document.Edit("changed");
+        Assert.Equal(1, service.DeferredChangeCount);
+        editor.Close(document);
+        Assert.Equal(0, service.DeferredChangeCount);
+
+        connection.SetResult(client.Workspaces);
+        await connecting;
+
+        Assert.True(session.IsConnected);
+        Assert.Empty(client.CheckOuts);
     }
 
     [Fact]
@@ -155,10 +304,14 @@ public sealed class TfvcAutoCheckOutServiceTests
     }
 
     [Fact]
-    public async Task ChangeBeforeConnection_ChecksOutOnceStateIsKnown()
+    public async Task ChangeWhileConnecting_ChecksOutOnceStateIsKnown()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        TaskCompletionSource<IReadOnlyList<TfvcWorkspace>> connection = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WorkspacesGate = connection;
+        TaskCompletionSource<IReadOnlyList<string>> checkOutStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.CheckOutStarted += paths => checkOutStarted.TrySetResult(paths);
         FakeTfvcServerClient server = new();
         server.ExistingItems.Add(ServerPath);
         using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
@@ -167,16 +320,16 @@ public sealed class TfvcAutoCheckOutServiceTests
         editor.Activate(document);
         using TfvcAutoCheckOutService service = new(session, editor, new RecordingWindow(), new NullExtensionLogger(), _ => "original");
         service.Start();
+        Task connecting = session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
 
         document.Edit("changed");
         Assert.Empty(client.CheckOuts);
+        Assert.Equal(1, service.DeferredChangeCount);
 
-        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
-        for (int attempt = 0; attempt < 100 && client.CheckOuts.Count == 0; attempt++)
-        {
-            await Task.Delay(30);
-        }
+        connection.SetResult(client.Workspaces);
+        await connecting;
 
+        Assert.Equal([FilePath], await checkOutStarted.Task.WaitAsync(TimeSpan.FromSeconds(30)));
         Assert.Equal([FilePath], Assert.Single(client.CheckOuts));
     }
 

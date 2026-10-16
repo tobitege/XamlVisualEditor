@@ -11,6 +11,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Xunit;
+using XamlVisualEditor.TfvcExtension.Localization;
 using XamlVisualEditor.TfvcExtension.Models;
 using XamlVisualEditor.TfvcExtension.Services;
 using XamlVisualEditor.TfvcExtension.ViewModels;
@@ -87,6 +88,142 @@ public sealed class TfvcPanelViewModelTests
             Assert.Null(viewModel.Comment);
             Assert.Contains("4711", viewModel.OperationMessage);
         }
+    }
+
+    [Theory]
+    [InlineData("current-user", true)]
+    [InlineData("other-user", false)]
+    public async Task PendingChanges_FindsUnrecognizedChangesetOnTheServerOrKeepsTheWorkItems(string authorId, bool linked)
+    {
+        (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            // A display language other than English or German.
+            client.CheckInOutput = "Ensemble de modifications 4712 archivé.";
+            server.CurrentUserId = "current-user";
+            server.History.Add(new TfvcChangesetInfo(4712, "Test User", null, "Update", authorId));
+            server.ChangesetChanges[4712] = [new TfvcChangesetChange("$/Product/a.cs", "edit")];
+            server.WorkItems[17] = new TfvcWorkItemInfo(17, "Task", "Port the form", "Active");
+            viewModel.WorkItemIdText = "17";
+            await viewModel.AddWorkItemCommand.Execute().ToTask();
+
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Single(client.CheckIns);
+            Assert.Null(viewModel.Comment);
+            if (linked)
+            {
+                Assert.Equal((17, 4712), Assert.Single(server.Links));
+                Assert.Empty(viewModel.WorkItems);
+                Assert.Contains("4712", viewModel.OperationMessage);
+            }
+            else
+            {
+                Assert.Empty(server.Links);
+                Assert.Equal(17, Assert.Single(viewModel.WorkItems).Id);
+                Assert.Contains(TfvcStrings.ChangesetNotDeterminedWorkItemsKept, viewModel.OperationMessage);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_KeepsWorkItemsWhenTheServerKnowsNoChangeset()
+    {
+        (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            client.CheckInOutput = "Ensemble de modifications 4712 archivé.";
+            server.CurrentUserId = "current-user";
+            server.WorkItems[17] = new TfvcWorkItemInfo(17, "Task", "Port the form", "Active");
+            viewModel.WorkItemIdText = "17";
+            await viewModel.AddWorkItemCommand.Execute().ToTask();
+
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Empty(server.Links);
+            Assert.Single(viewModel.WorkItems);
+            Assert.Contains(TfvcStrings.CheckedIn, viewModel.OperationMessage);
+            Assert.Contains(TfvcStrings.ChangesetNotDeterminedWorkItemsKept, viewModel.OperationMessage);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ChecksInWholeWorkspaceOnlyWhileItMatchesTheDisplayedList()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        client.RejectCheckInItemLists = true;
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client))
+        {
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Equal(2, client.CheckIns.Count);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], client.CheckIns[0].Items);
+            Assert.Empty(client.CheckIns[1].Items);
+
+            // A change pended after the list was loaded would be checked in without being shown.
+            client.CheckIns.Clear();
+            client.PendingChanges = [.. client.PendingChanges, TfvcTestData.CreateChange("$/Product/c.cs", @"C:\src\Product\c.cs")];
+            viewModel.Comment = "Update";
+            await viewModel.CheckInCommand.Execute().ToTask();
+
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], Assert.Single(client.CheckIns).Items);
+            Assert.Equal(TfvcStrings.PendingChangesChangedCheckInCancelled, viewModel.OperationMessage);
+            Assert.Equal("Update", viewModel.Comment);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ShelvesWholeWorkspaceOnlyWhileItMatchesTheDisplayedList()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        client.RejectShelveItemLists = true;
+        RecordingWindow window = new() { InputBoxResult = "Nightly" };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            client.PendingChanges = [.. client.PendingChanges, TfvcTestData.CreateChange("$/Product/c.cs", @"C:\src\Product\c.cs")];
+
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], Assert.Single(client.Shelves).Items);
+            Assert.Equal(TfvcStrings.PendingChangesChangedShelveCancelled, viewModel.OperationMessage);
+        }
+    }
+
+    [Theory]
+    [InlineData("/delete")]
+    [InlineData("-i")]
+    [InlineData("@items.txt")]
+    [InlineData("Fix: layout")]
+    [InlineData("Nightly;OtherUser")]
+    [InlineData("a\"b")]
+    [InlineData("Fix & test")]
+    public async Task PendingChanges_RejectsInvalidShelvesetNames(string name)
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        RecordingWindow window = new() { InputBoxResult = name };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Empty(client.Shelves);
+            Assert.Contains(name, viewModel.OperationMessage);
+        }
+    }
+
+    [Fact]
+    public void IsValidShelvesetName_LimitsTheLength()
+    {
+        Assert.True(PendingChangesViewModel.IsValidShelvesetName(new string('a', 64)));
+        Assert.False(PendingChangesViewModel.IsValidShelvesetName(new string('a', 65)));
+        Assert.True(PendingChangesViewModel.IsValidShelvesetName("Nightly build 2026-10-16"));
     }
 
     [Fact]

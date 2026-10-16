@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,49 @@ namespace XamlVisualEditor.Tests.Unit.Tfvc;
 
 public sealed class TfvcClientTests
 {
+    // Commands without /workspace run in an existing mapped folder, so the workspace maps the temporary folder.
+    private static readonly TfvcWorkspace MappedWorkspace = TfvcTestData.CreateWorkspace(localRoot: Path.GetTempPath());
+
+    [Fact]
+    public async Task ChangeCommands_RunInTheMappedFolderAndFailWithoutOne()
+    {
+        FakeTfCommandRunner runner = new();
+        TfvcClient client = new(runner);
+        TfvcWorkspace unmapped = TfvcTestData.CreateWorkspace(localRoot: Path.Combine(Path.GetTempPath(), "tfvc-missing-" + Guid.NewGuid().ToString("N")));
+
+        await client.CheckOutAsync(MappedWorkspace, ["$/Product/a.cs"], recursive: false, CancellationToken.None);
+        TfvcWorkspaceFolderNotFoundException exception = await Assert.ThrowsAsync<TfvcWorkspaceFolderNotFoundException>(
+            () => client.CheckInAsync(unmapped, "Update", ["$/Product/a.cs"], CancellationToken.None));
+
+        Assert.Equal(MappedWorkspace.GetWorkingDirectory(), Assert.Single(runner.Calls).WorkingDirectory);
+        Assert.Contains("DEV01", TfvcDisplayText.DescribeError(exception));
+    }
+
+    [Fact]
+    public async Task AddAsync_SplitsLongItemListsIntoSeveralCalls()
+    {
+        FakeTfCommandRunner runner = new();
+        TfvcClient client = new(runner);
+        List<string> items = new();
+        for (int i = 0; i < 400; i++)
+        {
+            items.Add(Path.Combine(Path.GetTempPath(), new string('x', 100) + i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        await client.AddAsync(MappedWorkspace, items, CancellationToken.None);
+
+        Assert.True(runner.Calls.Count > 1);
+        List<string> added = new();
+        foreach ((string WorkingDirectory, IReadOnlyList<string> Arguments) call in runner.Calls)
+        {
+            Assert.Equal(["add", "/noprompt"], call.Arguments.Take(2));
+            Assert.True(TfCommandRunner.EstimateCommandLineLength(call.Arguments) <= TfCommandRunner.MAX_COMMAND_LINE_LENGTH);
+            added.AddRange(call.Arguments.Skip(2));
+        }
+
+        Assert.Equal(items, added);
+    }
+
     [Fact]
     public async Task GetPendingChangesAsync_QueriesWholeWorkspaceAsXml()
     {
@@ -41,7 +85,7 @@ public sealed class TfvcClientTests
         CommentFileProbe probe = new(runner, argumentIndex: 1);
         TfvcClient client = new(runner);
 
-        await client.CheckInAsync(TfvcTestData.CreateWorkspace(), "@Max: layout fixed\r\nÄnderung für Grüße", ["$/Product/a.cs", "$/Product/b.cs"], CancellationToken.None);
+        await client.CheckInAsync(MappedWorkspace, "@Max: layout fixed\r\nÄnderung für Grüße", ["$/Product/a.cs", "$/Product/b.cs"], CancellationToken.None);
 
         IReadOnlyList<string> arguments = runner.Calls[0].Arguments;
         Assert.Equal(["checkin", "/comment:@" + probe.FilePath, "/noprompt", "$/Product/a.cs", "$/Product/b.cs"], arguments);
@@ -59,7 +103,7 @@ public sealed class TfvcClientTests
         TfvcClient client = new(runner);
 
         await Assert.ThrowsAsync<TfCommandException>(
-            () => client.CheckInAsync(TfvcTestData.CreateWorkspace(), "Fix build", ["$/Product/a.cs"], CancellationToken.None));
+            () => client.CheckInAsync(MappedWorkspace, "Fix build", ["$/Product/a.cs"], CancellationToken.None));
 
         Assert.Equal("Fix build", probe.Content);
         Assert.False(File.Exists(probe.FilePath));
@@ -72,9 +116,9 @@ public sealed class TfvcClientTests
         CommentFileProbe probe = new(runner, argumentIndex: 3);
         TfvcClient client = new(runner);
 
-        await client.ShelveAsync(TfvcTestData.CreateWorkspace(), "Nightly", "@Max: draft", ["$/Product/a.cs"], CancellationToken.None);
+        await client.ShelveAsync(MappedWorkspace, "Nightly", "@Max: draft", ["$/Product/a.cs"], CancellationToken.None);
         probe.Stop();
-        await client.ShelveAsync(TfvcTestData.CreateWorkspace(), "Nightly", "  ", ["$/Product/a.cs"], CancellationToken.None);
+        await client.ShelveAsync(MappedWorkspace, "Nightly", "  ", ["$/Product/a.cs"], CancellationToken.None);
 
         Assert.Equal(["shelve", "Nightly", "/noprompt", "/comment:@" + probe.FilePath, "$/Product/a.cs"], runner.Calls[0].Arguments);
         Assert.Equal("@Max: draft", probe.Content);
@@ -120,7 +164,7 @@ public sealed class TfvcClientTests
         TfvcClient client = new(runner);
 
         TfCommandException exception = await Assert.ThrowsAsync<TfCommandException>(
-            () => client.CheckOutAsync(TfvcTestData.CreateWorkspace(), [@"C:\src\Product\a.cs"], recursive: false, CancellationToken.None));
+            () => client.CheckOutAsync(MappedWorkspace, [@"C:\src\Product\a.cs"], recursive: false, CancellationToken.None));
 
         Assert.Equal("checkout", exception.Command);
         Assert.Contains("TF10152", TfvcDisplayText.DescribeError(exception));
@@ -132,7 +176,7 @@ public sealed class TfvcClientTests
         FakeTfCommandRunner runner = new();
         TfvcClient client = new(runner);
 
-        await client.CheckOutAsync(TfvcTestData.CreateWorkspace(), [@"C:\src\Product\src"], recursive: true, CancellationToken.None);
+        await client.CheckOutAsync(MappedWorkspace, [@"C:\src\Product\src"], recursive: true, CancellationToken.None);
 
         Assert.Equal(["checkout", "/noprompt", "/recursive", @"C:\src\Product\src"], runner.Calls[0].Arguments);
     }
@@ -149,7 +193,7 @@ public sealed class TfvcClientTests
         }
 
         await Assert.ThrowsAsync<TfCommandLineTooLongException>(
-            () => client.UndoAsync(TfvcTestData.CreateWorkspace(), items, false, CancellationToken.None));
+            () => client.UndoAsync(MappedWorkspace, items, false, CancellationToken.None));
         Assert.Empty(runner.Calls);
     }
 
@@ -160,7 +204,7 @@ public sealed class TfvcClientTests
         runner.Enqueue(new TfCommandResult(1, "@@ -1 +1 @@", string.Empty));
         TfvcClient client = new(runner);
 
-        TfCommandResult result = await client.DifferenceAsync(TfvcTestData.CreateWorkspace(), @"C:\src\Product\a.cs", CancellationToken.None);
+        TfCommandResult result = await client.DifferenceAsync(MappedWorkspace, @"C:\src\Product\a.cs", CancellationToken.None);
 
         Assert.Equal("@@ -1 +1 @@", result.StandardOutput);
         Assert.Equal(["difference", "/format:unified", "/noprompt", @"C:\src\Product\a.cs"], runner.Calls[0].Arguments);

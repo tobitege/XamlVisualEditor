@@ -177,4 +177,9 @@ Offline arbeiten? Versionierte Dateien bleiben schreibgeschützt; beim Bearbeite
   <data name="LogInitializationFailed" xml:space="preserve"><value>TFVC-Initialisierung ist fehlgeschlagen.</value></data>
   <data name="TfCommandTimeoutFormat" xml:space="preserve"><value>tf {0} wurde nicht innerhalb von {1} Sekunden beendet.</value></data>
   <data name="HistoryOfflineStatus" xml:space="preserve"><value>Offline. Der Verlauf ist nach dem Online-Gehen wieder verfügbar.</value></data>
+  <data name="WorkspaceFolderMissingFormat" xml:space="preserve"><value>Auf diesem Computer existiert kein zugeordneter Ordner des Arbeitsbereichs {0}. Zuerst den Arbeitsbereich abrufen oder einen zugeordneten Ordner anlegen.</value></data>
+  <data name="ChangesetNotDeterminedWorkItemsKept" xml:space="preserve"><value>Die Changeset-Nummer konnte nicht ermittelt werden, deshalb wurden die Arbeitselemente nicht verknüpft. Sie bleiben in der Liste.</value></data>
+  <data name="PendingChangesChangedCheckInCancelled" xml:space="preserve"><value>Für einen tf.exe-Aufruf sind es zu viele Änderungen, und die ausstehenden Änderungen des Arbeitsbereichs weichen von der angezeigten Liste ab. Es wurde nichts eingecheckt. Die Liste aktualisieren und erneut versuchen.</value></data>
+  <data name="PendingChangesChangedShelveCancelled" xml:space="preserve"><value>Für einen tf.exe-Aufruf sind es zu viele Änderungen, und die ausstehenden Änderungen des Arbeitsbereichs weichen von der angezeigten Liste ab. Es wurde kein Shelveset erstellt. Die Liste aktualisieren und erneut versuchen.</value></data>
+  <data name="ShelvesetNameInvalidFormat" xml:space="preserve"><value>„{0}“ ist kein gültiger Shelveset-Name. Ein Shelveset-Name hat höchstens 64 Zeichen, beginnt nicht mit „-“ oder „@“ und enthält keines der Zeichen " / \ : &lt; &gt; | * ? ;</value></data>
 </root>

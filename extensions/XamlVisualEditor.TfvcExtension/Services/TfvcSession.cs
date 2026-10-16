@@ -91,6 +91,9 @@ public sealed class TfvcSession : IDisposable
     /// <summary>Gets whether the last connection attempt failed.</summary>
     public bool ConnectionFailed { get; private set; }
 
+    /// <summary>Gets whether the last connection attempt failed because tf.exe was not found or did not start.</summary>
+    public bool TfExeMissing { get; private set; }
+
     /// <summary>Gets the local paths whose write protection was removed while working offline.</summary>
     public IReadOnlyCollection<string> OfflineEdits => _offlineEdits;
 
@@ -161,6 +164,7 @@ public sealed class TfvcSession : IDisposable
 
             Workspaces = workspaces;
             ConnectionFailed = false;
+            TfExeMissing = false;
             StatusMessage = workspaces.Count == 0 ? TfvcStrings.NoWorkspace : null;
             if (workspaces.Count > 0)
             {
@@ -192,6 +196,7 @@ public sealed class TfvcSession : IDisposable
             }
 
             ConnectionFailed = true;
+            TfExeMissing = ex is TfExeNotFoundException;
             Workspaces = Array.Empty<TfvcWorkspace>();
             CurrentWorkspace = null;
             PendingChanges = Array.Empty<TfvcPendingChange>();

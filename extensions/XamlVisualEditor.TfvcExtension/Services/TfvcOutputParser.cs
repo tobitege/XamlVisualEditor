@@ -97,7 +97,8 @@ public static partial class TfvcOutputParser
     /// <summary>Extracts the changeset number from <c>tf checkin</c> output.</summary>
     /// <remarks>
     /// tf.exe lists every folder and file before the summary line, and their paths may contain the word "changeset"
-    /// followed by digits. Only a line that starts with the changeset message counts, and the last one wins.
+    /// followed by digits. Only a line that starts with the changeset message counts, and the last one wins. The message
+    /// is recognized in English and German only.
     /// </remarks>
     public static int? TryParseChangesetId(string output)
     {
@@ -159,8 +160,9 @@ public static partial class TfvcOutputParser
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     // English "Changeset #123 checked in.", German "Changeset Nr. 123 wurde eingecheckt." or "Änderungssatz Nr. 123 eingecheckt.",
-    // optionally after one leading word such as "Das". The "Ä" may arrive in another code page, so up to two characters stand for it.
-    [GeneratedRegex(@"^(?:\p{L}+\s+)?(?:changeset|\S{0,2}nderungssatz)\s*(?:#|nr\.?)?\s*(?<id>\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // optionally after one leading word such as "Das". The runner decodes the output with the ANSI code page, so "Ä" arrives
+    // as one character. Other display languages are not matched; the caller then asks the server for the changeset.
+    [GeneratedRegex(@"^(?:\p{L}+\s+)?(?:changeset|änderungssatz)\s*(?:#|nr\.?)?\s*(?<id>\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ChangesetLineRegex();
 
     [GeneratedRegex(@"https?://[^\s""<>]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

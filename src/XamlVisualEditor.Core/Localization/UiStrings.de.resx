@@ -1281,6 +1281,8 @@
   <data name="PreviewThemeProviderError" xml:space="preserve"><value>Theme-Provider '{0}': {1}</value></data>
   <data name="PreviewThemeUnavailable" xml:space="preserve"><value>Nicht verfügbar: {0}</value></data>
   <data name="PreviewThemePreviewOnly" xml:space="preserve"><value>{0} (nur Vorschau)</value></data>
+  <data name="PreviewThemePending" xml:space="preserve"><value>{0} (wartet auf die Vorschau)</value></data>
+  <data name="PreviewThemeProjectDefault" xml:space="preserve"><value>Projektstandard</value></data>
   <data name="Duplicate" xml:space="preserve"><value>Duplizieren</value></data>
   <data name="ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>

@@ -51,7 +51,8 @@ public sealed class DesignerThemeWorkflowTests
         DesignerThemeProviderRegistration provider = new("sample.palette", "Sample", typeof(SampleThemeProvider).Assembly.Location,
             typeof(SampleThemeProvider).FullName!);
         ExtensionContributionRegistry registry = new();
-        using IDisposable oldRegistration = registry.RegisterDesignerThemeProviders("sample.extension", new[] { provider });
+        IDisposable oldRegistration = registry.RegisterDesignerThemeProviders("sample.extension", new[] { provider });
+        oldRegistration.Dispose();
         using IDisposable registration = registry.RegisterDesignerThemeProviders("sample.extension", new[] { provider });
         oldRegistration.Dispose();
         Assert.Equal(provider, Assert.Single(registry.DesignerThemeProviders));

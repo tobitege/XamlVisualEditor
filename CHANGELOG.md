@@ -107,6 +107,7 @@ uses Semantic Versioning.
 - Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
 - Fixed the preview theme selector showing the raw provider id of a saved theme before the previewer reported its themes: the entry names the theme and says that it waits for the preview, and it shows the theme as unavailable once the previewer exits or fails to start without reporting it.
 - Fixed the untranslated "Theme default" entry of the preview theme selector; it follows the UI language ("Projektstandard" in German).
+- Fixed extensions losing menu, toolbar, Command Palette, view or property editor contributions when they registered the same kind more than once: every registration is kept, and disposing one removes only its own items. Disposing a replaced command handler, command metadata or view provider registration no longer removes its replacement, and a theme provider ID that is already registered is rejected.
 
 ## [0.2.0] - 2026-09-01
 

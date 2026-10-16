@@ -4,6 +4,11 @@ namespace XamlVisualEditor.Extensions;
 public interface ICommands
 {
     /// <summary>Registers a command handler.</summary>
+    /// <remarks>A command has one handler: a later registration for the same command id replaces the earlier one.</remarks>
+    /// <returns>
+    /// A handle that removes this registration when disposed. Disposing a replaced registration, or disposing
+    /// again, has no effect.
+    /// </returns>
     IDisposable Register(string commandId, Func<CommandContext, Task> handler);
 
     /// <summary>Executes a command by id.</summary>

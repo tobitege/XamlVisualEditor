@@ -8,57 +8,47 @@ namespace XamlVisualEditor.Extensions.Hosting;
 public sealed class ExtensionViewRegistry : IExtensionViewRegistry
 {
     private readonly object _gate = new();
-    private readonly Dictionary<string, IExtensionTreeDataProvider> _treeProviders = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IWebviewViewProvider> _webviewProviders = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, ICustomViewProvider> _customProviders = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Slot<IExtensionTreeDataProvider>> _treeProviders = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Slot<IWebviewViewProvider>> _webviewProviders = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Slot<ICustomViewProvider>> _customProviders = new(StringComparer.Ordinal);
 
     public event EventHandler<ExtensionViewRegistryChangedEventArgs>? Changed;
 
     public IDisposable RegisterTreeDataProvider<T>(string viewId, ITreeDataProvider<T> provider)
     {
-        if (string.IsNullOrWhiteSpace(viewId))
-        {
-            throw new ArgumentException("View id is required.", nameof(viewId));
-        }
-
-        if (provider is null)
-        {
-            throw new ArgumentNullException(nameof(provider));
-        }
-
-        var adapter = new TreeDataProviderAdapter<T>(provider);
-        lock (_gate)
-        {
-            _treeProviders[viewId] = adapter;
-        }
-
-        Changed?.Invoke(this, new ExtensionViewRegistryChangedEventArgs(viewId));
-        return new Registration(() => RemoveTreeProvider(viewId, adapter));
+        ValidateRegistration(viewId, provider);
+        return Add<IExtensionTreeDataProvider>(_treeProviders, viewId, new TreeDataProviderAdapter<T>(provider));
     }
 
     public IDisposable RegisterWebviewViewProvider(string viewId, IWebviewViewProvider provider)
     {
-        if (string.IsNullOrWhiteSpace(viewId))
-        {
-            throw new ArgumentException("View id is required.", nameof(viewId));
-        }
-
-        if (provider is null)
-        {
-            throw new ArgumentNullException(nameof(provider));
-        }
-
-        lock (_gate)
-        {
-            _webviewProviders[viewId] = provider;
-        }
-
-        Changed?.Invoke(this, new ExtensionViewRegistryChangedEventArgs(viewId));
-        return new Registration(() => RemoveWebviewProvider(viewId, provider));
+        ValidateRegistration(viewId, provider);
+        return Add(_webviewProviders, viewId, provider);
     }
 
     public IDisposable RegisterCustomViewProvider(string viewId, ICustomViewProvider provider)
     {
+        ValidateRegistration(viewId, provider);
+        return Add(_customProviders, viewId, provider);
+    }
+
+    public bool TryGetTreeProvider(string viewId, out IExtensionTreeDataProvider provider)
+    {
+        return TryGet(_treeProviders, viewId, out provider);
+    }
+
+    public bool TryGetWebviewProvider(string viewId, out IWebviewViewProvider provider)
+    {
+        return TryGet(_webviewProviders, viewId, out provider);
+    }
+
+    public bool TryGetCustomViewProvider(string viewId, out ICustomViewProvider provider)
+    {
+        return TryGet(_customProviders, viewId, out provider);
+    }
+
+    private static void ValidateRegistration(string viewId, object? provider)
+    {
         if (string.IsNullOrWhiteSpace(viewId))
         {
             throw new ArgumentException("View id is required.", nameof(viewId));
@@ -68,92 +58,62 @@ public sealed class ExtensionViewRegistry : IExtensionViewRegistry
         {
             throw new ArgumentNullException(nameof(provider));
         }
+    }
 
+    private IDisposable Add<TProvider>(Dictionary<string, Slot<TProvider>> target, string viewId, TProvider provider)
+        where TProvider : class
+    {
+        Slot<TProvider> slot = new(provider);
         lock (_gate)
         {
-            _customProviders[viewId] = provider;
+            target[viewId] = slot;
         }
 
         Changed?.Invoke(this, new ExtensionViewRegistryChangedEventArgs(viewId));
-        return new Registration(() => RemoveCustomProvider(viewId, provider));
+        return new Registration(() => Remove(target, viewId, slot));
     }
 
-    public bool TryGetTreeProvider(string viewId, out IExtensionTreeDataProvider provider)
+    private bool TryGet<TProvider>(Dictionary<string, Slot<TProvider>> target, string viewId, out TProvider provider)
+        where TProvider : class
     {
         lock (_gate)
         {
-            return _treeProviders.TryGetValue(viewId, out provider!);
-        }
-    }
-
-    public bool TryGetWebviewProvider(string viewId, out IWebviewViewProvider provider)
-    {
-        lock (_gate)
-        {
-            return _webviewProviders.TryGetValue(viewId, out provider!);
-        }
-    }
-
-    public bool TryGetCustomViewProvider(string viewId, out ICustomViewProvider provider)
-    {
-        lock (_gate)
-        {
-            return _customProviders.TryGetValue(viewId, out provider!);
-        }
-    }
-
-    private void RemoveTreeProvider(string viewId, IExtensionTreeDataProvider provider)
-    {
-        lock (_gate)
-        {
-            if (_treeProviders.TryGetValue(viewId, out IExtensionTreeDataProvider? current)
-                && ReferenceEquals(current, provider))
+            if (target.TryGetValue(viewId, out Slot<TProvider>? slot))
             {
-                _treeProviders.Remove(viewId);
+                provider = slot.Provider;
+                return true;
             }
-            else
+        }
+
+        provider = null!;
+        return false;
+    }
+
+    private void Remove<TProvider>(Dictionary<string, Slot<TProvider>> target, string viewId, Slot<TProvider> slot)
+        where TProvider : class
+    {
+        lock (_gate)
+        {
+            if (!target.TryGetValue(viewId, out Slot<TProvider>? current) || !ReferenceEquals(current, slot))
             {
                 return;
             }
+
+            target.Remove(viewId);
         }
 
         Changed?.Invoke(this, new ExtensionViewRegistryChangedEventArgs(viewId));
     }
 
-    private void RemoveWebviewProvider(string viewId, IWebviewViewProvider provider)
+    /// <summary>Gives each registration its own identity, so a replaced registration cannot remove its successor.</summary>
+    private sealed class Slot<TProvider>
     {
-        lock (_gate)
+        public Slot(TProvider provider)
         {
-            if (_webviewProviders.TryGetValue(viewId, out IWebviewViewProvider? current)
-                && ReferenceEquals(current, provider))
-            {
-                _webviewProviders.Remove(viewId);
-            }
-            else
-            {
-                return;
-            }
+            Provider = provider;
         }
 
-        Changed?.Invoke(this, new ExtensionViewRegistryChangedEventArgs(viewId));
-    }
-
-    private void RemoveCustomProvider(string viewId, ICustomViewProvider provider)
-    {
-        lock (_gate)
-        {
-            if (_customProviders.TryGetValue(viewId, out ICustomViewProvider? current)
-                && ReferenceEquals(current, provider))
-            {
-                _customProviders.Remove(viewId);
-            }
-            else
-            {
-                return;
-            }
-        }
-
-        Changed?.Invoke(this, new ExtensionViewRegistryChangedEventArgs(viewId));
+        public TProvider Provider { get; }
     }
 
     private sealed class TreeDataProviderAdapter<T> : IExtensionTreeDataProvider

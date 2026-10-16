@@ -7,6 +7,7 @@ public sealed class CommandRegistry : ICommands
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, Func<CommandContext, Task>> _handlers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object> _owners = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
     public IDisposable Register(string commandId, Func<CommandContext, Task> handler)
@@ -21,12 +22,14 @@ public sealed class CommandRegistry : ICommands
             throw new ArgumentNullException(nameof(handler));
         }
 
+        object owner = new();
         lock (_gate)
         {
             _handlers[commandId] = handler;
+            _owners[commandId] = owner;
         }
 
-        return new Registration(() => Unregister(commandId));
+        return new Registration(() => Unregister(commandId, owner));
     }
 
     /// <inheritdoc />
@@ -62,11 +65,15 @@ public sealed class CommandRegistry : ICommands
         return Task.FromResult<IReadOnlyList<string>>(commands);
     }
 
-    private void Unregister(string commandId)
+    private void Unregister(string commandId, object owner)
     {
         lock (_gate)
         {
-            _handlers.Remove(commandId);
+            if (_owners.TryGetValue(commandId, out object? current) && ReferenceEquals(current, owner))
+            {
+                _owners.Remove(commandId);
+                _handlers.Remove(commandId);
+            }
         }
     }
 

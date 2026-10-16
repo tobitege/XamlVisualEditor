@@ -1,6 +1,11 @@
 namespace XamlVisualEditor.Extensions;
 
 /// <summary>Registers view providers.</summary>
+/// <remarks>
+/// A view has one provider of each kind: a later registration for the same view id replaces the earlier one. The
+/// handle returned by a registration removes it when disposed; disposing a replaced registration, or disposing
+/// again, has no effect.
+/// </remarks>
 public interface IViews
 {
     /// <summary>Registers a tree data provider.</summary>

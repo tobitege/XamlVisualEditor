@@ -43,6 +43,21 @@ Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben. Offen
 10. Tests: echte Repos für Ordner-Stage, Rename-Unstage, Stage All mit über 1.500 Dateien; Theory für die Watcher-Filter;
     Watcher-Ausfall, Status-Fehler, Timeout; `GitTestRepository` ohne `init -b` (git 2.23) und mit `GIT_CEILING_DIRECTORIES`.
 
+Offene Befunde des Reviews von Phase 2 (Stand 862dd40), Behebung nach den Korrekturen zu Phase 0/1:
+1. Branch-Namen nie als Option: `git branch -- <name>`, Eingabe vorher prüfen (`check-ref-format --branch`).
+2. Wechsel auf Remote-Branch über den Upstream zuordnen, nicht über den Namen; bei Namensgleichheit mit fremdem Upstream nachfragen.
+3. „Neu von hier“ von einem Remote-Branch mit anderem Namen mit `--no-track`, damit der erste Push `-u` anbietet.
+4. Fehlerklassen: Hook/geschützter Branch, 403 (keine Rechte), Netzwerk; Push-Ergebnis über `--porcelain`.
+5. Sync meldet Teilerfolg (Pull ok, Push fehlgeschlagen).
+6. Schreibsperre: Fetch und Push ohne Sperre; Pull = abbrechbarer Fetch plus kurzes `merge --ff-only @{u}` unter der Sperre.
+7. Repository-Panel lädt Branches nur bei Ref-Änderung, nur sichtbar, mit Rx-Switch und Abgleich statt Neuaufbau.
+8. Fortschrittsdialog: nur ausdrücklicher Abbruch zählt; fertige Operation nach Abbruch als Erfolg melden.
+9. Remote-Namen mit Schrägstrich über längstes Präfix der Remote-Liste auflösen.
+10. Fetch: Teilerfolg bei einem kaputten Remote melden; `--prune`, damit „gone“ und gelöschte Remote-Branches stimmen.
+11. Vereinfachen: Remote-Vorgabe einmal, ein Ergebnisfeld statt vier, doppelte Suche, ungenutzte Felder, Test-Hook im Produktivtyp.
+12. Anzeige: Detached HEAD im Panel, „gone“ sichtbar, Fetch- und Pull-Icon unterscheidbar.
+13. Tests: echte Repos für 1-3, „gone“ mit `fetch --prune`, Sync-Teilfehler, Hook-Klassifizierung, `GIT_ALLOW_PROTOCOL` neutralisieren, Enkelprozess beim Abbruch prüfen.
+
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 
 Entscheidung zu 1.4: Der `.git`-Watcher und das Aktualisieren nach eigenen Kommandos laufen immer; der rekursive

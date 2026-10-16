@@ -44,6 +44,13 @@ public sealed class PropertyEditingWorkflowTests
           <TextBox x:Name="input" VerticalAlignment="Center" />
         </StackPanel>
         """;
+    private const string ThreeControlsXaml = """
+        <StackPanel xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+          <Label x:Name="caption" VerticalAlignment="Center" Background="Red" />
+          <TextBox x:Name="input" VerticalAlignment="Center" Background="Red" />
+          <Button x:Name="action" VerticalAlignment="Center" Background="Red" />
+        </StackPanel>
+        """;
 
     [AvaloniaTheory(Timeout = 30000)]
     [InlineData(PropertyFixtureOwner)]
@@ -101,8 +108,7 @@ public sealed class PropertyEditingWorkflowTests
             rowsView.CollectionChanged -= recordChange;
         }
 
-        Assert.InRange(changes.Count, 1, 2);
-        Assert.All(changes, action => Assert.Equal(NotifyCollectionChangedAction.Reset, action));
+        Assert.Equal(NotifyCollectionChangedAction.Reset, Assert.Single(changes));
         headers = CollapsibleHeaders(inspector);
         Assert.All(headers, header => Assert.True(header.IsExpanded));
         PropertyRowViewModel[] rows = session.GroupedRows();
@@ -427,6 +433,227 @@ public sealed class PropertyEditingWorkflowTests
         Assert.Equal($"VerticalAlignment: {UiStrings.PropertyValueApplyFailed}", inspector.StatusText);
         Assert.All(session.ChildNodes, node => Assert.Equal("Center", node.GetPropertyValue("VerticalAlignment")));
         Assert.Equal(undoCount, session.Document.SyncEngine.UndoRedo.UndoCount);
+
+        // The reload that DocumentChanged runs keeps the rejected draft on the same entry.
+        await inspector.HandleDocumentChangedAsync(session.Host.ActiveDocumentPath, cancellationToken);
+        Assert.Same(alignment, session.Entry("VerticalAlignment"));
+        Assert.Equal("Top", alignment.Value);
+        Assert.Equal(UiStrings.PropertyValueApplyFailed, alignment.ValidationError);
+        Assert.Equal($"VerticalAlignment: {UiStrings.PropertyValueApplyFailed}", inspector.StatusText);
+        Assert.All(session.ChildNodes, node => Assert.Equal("Center", node.GetPropertyValue("VerticalAlignment")));
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Inspector_rolls_back_set_null_on_every_node_when_a_later_node_fails()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using InspectorSession session = await InspectorSession.CreateAsync(ThreeControlsXaml, false, cancellationToken,
+            selectedChildren: [0, 1],
+            wrapHost: created => new FailingNodeDesignerHost(created.Host, created.ChildNodes[1].Id.ToString("D")));
+        PropertyEditorPanelViewModel inspector = session.Inspector;
+        int undoCount = session.Document.SyncEngine.UndoRedo.UndoCount;
+        PropertyEntryViewModel background = session.Entry("Background");
+        Assert.True(background.CanAssignNull);
+
+        await background.SetNullCommand.Execute().ToTask(cancellationToken);
+        await WaitUntilAsync(() => background.HasValidationError, cancellationToken);
+        Assert.Equal(UiStrings.PropertyValueApplyFailed, background.ValidationError);
+        Assert.Equal($"Background: {UiStrings.PropertyValueApplyFailed}", inspector.StatusText);
+        Assert.All(session.ChildNodes, node => Assert.Equal("Red", node.GetPropertyValue("Background")));
+        Assert.Equal(undoCount, session.Document.SyncEngine.UndoRedo.UndoCount);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Inspector_keeps_a_rejected_draft_with_the_selection_it_was_typed_for()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using InspectorSession session = await InspectorSession.CreateAsync(ThreeControlsXaml, false, cancellationToken,
+            selectedChildren: [0, 1],
+            wrapHost: created => new FailingNodeDesignerHost(created.Host, created.ChildNodes[1].Id.ToString("D")));
+        int undoCount = session.Document.SyncEngine.UndoRedo.UndoCount;
+        PropertyEntryViewModel alignment = session.Entry("VerticalAlignment");
+        alignment.Value = "Top";
+        await alignment.CommitCommand.Execute().ToTask(cancellationToken);
+        Assert.Equal(UiStrings.PropertyValueApplyFailed, alignment.ValidationError);
+
+        foreach (int[] otherSelection in new[] { new[] { 0, 2 }, new[] { 0 } })
+        {
+            await session.SelectAsync(cancellationToken, otherSelection);
+            PropertyEntryViewModel other = session.Entry("VerticalAlignment");
+            Assert.NotSame(alignment, other);
+            Assert.Equal("Center", other.Value);
+            Assert.False(other.HasValidationError);
+            await other.CommitCommand.Execute().ToTask(cancellationToken);
+        }
+
+        Assert.All(session.ChildNodes, node => Assert.Equal("Center", node.GetPropertyValue("VerticalAlignment")));
+        Assert.Equal(undoCount, session.Document.SyncEngine.UndoRedo.UndoCount);
+
+        await session.SelectAsync(cancellationToken, 0, 1);
+        PropertyEntryViewModel restored = session.Entry("VerticalAlignment");
+        Assert.Equal("Top", restored.Value);
+        Assert.Equal(UiStrings.PropertyValueApplyFailed, restored.ValidationError);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Inspector_writes_a_running_commit_to_the_selection_it_was_typed_for()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        FailingNodeDesignerHost? host = null;
+        using InspectorSession session = await InspectorSession.CreateAsync(ThreeControlsXaml, false, cancellationToken,
+            selectedChildren: [0, 1],
+            wrapHost: created => host = new FailingNodeDesignerHost(created.Host, null));
+        int undoCount = session.Document.SyncEngine.UndoRedo.UndoCount;
+        PropertyEntryViewModel alignment = session.Entry("VerticalAlignment");
+        TaskCompletionSource release = host!.HoldNextPropertyWrite();
+        alignment.Value = "Top";
+        await alignment.CommitCommand.Execute().ToTask(cancellationToken);
+        await host.PropertyWriteHeld.WaitAsync(cancellationToken);
+
+        await session.SelectAsync(cancellationToken, 0, 2);
+        release.SetResult();
+        await WaitUntilAsync(() => alignment.CommittedValue == "Top", cancellationToken);
+        Assert.Equal(new string?[] { "Top", "Top", "Center" },
+            session.ChildNodes.Select(node => node.GetPropertyValue("VerticalAlignment")).ToArray());
+        Assert.Equal(undoCount + 1, session.Document.SyncEngine.UndoRedo.UndoCount);
+    }
+
+    [AvaloniaTheory(Timeout = 30000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Disposing_the_inspector_completes_a_started_commit_and_cancels_a_waiting_one(bool multiSelection)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        FailingNodeDesignerHost? host = null;
+        int[] selection = multiSelection ? new[] { 0, 1 } : new[] { 0 };
+        using InspectorSession session = await InspectorSession.CreateAsync(ThreeControlsXaml, false, cancellationToken,
+            selectedChildren: selection,
+            wrapHost: created => host = new FailingNodeDesignerHost(created.Host, null));
+        int undoCount = session.Document.SyncEngine.UndoRedo.UndoCount;
+        PropertyEntryViewModel alignment = session.Entry("VerticalAlignment");
+        PropertyEntryViewModel horizontal = session.Entry("HorizontalAlignment");
+        TaskCompletionSource release = host!.HoldNextPropertyWrite();
+        alignment.Value = "Top";
+        await alignment.CommitCommand.Execute().ToTask(cancellationToken);
+        await host.PropertyWriteHeld.WaitAsync(cancellationToken);
+        horizontal.Value = "Left";
+        await horizontal.CommitCommand.Execute().ToTask(cancellationToken);
+
+        session.Inspector.Dispose();
+        release.SetResult();
+        await WaitUntilAsync(() => alignment.CommittedValue == "Top", cancellationToken);
+        await FlushAsync().WaitAsync(cancellationToken);
+        string?[] expected = multiSelection ? new string?[] { "Top", "Top", "Center" } : new string?[] { "Top", "Center", "Center" };
+        Assert.Equal(expected, session.ChildNodes.Select(node => node.GetPropertyValue("VerticalAlignment")).ToArray());
+        Assert.All(session.ChildNodes, node => Assert.Null(node.FindProperty("HorizontalAlignment")));
+        Assert.Equal(undoCount + 1, session.Document.SyncEngine.UndoRedo.UndoCount);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Inspector_updates_the_rows_in_place_when_a_commit_reloads_the_document()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using InspectorSession session = await InspectorSession.CreateAsync(FixtureXaml("CheckBox"), false, cancellationToken);
+        PropertyEditorPanelViewModel inspector = session.Inspector;
+        PropertyRowViewModel[] rowsBefore = session.GroupedRows();
+        PropertyEntryViewModel padding = session.Entry("Padding");
+        List<NotifyCollectionChangedAction> groupedChanges = [];
+        List<NotifyCollectionChangedAction> flatChanges = [];
+        NotifyCollectionChangedEventHandler recordGrouped = (_, args) => groupedChanges.Add(args.Action);
+        NotifyCollectionChangedEventHandler recordFlat = (_, args) => flatChanges.Add(args.Action);
+        INotifyCollectionChanged groupedView = inspector.GroupedPropertiesView;
+        INotifyCollectionChanged flatView = inspector.PropertiesView;
+        groupedView.CollectionChanged += recordGrouped;
+        flatView.CollectionChanged += recordFlat;
+        try
+        {
+            padding.Value = "8,9";
+            await CommitAndReloadAsync(session, () => padding.CommitCommand.Execute().ToTask(cancellationToken), cancellationToken);
+            Assert.Equal("8,9", session.Root.GetPropertyValue("Padding"));
+            Assert.Empty(groupedChanges);
+            Assert.Empty(flatChanges);
+            Assert.Same(padding, session.Entry("Padding"));
+            Assert.Equal("8,9", padding.Value);
+            PropertyRowViewModel[] rowsAfter = session.GroupedRows();
+            Assert.Equal(rowsBefore.Length, rowsAfter.Length);
+            Assert.All(rowsBefore.Zip(rowsAfter), pair => Assert.Same(pair.First, pair.Second));
+
+            // A reset moves Tag from the local values to its category: one regroup, none from the reload.
+            PropertyEntryViewModel tag = session.Entry("Tag");
+            await CommitAndReloadAsync(session, () => tag.ResetCommand.Execute().ToTask(cancellationToken), cancellationToken);
+            Assert.False(tag.IsSet);
+            Assert.Equal(NotifyCollectionChangedAction.Reset, Assert.Single(groupedChanges));
+            Assert.Equal(NotifyCollectionChangedAction.Reset, Assert.Single(flatChanges));
+            Assert.DoesNotContain(session.GroupedRows(), row => ReferenceEquals(row.Property, tag)
+                && row.GroupName == UiStrings.LocalValues);
+        }
+        finally
+        {
+            groupedView.CollectionChanged -= recordGrouped;
+            flatView.CollectionChanged -= recordFlat;
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Value_template_creates_the_expression_field_when_the_value_becomes_an_expression()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using InspectorSession session = await InspectorSession.CreateAsync(FixtureXaml("CheckBox"), false, cancellationToken);
+        FluentTheme theme = new();
+        Avalonia.Application.Current!.Styles.Add(theme);
+        PropertyEditorPanelView propertyView = new() { DataContext = session.Inspector };
+        IDataTemplate valueTemplate = Assert.IsAssignableFrom<IDataTemplate>(propertyView.Resources["PropertyValueTemplate"]);
+        PropertyEntryViewModel threeState = session.Entry("IsThreeState");
+        Assert.Equal(PropertyEditorKind.Boolean, threeState.EditorKind);
+        Control valueRoot = Assert.IsAssignableFrom<Control>(valueTemplate.Build(threeState));
+        valueRoot.DataContext = threeState;
+        propertyView.Content = valueRoot;
+        Window propertyWindow = new() { Width = 480, Height = 700, Content = propertyView };
+        TextBox[] ExpressionFields() => propertyView.GetVisualDescendants().OfType<TextBox>()
+            .Where(field => field.PlaceholderText == UiStrings.BindingResourceExpression).ToArray();
+        try
+        {
+            propertyWindow.Show();
+            Dispatcher.UIThread.RunJobs();
+            propertyWindow.UpdateLayout();
+            Assert.Single(propertyView.GetVisualDescendants().OfType<CheckBox>(), box => box.IsVisible);
+            Assert.Empty(ExpressionFields());
+
+            threeState.Value = "{Binding Flag}";
+            Dispatcher.UIThread.RunJobs();
+            propertyWindow.UpdateLayout();
+            TextBox expression = Assert.Single(ExpressionFields());
+            Assert.True(expression.IsVisible);
+            Assert.Equal("{Binding Flag}", expression.Text);
+            Assert.DoesNotContain(propertyView.GetVisualDescendants().OfType<CheckBox>(), box => box.IsVisible);
+        }
+        finally
+        {
+            propertyWindow.Close();
+            Avalonia.Application.Current.Styles.Remove(theme);
+        }
+    }
+
+    /// <summary>
+    /// Waits for the commit and the DocumentChanged notification it causes, then runs the reload of that
+    /// notification to its end; the panel's own reload of the notification is canceled or finished by then.
+    /// </summary>
+    private static async Task CommitAndReloadAsync(InspectorSession session, Func<Task> commit, CancellationToken cancellationToken)
+    {
+        TaskCompletionSource documentChanged = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<DesignerDocumentChangedEventArgs> onDocumentChanged = (_, _) => documentChanged.TrySetResult();
+        session.Host.DocumentChanged += onDocumentChanged;
+        try
+        {
+            await commit();
+            await documentChanged.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            session.Host.DocumentChanged -= onDocumentChanged;
+        }
+
+        await session.Inspector.HandleDocumentChangedAsync(session.Host.ActiveDocumentPath, cancellationToken);
     }
 
     [AvaloniaFact(Timeout = 30000)]
@@ -762,15 +989,38 @@ public sealed class PropertyEditingWorkflowTests
             Document.DesignSurface.Selection.SetSelection(children.Select(index => ChildItems[index]).ToArray());
     }
 
-    /// <summary>Forwards to the shell host and rejects property edits of one node.</summary>
-    private sealed class FailingNodeDesignerHost(IDesignerHost inner, string failingNodeId) : IDesignerHost
+    /// <summary>
+    /// Forwards to the shell host, including its document notifications and explicit null values. Property writes
+    /// of <paramref name="failingNodeId" /> fail, and <see cref="HoldNextPropertyWrite" /> holds the next write.
+    /// </summary>
+    private sealed class FailingNodeDesignerHost(ShellDesignerHost inner, string? failingNodeId)
+        : IDesignerHost, IDesignerDocumentNotifications, IDesignerPropertyValueHost
     {
+        private readonly TaskCompletionSource _writeHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource? _heldWrite;
+
+        /// <summary>Completes when a held write has started.</summary>
+        public Task PropertyWriteHeld => _writeHeld.Task;
+
+        /// <summary>Holds the next property write until the returned source completes.</summary>
+        public TaskCompletionSource HoldNextPropertyWrite()
+        {
+            _heldWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            return _heldWrite;
+        }
+
         public string? ActiveDocumentPath => inner.ActiveDocumentPath;
 
         public event EventHandler<DesignerDocumentChangedEventArgs>? ActiveDocumentChanged
         {
             add => inner.ActiveDocumentChanged += value;
             remove => inner.ActiveDocumentChanged -= value;
+        }
+
+        public event EventHandler<DesignerDocumentChangedEventArgs>? DocumentChanged
+        {
+            add => inner.DocumentChanged += value;
+            remove => inner.DocumentChanged -= value;
         }
 
         public event EventHandler<DesignerSelectionChangedEventArgs>? SelectionChanged
@@ -794,10 +1044,25 @@ public sealed class PropertyEditingWorkflowTests
         public Task<IReadOnlyList<DesignerEventInfo>> GetEventsAsync(string nodeId, CancellationToken cancellationToken) =>
             inner.GetEventsAsync(nodeId, cancellationToken);
 
-        public Task<bool> SetPropertyAsync(string nodeId, string propertyName, string? value, CancellationToken cancellationToken) =>
-            string.Equals(nodeId, failingNodeId, StringComparison.OrdinalIgnoreCase)
-                ? Task.FromResult(false)
-                : inner.SetPropertyAsync(nodeId, propertyName, value, cancellationToken);
+        public async Task<bool> SetPropertyAsync(string nodeId, string propertyName, string? value,
+            CancellationToken cancellationToken)
+        {
+            if (_heldWrite is { } held)
+            {
+                _heldWrite = null;
+                _writeHeld.TrySetResult();
+                await held.Task;
+            }
+
+            return !IsFailing(nodeId) && await inner.SetPropertyAsync(nodeId, propertyName, value, cancellationToken);
+        }
+
+        public Task<string> SetPropertyNullAsync(string nodeId, string propertyName, CancellationToken cancellationToken) =>
+            IsFailing(nodeId)
+                ? Task.FromException<string>(new InvalidOperationException(UiStrings.PropertyValueApplyFailed))
+                : inner.SetPropertyNullAsync(nodeId, propertyName, cancellationToken);
+
+        private bool IsFailing(string nodeId) => string.Equals(nodeId, failingNodeId, StringComparison.OrdinalIgnoreCase);
 
         public Task<string?> InsertElementAsync(string typeName, string xmlNamespace, string? parentNodeId,
             CancellationToken cancellationToken) =>

@@ -72,9 +72,14 @@ public sealed partial class PropertyEditorPanelView : UserControl
             };
             void Close() => dialog.Close();
             editor.CloseRequested += Close;
+            // Escape and the window close button wait for a running apply; the apply closes the dialog when it succeeds.
+            dialog.Closing += (_, args) =>
+            {
+                if (!editor.CanClose) args.Cancel = true;
+            };
             dialog.KeyDown += (_, args) =>
             {
-                if (args.Key == Key.Escape && !editor.IsBusy) { args.Handled = true; dialog.Close(); }
+                if (args.Key == Key.Escape && editor.CanClose) { args.Handled = true; dialog.Close(); }
             };
             try { await dialog.ShowDialog(owner); }
             finally { editor.CloseRequested -= Close; }

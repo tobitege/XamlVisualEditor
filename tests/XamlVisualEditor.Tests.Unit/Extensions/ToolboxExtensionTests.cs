@@ -196,6 +196,8 @@ public sealed class ToolboxExtensionTests
         ControllableControlCatalog catalog = new();
         using ToolboxPanelViewModel model = new(commands, settings, catalog, ImmediateSequencer.Instance,
             storage: new InMemoryExtensionStorage(), designer: new StubDesignerHost());
+        // The immediate sequencer would wait out the status dismissal delay inside the reload.
+        model.StatusDismissalScheduler = new VirtualClock();
         // A cancelled load leaves the stored lists unread, which locks them but not the insertion.
         await model.InitializePreferencesAsync(new CancellationToken(canceled: true));
         Assert.NotNull(model.PreferenceError);

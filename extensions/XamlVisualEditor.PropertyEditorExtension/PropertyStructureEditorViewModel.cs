@@ -21,7 +21,8 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     private readonly IDesignerStructureHost _host;
     private readonly DesignerPropertyStructure _original;
     private readonly XElement _root;
-    private readonly CancellationTokenSource _lifetime = new();
+    private readonly CancellationTokenSource _lifetime;
+    private readonly CancellationTokenRegistration _ownerLifetimeEnded;
     private StructureNodeViewModel? _selectedNode;
     private StructureAttributeViewModel? _selectedAttribute;
     private DesignerStructureType? _selectedType;
@@ -32,10 +33,19 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     private string? _error;
     private bool _isBusy;
 
-    public PropertyStructureEditorViewModel(IDesignerStructureHost host, DesignerPropertyStructure original)
+    /// <param name="host">The host that applies the draft.</param>
+    /// <param name="original">The property structure the draft starts from.</param>
+    /// <param name="ownerLifetime">
+    /// The lifetime of the owning panel. Its end cancels a running apply and requests closing the editor.
+    /// </param>
+    public PropertyStructureEditorViewModel(IDesignerStructureHost host, DesignerPropertyStructure original,
+        CancellationToken ownerLifetime = default)
     {
         _host = host;
         _original = original;
+        _lifetime = CancellationTokenSource.CreateLinkedTokenSource(ownerLifetime);
+        // Registered on the linked source: CanClose already sees the cancellation when the close is requested.
+        _ownerLifetimeEnded = _lifetime.Token.Register(() => CloseRequested?.Invoke());
         _root = XElement.Parse(original.PropertyElementXaml, LoadOptions.PreserveWhitespace);
         var editable = this.WhenAnyValue(x => x.IsBusy).Select(busy => !busy);
         AddChildCommand = ReactiveCommand.Create(() => Edit(() => AddElement(sibling: false)), editable);
@@ -52,7 +62,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
             selected.RemoveNodes();
             Refresh(selected);
         }), editable);
-        ApplyCommand = ReactiveCommand.CreateFromTask(ApplyAsync, editable);
+        ApplyCommand = ReactiveCommand.CreateFromTask(() => ApplyCompletion = ApplyAsync(), editable);
         CancelCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(), editable);
         Refresh(_root);
     }
@@ -115,6 +125,15 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
     public string? Error { get => _error; private set => this.RaiseAndSetIfChanged(ref _error, value); }
     public bool IsBusy { get => _isBusy; private set { this.RaiseAndSetIfChanged(ref _isBusy, value); this.RaisePropertyChanged(nameof(CanEdit)); } }
     public bool CanEdit => !IsBusy;
+
+    /// <summary>
+    /// Determines whether the editor may close. A running apply keeps it open until the host answers; the end of
+    /// the owner lifetime cancels the apply and allows closing.
+    /// </summary>
+    public bool CanClose => !IsBusy || _lifetime.IsCancellationRequested;
+
+    /// <summary>Completes when the last started apply has ended; it never faults.</summary>
+    internal Task ApplyCompletion { get; private set; } = Task.CompletedTask;
     public bool CanEditText => SelectedNode is { } selected && !selected.Element.Elements().Any();
     public string TextValue
     {
@@ -362,6 +381,7 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
 
     private async Task ApplyAsync()
     {
+        bool applied = false;
         try
         {
             IsBusy = true;
@@ -369,15 +389,19 @@ public sealed class PropertyStructureEditorViewModel : ReactiveObject, IDisposab
             await _host.ApplyPropertyStructureAsync(
                 _original with { GridDefinitionOriginalIndices = GetGridDefinitionMap() },
                 _root.ToString(SaveOptions.DisableFormatting), _lifetime.Token);
-            CloseRequested?.Invoke();
+            applied = true;
         }
         catch (OperationCanceledException) { }
         catch (Exception exception) { Error = exception.Message; }
         finally { IsBusy = false; }
+
+        // Raised after IsBusy is cleared, so that the close is not refused as a close during the apply.
+        if (applied) CloseRequested?.Invoke();
     }
 
     public void Dispose()
     {
+        _ownerLifetimeEnded.Dispose();
         _lifetime.Cancel();
         _lifetime.Dispose();
         _addGridDefinitionCommand?.Dispose();

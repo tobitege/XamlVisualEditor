@@ -104,17 +104,19 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
         bool hasTextInput = typedEditor is TextBox or ComboBox { IsEditable: true };
         if (!hasTextInput && entry.EditorKind is not PropertyEditorKind.Collection and not PropertyEditorKind.Template)
         {
-            TextBox expressionEditor = new() { IsReadOnly = entry.IsReadOnly, PlaceholderText = UiStrings.BindingResourceExpression };
-            expressionEditor.Bind(TextBox.TextProperty, new Binding(nameof(PropertyEntryViewModel.Value))
+            // The typed editor hides while the value is an expression. The text field for the expression is created
+            // when the typed editor hides for the first time; most values never become an expression.
+            TextBox? expressionEditor = null;
+            typedEditor.PropertyChanged += (_, args) =>
             {
-                Source = entry, Mode = BindingMode.TwoWay
-            });
-            expressionEditor.Bind(Control.IsVisibleProperty, new Binding(nameof(PropertyEntryViewModel.IsExpression)) { Source = entry });
+                if (args.Property != Control.IsVisibleProperty || typedEditor.IsVisible || expressionEditor is not null) return;
+                expressionEditor = CreateExpressionEditor(entry);
+                field.Children.Insert(0, expressionEditor);
+            };
             typedEditor.Bind(Control.IsVisibleProperty, new Binding(nameof(PropertyEntryViewModel.IsExpression))
             {
                 Source = entry, Converter = new BooleanInverseConverter()
             });
-            field.Children.Add(expressionEditor);
         }
         if (entry.EditorKind == PropertyEditorKind.GridLength)
         {
@@ -168,5 +170,16 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
             }
         }, RoutingStrategies.Bubble);
         return field;
+    }
+
+    private static TextBox CreateExpressionEditor(PropertyEntryViewModel entry)
+    {
+        TextBox expressionEditor = new() { IsReadOnly = entry.IsReadOnly, PlaceholderText = UiStrings.BindingResourceExpression };
+        expressionEditor.Bind(TextBox.TextProperty, new Binding(nameof(PropertyEntryViewModel.Value))
+        {
+            Source = entry, Mode = BindingMode.TwoWay
+        });
+        expressionEditor.Bind(Control.IsVisibleProperty, new Binding(nameof(PropertyEntryViewModel.IsExpression)) { Source = entry });
+        return expressionEditor;
     }
 }

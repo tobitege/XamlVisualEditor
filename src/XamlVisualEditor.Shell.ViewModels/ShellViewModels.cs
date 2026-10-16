@@ -8935,7 +8935,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             MarkPreviewerStopped(inactive);
         }
 
+        // A canceled start stays canceled when the document becomes active again; the previewer toggle starts it again.
         if (document.UseExternalPreviewer && document.IsLoaded && document.PreviewerSession is null
+            && document.PreviewerState != PreviewerState.Canceled
             && document.StartPreviewerCommand is { } start && start.CanExecute(null))
         {
             start.Execute(null);

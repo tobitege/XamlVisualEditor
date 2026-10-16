@@ -194,15 +194,29 @@ public sealed class PreviewThemeLabelTests : IDisposable
             metadataService: new TypeMetadataService(),
             recentFilesPath: Path.Combine(_root, "recent.json"),
             workspaceSessions: new WorkspaceSessionStore(Path.Combine(_root, "sessions.json")));
-        using IDisposable trust = main.PreviewerTrustInteraction.RegisterHandler(context => context.SetOutput(PreviewerTrustDecision.Cancel));
+        int prompts = 0;
+        using IDisposable trust = main.PreviewerTrustInteraction.RegisterHandler(context =>
+        {
+            prompts++;
+            context.SetOutput(PreviewerTrustDecision.Cancel);
+        });
         await main.OpenFileAsync(projectPath).WaitAsync(cancellationToken);
         Assert.True(main.HasWorkspace);
         await main.OpenFileAsync(xamlPath).WaitAsync(cancellationToken);
         DesignerDocumentViewModel document = Assert.IsType<DesignerDocumentViewModel>(main.ActiveDocument);
 
         // A document of a project starts its previewer once loaded; declining the trust prompt cancels that start.
-        Task canceled = WaitForStateAsync(document, PreviewerState.Canceled);
-        if (document.PreviewerState != PreviewerState.Canceled) await canceled.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        await WaitForCanceledStartAsync(document, cancellationToken);
+        Assert.Equal(1, prompts);
+        DesignerDocumentViewModel other = await OpenAsync(main, "Other.axaml", cancellationToken);
+        await WaitForCanceledStartAsync(other, cancellationToken);
+        Assert.Equal(2, prompts);
+
+        // Activating the document again does not ask again.
+        main.ActiveDocument = document;
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        Assert.Equal(2, prompts);
+        Assert.Equal(PreviewerState.Canceled, document.PreviewerState);
         document.SetPreviewThemeSelection(Harbor, activatePreviewer: false);
         PreviewerSurfaceControl surface = new() { Document = document, Width = 200, Height = 100 };
         Window window = new() { Content = surface, Width = 300, Height = 200 };
@@ -212,6 +226,15 @@ public sealed class PreviewThemeLabelTests : IDisposable
 
             Assert.Equal(HarborUnavailable, document.DesignSurface.SelectedPreviewTheme?.DisplayName);
             Assert.Equal(UiStrings.PreviewerStartCanceled, surface.StatusText);
+
+            // Turning the previewer off and on again requests a new start, which asks again.
+            document.UseExternalPreviewer = false;
+            Task restarted = WaitForStateAsync(document, PreviewerState.Starting);
+            document.UseExternalPreviewer = true;
+            await restarted.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+            await WaitForCanceledStartAsync(document, cancellationToken);
+            Assert.Equal(3, prompts);
+            Assert.Equal(HarborUnavailable, document.DesignSurface.SelectedPreviewTheme?.DisplayName);
 
             document.PreviewerState = PreviewerState.Starting;
             Assert.Equal(HarborPending, document.DesignSurface.SelectedPreviewTheme?.DisplayName);
@@ -387,6 +410,12 @@ public sealed class PreviewThemeLabelTests : IDisposable
         }
         document.PropertyChanged += OnPropertyChanged;
         return reached.Task;
+    }
+
+    private static async Task WaitForCanceledStartAsync(DesignerDocumentViewModel document, CancellationToken cancellationToken)
+    {
+        Task canceled = WaitForStateAsync(document, PreviewerState.Canceled);
+        if (document.PreviewerState != PreviewerState.Canceled) await canceled.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
     }
 
     private static async Task<PreviewerTcpSession> ConnectAsync(DesignerDocumentViewModel document)

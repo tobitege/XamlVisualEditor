@@ -176,4 +176,5 @@ Offline arbeiten? Versionierte Dateien bleiben schreibgeschützt; beim Bearbeite
   <data name="LogWorkspaceSelectionFailed" xml:space="preserve"><value>Auswahl des TFVC-Arbeitsbereichs zum XVE-Workspace ist fehlgeschlagen.</value></data>
   <data name="LogInitializationFailed" xml:space="preserve"><value>TFVC-Initialisierung ist fehlgeschlagen.</value></data>
   <data name="TfCommandTimeoutFormat" xml:space="preserve"><value>tf {0} wurde nicht innerhalb von {1} Sekunden beendet.</value></data>
+  <data name="HistoryOfflineStatus" xml:space="preserve"><value>Offline. Der Verlauf ist nach dem Online-Gehen wieder verfügbar.</value></data>
 </root>

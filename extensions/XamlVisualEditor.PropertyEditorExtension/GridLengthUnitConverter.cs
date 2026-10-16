@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.PropertyEditorExtension;
 
@@ -35,7 +36,7 @@ internal sealed class GridLengthUnitConverter(PropertyEntryViewModel entry) : IV
         catch (Exception exception) when (exception is FormatException or ArgumentException or OverflowException)
         {
             return new BindingNotification(new FormatException(
-                "Enter a valid grid size before changing its unit.", exception), BindingErrorType.DataValidationError);
+                UiStrings.GridLengthUnitNeedsValidSize, exception), BindingErrorType.DataValidationError);
         }
     }
 }

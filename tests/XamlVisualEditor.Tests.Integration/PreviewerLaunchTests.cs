@@ -37,10 +37,11 @@ public sealed class PreviewerLaunchTests
         using (ZipArchive archive = ZipFile.OpenRead(packagePath))
         {
             Assert.Contains(archive.Entries, entry => entry.FullName == "xve.extension.json");
-            Assert.Contains(archive.Entries, entry => entry.FullName == "lib/net10.0/XamlVisualEditor.FloweryThemeExtension.dll");
-            // The package ships the Flowery runtime it themes with, never the editor's own contract assemblies.
-            Assert.Contains(archive.Entries, entry => entry.FullName == "lib/net10.0/Flowery.NET.dll");
-            Assert.DoesNotContain(archive.Entries, entry => entry.FullName.EndsWith("/XamlVisualEditor.Core.dll", StringComparison.OrdinalIgnoreCase));
+            // The package ships the providers and the Flowery runtime they theme with; Avalonia and the editor
+            // contracts come from the host process.
+            Assert.Equal(new[] { "lib/net10.0/Flowery.NET.dll", "lib/net10.0/XamlVisualEditor.FloweryThemeExtension.dll" },
+                archive.Entries.Select(entry => entry.FullName).Where(name => name.StartsWith("lib/", StringComparison.Ordinal))
+                    .Order(StringComparer.Ordinal));
         }
         string artifactRoot = Path.Combine(Path.GetTempPath(), "XamlVisualEditor-preview-artifacts", "flowery-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(artifactRoot);

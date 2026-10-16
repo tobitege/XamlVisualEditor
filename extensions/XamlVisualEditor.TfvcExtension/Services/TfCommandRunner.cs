@@ -172,11 +172,14 @@ public sealed class TfCommandRunner : ITfCommandRunner
         _logger.Warn(message + ": " + (lineEnd < 0 ? error : error.Substring(0, lineEnd)));
     }
 
-    // tf.exe writes redirected output in the ANSI code page of the system, not in the OEM code page.
-    private static Encoding CreateOutputEncoding()
+    // tf.exe writes redirected output in the ANSI code page of the system (GetACP), not in the OEM code page. The ANSI
+    // code page follows the system locale, which can differ from the user's format culture, and is 65001 when Windows
+    // uses UTF-8 for non-Unicode programs. With the code pages provider registered, code page 0 selects exactly that
+    // code page; without a system code page (other systems) it falls back to UTF-8.
+    internal static Encoding CreateOutputEncoding()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
+        return Encoding.GetEncoding(0);
     }
 
     private static void TryKill(Process process)

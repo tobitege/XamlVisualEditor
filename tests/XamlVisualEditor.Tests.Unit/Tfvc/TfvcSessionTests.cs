@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using XamlVisualEditor.TfvcExtension.Localization;
 using XamlVisualEditor.TfvcExtension.Models;
 using XamlVisualEditor.TfvcExtension.Services;
 
@@ -25,6 +27,7 @@ public sealed class TfvcSessionTests
     [Fact]
     public async Task ApplySettingsAsync_ConnectsPersistsAndSelectsWorkspaceOfEditor()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         TfvcWorkspace other = TfvcTestData.CreateWorkspace("OTHER", @"C:\other");
         TfvcWorkspace product = TfvcTestData.CreateWorkspace();
         FakeTfvcClient client = new()
@@ -74,6 +77,7 @@ public sealed class TfvcSessionTests
     [Fact]
     public async Task EditorWorkspaceChange_SelectsMappingWorkspace()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         TfvcWorkspace first = TfvcTestData.CreateWorkspace("FIRST", @"C:\first");
         TfvcWorkspace second = TfvcTestData.CreateWorkspace("SECOND", @"C:\second");
         FakeTfvcClient client = new() { Workspaces = [first, second] };
@@ -90,6 +94,7 @@ public sealed class TfvcSessionTests
     [Fact]
     public async Task FindPendingChange_MatchesLocalAndServerPathsIgnoringCase()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         FakeTfvcClient client = new()
         {
             Workspaces = [TfvcTestData.CreateWorkspace()],
@@ -102,6 +107,54 @@ public sealed class TfvcSessionTests
         Assert.NotNull(session.FindPendingChangeByServerPath("$/product/a.CS"));
         Assert.Null(session.FindPendingChangeByServerPath("$/Product/b.cs"));
         Assert.Same(session.CurrentWorkspace, session.FindWorkspaceForLocalPath(@"C:\src\Product\x\y.cs"));
+    }
+
+    [Fact]
+    public async Task GoOfflineDuringConnect_KeepsCachedWorkspacesWhenConnectFails()
+    {
+        TfvcWorkspace workspace = TfvcTestData.CreateWorkspace();
+        FakeTfvcClient client = new() { Workspaces = [workspace] };
+        using TfvcSession session = CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo());
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+        TaskCompletionSource<IReadOnlyList<TfvcWorkspace>> gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WorkspacesGate = gate;
+
+        Task connect = session.ConnectAsync(CancellationToken.None);
+        Assert.False(connect.IsCompleted);
+        await session.GoOfflineAsync(CancellationToken.None);
+        gate.SetException(new TimeoutException("tf workspaces did not finish."));
+        await connect;
+
+        Assert.True(session.IsOffline);
+        Assert.False(session.ConnectionFailed);
+        Assert.Same(workspace, Assert.Single(session.Workspaces));
+        Assert.Null(session.CurrentWorkspace);
+        Assert.Equal(TfvcStrings.OfflineStatus, session.StatusMessage);
+        Assert.False(session.IsBusy);
+    }
+
+    [Fact]
+    public async Task GoOfflineDuringConnect_StaysOfflineWhenConnectSucceeds()
+    {
+        TfvcWorkspace workspace = TfvcTestData.CreateWorkspace();
+        FakeTfvcClient client = new() { Workspaces = [workspace] };
+        using TfvcSession session = CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo());
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+        int queriesBeforeConnect = client.PendingChangeQueries;
+        TaskCompletionSource<IReadOnlyList<TfvcWorkspace>> gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WorkspacesGate = gate;
+
+        Task connect = session.ConnectAsync(CancellationToken.None);
+        await session.GoOfflineAsync(CancellationToken.None);
+        gate.SetResult([TfvcTestData.CreateWorkspace("OTHER", @"C:\other")]);
+        await connect;
+
+        Assert.True(session.IsOffline);
+        Assert.False(session.IsConnected);
+        Assert.Null(session.CurrentWorkspace);
+        Assert.Same(workspace, Assert.Single(session.Workspaces));
+        Assert.Equal(TfvcStrings.OfflineStatus, session.StatusMessage);
+        Assert.Equal(queriesBeforeConnect, client.PendingChangeQueries);
     }
 
     internal static TfvcSession CreateSession(FakeTfvcClient client, InMemoryExtensionStorage storage, FakeWorkspaceInfo workspaceInfo, FakeTfvcServerClient? server = null)

@@ -65,16 +65,16 @@ public sealed class ToolboxCatalogWorkflowTests
 
             ToolboxAssemblyGroup libraryGroup = Assert.Single(model.AssemblyGroups, group => group.AssemblyName == libraryName);
             ToolboxAssemblyGroup secondLibraryGroup = Assert.Single(model.AssemblyGroups, group => group.AssemblyName == secondLibraryName);
-            ToolboxPanelItem standardItem = model.StandardItems[0];
+            ToolboxPanelItem standardItem = model.VisibleItems.First(item => item.IsStandardControl);
             ToolboxAssemblyGroup standardGroup = Assert.Single(model.AssemblyGroups, group => group.AssemblyName == standardItem.AssemblyName);
             ListBox standard = GetControlList(view, standardGroup);
             ListBox thirdParty = GetControlList(view, libraryGroup);
             ListBox secondLibrary = GetControlList(view, secondLibraryGroup);
             Assert.All(libraryGroup.Items, item => Assert.False(item.IsStandardControl));
             Assert.All(secondLibraryGroup.Items, item => Assert.False(item.IsStandardControl));
-            Assert.DoesNotContain(model.ThirdPartyItems, item => item.FullName == typeof(AbstractControl).FullName);
-            Assert.DoesNotContain(model.ThirdPartyItems, item => item.FullName == typeof(ServiceControl).FullName);
-            Assert.DoesNotContain(model.ThirdPartyItems, item => item.FullName == typeof(HiddenControl).FullName);
+            Assert.DoesNotContain(model.VisibleItems.Where(item => !item.IsStandardControl), item => item.FullName == typeof(AbstractControl).FullName);
+            Assert.DoesNotContain(model.VisibleItems.Where(item => !item.IsStandardControl), item => item.FullName == typeof(ServiceControl).FullName);
+            Assert.DoesNotContain(model.VisibleItems.Where(item => !item.IsStandardControl), item => item.FullName == typeof(HiddenControl).FullName);
 
             standard.SelectedItem = standardItem;
             ToolboxPanelItem externalButton = Assert.Single(libraryGroup.Items,
@@ -105,7 +105,7 @@ public sealed class ToolboxCatalogWorkflowTests
             search.Text = "library caption";
             FlushLayout(window);
             Assert.Same(libraryGroup, Assert.Single(model.AssemblyGroups));
-            Assert.Equal(typeof(CaptionControl).FullName, Assert.Single(model.ThirdPartyItems).FullName);
+            Assert.Equal(typeof(CaptionControl).FullName, Assert.Single(model.VisibleItems, item => !item.IsStandardControl).FullName);
             Assert.Equal(typeof(CaptionControl).FullName,
                 Assert.Single(GetControlList(view, libraryGroup).Items.OfType<ToolboxPanelItem>()).FullName);
             await model.ClearFiltersCommand.Execute().ToTask();
@@ -113,7 +113,7 @@ public sealed class ToolboxCatalogWorkflowTests
             model.SelectedCategory = Assert.Single(model.Categories, option => option.Value == "Library content");
             FlushLayout(window);
             Assert.Same(libraryGroup, Assert.Single(model.AssemblyGroups));
-            Assert.All(model.ThirdPartyItems, item => Assert.Equal("Library content", item.Category));
+            Assert.All(model.VisibleItems.Where(item => !item.IsStandardControl), item => Assert.Equal("Library content", item.Category));
             Assert.All(GetControlList(view, libraryGroup).Items.OfType<ToolboxPanelItem>(),
                 item => Assert.Equal("Library content", item.Category));
             search.Text = "__no_such_toolbox_control__";

@@ -260,6 +260,8 @@ public sealed class TextEditingExtension : IXveExtension
     /// </summary>
     internal sealed class OptionsPersistence : IDisposable
     {
+        private static readonly TimeSpan ShutdownSaveTimeout = TimeSpan.FromSeconds(2);
+
         private readonly ITextEditorViewHost _view;
         private readonly TextEditorOptionsStore _store;
         private readonly IContextKeys? _contextKeys;
@@ -307,9 +309,14 @@ public sealed class TextEditingExtension : IXveExtension
             });
         }
 
+        /// <summary>Stops following the options; shutdown waits a short time for the running save.</summary>
         public void Dispose()
         {
             _view.OptionsChanged -= OnOptionsChanged;
+            if (!Saving.Wait(ShutdownSaveTimeout))
+            {
+                _logger.Warn("The editor options were not saved before shutdown.");
+            }
         }
 
         private void OnOptionsChanged(object? sender, EventArgs e)

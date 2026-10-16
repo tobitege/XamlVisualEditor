@@ -65,6 +65,9 @@ own theme.
 - An editor theme from the same package uses the preview theme with the same ID.
 - The builtin editor themes `light` and `dark` use the preview theme of the same name;
   `system` resolves to the variant the editor currently shows.
+- When the catalog the preview reports for a document does not offer the derived
+  theme, for example because the target application excludes it or the provider
+  failed, the document keeps the project default.
 - A theme picked in the designer is stored for the workspace and wins. Picking the
   project default while the options supply a theme is stored as well; picking the
   supplied theme returns to following the options.
@@ -87,15 +90,23 @@ reported rather than silently replacing a saved selection with another theme.
 
 `extensions/XamlVisualEditor.FloweryThemeExtension` contains an optional provider for Flowery.NET 3.4.0.
 The editor application does not reference this project or Flowery.NET.
-In previews, the provider applies only to projects that reference Flowery.NET and uses the target project's Flowery.NET assembly.
+
+Every preview receives all enabled providers, and the preview host loads each of them and reads its catalog,
+even without a selection. Only following the editor theme is limited to projects that reference Flowery.NET.
+A theme picked explicitly for the workspace applies to every document of the workspace:
+
+- In a project that references Flowery.NET, the provider uses the target project's Flowery.NET assembly, because
+  the preview host resolves dependencies from the target output before the package directory.
+- In a project without Flowery.NET, the preview host loads the `Flowery.NET.dll` from the package, and the picked
+  Flowery palette restyles that project in the preview as well.
 
 Build the package from the repository root:
 
 ```powershell
-dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.FloweryThemeExtension.csproj -c Debug
+dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.FloweryThemeExtension.csproj -c Release -o artifacts/packages
 ```
 
-Install the resulting package from the project's `bin/Debug` directory through Extensions.
+The command builds the extension itself; install the resulting package from `artifacts/packages` through Extensions.
 The provider ID is `xamlvisualeditor.flowery-themes/palette`; the provider requires `Flowery.NET`.
 
 The catalog uses the target application's registered themes, exclusions, and preferred order.

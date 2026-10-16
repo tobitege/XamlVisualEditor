@@ -40,11 +40,15 @@ internal sealed class FakeTfCommandRunner : ITfCommandRunner
 
     public List<(string WorkingDirectory, IReadOnlyList<string> Arguments)> Calls { get; } = new();
 
+    /// <summary>Runs while a command is running, for example to read a file that exists only during the call.</summary>
+    public Action<IReadOnlyList<string>>? OnRun { get; set; }
+
     public void Enqueue(TfCommandResult result) => _results.Enqueue(result);
 
     public Task<TfCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
     {
         Calls.Add((workingDirectory, arguments));
+        OnRun?.Invoke(arguments);
         return Task.FromResult(_results.Count > 0 ? _results.Dequeue() : new TfCommandResult(0, string.Empty, string.Empty));
     }
 }
@@ -75,8 +79,18 @@ internal sealed class FakeTfvcClient : ITfvcClient
 
     public Exception? WorkspacesFailure { get; set; }
 
+    /// <summary>When set, the workspace query completes with this task instead of <see cref="Workspaces"/>.</summary>
+    public TaskCompletionSource<IReadOnlyList<TfvcWorkspace>>? WorkspacesGate { get; set; }
+
     public Task<IReadOnlyList<TfvcWorkspace>> GetWorkspacesAsync(string collectionUrl, CancellationToken cancellationToken)
-        => WorkspacesFailure is null ? Task.FromResult(Workspaces) : Task.FromException<IReadOnlyList<TfvcWorkspace>>(WorkspacesFailure);
+    {
+        if (WorkspacesGate is { } gate)
+        {
+            return gate.Task;
+        }
+
+        return WorkspacesFailure is null ? Task.FromResult(Workspaces) : Task.FromException<IReadOnlyList<TfvcWorkspace>>(WorkspacesFailure);
+    }
 
     public Task<IReadOnlyList<TfvcPendingChange>> GetPendingChangesAsync(string collectionUrl, TfvcWorkspace workspace, CancellationToken cancellationToken)
     {
@@ -101,10 +115,18 @@ internal sealed class FakeTfvcClient : ITfvcClient
 
     public List<bool> CheckOutRecursion { get; } = new();
 
-    public Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken)
+    /// <summary>When set, a check-out waits for this task before it completes.</summary>
+    public TaskCompletionSource? CheckOutGate { get; set; }
+
+    public async Task<TfCommandResult> CheckOutAsync(TfvcWorkspace workspace, IReadOnlyList<string> localPaths, bool recursive, CancellationToken cancellationToken)
     {
         CheckOuts.Add(localPaths);
         CheckOutRecursion.Add(recursive);
+        if (CheckOutGate is { } gate)
+        {
+            await gate.Task;
+        }
+
         if (CheckOutFailure is not null)
         {
             throw CheckOutFailure;
@@ -116,7 +138,7 @@ internal sealed class FakeTfvcClient : ITfvcClient
             PendingChangesByLocalPath[path] = [TfvcTestData.CreateChange(serverPath, path)];
         }
 
-        return Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+        return new TfCommandResult(0, string.Empty, string.Empty);
     }
 
     public List<IReadOnlyList<string>> Adds { get; } = new();
@@ -165,8 +187,18 @@ internal sealed class FakeTfvcClient : ITfvcClient
         return Task.FromResult(new TfCommandResult(0, CheckInOutput, string.Empty));
     }
 
+    public List<(string Name, string? Comment, IReadOnlyList<string> Items)> Shelves { get; } = new();
+
+    /// <summary>Gets or sets whether a shelve call with an item list reports a too long command line.</summary>
+    public bool RejectShelveItemLists { get; set; }
+
     public Task<TfCommandResult> ShelveAsync(TfvcWorkspace workspace, string shelvesetName, string? comment, IReadOnlyList<string> itemSpecs, CancellationToken cancellationToken)
-        => Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    {
+        Shelves.Add((shelvesetName, comment, itemSpecs));
+        return RejectShelveItemLists && itemSpecs.Count > 0
+            ? Task.FromException<TfCommandResult>(new TfCommandLineTooLongException())
+            : Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));
+    }
 
     public Task<TfCommandResult> GetLatestAsync(TfvcWorkspace workspace, string itemSpec, bool recursive, CancellationToken cancellationToken)
         => Task.FromResult(new TfCommandResult(0, string.Empty, string.Empty));

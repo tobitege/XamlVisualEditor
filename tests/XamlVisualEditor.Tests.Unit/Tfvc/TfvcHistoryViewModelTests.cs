@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls.DataGridSorting;
 using Xunit;
+using XamlVisualEditor.TfvcExtension.Localization;
 using XamlVisualEditor.TfvcExtension.Models;
 using XamlVisualEditor.TfvcExtension.Services;
 using XamlVisualEditor.TfvcExtension.ViewModels;
@@ -75,6 +76,33 @@ public sealed class TfvcHistoryViewModelTests
             Assert.Null(viewModel.AuthorText);
             Assert.Null(server.AuthorFilters[^1]);
             Assert.Equal(3, viewModel.Changesets.Count);
+        }
+    }
+
+    [Fact]
+    public async Task History_MakesNoServerCallWhileOffline()
+    {
+        (TfvcSession session, _, FakeTfvcServerClient server) = await CreateSessionAsync();
+        using (session)
+        {
+            TfvcHistoryViewModel viewModel = new(session);
+            await viewModel.ShowAsync("$/Product", CancellationToken.None);
+            viewModel.SelectedChangeset = viewModel.Changesets[0];
+            int requests = server.AuthorFilters.Count;
+
+            await session.GoOfflineAsync(CancellationToken.None);
+            await viewModel.ShowAsync("$/Product/src", CancellationToken.None);
+
+            Assert.Equal(requests, server.AuthorFilters.Count);
+            Assert.Empty(viewModel.Changesets);
+            Assert.Equal(TfvcStrings.HistoryOfflineStatus, viewModel.Message);
+
+            viewModel.SearchText = "Third";
+            await viewModel.SearchCommand.Execute().ToTask();
+            await viewModel.RefreshCommand.Execute().ToTask();
+
+            Assert.Equal(requests, server.AuthorFilters.Count);
+            Assert.Equal(TfvcStrings.HistoryOfflineStatus, viewModel.Message);
         }
     }
 

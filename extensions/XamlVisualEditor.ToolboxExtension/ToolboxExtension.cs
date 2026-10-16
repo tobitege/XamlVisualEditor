@@ -20,8 +20,9 @@ public sealed class ToolboxExtension : IXveExtension
             workspaceInfo: context.WorkspaceInfo, storage: context.Storage, designer: context.Designer);
         context.Subscriptions.Add(viewModel);
         await viewModel.InitializePreferencesAsync(cancellationToken);
+        // Extensions activate one after another; the view model reports loading progress and errors itself.
         if (context.ControlCatalog is not null)
-            await viewModel.ReloadAsync(cancellationToken, includeProjectControls: false, forceRefresh: false);
+            _ = viewModel.ReloadAsync(cancellationToken, includeProjectControls: false, forceRefresh: false);
 
         context.Subscriptions.Add(context.Commands.Register(InsertButtonCommandId, _ => InsertButtonAsync(context, cancellationToken)));
         context.Subscriptions.Add(context.Commands.Register(InsertSelectedCommandId, commandContext =>
@@ -53,7 +54,7 @@ public sealed class ToolboxExtension : IXveExtension
             new CommandMetadata(
                 Title: UiStrings.ToolboxInsertButton,
                 Category: UiStrings.Toolbox,
-                When: "hasWorkspace && hasDesignerDocument",
+                When: "hasDesignerDocument",
                 Priority: 50)));
 
         context.Subscriptions.Add(context.CommandMetadata.Register(
@@ -61,7 +62,7 @@ public sealed class ToolboxExtension : IXveExtension
             new CommandMetadata(
                 Title: UiStrings.ToolboxInsertSelected,
                 Category: UiStrings.Toolbox,
-                When: "hasWorkspace && hasDesignerDocument",
+                When: "hasDesignerDocument",
                 Priority: 60)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
@@ -99,18 +100,19 @@ public sealed class ToolboxExtension : IXveExtension
         IStatusBarItem loadStatus = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, 30);
         loadStatus.CommandId = ShowTaskCommandId;
         context.Subscriptions.Add(loadStatus);
-        context.Subscriptions.Add(viewModel.WhenAnyValue(x => x.HasLoadTask, x => x.HasLoadError, x => x.StatusText)
+        context.Subscriptions.Add(viewModel.WhenAnyValue(x => x.HasLoadTask, x => x.HasLoadError, x => x.IsLoading, x => x.StatusText)
             .Subscribe(state =>
             {
-                loadStatus.Text = UiStrings.Toolbox + ": " + (state.Property2 ? UiStrings.RetryControlDiscovery : UiStrings.LoadProjectControls);
-                loadStatus.Tooltip = state.Property3;
+                loadStatus.Text = UiStrings.Toolbox + ": " + (state.Property2 ? UiStrings.RetryControlDiscovery
+                    : state.Property3 ? UiStrings.LoadingProjectControls : UiStrings.LoadProjectControls);
+                loadStatus.Tooltip = state.Property4;
                 if (state.Property1) loadStatus.Show();
                 else loadStatus.Hide();
             }));
 
         if (context.ControlCatalog is { HasProjectAssemblies: true })
         {
-            await viewModel.ReloadAsync(cancellationToken, includeProjectControls: true);
+            _ = viewModel.ReloadAsync(cancellationToken, includeProjectControls: true);
         }
     }
 
@@ -164,8 +166,7 @@ public sealed class ToolboxExtension : IXveExtension
     }
 
     private static bool HasInsertTarget(ExtensionContext context) =>
-        !string.IsNullOrWhiteSpace(context.WorkspaceInfo.WorkspacePath)
-        && !string.IsNullOrWhiteSpace(context.Designer.ActiveDocumentPath);
+        !string.IsNullOrWhiteSpace(context.Designer.ActiveDocumentPath);
 
     private static bool TryGetStringArg(IReadOnlyList<object?>? arguments, int index, out string? value)
     {

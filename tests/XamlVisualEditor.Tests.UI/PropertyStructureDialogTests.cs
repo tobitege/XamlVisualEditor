@@ -38,6 +38,7 @@ public sealed class PropertyStructureDialogTests
     {
         const string original = "<Button xmlns=\"https://github.com/avaloniaui\" xmlns:av=\"https://github.com/avaloniaui\"><Button.Template><ControlTemplate TargetType=\"Button\"><Border Width=\"80\" Height=\"40\" /></ControlTemplate></Button.Template></Button>";
         string path = Path.Combine(Path.GetTempPath(), $"xve-structure-validation-{Guid.NewGuid():N}.axaml");
+        using TemporaryFile temporaryFile = new(path);
         await File.WriteAllTextAsync(path, original);
         using MainWindowViewModel main = new(metadataService: new TypeMetadataService());
         await main.OpenFileAsync(path);
@@ -93,6 +94,8 @@ public sealed class PropertyStructureDialogTests
     {
         const string original = "<Button xmlns=\"https://github.com/avaloniaui\"><Button.Template><ControlTemplate TargetType=\"Button\"><Border Width=\"80\" /></ControlTemplate></Button.Template></Button>";
         string path = Path.Combine(Path.GetTempPath(), $"xve-structure-lifetime-{Guid.NewGuid():N}.axaml");
+        using TemporaryFile temporaryFile = new(path);
+        using TemporaryFile otherFile = new(Path.Combine(Path.GetTempPath(), $"xve-structure-other-{Guid.NewGuid():N}.axaml"));
         await File.WriteAllTextAsync(path, original);
         using MainWindowViewModel main = new(metadataService: new TypeMetadataService());
         await main.OpenFileAsync(path);
@@ -110,9 +113,8 @@ public sealed class PropertyStructureDialogTests
 
         if (switchDocument)
         {
-            string otherPath = Path.Combine(Path.GetTempPath(), $"xve-structure-other-{Guid.NewGuid():N}.axaml");
-            await File.WriteAllTextAsync(otherPath, original);
-            await main.OpenFileAsync(otherPath);
+            await File.WriteAllTextAsync(otherFile.Path, original);
+            await main.OpenFileAsync(otherFile.Path);
         }
         else
         {
@@ -173,6 +175,7 @@ public sealed class PropertyStructureDialogTests
             ? $" xmlns:lib=\"clr-namespace:XamlVisualEditor.TestControls;assembly={assemblyName}\"" : string.Empty;
         string original = $"<{ownerTag} xmlns=\"https://github.com/avaloniaui\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"{libraryDeclaration}>{content}</{ownerTag}>";
         string filePath = Path.Combine(Path.GetTempPath(), $"xve-structure-{Guid.NewGuid():N}.axaml");
+        using TemporaryFile temporaryFile = new(filePath);
         await File.WriteAllTextAsync(filePath, original);
         TypeMetadataService metadata = new();
         using MainWindowViewModel main = new(metadataService: metadata);
@@ -353,5 +356,13 @@ public sealed class PropertyStructureDialogTests
             window?.Close();
             Application.Current.Styles.Remove(theme);
         }
+    }
+
+    /// <summary>Deletes a file in the temporary folder when disposed.</summary>
+    private sealed class TemporaryFile(string path) : IDisposable
+    {
+        public string Path { get; } = path;
+
+        public void Dispose() => File.Delete(Path);
     }
 }

@@ -95,6 +95,23 @@ public sealed class TfvcOutputParserTests
         Assert.Equal(expected, TfvcOutputParser.TryParseChangesetId(output));
     }
 
+    [Theory]
+    [InlineData("D:\\src\\changeset-viewer\\v2:\r\nChecking in edit: App.axaml\r\nChecking in add: changeset 7 notes.txt\r\n\r\nD:\\src\\Changeset 3\\docs:\r\nChecking in edit: readme.md\r\n\r\nChangeset #4711 checked in.\r\n", 4711)]
+    [InlineData("D:\\src\\changeset-viewer\\v2:\r\nEinchecken von Bearbeiten: App.axaml\r\nEinchecken von Hinzufügen: Änderungssatz 7 Notizen.txt\r\n\r\nD:\\src\\Änderungssatz 3\\docs:\r\nEinchecken von Bearbeiten: readme.md\r\n\r\nChangeset Nr. 815 wurde eingecheckt.\r\n", 815)]
+    [InlineData("D:\\src\\changeset-viewer\\v2:\nEinchecken von Bearbeiten: App.axaml\n\nDas Änderungssatz Nr. 42 wurde eingecheckt.\n", 42)]
+    public void TryParseChangesetId_ReadsOnlyTheSummaryOfMultiLineOutput(string output, int expected)
+    {
+        Assert.Equal(expected, TfvcOutputParser.TryParseChangesetId(output));
+    }
+
+    [Fact]
+    public void TryParseChangesetId_IgnoresChangesetNumbersInItemPaths()
+    {
+        const string output = "D:\\src\\changeset-viewer\\v2:\r\nChecking in edit: App.axaml\r\nChecking in edit: changeset 12.txt\r\n";
+
+        Assert.Null(TfvcOutputParser.TryParseChangesetId(output));
+    }
+
     [Fact]
     public void TryParseChangesetId_ReturnsNullWithoutChangeset()
     {

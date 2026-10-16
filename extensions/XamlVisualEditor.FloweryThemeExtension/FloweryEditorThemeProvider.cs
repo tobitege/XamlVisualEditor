@@ -21,9 +21,7 @@ public sealed class FloweryEditorThemeProvider : IEditorThemeProvider
             : throw new InvalidOperationException("Missing Flowery palette color: " + name);
         string ColorValue(string name) => Read(name).ToString();
         Color foreground = Read("DaisyBaseContentColor");
-        // Forest gets light text on the green editor accent surfaces.
-        Color primaryContent = string.Equals(info.Name, "Forest", StringComparison.OrdinalIgnoreCase)
-            ? Colors.White : Read("DaisyPrimaryContentColor");
+        Color primaryContent = Read("DaisyPrimaryContentColor");
         return new EditorThemePalette(info.IsDark, new Dictionary<EditorThemeColor, string>
         {
             [EditorThemeColor.Background] = ColorValue("DaisyBase100Color"),

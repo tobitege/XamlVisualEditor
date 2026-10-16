@@ -14,6 +14,9 @@ namespace XamlVisualEditor.PropertyEditorExtension;
 
 public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
 {
+    /// <summary>Theme brush of error texts; the editor themes update it.</summary>
+    internal const string ErrorBrushKey = "EditorErrorBrush";
+
     [Content]
     public IDataTemplate? TextEditor { get; set; }
 
@@ -145,7 +148,8 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
         {
             field.Children.Add(typedEditor);
         }
-        TextBlock error = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.IndianRed, FontSize = 11 };
+        TextBlock error = new() { TextWrapping = TextWrapping.Wrap, FontSize = 11 };
+        error.Bind(TextBlock.ForegroundProperty, error.GetResourceObservable(ErrorBrushKey));
         error.Bind(TextBlock.TextProperty, new Binding(nameof(PropertyEntryViewModel.ValidationError)) { Source = entry });
         error.Bind(Control.IsVisibleProperty, new Binding(nameof(PropertyEntryViewModel.HasValidationError)) { Source = entry });
         field.Children.Add(error);

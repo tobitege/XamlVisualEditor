@@ -1,3 +1,4 @@
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -56,19 +57,23 @@ public sealed class CaretPositionMemoryTests
     [Fact]
     public async Task SwitchingDocumentsSavesTheCollectedPositionsOnceAfterTheDelay()
     {
+        VirtualClock clock = new();
         CountingStorage storage = new();
         FakeEditor editor = new();
         FakeDocument first = new(Path.GetFullPath("one.cs"), "a\nb");
         FakeDocument second = new(Path.GetFullPath("two.cs"), "c");
-        using CaretPositionMemory memory = new(editor, storage, new RecordingLogger(), TimeSpan.FromMilliseconds(200));
+        using CaretPositionMemory memory = new(editor, storage, new RecordingLogger(), TimeSpan.FromSeconds(2), clock);
         await memory.LoadAsync(CancellationToken.None);
 
         editor.Activate(first);
         first.CaretOffset = 2;
         editor.Activate(second);
         editor.Activate(first);
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        Assert.False(memory.FlushAsync().IsCompleted);
         Assert.Equal(0, storage.Writes);
 
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
         await memory.FlushAsync();
 
         Assert.Equal(1, storage.Writes);
@@ -95,19 +100,23 @@ public sealed class CaretPositionMemoryTests
     }
 
     [Fact]
-    public async Task FailingDocumentIsLoggedInsteadOfThrown()
+    public async Task FailingDocumentIsLoggedAndTheNextDocumentStillGetsItsCaret()
     {
         InMemoryExtensionStorage storage = new();
+        string nextPath = Path.GetFullPath("next.cs");
+        await storage.SetAsync("textEditing.caretPositions", new List<CaretPosition> { new(nextPath, 2, 3) }, CancellationToken.None);
         RecordingLogger logger = new();
         FakeEditor editor = new();
         FakeDocument broken = new(Path.GetFullPath("broken.cs"), "text") { Failure = new InvalidOperationException("gone") };
+        FakeDocument next = new(nextPath, "one\ntwo");
         using CaretPositionMemory memory = new(editor, storage, logger);
         await memory.LoadAsync(CancellationToken.None);
 
         editor.Activate(broken);
-        editor.Activate(new FakeDocument(Path.GetFullPath("next.cs"), "next"));
+        editor.Activate(next);
 
         Assert.Contains(logger.Errors, error => error is InvalidOperationException { Message: "gone" });
+        Assert.Equal(6, next.CaretOffset);
     }
 
     private sealed class CountingStorage : IExtensionStorage

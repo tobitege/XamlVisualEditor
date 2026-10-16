@@ -31,9 +31,9 @@ public sealed class PropertyGroupExpansionTests
         Application.Current!.Styles.Add(theme);
         Application.Current.Styles.Add(gridTheme);
         Window? window = null;
+        string path = Path.Combine(Path.GetTempPath(), "xve-group-expansion-" + Guid.NewGuid().ToString("N") + ".axaml");
         try
         {
-            string path = Path.Combine(Path.GetTempPath(), "xve-group-expansion-" + Guid.NewGuid().ToString("N") + ".axaml");
             await File.WriteAllTextAsync(path,
                 "<Button xmlns=\"https://github.com/avaloniaui\" Width=\"160\" Height=\"40\" />").WaitAsync(cancellationToken);
             TypeMetadataService metadata = new();
@@ -84,6 +84,7 @@ public sealed class PropertyGroupExpansionTests
             window?.Close();
             Application.Current.Styles.Remove(gridTheme);
             Application.Current.Styles.Remove(theme);
+            File.Delete(path);
         }
     }
 

@@ -67,4 +67,30 @@ public sealed class EditorPreviewThemeDefaultsTests
         Assert.Null(EditorPreviewThemeDefaults.Resolve(new EditorThemeSelection("example.editor-only/colors", "night"), true,
             new[] { Palette }, Project("Example.Palette")));
     }
+
+    [Fact]
+    public void DerivedThemeTheReportedCatalogDoesNotOfferKeepsTheProjectDefault()
+    {
+        DesignerTheme light = new("light", "Light", false);
+        DesignerTheme corporate = new("corporate", "Corporate", false);
+        DesignerThemeCatalog Catalog(string providerId, DesignerTheme[] themes, string? error = null) =>
+            new(Guid.NewGuid(), new[] { new DesignerThemeProviderCatalog(providerId, "Palette", themes, error) });
+        DesignerThemeSelection? ResolveDark(DesignerThemeCatalog? catalog) => EditorPreviewThemeDefaults.Resolve(
+            new EditorThemeSelection(EditorPreviewThemeDefaults.BuiltinProviderId, "dark"), true,
+            new[] { Palette }, Project("Example.Palette"), catalog);
+        DesignerThemeCatalog withoutDark = Catalog(PaletteId, new[] { light, corporate });
+
+        Assert.Null(ResolveDark(withoutDark));
+        Assert.Null(ResolveDark(Catalog(PaletteId, Array.Empty<DesignerTheme>(), "Palette failed.")));
+        Assert.Equal(new DesignerThemeSelection(PaletteId, "dark"),
+            ResolveDark(Catalog(PaletteId, new[] { light, new DesignerTheme("dark", "Dark", true) })));
+        Assert.Equal(new DesignerThemeSelection(PaletteId, "dark"),
+            ResolveDark(Catalog(Undeclared.Id, new[] { new DesignerTheme("dark", "Dark", true) })));
+        Assert.Equal(new DesignerThemeSelection(PaletteId, "dark"), ResolveDark(null));
+
+        Assert.Null(EditorPreviewThemeDefaults.Resolve(new EditorThemeSelection(PaletteId, "forest"), false,
+            new[] { Palette }, Project("Example.Palette"), withoutDark));
+        Assert.Equal(new DesignerThemeSelection(PaletteId, "corporate"), EditorPreviewThemeDefaults.Resolve(
+            new EditorThemeSelection(PaletteId, "corporate"), false, new[] { Palette }, Project("Example.Palette"), withoutDark));
+    }
 }

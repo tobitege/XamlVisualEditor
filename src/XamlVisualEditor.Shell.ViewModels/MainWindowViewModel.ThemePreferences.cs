@@ -75,7 +75,17 @@ public sealed partial class MainWindowViewModel
         if (_editorThemes is null || _workspace is not { } workspace) return null;
         ProjectModel? project = ProjectSelection.FindPreviewProject(workspace, _workspacePath, document.FilePath);
         return EditorPreviewThemeDefaults.Resolve(_editorThemes.Selection, _editorThemes.IsDark,
-            _extensionContributions?.DesignerThemeProviders ?? Array.Empty<DesignerThemeProviderRegistration>(), project);
+            _extensionContributions?.DesignerThemeProviders ?? Array.Empty<DesignerThemeProviderRegistration>(), project,
+            document.PreviewThemeCatalog);
+    }
+
+    /// <summary>A reported catalog can withdraw the derived theme, so the document then returns to the project default.</summary>
+    private void OnPreviewThemeCatalogReported(DesignerDocumentViewModel document, DesignerThemeCatalog? catalog)
+    {
+        if (_themePreferencesDisposed || catalog is null || PreviewThemePreference.IsExplicitChoice(_workspacePreviewTheme)) return;
+        _applyingWorkspaceTheme = true;
+        try { ApplyPreviewTheme(document); }
+        finally { _applyingWorkspaceTheme = false; }
     }
 
     private void ApplyPreviewTheme(DesignerDocumentViewModel document)
@@ -97,9 +107,12 @@ public sealed partial class MainWindowViewModel
         {
             if (_themePreferenceSubscriptions.ContainsKey(document)) continue;
             ApplyPreviewTheme(document);
-            _themePreferenceSubscriptions.Add(document, document.WhenAnyValue(item => item.PreviewThemeRequest)
-                .Select(request => request?.Selection).DistinctUntilChanged().Skip(1)
-                .Subscribe(selection => OnWorkspacePreviewThemeSelected(document, selection)));
+            _themePreferenceSubscriptions.Add(document, new CompositeDisposable(
+                document.WhenAnyValue(item => item.PreviewThemeRequest)
+                    .Select(request => request?.Selection).DistinctUntilChanged().Skip(1)
+                    .Subscribe(selection => OnWorkspacePreviewThemeSelected(document, selection)),
+                document.WhenAnyValue(item => item.PreviewThemeCatalog).Skip(1)
+                    .Subscribe(catalog => OnPreviewThemeCatalogReported(document, catalog))));
         }
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -15,6 +16,7 @@ using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Acp;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
+using XamlVisualEditor.Core.Localization;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.AcpExtension;
@@ -31,7 +33,10 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     private readonly SerialDisposable _profileSubscription = new();
     private readonly Subject<Unit> _saveRequests = new();
     private readonly Dictionary<string, int> _toolCallIndexes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, DateTime> _terminalFetchTimestamps = new(StringComparer.Ordinal);
+    // Terminal id to tool call id for terminals that have not exited; only touched on the main thread.
+    private readonly Dictionary<string, string> _openTerminals = new(StringComparer.Ordinal);
+    private readonly SerialDisposable _terminalPolling = new();
+    private bool _isPollingTerminals;
     private CancellationTokenSource? _authCts;
 
     public ObservableCollection<AcpSessionEntry> Sessions { get; } = new();
@@ -42,6 +47,11 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<AcpProfileViewModel> Profiles { get; } = new();
 
+    public ObservableCollection<AcpAuthenticationMethod> AuthenticationMethods { get; } = new();
+
+    [Reactive]
+    public partial AcpAuthenticationMethod? SelectedAuthenticationMethod { get; set; }
+
     [Reactive]
     public partial AcpProfileViewModel? SelectedProfile { get; set; }
 
@@ -49,22 +59,28 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     public partial bool IsConnected { get; private set; }
 
     [Reactive]
-    public partial string StatusText { get; private set; } = "Disconnected";
+    public partial string StatusText { get; private set; } = UiStrings.Disconnected;
 
     [Reactive]
     public partial string? ActiveSessionId { get; private set; }
 
     [Reactive]
-    public partial string AgentName { get; private set; } = "Mock Agent";
+    public partial string PromptText { get; set; } = string.Empty;
+
+    [Reactive]
+    public partial bool IsPromptRunning { get; private set; }
+
+    [Reactive]
+    public partial string AgentName { get; private set; } = string.Empty;
 
     [Reactive]
     public partial string? ApiKeyInput { get; set; }
 
     [Reactive]
-    public partial string ApiKeyStatus { get; private set; } = "Unknown";
+    public partial string ApiKeyStatus { get; private set; } = UiStrings.StateUnknown;
 
     [Reactive]
-    public partial string WebAuthStatus { get; private set; } = "Not signed in";
+    public partial string WebAuthStatus { get; private set; } = UiStrings.NotSignedIn;
 
     [Reactive]
     public partial string? WebAuthUserCode { get; private set; }
@@ -93,6 +109,9 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<RxVoid, RxVoid> NewSessionCommand { get; }
 
     public ReactiveCommand<RxVoid, RxVoid> CancelPromptCommand { get; }
+
+    public ReactiveCommand<RxVoid, RxVoid> SendPromptCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> AuthenticateCommand { get; }
 
     public ReactiveCommand<RxVoid, RxVoid> SaveApiKeyCommand { get; }
 
@@ -129,6 +148,8 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             DisconnectCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
             NewSessionCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
             CancelPromptCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
+            SendPromptCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
+            AuthenticateCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
             SaveApiKeyCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
             ClearApiKeyCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
             StartWebAuthCommand = ReactiveCommand.Create(() => { }, Observable.Return(false));
@@ -142,12 +163,23 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         ConnectMockCommand = ReactiveCommand.CreateFromTask(ConnectMockAsync, canConnect);
         ConnectProfileCommand = ReactiveCommand.CreateFromTask(ConnectProfileAsync, canConnect);
         DisconnectCommand = ReactiveCommand.CreateFromTask(DisconnectAsync, canDisconnect);
-        NewSessionCommand = ReactiveCommand.CreateFromTask(CreateSessionAsync, canDisconnect);
+        IObservable<bool> canStartSession = this.WhenAnyValue(x => x.IsConnected, x => x.IsPromptRunning,
+            (connected, running) => connected && !running);
+        NewSessionCommand = ReactiveCommand.CreateFromTask(CreateSessionAsync, canStartSession);
+
+        IObservable<bool> canSend = this.WhenAnyValue(x => x.IsConnected, x => x.ActiveSessionId,
+            x => x.PromptText, x => x.IsPromptRunning,
+            (connected, sessionId, text, running) => connected && !string.IsNullOrWhiteSpace(sessionId)
+                && !string.IsNullOrWhiteSpace(text) && !running);
+        SendPromptCommand = ReactiveCommand.CreateFromTask(SendPromptAsync, canSend);
+        AuthenticateCommand = ReactiveCommand.CreateFromTask(AuthenticateAsync,
+            this.WhenAnyValue(x => x.IsConnected, x => x.SelectedAuthenticationMethod, x => x.IsPromptRunning,
+                (connected, method, running) => connected && method is not null && !running));
 
         IObservable<bool> canCancel = this.WhenAnyValue(
             x => x.IsConnected,
-            x => x.ActiveSessionId,
-            (connected, sessionId) => connected && !string.IsNullOrWhiteSpace(sessionId));
+            x => x.IsPromptRunning,
+            (connected, running) => connected && running);
         CancelPromptCommand = ReactiveCommand.CreateFromTask(CancelPromptAsync, canCancel);
 
         IObservable<bool> canSaveKey = this.WhenAnyValue(
@@ -181,7 +213,9 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         OpenVerificationUrlCommand = ReactiveCommand.CreateFromTask(OpenVerificationUrlAsync, canOpenLink);
 
         _service.NotificationReceived += OnNotificationReceived;
+        _service.ConnectionChanged += OnConnectionChanged;
         _service.StderrReceived += OnStderrReceived;
+        _disposables.Add(_terminalPolling);
         UpdateConnectionState();
 
         _disposables.Add(_saveRequests
@@ -201,8 +235,8 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         _profileSubscription.Disposable = Disposable.Empty;
         if (profile is null)
         {
-            ApiKeyStatus = "Unknown";
-            WebAuthStatus = "Not signed in";
+            ApiKeyStatus = UiStrings.StateUnknown;
+            WebAuthStatus = UiStrings.NotSignedIn;
             return;
         }
 
@@ -215,7 +249,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
     private void LoadMockData()
     {
         IsConnected = true;
-        StatusText = "Connected";
+        StatusText = UiStrings.Connected;
         ActiveSessionId = "session-001";
 
         Sessions.Add(new AcpSessionEntry(
@@ -260,14 +294,14 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
         try
         {
-            await _service.ConnectMockAgentAsync(CancellationToken.None).ConfigureAwait(false);
+            await _service.ConnectMockAgentAsync(CancellationToken.None);
             UpdateConnectionState();
-            AddActivity("Connected to mock agent.", "info");
-            await InitializeSessionAsync().ConfigureAwait(false);
+            AddActivity(UiStrings.ConnectedMockAgent, "info");
+            await InitializeSessionAsync();
         }
         catch (Exception ex)
         {
-            AddActivity("Connect failed: " + ex.Message, "error");
+            AddActivity(UiStrings.ConnectFailedPrefix + ex.Message, "error");
         }
     }
 
@@ -281,15 +315,15 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         try
         {
             AcpProfile profile = SelectedProfile.ToProfile();
-            AcpAgentProcessOptions options = await BuildProcessOptionsAsync(profile).ConfigureAwait(false);
-            await _service.ConnectAsync(options, CancellationToken.None).ConfigureAwait(false);
+            AcpAgentProcessOptions options = await BuildProcessOptionsAsync(profile);
+            await _service.ConnectAsync(options, CancellationToken.None);
             UpdateConnectionState();
-            AddActivity("Connected to " + profile.Name + ".", "info");
-            await InitializeSessionAsync().ConfigureAwait(false);
+            AddActivity(UiStrings.ConnectedToPrefix + profile.Name + ".", "info");
+            await InitializeSessionAsync();
         }
         catch (Exception ex)
         {
-            AddActivity("Connect failed: " + ex.Message, "error");
+            AddActivity(UiStrings.ConnectFailedPrefix + ex.Message, "error");
         }
     }
 
@@ -302,13 +336,53 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
         try
         {
-            await _service.DisconnectAsync().ConfigureAwait(false);
+            await _service.DisconnectAsync();
             UpdateConnectionState();
-            AddActivity("Disconnected.", "info");
+            AddActivity(UiStrings.DisconnectedMessage, "info");
         }
         catch (Exception ex)
         {
-            AddActivity("Disconnect failed: " + ex.Message, "error");
+            AddActivity(UiStrings.DisconnectFailedPrefix + ex.Message, "error");
+        }
+    }
+
+    private async Task AuthenticateAsync()
+    {
+        if (_service is null || SelectedAuthenticationMethod is null) return;
+        try
+        {
+            await _service.SendRequestAsync("authenticate", new { methodId = SelectedAuthenticationMethod.Id }, CancellationToken.None);
+            if (string.IsNullOrEmpty(ActiveSessionId)) await CreateSessionAsync();
+        }
+        catch (Exception error)
+        {
+            AddActivity(string.Format(UiStrings.AcpAuthenticationFailed, error.Message), "error");
+        }
+    }
+
+    private async Task SendPromptAsync()
+    {
+        if (_service is null || string.IsNullOrWhiteSpace(ActiveSessionId) || string.IsNullOrWhiteSpace(PromptText))
+            return;
+
+        string text = PromptText;
+        string sessionId = ActiveSessionId;
+        IsPromptRunning = true;
+        PromptText = string.Empty;
+        AppendMessageChunk("user", text);
+        try
+        {
+            await _service.PromptAsync(sessionId, new[] { new { type = "text", text } }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            AddActivity(string.Format(UiStrings.AcpPromptFailed, ex.Message), "error");
+            if (string.IsNullOrEmpty(PromptText)) PromptText = text;
+        }
+        finally
+        {
+            IsPromptRunning = false;
+            UpdateConnectionState();
         }
     }
 
@@ -322,13 +396,18 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         try
         {
             await _service.CancelAsync(ActiveSessionId, CancellationToken.None).ConfigureAwait(false);
-            AddActivity("Cancel requested for session " + ActiveSessionId + ".", "info");
+            AddActivity(UiStrings.CancelSessionPrefix + ActiveSessionId + ".", "info");
         }
         catch (Exception ex)
         {
-            AddActivity("Cancel failed: " + ex.Message, "error");
+            AddActivity(UiStrings.CancelFailedPrefix + ex.Message, "error");
         }
     }
+
+    private void OnConnectionChanged() => RxSchedulers.MainThreadScheduler.Schedule(() =>
+    {
+        if (!_disposed) UpdateConnectionState();
+    });
 
     private void UpdateConnectionState()
     {
@@ -338,7 +417,12 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         }
 
         IsConnected = _service.IsConnected;
-        StatusText = IsConnected ? "Connected" : "Disconnected";
+        StatusText = IsConnected ? UiStrings.Connected : UiStrings.Disconnected;
+        if (!IsConnected && _openTerminals.Count > 0)
+        {
+            _openTerminals.Clear();
+            UpdateTerminalPolling();
+        }
         ActiveSessionId = _service.ActiveSessionId;
 
         if (!string.IsNullOrWhiteSpace(ActiveSessionId))
@@ -346,7 +430,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             AddOrUpdateSession(new AcpSessionEntry(
                 ActiveSessionId,
                 AgentName,
-                "Active",
+                UiStrings.StateActive,
                 DateTime.Now.ToString("HH:mm:ss")));
         }
     }
@@ -373,9 +457,20 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             }
         };
 
-        JsonElement initializeResult = await _service.InitializeAsync(initializePayload, CancellationToken.None)
-            .ConfigureAwait(false);
+        JsonElement initializeResult = await _service.InitializeAsync(initializePayload, CancellationToken.None);
         ApplyAgentInfo(initializeResult);
+        AuthenticationMethods.Clear();
+        if (initializeResult.TryGetProperty("authMethods", out JsonElement methods) && methods.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement method in methods.EnumerateArray())
+            {
+                string? type = TryGetString(method, "type");
+                string? id = TryGetString(method, "id");
+                if (id is not null && (type is null or "agent"))
+                    AuthenticationMethods.Add(new AcpAuthenticationMethod(id, TryGetString(method, "name") ?? id));
+            }
+        }
+        SelectedAuthenticationMethod = AuthenticationMethods.FirstOrDefault();
 
         string cwd = ResolveWorkspaceDirectory();
         object sessionPayload = new
@@ -384,10 +479,10 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             mcpServers = Array.Empty<object>()
         };
 
-        string sessionId = await _service.CreateSessionAsync(sessionPayload, CancellationToken.None)
-            .ConfigureAwait(false);
+        string sessionId = await _service.CreateSessionAsync(sessionPayload, CancellationToken.None);
+        _toolCallIndexes.Clear();
         UpdateConnectionState();
-        AddActivity("Created session " + sessionId + ".", "info");
+        AddActivity(UiStrings.CreatedSessionPrefix + sessionId + ".", "info");
     }
 
     private async Task CreateSessionAsync()
@@ -406,14 +501,14 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 mcpServers = Array.Empty<object>()
             };
 
-            string sessionId = await _service.CreateSessionAsync(sessionPayload, CancellationToken.None)
-                .ConfigureAwait(false);
+            string sessionId = await _service.CreateSessionAsync(sessionPayload, CancellationToken.None);
+            _toolCallIndexes.Clear();
             UpdateConnectionState();
-            AddActivity("Created session " + sessionId + ".", "info");
+            AddActivity(UiStrings.CreatedSessionPrefix + sessionId + ".", "info");
         }
         catch (Exception ex)
         {
-            AddActivity("Create session failed: " + ex.Message, "error");
+            AddActivity(UiStrings.CreateSessionFailedPrefix + ex.Message, "error");
         }
     }
 
@@ -451,7 +546,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             string? secret = await _secretStore.GetSecretAsync(key, CancellationToken.None).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(secret))
             {
-                throw new InvalidOperationException("API key is not stored for this profile.");
+                throw new InvalidOperationException(UiStrings.ApiKeyNotStored);
             }
 
             options.EnvironmentVariables[profile.ApiKeyEnvVar] = secret;
@@ -558,7 +653,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         await _secretStore.SetSecretAsync(key, ApiKeyInput, CancellationToken.None).ConfigureAwait(false);
         ApiKeyInput = string.Empty;
         await RefreshApiKeyStatusAsync(SelectedProfile).ConfigureAwait(false);
-        AddActivity("API key stored.", "info");
+        AddActivity(UiStrings.ApiKeyStored, "info");
     }
 
     private async Task ClearApiKeyAsync()
@@ -571,51 +666,51 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         string key = BuildApiKeyKey(SelectedProfile.Id);
         await _secretStore.RemoveSecretAsync(key, CancellationToken.None).ConfigureAwait(false);
         await RefreshApiKeyStatusAsync(SelectedProfile).ConfigureAwait(false);
-        AddActivity("API key removed.", "info");
+        AddActivity(UiStrings.ApiKeyRemoved, "info");
     }
 
     private async Task RefreshApiKeyStatusAsync(AcpProfileViewModel profile)
     {
         if (_secretStore is null)
         {
-            ApiKeyStatus = "Unavailable";
+            ApiKeyStatus = UiStrings.StateUnavailable;
             return;
         }
 
         OAuthTokenInfo? oauthInfo = await ReadOAuthTokenAsync(profile.Id).ConfigureAwait(false);
         if (oauthInfo is not null && !string.IsNullOrWhiteSpace(oauthInfo.AccessToken))
         {
-            ApiKeyStatus = "Stored (OAuth)";
+            ApiKeyStatus = UiStrings.StoredOAuth;
             return;
         }
 
         string key = BuildApiKeyKey(profile.Id);
         string? secret = await _secretStore.GetSecretAsync(key, CancellationToken.None).ConfigureAwait(false);
-        ApiKeyStatus = string.IsNullOrWhiteSpace(secret) ? "Not set" : "Stored";
+        ApiKeyStatus = string.IsNullOrWhiteSpace(secret) ? UiStrings.NotSet : UiStrings.StateStored;
     }
 
     private async Task RefreshWebAuthStatusAsync(AcpProfileViewModel profile)
     {
         if (_secretStore is null)
         {
-            WebAuthStatus = "Unavailable";
+            WebAuthStatus = UiStrings.StateUnavailable;
             return;
         }
 
         OAuthTokenInfo? oauthInfo = await ReadOAuthTokenAsync(profile.Id).ConfigureAwait(false);
         if (oauthInfo is null || string.IsNullOrWhiteSpace(oauthInfo.AccessToken))
         {
-            WebAuthStatus = "Not signed in";
+            WebAuthStatus = UiStrings.NotSignedIn;
             return;
         }
 
         if (oauthInfo.ExpiresAt is not null && oauthInfo.ExpiresAt <= DateTimeOffset.UtcNow)
         {
-            WebAuthStatus = "Expired";
+            WebAuthStatus = UiStrings.StateExpired;
             return;
         }
 
-        WebAuthStatus = "Signed in";
+        WebAuthStatus = UiStrings.SignedIn;
     }
 
     private static string BuildApiKeyKey(string profileId)
@@ -638,15 +733,19 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         string? clientId = SelectedProfile.OAuthClientId;
         if (string.IsNullOrWhiteSpace(clientId))
         {
-            AddActivity("OAuth client id is required.", "error");
-            WebAuthStatus = "Missing client id";
+            AddActivity(UiStrings.OAuthClientIdRequired, "error");
+            WebAuthStatus = UiStrings.MissingClientId;
             return;
         }
 
-        string deviceCodeUrl = SelectedProfile.OAuthDeviceCodeUrl
-            ?? "https://api.openai.com/v1/oauth/device/code";
-        string tokenUrl = SelectedProfile.OAuthTokenUrl
-            ?? "https://api.openai.com/v1/oauth/token";
+        string? deviceCodeUrl = SelectedProfile.OAuthDeviceCodeUrl;
+        string? tokenUrl = SelectedProfile.OAuthTokenUrl;
+        if (!Uri.TryCreate(deviceCodeUrl, UriKind.Absolute, out _)
+            || !Uri.TryCreate(tokenUrl, UriKind.Absolute, out _))
+        {
+            WebAuthStatus = UiStrings.OAuthEndpointsRequired;
+            return;
+        }
         string scope = string.IsNullOrWhiteSpace(SelectedProfile.OAuthScopes)
             ? "openid profile email offline_access"
             : SelectedProfile.OAuthScopes;
@@ -654,7 +753,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         _authCts?.Cancel();
         _authCts = new CancellationTokenSource();
         IsWebAuthBusy = true;
-        WebAuthStatus = "Requesting device code...";
+        WebAuthStatus = UiStrings.RequestingDeviceCode;
 
         try
         {
@@ -668,7 +767,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             WebAuthUserCode = deviceCode.UserCode;
             WebAuthVerificationUri = deviceCode.VerificationUri;
             WebAuthVerificationUriComplete = deviceCode.VerificationUriComplete;
-            WebAuthStatus = "Waiting for authorization";
+            WebAuthStatus = UiStrings.WaitingAuthorization;
 
             string url = deviceCode.VerificationUriComplete ?? deviceCode.VerificationUri;
             await TryOpenUrlAsync(url).ConfigureAwait(false);
@@ -682,13 +781,13 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 .ConfigureAwait(false);
 
             await StoreOAuthTokenAsync(SelectedProfile.Id, token).ConfigureAwait(false);
-            WebAuthStatus = "Signed in";
+            WebAuthStatus = UiStrings.SignedIn;
             await RefreshApiKeyStatusAsync(SelectedProfile).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            WebAuthStatus = "Sign in failed";
-            AddActivity("OAuth failed: " + ex.Message, "error");
+            WebAuthStatus = UiStrings.SignInFailed;
+            AddActivity(UiStrings.OAuthFailedPrefix + ex.Message, "error");
         }
         finally
         {
@@ -713,9 +812,9 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         WebAuthUserCode = null;
         WebAuthVerificationUri = null;
         WebAuthVerificationUriComplete = null;
-        WebAuthStatus = "Not signed in";
+        WebAuthStatus = UiStrings.NotSignedIn;
         await RefreshApiKeyStatusAsync(SelectedProfile).ConfigureAwait(false);
-        AddActivity("OAuth sign-out complete.", "info");
+        AddActivity(UiStrings.OAuthSignOutComplete, "info");
     }
 
     private async Task CopyUserCodeAsync()
@@ -728,7 +827,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         try
         {
             await CopyToClipboardInteraction.Handle(WebAuthUserCode).ConfigureAwait(false);
-            AddActivity("Copied verification code.", "info");
+            AddActivity(UiStrings.VerificationCodeCopied, "info");
         }
         catch
         {
@@ -812,30 +911,39 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             return null;
         }
 
-        if (info.ExpiresAt is not null && info.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(1))
+        if (info.ExpiresAt is null || info.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1))
         {
-            if (!string.IsNullOrWhiteSpace(info.RefreshToken)
-                && !string.IsNullOrWhiteSpace(profile.OAuthTokenUrl ?? "https://api.openai.com/v1/oauth/token"))
+            return info.AccessToken;
+        }
+
+        bool hasTokenEndpoint = Uri.TryCreate(profile.OAuthTokenUrl, UriKind.Absolute, out _);
+        if (!string.IsNullOrWhiteSpace(info.RefreshToken) && hasTokenEndpoint)
+        {
+            try
             {
-                try
-                {
-                    AcpTokenResponse refreshed = await _oauthService.RefreshTokenAsync(
-                            profile.OAuthClientId,
-                            info.RefreshToken,
-                            profile.OAuthTokenUrl ?? "https://api.openai.com/v1/oauth/token",
-                            CancellationToken.None)
-                        .ConfigureAwait(false);
-                    await StoreOAuthTokenAsync(profile.Id, refreshed).ConfigureAwait(false);
-                    return refreshed.AccessToken;
-                }
-                catch
-                {
-                    return info.AccessToken;
-                }
+                AcpTokenResponse refreshed = await _oauthService.RefreshTokenAsync(
+                        profile.OAuthClientId,
+                        info.RefreshToken,
+                        profile.OAuthTokenUrl!,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+                await StoreOAuthTokenAsync(profile.Id, refreshed).ConfigureAwait(false);
+                return refreshed.AccessToken;
+            }
+            catch (Exception ex)
+            {
+                AddActivity(UiStrings.OAuthFailedPrefix + ex.Message, "error");
             }
         }
 
-        return info.AccessToken;
+        if (info.ExpiresAt > DateTimeOffset.UtcNow)
+        {
+            return info.AccessToken;
+        }
+
+        // The stored API key holds the same expired token, so the connection must not fall back to it.
+        WebAuthStatus = hasTokenEndpoint ? UiStrings.StateExpired : UiStrings.OAuthEndpointsRequired;
+        throw new InvalidOperationException(UiStrings.OAuthTokenExpired);
     }
 
 
@@ -844,13 +952,13 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         if (!initializeResult.TryGetProperty("agentInfo", out JsonElement agentInfo)
             || agentInfo.ValueKind != JsonValueKind.Object)
         {
-            AgentName = "ACP Agent";
+            AgentName = UiStrings.AcpAgent;
             return;
         }
 
         string? title = TryGetString(agentInfo, "title");
         string? name = TryGetString(agentInfo, "name");
-        AgentName = !string.IsNullOrWhiteSpace(title) ? title : name ?? "ACP Agent";
+        AgentName = !string.IsNullOrWhiteSpace(title) ? title : name ?? UiStrings.AcpAgent;
     }
 
     private static string GetClientVersion()
@@ -883,7 +991,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             AddOrUpdateSession(new AcpSessionEntry(
                 sessionId,
                 AgentName,
-                "Active",
+                UiStrings.StateActive,
                 DateTime.Now.ToString("HH:mm:ss")));
         }
 
@@ -894,14 +1002,8 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        string? updateKind = null;
-        JsonElement? updatePayload = null;
-        foreach (JsonProperty property in updateElement.Value.EnumerateObject())
-        {
-            updateKind = property.Name;
-            updatePayload = property.Value;
-            break;
-        }
+        string? updateKind = TryGetString(updateElement, "sessionUpdate");
+        JsonElement? updatePayload = updateElement;
 
         if (string.IsNullOrWhiteSpace(updateKind))
         {
@@ -940,20 +1042,20 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 UpsertToolEntry(payload.Value);
                 break;
             case "plan":
-                AppendStatusEntry("Plan update", SummarizePlan(payload.Value));
+                AppendStatusEntry(UiStrings.PlanUpdate, SummarizePlan(payload.Value));
                 break;
             case "current_mode_update":
-                AppendStatusEntry("Mode", SummarizeMode(payload.Value));
+                AppendStatusEntry(UiStrings.ModeLabel, SummarizeMode(payload.Value));
                 break;
             case "config_option_update":
-                AppendStatusEntry("Config", SummarizeConfigOptions(payload.Value));
+                AppendStatusEntry(UiStrings.ConfigLabel, SummarizeConfigOptions(payload.Value));
                 break;
         }
     }
 
     private void AppendMessageChunk(string role, string? text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrEmpty(text))
         {
             return;
         }
@@ -981,9 +1083,9 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        string title = TryGetString(payload, "title") ?? "Tool call";
-        string status = TryGetString(payload, "status") ?? "pending";
-        string kind = TryGetString(payload, "kind") ?? "other";
+        string? title = TryGetString(payload, "title");
+        string? status = TryGetString(payload, "status");
+        string? kind = TryGetString(payload, "kind");
         ToolContentSnapshot contentSnapshot = ExtractToolContent(payload);
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
 
@@ -994,25 +1096,28 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 && index < Transcript.Count
                 && Transcript[index] is AcpTranscriptToolEntry existing)
             {
-                Transcript[index] = existing with
+                AcpTranscriptToolEntry updated = existing with
                 {
-                    Title = title,
-                    Status = status,
-                    ToolKind = kind,
+                    Title = title ?? existing.Title,
+                    Status = status ?? existing.Status,
+                    ToolKind = kind ?? existing.ToolKind,
                     Timestamp = timestamp,
                     DiffPath = contentSnapshot.DiffPath ?? existing.DiffPath,
                     DiffOldText = contentSnapshot.DiffOldText ?? existing.DiffOldText,
                     DiffNewText = contentSnapshot.DiffNewText ?? existing.DiffNewText,
-                    TerminalId = contentSnapshot.TerminalId ?? existing.TerminalId
+                    TerminalId = contentSnapshot.TerminalId ?? existing.TerminalId,
+                    OutputText = contentSnapshot.OutputText ?? existing.OutputText
                 };
+                Transcript[index] = updated;
+                TrackOpenTerminal(updated);
                 return Disposable.Empty;
             }
 
-            Transcript.Add(new AcpTranscriptToolEntry(
+            AcpTranscriptToolEntry added = new(
                 toolCallId,
-                title,
-                status,
-                kind,
+                title ?? UiStrings.ToolCall,
+                status ?? "pending",
+                kind ?? "other",
                 timestamp,
                 contentSnapshot.DiffPath,
                 contentSnapshot.DiffOldText,
@@ -1021,51 +1126,48 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 null,
                 false,
                 null,
-                null));
+                null,
+                contentSnapshot.OutputText);
+            Transcript.Add(added);
             _toolCallIndexes[toolCallId] = Transcript.Count - 1;
+            TrackOpenTerminal(added);
             return Disposable.Empty;
         });
 
         if (!string.IsNullOrWhiteSpace(contentSnapshot.TerminalId))
         {
-            _ = FetchTerminalOutputAsync(toolCallId, contentSnapshot.TerminalId);
+            RefreshTerminalOutput(toolCallId, contentSnapshot.TerminalId);
         }
     }
 
-    private async Task FetchTerminalOutputAsync(string toolCallId, string terminalId)
+    private void RefreshTerminalOutput(string toolCallId, string terminalId)
     {
         if (_service is null)
         {
             return;
         }
 
-        if (_terminalFetchTimestamps.TryGetValue(terminalId, out DateTime lastFetch)
-            && DateTime.UtcNow - lastFetch < TimeSpan.FromSeconds(1))
-        {
-            return;
-        }
-
-        _terminalFetchTimestamps[terminalId] = DateTime.UtcNow;
-
         try
         {
-            object payload = new
+            JsonElement? snapshot = _service.GetTerminalOutput(terminalId);
+            if (snapshot is null)
             {
-                terminalId,
-                sessionId = ActiveSessionId ?? string.Empty
-            };
+                // The client no longer knows this terminal, so no further output can arrive.
+                RxSchedulers.MainThreadScheduler.Schedule(() => ForgetOpenTerminal(terminalId));
+                return;
+            }
 
-            JsonElement response = await _service.SendRequestAsync("terminal/output", payload, CancellationToken.None)
-                .ConfigureAwait(false);
+            JsonElement response = snapshot.Value;
 
             string? output = TryGetString(response, "output");
             bool truncated = response.TryGetProperty("truncated", out JsonElement truncElement)
                 && truncElement.ValueKind == JsonValueKind.True;
             int? exitCode = null;
             string? signal = null;
+            bool exited = response.TryGetProperty("exitStatus", out JsonElement exitStatus)
+                && exitStatus.ValueKind == JsonValueKind.Object;
 
-            if (response.TryGetProperty("exitStatus", out JsonElement exitStatus)
-                && exitStatus.ValueKind == JsonValueKind.Object)
+            if (exited)
             {
                 if (exitStatus.TryGetProperty("exitCode", out JsonElement exitCodeElement)
                     && exitCodeElement.ValueKind == JsonValueKind.Number
@@ -1079,6 +1181,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 
             RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
             {
+                if (exited) ForgetOpenTerminal(terminalId);
                 if (!_toolCallIndexes.TryGetValue(toolCallId, out int index)
                     || index < 0
                     || index >= Transcript.Count
@@ -1099,15 +1202,47 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            AddActivity("Terminal output failed: " + ex.Message, "error");
+            AddActivity(UiStrings.TerminalOutputFailedPrefix + ex.Message, "error");
         }
+    }
+
+    private void TrackOpenTerminal(AcpTranscriptToolEntry entry)
+    {
+        if (entry.TerminalId is null || entry.TerminalExitCode is not null || entry.TerminalSignal is not null) return;
+        _openTerminals[entry.TerminalId] = entry.ToolCallId;
+        UpdateTerminalPolling();
+    }
+
+    private void ForgetOpenTerminal(string terminalId)
+    {
+        if (_openTerminals.Remove(terminalId)) UpdateTerminalPolling();
+    }
+
+    private void UpdateTerminalPolling()
+    {
+        bool poll = _openTerminals.Count > 0 && !_disposed;
+        if (poll == _isPollingTerminals) return;
+        _isPollingTerminals = poll;
+        _terminalPolling.Disposable = poll
+            ? Observable.Interval(TimeSpan.FromSeconds(1))
+                .WitnessOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(_ => PollOpenTerminals())
+            : Disposable.Empty;
+    }
+
+    private void PollOpenTerminals()
+    {
+        if (!IsConnected) return;
+        foreach (KeyValuePair<string, string> terminal in _openTerminals.ToArray())
+            RefreshTerminalOutput(terminal.Value, terminal.Key);
     }
 
     private readonly record struct ToolContentSnapshot(
         string? DiffPath,
         string? DiffOldText,
         string? DiffNewText,
-        string? TerminalId);
+        string? TerminalId,
+        string? OutputText);
 
     private static ToolContentSnapshot ExtractToolContent(JsonElement payload)
     {
@@ -1121,6 +1256,7 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         string? diffOld = null;
         string? diffNew = null;
         string? terminalId = null;
+        List<string> texts = new();
 
         foreach (JsonElement item in content.EnumerateArray())
         {
@@ -1129,27 +1265,26 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
                 continue;
             }
 
-            if (diffPath is null && item.TryGetProperty("diff", out JsonElement diff)
-                && diff.ValueKind == JsonValueKind.Object)
+            string? type = TryGetString(item, "type");
+            if (diffPath is null && type == "diff")
             {
-                diffPath = TryGetString(diff, "path");
-                diffOld = TruncateText(TryGetString(diff, "oldText"), 2000);
-                diffNew = TruncateText(TryGetString(diff, "newText"), 2000);
+                diffPath = TryGetString(item, "path");
+                diffOld = TruncateText(TryGetString(item, "oldText"), 2000);
+                diffNew = TruncateText(TryGetString(item, "newText"), 2000);
             }
 
-            if (terminalId is null && item.TryGetProperty("terminal", out JsonElement terminal)
-                && terminal.ValueKind == JsonValueKind.Object)
+            if (terminalId is null && type == "terminal")
             {
-                terminalId = TryGetString(terminal, "terminalId");
+                terminalId = TryGetString(item, "terminalId");
             }
-
-            if (diffPath is not null && terminalId is not null)
+            if (type == "content" && ExtractContentText(item) is { } text)
             {
-                break;
+                texts.Add(text);
             }
         }
 
-        return new ToolContentSnapshot(diffPath, diffOld, diffNew, terminalId);
+        return new ToolContentSnapshot(diffPath, diffOld, diffNew, terminalId,
+            texts.Count > 0 ? string.Join(Environment.NewLine, texts) : null);
     }
 
     private static string? TruncateText(string? text, int maxLength)
@@ -1178,16 +1313,16 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             && entries.ValueKind == JsonValueKind.Array)
         {
             int count = entries.GetArrayLength();
-            return "entries: " + count;
+            return UiStrings.EntriesPrefix + count;
         }
 
-        return "updated";
+        return UiStrings.StateUpdated;
     }
 
     private static string SummarizeMode(JsonElement payload)
     {
         string? modeId = TryGetString(payload, "currentModeId");
-        return string.IsNullOrWhiteSpace(modeId) ? "changed" : "current: " + modeId;
+        return string.IsNullOrWhiteSpace(modeId) ? UiStrings.StateChanged : UiStrings.CurrentPrefix + modeId;
     }
 
     private static string SummarizeConfigOptions(JsonElement payload)
@@ -1196,10 +1331,10 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
             && options.ValueKind == JsonValueKind.Array)
         {
             int count = options.GetArrayLength();
-            return "options: " + count;
+            return UiStrings.OptionsPrefix + count;
         }
 
-        return "updated";
+        return UiStrings.StateUpdated;
     }
 
     private static string BuildUpdateSummary(string updateKind, JsonElement? payload)
@@ -1367,11 +1502,14 @@ public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
         if (_service is not null)
         {
             _service.NotificationReceived -= OnNotificationReceived;
+            _service.ConnectionChanged -= OnConnectionChanged;
             _service.StderrReceived -= OnStderrReceived;
         }
     }
 }
 
 public sealed partial record AcpSessionEntry(string SessionId, string Agent, string Status, string LastUpdated);
+
+public sealed record AcpAuthenticationMethod(string Id, string Name);
 
 public sealed partial record AcpActivityEntry(string Timestamp, string Message, string Kind);

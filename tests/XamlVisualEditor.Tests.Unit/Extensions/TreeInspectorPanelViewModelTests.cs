@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
@@ -37,6 +38,47 @@ public sealed class TreeInspectorPanelViewModelTests
         TreeInspectorNodeViewModel refreshedRoot = Assert.Single(viewModel.TreeModel.RootItems);
         Assert.True(refreshedRoot.IsExpanded);
         Assert.Equal(childId, viewModel.TreeModel.SelectedNode?.NodeId);
+    }
+
+    [Theory]
+    [InlineData(TreeKind.Visual)]
+    [InlineData(TreeKind.Logical)]
+    public async Task ExpandAndCollapseAll_PreservesStateAfterRefresh(TreeKind kind)
+    {
+        string rootId = Guid.NewGuid().ToString("D");
+        string childId = Guid.NewGuid().ToString("D");
+        string leafId = Guid.NewGuid().ToString("D");
+        DesignerNodeSummary[] nodes =
+        {
+            new(rootId, "Grid", "Root", null, 1),
+            new(childId, "StackPanel", "Group", rootId, 1),
+            new(leafId, "Button", "Leaf", childId, 0)
+        };
+        FakeDesignerHost designer = new();
+        if (kind == TreeKind.Visual) designer.VisualTree = nodes;
+        else designer.LogicalTree = nodes;
+        using TreeInspectorPanelViewModel viewModel = new(designer, kind);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExpandAllCommand.Execute().ToTask();
+        TreeInspectorNodeViewModel root = Assert.Single(viewModel.TreeModel.RootItems);
+        Assert.True(root.IsExpanded);
+        Assert.True(Assert.Single(root.Children).IsExpanded);
+        Assert.Equal(3, viewModel.TreeModel.Model.Flattened.Count);
+
+        await viewModel.CollapseAllCommand.Execute().ToTask();
+        Assert.False(root.IsExpanded);
+        Assert.False(Assert.Single(root.Children).IsExpanded);
+        Assert.Single(viewModel.TreeModel.Model.Flattened);
+
+        DesignerNodeSummary[] refreshed =
+        {
+            nodes[0], nodes[1], new(leafId, "Button", "Updated leaf", childId, 0)
+        };
+        if (kind == TreeKind.Visual) designer.VisualTree = refreshed;
+        else designer.LogicalTree = refreshed;
+        await viewModel.RefreshAsync(CancellationToken.None);
+        Assert.False(Assert.Single(viewModel.TreeModel.RootItems).IsExpanded);
     }
 
     [Fact]

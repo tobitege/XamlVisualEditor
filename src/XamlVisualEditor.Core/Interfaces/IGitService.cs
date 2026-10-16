@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
-/// Provides git operations for repository status, diff, and staging workflows.
+/// Provides git operations for repository status, diff, and staging workflows. Paths are passed as literal
+/// paths, not as patterns. Stage, unstage, discard and commit throw <see cref="System.InvalidOperationException"/>
+/// with git's error output when git fails.
 /// </summary>
 public interface IGitService
 {
@@ -35,14 +37,10 @@ public interface IGitService
     Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
 
     /// <summary>
-    /// Discards changes for the specified paths.
+    /// Discards the unstaged changes of the specified paths by restoring their working files from the index;
+    /// staged changes and files that exist only in the index are kept.
     /// </summary>
     Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
-
-    /// <summary>
-    /// Removes untracked files for the specified paths.
-    /// </summary>
-    Task RemoveUntrackedAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default);
 
     /// <summary>
     /// Creates a commit with the given message.

@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
+        x:Class="XamlVisualEditor.App.Views.ConfirmDialog"
+        Classes="editor-chrome"
+        x:DataType="vm:ConfirmDialogViewModel"
+        Title="{CompiledBinding Title}"
+        Width="420"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+    <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+    <ScrollViewer Grid.Row="1" MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+    </ScrollViewer>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="ConfirmButton" Content="{CompiledBinding ConfirmText}" Command="{CompiledBinding ConfirmCommand}"
+              IsDefault="{CompiledBinding IsConfirmDefault}" />
+      <Button Name="CancelButton" Content="{CompiledBinding CancelText}" Command="{CompiledBinding CancelCommand}"
+              IsDefault="{CompiledBinding IsDestructive}" IsCancel="True" />
+    </StackPanel>
+  </Grid>
+</Window>

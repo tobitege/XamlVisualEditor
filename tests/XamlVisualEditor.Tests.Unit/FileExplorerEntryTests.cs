@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.FileExplorerExtension;
 using Xunit;
@@ -63,6 +64,32 @@ public sealed class FileExplorerEntryTests
         }
     }
 
+    [Fact]
+    public async Task DeleteReadOnlyFileReportsWriteProtectionInUiLanguage()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to delete a read-only file.");
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "locked.tmp");
+        File.WriteAllText(path, "data");
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            StubWindow window = new(pickFirstOption: true);
+            FileExplorerEntry entry = new(path, isDirectory: false, icon: null, new StubEditorServices(), window, new StubWorkspaceHost(), () => { });
+
+            await entry.DeleteAsync(CancellationToken.None);
+
+            Assert.True(File.Exists(path));
+            Assert.Equal(string.Format(UiStrings.DeleteReadOnly, "locked.tmp"), Assert.Single(window.ErrorMessages));
+        }
+        finally
+        {
+            // Only the file this test created is made writable again, so the temporary folder can be removed.
+            File.SetAttributes(path, FileAttributes.Normal);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         string root = Path.Combine(Path.GetTempPath(), "xve-tests", Path.GetRandomFileName());
@@ -108,11 +135,15 @@ public sealed class FileExplorerEntryTests
     private sealed class StubWindow : IWindow
     {
         private readonly string? _input;
+        private readonly bool _pickFirstOption;
 
-        public StubWindow(string? input = null)
+        public StubWindow(string? input = null, bool pickFirstOption = false)
         {
             _input = input;
+            _pickFirstOption = pickFirstOption;
         }
+
+        public List<string> ErrorMessages { get; } = new();
 
         public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken)
             => Task.CompletedTask;
@@ -121,7 +152,10 @@ public sealed class FileExplorerEntryTests
             => Task.CompletedTask;
 
         public Task ShowErrorMessageAsync(string message, CancellationToken cancellationToken)
-            => Task.CompletedTask;
+        {
+            ErrorMessages.Add(message);
+            return Task.CompletedTask;
+        }
 
         public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken)
         {
@@ -133,7 +167,7 @@ public sealed class FileExplorerEntryTests
             QuickPickOptions options,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<QuickPickItem?>(null);
+            return Task.FromResult(_pickFirstOption ? items[0] : null);
         }
 
         public IOutputChannel CreateOutputChannel(string name)

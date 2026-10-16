@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
 using XamlVisualEditor.Collaboration.UI;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -117,7 +118,7 @@ public sealed class CollaborationPanelHostAdapter : ICollaborationPanelHost, ICo
         }
 
         string inviteeText = invitee.Trim();
-        _mainViewModel.Collaboration.StatusMessage = "Invite prepared for " + inviteeText;
+        _mainViewModel.Collaboration.StatusMessage = UiStrings.InvitePreparedPrefix + inviteeText;
         return Task.FromResult(true);
     }
 

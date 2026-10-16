@@ -45,6 +45,15 @@ internal static class ProjectSelection
         return existing;
     }
 
+    /// <summary>
+    /// Returns the project that renders a XAML file in the previewer. Files outside all project folders
+    /// (for example generated XAML in a scratch directory) render against the loaded workspace project.
+    /// </summary>
+    public static ProjectModel? FindPreviewProject(WorkspaceModel workspace, string? workspacePath, string filePath)
+        => FindProjectForFile(workspace, filePath)
+            ?? workspace.Projects.FirstOrDefault(project => FileSystemPathComparison.Equals(project.ProjectPath, workspacePath))
+            ?? SelectPreferredProject(workspace.Projects);
+
     public static ProjectModel? SelectPreferredProject(IEnumerable<ProjectModel> projects)
     {
         ProjectModel? selected = null;

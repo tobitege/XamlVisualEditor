@@ -1,10 +1,13 @@
 using System.IO;
 using System.Linq;
+using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.FileExplorerExtension;
 
-public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IExtensionTreeItemChildrenProvider, IExtensionTreeItemWorkspaceProvider
+public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IExtensionTreeItemChildrenProvider, IExtensionTreeItemWorkspaceProvider,
+    IExtensionTreeItemPathProvider
 {
     private readonly IEditorServices _editor;
     private readonly IWindow _window;
@@ -86,7 +89,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
 
         string? newName = await _window.ShowInputBoxAsync(
-            new InputBoxOptions("Rename", "Enter the new name", Name),
+            new InputBoxOptions(UiStrings.Rename, UiStrings.NewNamePrompt, Name),
             cancellationToken);
 
         if (string.IsNullOrWhiteSpace(newName) || string.Equals(newName, Name, StringComparison.Ordinal))
@@ -97,7 +100,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         string newPath = Path.Combine(parent, newName);
         if (File.Exists(newPath) || Directory.Exists(newPath))
         {
-            await _window.ShowWarningMessageAsync("A file or folder with that name already exists.", cancellationToken);
+            await _window.ShowWarningMessageAsync(UiStrings.FileOrFolderExists, cancellationToken);
             return;
         }
 
@@ -116,7 +119,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync($"Rename failed: {ex.Message}", cancellationToken);
+            await _window.ShowErrorMessageAsync(string.Format(UiStrings.RenameFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, FullPath)), cancellationToken);
         }
     }
 
@@ -129,16 +132,16 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
 
         QuickPickItem[] options =
         {
-            new("Delete", "Permanently delete the item", null),
-            new("Cancel", "Keep the item", null)
+            new(UiStrings.Delete, UiStrings.PermanentlyDeleteItem, null),
+            new(UiStrings.Cancel, UiStrings.KeepItem, null)
         };
 
         QuickPickItem? choice = await _window.ShowQuickPickAsync(
             options,
-            new QuickPickOptions("Confirm Delete", CanPickMany: false),
+            new QuickPickOptions(UiStrings.ConfirmDelete, CanPickMany: false),
             cancellationToken);
 
-        if (choice is null || !string.Equals(choice.Label, "Delete", StringComparison.OrdinalIgnoreCase))
+        if (choice is null || !string.Equals(choice.Label, options[0].Label, StringComparison.Ordinal))
         {
             return;
         }
@@ -158,7 +161,10 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync($"Delete failed: {ex.Message}", cancellationToken);
+            string message = FileSystemErrorMessages.TryGetReadOnlyEntryName(ex, FullPath, out string? readOnlyName)
+                ? string.Format(UiStrings.DeleteReadOnly, (object?)readOnlyName)
+                : string.Format(UiStrings.DeleteFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, FullPath));
+            await _window.ShowErrorMessageAsync(message, cancellationToken);
         }
     }
 
@@ -171,7 +177,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
 
         string? name = await _window.ShowInputBoxAsync(
-            new InputBoxOptions("New File", "Enter the file name", ""),
+            new InputBoxOptions(UiStrings.NewFile, UiStrings.FileNamePrompt, ""),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -181,7 +187,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         string path = Path.Combine(targetDirectory, name);
         if (File.Exists(path) || Directory.Exists(path))
         {
-            await _window.ShowWarningMessageAsync("A file or folder with that name already exists.", cancellationToken);
+            await _window.ShowWarningMessageAsync(UiStrings.FileOrFolderExists, cancellationToken);
             return;
         }
 
@@ -193,7 +199,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync($"Create file failed: {ex.Message}", cancellationToken);
+            await _window.ShowErrorMessageAsync(string.Format(UiStrings.CreateFileFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, path)), cancellationToken);
         }
     }
 
@@ -206,7 +212,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
 
         string? name = await _window.ShowInputBoxAsync(
-            new InputBoxOptions("New Folder", "Enter the folder name", ""),
+            new InputBoxOptions(UiStrings.NewFolder, UiStrings.FolderNamePrompt, ""),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -216,7 +222,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         string path = Path.Combine(targetDirectory, name);
         if (File.Exists(path) || Directory.Exists(path))
         {
-            await _window.ShowWarningMessageAsync("A file or folder with that name already exists.", cancellationToken);
+            await _window.ShowWarningMessageAsync(UiStrings.FileOrFolderExists, cancellationToken);
             return;
         }
 
@@ -227,7 +233,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         }
         catch (Exception ex)
         {
-            await _window.ShowErrorMessageAsync($"Create folder failed: {ex.Message}", cancellationToken);
+            await _window.ShowErrorMessageAsync(string.Format(UiStrings.CreateFolderFailed, (object?)FileSystemErrorMessages.DescribeReason(ex, path)), cancellationToken);
         }
     }
 

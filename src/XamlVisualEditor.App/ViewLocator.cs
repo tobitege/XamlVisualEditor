@@ -9,6 +9,7 @@ using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.CollaborationExtension;
 using XamlVisualEditor.CollaborationExtension.Views;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.GitExtension;
 using XamlVisualEditor.GitExtension.Views;
@@ -47,40 +48,33 @@ public sealed class ViewLocator : IDataTemplate
     {
         if (param is IDockable dockable)
         {
-            switch (dockable)
+            Control? dockView = dockable switch
             {
-                case DesignerDocument doc:
-                    return new DesignerDocumentView { DataContext = doc.DocumentViewModel };
-                case TextDocument doc:
-                    return new TextFileView { DataContext = doc.DocumentViewModel };
-                case InfiniteCanvasDocument doc:
-                    return new InfiniteCanvasView { DataContext = doc.CanvasViewModel };
-                case CanvasMdiDocument doc when doc.DocumentViewModel is DesignerDocumentViewModel designer:
-                    return new DesignerDocumentView { DataContext = designer };
-                case CanvasMdiDocument doc when doc.DocumentViewModel is TextDocumentViewModel text:
-                    return new TextFileView { DataContext = text };
-                case SolutionExplorerTool tool:
-                    return new SolutionExplorerView { DataContext = tool.SolutionExplorerViewModel };
-                case OutputTool tool:
-                    return new OutputView { DataContext = tool.OutputViewModel };
-                case TerminalTool tool:
-                    return new TerminalToolView { DataContext = tool };
-                case BreakpointsTool tool:
-                    return new BreakpointsView { DataContext = tool.BreakpointsViewModel };
-                case CallStackTool tool:
-                    return new CallStackView { DataContext = tool.CallStackViewModel };
-                case LocalsTool tool:
-                    return new LocalsView { DataContext = tool.LocalsViewModel };
-                case WatchesTool tool:
-                    return new WatchesView { DataContext = tool.WatchesViewModel };
-                case ExtensionTool tool:
-                    return new ExtensionToolView { DataContext = tool };
-                case ExtensionManagerTool tool:
-                    return new ExtensionManagerView { DataContext = tool.ExtensionManagerViewModel };
+                DesignerDocument doc => new DesignerDocumentView { DataContext = doc.DocumentViewModel },
+                TextDocument doc => new TextFileView { DataContext = doc.DocumentViewModel },
+                InfiniteCanvasDocument doc => new InfiniteCanvasView { DataContext = doc.CanvasViewModel },
+                CanvasMdiDocument doc when doc.DocumentViewModel is DesignerDocumentViewModel designer =>
+                    new DesignerDocumentView { DataContext = designer },
+                CanvasMdiDocument doc when doc.DocumentViewModel is TextDocumentViewModel text =>
+                    new TextFileView { DataContext = text },
+                SolutionExplorerTool tool => new SolutionExplorerView { DataContext = tool.SolutionExplorerViewModel },
+                OutputTool tool => new OutputView { DataContext = tool.OutputViewModel },
+                TerminalTool tool => new TerminalToolView { DataContext = tool },
+                BreakpointsTool tool => new BreakpointsView { DataContext = tool.BreakpointsViewModel },
+                CallStackTool tool => new CallStackView { DataContext = tool.CallStackViewModel },
+                LocalsTool tool => new LocalsView { DataContext = tool.LocalsViewModel },
+                WatchesTool tool => new WatchesView { DataContext = tool.WatchesViewModel },
+                ExtensionTool tool => new ExtensionToolView { DataContext = tool },
+                _ => null
+            };
+
+            if (dockView is not null)
+            {
+                return ApplyEditorDensity(dockView);
             }
         }
 
-        return param switch
+        return ApplyEditorDensity(param switch
         {
             DesignerDocumentViewModel => new DesignerDocumentView(),
             SolutionExplorerViewModel => new SolutionExplorerView(),
@@ -95,6 +89,7 @@ public sealed class ViewLocator : IDataTemplate
             CallStackViewModel => new CallStackView(),
             LocalsViewModel => new LocalsView(),
             WatchesViewModel => new WatchesView(),
+            ReferencesViewModel => new ReferencesView(),
             CodeEditorViewModel => new XamlCodeEditorView(),
             TextDocumentViewModel => new TextFileView(),
             InfiniteCanvasViewModel => new InfiniteCanvasView(),
@@ -117,8 +112,19 @@ public sealed class ViewLocator : IDataTemplate
             ExtensionTreeViewModel => new ExtensionTreeView(),
             ExtensionWebviewViewModel => new ExtensionWebviewView(),
             ExtensionManagerViewModel => new ExtensionManagerView(),
-            _ => new TextBlock { Text = $"No view for {param?.GetType().FullName ?? "null"}" }
-        };
+            _ => new TextBlock { Text = string.Format(UiStrings.MissingView, (object?)(param?.GetType().FullName ?? "null")) }
+        });
+    }
+
+    private static Control ApplyEditorDensity(Control view)
+    {
+        // A document's controls must keep their own theme metrics.
+        if (view is not DesignerDocumentView and not DesignSurfaceView and not InfiniteCanvasView)
+        {
+            view.Classes.Add("editor-chrome");
+        }
+
+        return view;
     }
 
     /// <inheritdoc />
@@ -140,6 +146,7 @@ public sealed class ViewLocator : IDataTemplate
             or LocalsViewModel
             or WatchesViewModel
             or ReferencesViewModel
+            or ReferencesPanelViewModel
             or CodeEditorViewModel
             or TextDocumentViewModel
             or InfiniteCanvasViewModel
@@ -154,6 +161,7 @@ public sealed class ViewLocator : IDataTemplate
             or IdeBridgePanelViewModel
             or McpPanelViewModel
             or OutputPanelViewModel
+            or ProblemsPanelViewModel
             or PropertyEditorPanelViewModel
             or ToolboxPanelViewModel
             or TreeInspectorPanelViewModel

@@ -243,6 +243,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                     ex.Message);
                 _workspace.Dispose();
                 _workspace = null;
+                project = null;
             }
         }
         finally
@@ -825,7 +826,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return trimmed;
     }
 
-    private IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
+    internal IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
     {
         if (string.IsNullOrWhiteSpace(projectPath) || !System.IO.File.Exists(projectPath))
         {
@@ -872,16 +873,41 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             }
         }
 
-        if (results.Count == 0)
+        // An SDK-style project includes its XAML files by default glob, whatever other items it lists; explicit items
+        // such as a None update of a text file must not hide them.
+        if (results.Count == 0 || UsesDefaultXamlItems(doc))
         {
+            string[] removed = doc.Descendants()
+                .Where(e => string.Equals(e.Name.LocalName, "AvaloniaXaml", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(e.Name.LocalName, "Page", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(e => SplitPatterns(e.Attribute("Remove")?.Value))
+                .ToArray();
             foreach (string file in EnumerateProjectXamlFiles(projectDir))
             {
                 string rel = System.IO.Path.GetRelativePath(projectDir, file);
+                if (removed.Any(pattern => GlobMatch(rel.Replace('\\', '/'), pattern)))
+                {
+                    continue;
+                }
+
                 results.Add(new XamlFileModel { FilePath = file, RelativePath = rel });
             }
         }
 
         return results;
+    }
+
+    // SDK-style projects glob their items unless EnableDefaultItems or the Avalonia switch EnableDefaultAvaloniaItems
+    // turns that off.
+    internal static bool UsesDefaultXamlItems(XDocument project)
+    {
+        XElement? root = project.Root;
+        bool sdkStyle = root?.Attribute("Sdk") is not null
+            || root?.Elements().Any(e => string.Equals(e.Name.LocalName, "Sdk", StringComparison.OrdinalIgnoreCase)) == true;
+        return sdkStyle && !project.Descendants().Any(e =>
+            (string.Equals(e.Name.LocalName, "EnableDefaultItems", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(e.Name.LocalName, "EnableDefaultAvaloniaItems", StringComparison.OrdinalIgnoreCase))
+            && string.Equals(e.Value.Trim(), "false", StringComparison.OrdinalIgnoreCase));
     }
 
     private IEnumerable<string> EnumerateProjectXamlFiles(string projectDir)
@@ -999,9 +1025,12 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return value.Contains('*') || value.Contains('?');
     }
 
+    // As in MSBuild, "**/" matches zero or more directories, so "**/*.axaml" also matches a file in the
+    // project root.
     private static bool GlobMatch(string text, string pattern)
     {
         string regex = Regex.Escape(pattern)
+            .Replace("\\*\\*/", "(?:.*/)?")
             .Replace("\\*\\*", ".*")
             .Replace("\\*", "[^/]*")
             .Replace("\\?", "[^/]");
@@ -1044,8 +1073,51 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 /// </summary>
 public sealed class TypeMetadataService : ITypeMetadataService
 {
-    private readonly Dictionary<string, TypeMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Reads only the selected assemblies and the Avalonia base types for the toolbox.</summary>
+    public static IReadOnlyList<TypeMetadata> ReadControlTypes(IReadOnlyList<string> assemblyPaths,
+        Action<string> reportFailure, Action<int, int, string> reportProgress, CancellationToken cancellationToken,
+        bool includeProjectControls = true)
+    {
+        Dictionary<string, (string Path, bool IsStandard)> selected = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in assemblyPaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                AssemblyTypeCatalog.AssemblyIdentity? identity = AssemblyTypeCatalog.ReadAssemblyIdentity(path);
+                if (identity is not null) selected.TryAdd(identity.Name, (path, identity.IsStandardAssembly));
+            }
+            catch (BadImageFormatException) { }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                reportFailure($"Cannot read control metadata from '{path}': {error.Message}");
+            }
+        }
+
+        // Project assemblies replace the base catalog; old and new types are not merged.
+        string[] standardPaths = { typeof(AvaloniaObject).Assembly.Location, typeof(Control).Assembly.Location };
+        bool hasProjectFramework = standardPaths.Any(path => selected.ContainsKey(Path.GetFileNameWithoutExtension(path)));
+        foreach (string path in standardPaths)
+        {
+            AssemblyTypeCatalog.AssemblyIdentity identity = AssemblyTypeCatalog.ReadAssemblyIdentity(path)
+                ?? throw new BadImageFormatException($"XVE base assembly contains no .NET metadata: {path}");
+            if (!hasProjectFramework)
+                selected.TryAdd(identity.Name, (path, identity.IsStandardAssembly));
+            else if (!selected.ContainsKey(identity.Name))
+                reportFailure($"The project dependency '{identity.Name}' is missing. Restore the project references.");
+        }
+        string[] paths = selected.Values.Where(assembly => includeProjectControls || assembly.IsStandard)
+            .Select(assembly => assembly.Path).ToArray();
+        return AssemblyTypeCatalog.Read(paths, reportFailure, cancellationToken, reportProgress);
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TypeMetadata> _cache = new(StringComparer.Ordinal);
+    private readonly object _catalogGate = new();
+    private readonly Dictionary<string, IReadOnlyList<TypeMetadata>> _namespaceTypes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _registeredAssemblyPaths = new(StringComparer.OrdinalIgnoreCase);
+    private Lazy<IReadOnlyList<TypeMetadata>>? _typeCatalog;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, Type[]> _exportedTypesCache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Assembly, FieldInfo[]> _attachedPropertyFieldsCache = new();
     private readonly List<System.Reflection.Assembly> _loadedAssemblies = new();
     private readonly HashSet<string> _loadedAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<TypeMetadataService> _logger;
@@ -1082,16 +1154,24 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public TypeMetadata? GetType(string xmlNamespace, string typeName)
     {
-        TypeMetadata? cached = GetTypeMetadata(typeName);
-        if (cached is not null)
+        IReadOnlyList<TypeMetadata> types = GetAvailableTypes(xmlNamespace);
+        for (int index = 0; index < types.Count; index++)
         {
-            return cached;
+            TypeMetadata type = types[index];
+            if (string.Equals(type.Name, typeName, StringComparison.Ordinal)
+                || string.Equals(type.FullName, typeName, StringComparison.Ordinal))
+                return type;
         }
 
         if (TryResolveType(xmlNamespace, typeName, out Type? resolved))
         {
+            string key = resolved!.Assembly.FullName + "|" + resolved.FullName;
+            if (_cache.TryGetValue(key, out TypeMetadata? cached))
+            {
+                return cached;
+            }
             TypeMetadata meta = BuildMetadata(resolved!);
-            _cache[resolved!.FullName ?? resolved.Name] = meta;
+            _cache[key] = meta;
             return meta;
         }
 
@@ -1103,42 +1183,60 @@ public sealed class TypeMetadataService : ITypeMetadataService
     {
         if (string.IsNullOrWhiteSpace(xmlNamespace))
         {
-            return Array.Empty<TypeMetadata>();
+            return GetTypeCatalog();
         }
 
-        List<TypeMetadata> results = new();
+        lock (_catalogGate)
+        {
+            if (_namespaceTypes.TryGetValue(xmlNamespace, out IReadOnlyList<TypeMetadata>? cached))
+                return cached;
+
+            IReadOnlyList<TypeMetadata> filtered = FilterAvailableTypes(xmlNamespace);
+            _namespaceTypes.Add(xmlNamespace, filtered);
+            return filtered;
+        }
+    }
+
+    private IReadOnlyList<TypeMetadata> FilterAvailableTypes(string xmlNamespace)
+    {
+        IReadOnlyList<TypeMetadata> types = GetTypeCatalog();
+        if (TryParseClrNamespace(xmlNamespace, out string? clrNamespace, out string? assemblyName))
+        {
+            return types.Where(type => string.Equals(type.ClrNamespace, clrNamespace, StringComparison.Ordinal)
+                && (string.IsNullOrEmpty(assemblyName)
+                    || string.Equals(type.AssemblyName, assemblyName, StringComparison.OrdinalIgnoreCase))).ToArray();
+        }
         if (_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
         {
-            foreach (XmlnsDefinition mapping in mappings)
-            {
-                foreach (System.Reflection.Assembly asm in _loadedAssemblies)
-                {
-                    string? asmName = asm.GetName().Name;
-                    if (!string.Equals(asmName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    foreach (Type type in GetExportedTypesCached(asm))
-                    {
-                        if (!string.Equals(type.Namespace, mapping.ClrNamespace, StringComparison.Ordinal))
-                        {
-                            continue;
-                        }
-
-                        results.Add(BuildMetadata(type));
-                    }
-                }
-            }
+            return types.Where(type => mappings.Any(mapping =>
+                string.Equals(type.AssemblyName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(type.ClrNamespace, mapping.ClrNamespace, StringComparison.Ordinal))).ToArray();
         }
+        return Array.Empty<TypeMetadata>();
+    }
 
-        return results;
+    private IReadOnlyList<TypeMetadata> GetTypeCatalog()
+    {
+        Lazy<IReadOnlyList<TypeMetadata>> catalog;
+        lock (_catalogGate)
+        {
+            if (_typeCatalog is null)
+            {
+                string[] paths = _loadedAssemblies.Where(assembly => !assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
+                    .Select(assembly => assembly.Location).Concat(_registeredAssemblyPaths.Values)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                _typeCatalog = new Lazy<IReadOnlyList<TypeMetadata>>(() =>
+                    AssemblyTypeCatalog.Read(paths, message => _logger.LogWarning("{CatalogError}", message)));
+            }
+            catalog = _typeCatalog;
+        }
+        return catalog.Value;
     }
 
     /// <inheritdoc />
     public IReadOnlyList<PropertyMetadata> GetProperties(TypeMetadata type)
     {
-        Type? clrType = FindClrType(type.FullName);
+        Type? clrType = ResolveClrType(type);
         if (clrType is null)
         {
             return Array.Empty<PropertyMetadata>();
@@ -1156,6 +1254,12 @@ public sealed class TypeMetadataService : ITypeMetadataService
             }
 
             (string category, string? description) = GetCategoryAndDescription(field);
+            if (category == "Misc" && ownerType.GetProperty(prop.Name) is { } clrProperty)
+            {
+                (string wrapperCategory, string? wrapperDescription) = GetCategoryAndDescription(clrProperty);
+                if (wrapperCategory != "Misc") category = wrapperCategory;
+                description ??= wrapperDescription;
+            }
 
             properties.Add(new PropertyMetadata
             {
@@ -1167,6 +1271,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 ClrType = prop.PropertyType,
                 IsAttached = prop.IsAttached,
                 OwnerType = prop.IsAttached ? ownerType.FullName : null,
+                DeclaringTypeName = ownerType.Name,
                 Category = category,
                 Description = description
             });
@@ -1204,6 +1309,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 Kind = MapValueKind(prop.PropertyType),
                 IsReadOnly = !prop.CanWrite,
                 ClrType = prop.PropertyType,
+                DeclaringTypeName = prop.DeclaringType?.Name,
                 Category = category,
                 Description = description
             });
@@ -1215,7 +1321,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public IReadOnlyList<EventMetadata> GetEvents(TypeMetadata type)
     {
-        Type? clrType = FindClrType(type.FullName);
+        Type? clrType = ResolveClrType(type);
         if (clrType is null)
         {
             return Array.Empty<EventMetadata>();
@@ -1246,6 +1352,10 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// </summary>
     public TypeMetadata? GetTypeMetadata(string fullTypeName)
     {
+        TypeMetadata? catalogType = GetTypeCatalog().FirstOrDefault(type =>
+            string.Equals(type.FullName, fullTypeName, StringComparison.Ordinal));
+        if (catalogType is not null) return catalogType;
+
         if (_cache.TryGetValue(fullTypeName, out TypeMetadata? cached))
         {
             return cached;
@@ -1266,23 +1376,35 @@ public sealed class TypeMetadataService : ITypeMetadataService
     }
 
     /// <summary>
-    /// Loads an assembly for metadata lookup.
+    /// Registers assembly metadata without loading project code into the editor process.
     /// </summary>
     public void LoadAssembly(string assemblyPath)
     {
-        if (!ShouldLoadAssembly(assemblyPath, out _))
+        if (!ShouldLoadAssembly(assemblyPath, out string? assemblyName) || assemblyName is null)
         {
             return;
         }
 
         try
         {
-            System.Reflection.Assembly asm = AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
-            AddAssembly(asm);
+            var namespaces = AssemblyTypeCatalog.ReadXmlnsDefinitions(assemblyPath);
+            lock (_catalogGate)
+            {
+                if (!_registeredAssemblyPaths.TryAdd(assemblyName, assemblyPath)) return;
+                foreach (var (xmlNamespace, clrNamespace) in namespaces)
+                {
+                    if (!_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
+                        _xmlnsMappings[xmlNamespace] = mappings = new();
+                    XmlnsDefinition mapping = new(xmlNamespace, clrNamespace, assemblyName);
+                    if (!mappings.Contains(mapping)) mappings.Add(mapping);
+                }
+                _typeCatalog = null;
+                _namespaceTypes.Clear();
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("Failed to load assembly '{Path}': {Message}", assemblyPath, ex.Message);
+            _logger.LogWarning("Failed to read assembly metadata '{Path}': {Message}", assemblyPath, ex.Message);
         }
     }
 
@@ -1341,21 +1463,6 @@ public sealed class TypeMetadataService : ITypeMetadataService
             return false;
         }
 
-        if (_loadedAssemblyNames.Contains(assemblyName))
-        {
-            if (TryGetLoadedAssembly(assemblyName, out System.Reflection.Assembly? loaded) &&
-                !string.IsNullOrWhiteSpace(loaded?.Location) &&
-                !string.Equals(loaded.Location, assemblyPath, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning(
-                    "Assembly '{Name}' already loaded from '{LoadedPath}'. Skipping '{Path}'.",
-                    assemblyName,
-                    loaded.Location,
-                    assemblyPath);
-            }
-            return false;
-        }
-
         return true;
     }
 
@@ -1384,6 +1491,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public Type? ResolveClrType(TypeMetadata type)
     {
+        EnsureAssemblyLoaded(type.AssemblyName);
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
             if (!string.IsNullOrWhiteSpace(type.AssemblyName))
@@ -1404,6 +1512,24 @@ public sealed class TypeMetadataService : ITypeMetadataService
         return null;
     }
 
+    private void EnsureAssemblyLoaded(string? assemblyName)
+    {
+        string? assemblyPath;
+        lock (_catalogGate)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyName) || _loadedAssemblyNames.Contains(assemblyName)
+                || !_registeredAssemblyPaths.TryGetValue(assemblyName, out assemblyPath)) return;
+        }
+        try
+        {
+            AddAssembly(AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to load requested designer assembly '{Path}'", assemblyPath);
+        }
+    }
+
     private Type? FindClrType(string fullTypeName)
     {
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
@@ -1420,7 +1546,8 @@ public sealed class TypeMetadataService : ITypeMetadataService
     private static TypeMetadata BuildMetadata(Type type)
     {
         string clrNamespace = type.Namespace ?? string.Empty;
-        string assemblyName = type.Assembly.GetName().Name ?? string.Empty;
+        AssemblyName identity = type.Assembly.GetName();
+        string assemblyName = identity.Name ?? string.Empty;
 
         return new TypeMetadata
         {
@@ -1428,7 +1555,17 @@ public sealed class TypeMetadataService : ITypeMetadataService
             Name = type.Name,
             XmlNamespace = $"clr-namespace:{clrNamespace};assembly={assemblyName}",
             ClrNamespace = clrNamespace,
-            AssemblyName = assemblyName
+            AssemblyName = assemblyName,
+            AssemblyVersion = identity.Version?.ToString(),
+            IsControl = typeof(Control).IsAssignableFrom(type),
+            IsStyle = typeof(Avalonia.Styling.Styles).IsAssignableFrom(type),
+            IsStandardControl = AssemblyTypeCatalog.IsStandardAssembly(assemblyName, identity.GetPublicKey()),
+            IsPanel = typeof(Panel).IsAssignableFrom(type),
+            IsContentControl = typeof(ContentControl).IsAssignableFrom(type),
+            IsItemsControl = typeof(ItemsControl).IsAssignableFrom(type),
+            IsTopLevel = typeof(TopLevel).IsAssignableFrom(type),
+            IsInstantiable = type.IsPublic && !type.IsAbstract && !type.ContainsGenericParameters
+                && type.GetConstructor(Type.EmptyTypes) is not null
         };
     }
 
@@ -1440,23 +1577,35 @@ public sealed class TypeMetadataService : ITypeMetadataService
     private void AddAssembly(System.Reflection.Assembly asm)
     {
         string? name = asm.GetName().Name;
-        if (string.IsNullOrWhiteSpace(name) || !_loadedAssemblyNames.Add(name))
+        lock (_catalogGate)
         {
-            return;
-        }
+            if (string.IsNullOrWhiteSpace(name) || !_loadedAssemblyNames.Add(name))
+            {
+                return;
+            }
 
-        _loadedAssemblies.Add(asm);
-        AddXmlnsDefinitions(asm);
+            // The catalog reads assembly files by path; an assembly loaded from an already
+            // registered or loaded path does not change its content.
+            bool addsCatalogPath = !asm.IsDynamic && !string.IsNullOrEmpty(asm.Location)
+                && !_registeredAssemblyPaths.Values.Contains(asm.Location, StringComparer.OrdinalIgnoreCase)
+                && !_loadedAssemblies.Any(loaded => !loaded.IsDynamic
+                    && string.Equals(loaded.Location, asm.Location, StringComparison.OrdinalIgnoreCase));
+            _loadedAssemblies.Add(asm);
+            bool addsMappings = AddXmlnsDefinitions(asm);
+            if (addsCatalogPath) _typeCatalog = null;
+            if (addsCatalogPath || addsMappings) _namespaceTypes.Clear();
+        }
     }
 
-    private void AddXmlnsDefinitions(System.Reflection.Assembly asm)
+    private bool AddXmlnsDefinitions(System.Reflection.Assembly asm)
     {
         string? asmName = asm.GetName().Name;
         if (string.IsNullOrWhiteSpace(asmName))
         {
-            return;
+            return false;
         }
 
+        bool added = false;
         foreach (System.Reflection.CustomAttributeData attr in asm.GetCustomAttributesData())
         {
             if (!IsXmlnsDefinitionAttribute(attr.AttributeType))
@@ -1482,8 +1631,13 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 _xmlnsMappings[xmlNamespace] = list;
             }
 
-            list.Add(new XmlnsDefinition(xmlNamespace, clrNamespace, asmName));
+            XmlnsDefinition mapping = new(xmlNamespace, clrNamespace, asmName);
+            if (list.Contains(mapping)) continue;
+            list.Add(mapping);
+            added = true;
         }
+
+        return added;
     }
 
     private static bool IsXmlnsDefinitionAttribute(Type attributeType)
@@ -1561,67 +1715,42 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
-            Type[] types;
-            try
+            foreach (FieldInfo field in GetAttachedPropertyFieldsCached(asm))
             {
-                types = asm.GetTypes();
-            }
-            catch
-            {
-                continue;
-            }
-
-            foreach (Type type in types)
-            {
-                if (type.ContainsGenericParameters)
+                try
                 {
-                    continue;
-                }
-
-                foreach (System.Reflection.FieldInfo field in type.GetFields(
-                    System.Reflection.BindingFlags.Public |
-                    System.Reflection.BindingFlags.Static |
-                    System.Reflection.BindingFlags.FlattenHierarchy))
-                {
-                    try
-                    {
-                        if (!typeof(Avalonia.AvaloniaProperty).IsAssignableFrom(field.FieldType))
-                        {
-                            continue;
-                        }
-
-                        Avalonia.AvaloniaProperty? prop = field.GetValue(null) as Avalonia.AvaloniaProperty;
-                        if (prop is null || !prop.IsAttached)
-                        {
-                            continue;
-                        }
-
-                        string name = $"{type.Name}.{prop.Name}";
-                        if (!seen.Add(name))
-                        {
-                            continue;
-                        }
-
-                        (string category, string? description) = GetCategoryAndDescription(field);
-
-                        attached.Add(new PropertyMetadata
-                        {
-                            Name = name,
-                            TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
-                            Kind = MapValueKind(prop.PropertyType),
-                            IsReadOnly = prop.IsReadOnly,
-                            DefaultValue = TryGetDefaultValue(prop, type),
-                            ClrType = prop.PropertyType,
-                            IsAttached = true,
-                            OwnerType = type.FullName,
-                            Category = category,
-                            Description = description
-                        });
-                    }
-                    catch
+                    Avalonia.AvaloniaProperty? prop = field.GetValue(null) as Avalonia.AvaloniaProperty;
+                    if (prop is null || !prop.IsAttached)
                     {
                         continue;
                     }
+
+                    Type type = field.DeclaringType!;
+                    string name = $"{type.Name}.{prop.Name}";
+                    if (!seen.Add(name))
+                    {
+                        continue;
+                    }
+
+                    (string category, string? description) = GetCategoryAndDescription(field);
+
+                    attached.Add(new PropertyMetadata
+                    {
+                        Name = name,
+                        TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
+                        Kind = MapValueKind(prop.PropertyType),
+                        IsReadOnly = prop.IsReadOnly,
+                        DefaultValue = TryGetDefaultValue(prop, type),
+                        ClrType = prop.PropertyType,
+                        IsAttached = true,
+                        OwnerType = type.FullName,
+                        Category = category,
+                        Description = description
+                    });
+                }
+                catch
+                {
+                    continue;
                 }
             }
         }
@@ -1629,17 +1758,84 @@ public sealed class TypeMetadataService : ITypeMetadataService
         return attached;
     }
 
+    private FieldInfo[] GetAttachedPropertyFieldsCached(Assembly assembly)
+    {
+        return _attachedPropertyFieldsCache.GetOrAdd(assembly, asm =>
+        {
+            List<FieldInfo> fields = new();
+            try
+            {
+                if (asm.IsDynamic || string.IsNullOrWhiteSpace(asm.Location))
+                {
+                    return Array.Empty<FieldInfo>();
+                }
+
+                using FileStream stream = File.OpenRead(asm.Location);
+                foreach (AttachedPropertyField candidate in AttachedPropertyDiscovery.Read(stream))
+                {
+                    if (!TryGetTypeSafe(asm, candidate.OwnerTypeName, out Type? owner))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        FieldInfo? field = owner!.GetField(candidate.FieldName,
+                            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+                        if (field is not null && typeof(AvaloniaProperty).IsAssignableFrom(field.FieldType)
+                            && IsAttachedPropertyCandidate(field))
+                        {
+                            fields.Add(field);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to resolve property field '{Owner}.{Field}': {Message}",
+                            candidate.OwnerTypeName, candidate.FieldName, ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to read attached-property metadata from '{Assembly}': {Message}",
+                    asm.FullName, ex.Message);
+            }
+
+            return fields.ToArray();
+        });
+    }
+
+    private static bool IsAttachedPropertyCandidate(FieldInfo field)
+    {
+        // Reading a field runs its owner's initializer. Do not initialize ordinary controls
+        // merely to discover whether their properties are attached.
+        if (field.FieldType.IsGenericType &&
+            field.FieldType.GetGenericTypeDefinition() == typeof(AttachedProperty<>)) return true;
+        Type? owner = field.DeclaringType;
+        if (owner is null) return false;
+        string name = field.Name.EndsWith("Property", StringComparison.Ordinal) ? field.Name[..^8] : field.Name;
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        return owner.GetMember("Get" + name, MemberTypes.Method, flags)
+            .Concat(owner.GetMember("Set" + name, MemberTypes.Method, flags)).OfType<MethodInfo>()
+            .Any(method =>
+            {
+                ParameterInfo[] parameters = method.GetParameters();
+                return !method.ContainsGenericParameters && parameters.Length == (method.Name.StartsWith("Get", StringComparison.Ordinal) ? 1 : 2)
+                    && typeof(AvaloniaObject).IsAssignableFrom(parameters[0].ParameterType);
+            });
+    }
+
     private static object? TryGetDefaultValue(Avalonia.AvaloniaProperty prop, Type ownerType)
     {
         try
         {
-            System.Reflection.MethodInfo? getDefault = prop.GetType().GetMethod("GetDefaultValue");
+            System.Reflection.MethodInfo? getDefault = prop.GetType().GetMethod("GetDefaultValue", new[] { typeof(Type) });
             if (getDefault is not null)
             {
                 return getDefault.Invoke(prop, new object?[] { ownerType });
             }
 
-            System.Reflection.MethodInfo? getMetadata = prop.GetType().GetMethod("GetMetadata");
+            System.Reflection.MethodInfo? getMetadata = prop.GetType().GetMethod("GetMetadata", new[] { typeof(Type) });
             if (getMetadata is not null)
             {
                 object? metadata = getMetadata.Invoke(prop, new object?[] { ownerType });
@@ -1844,6 +2040,11 @@ public sealed class TypeMetadataService : ITypeMetadataService
                     return true;
                 }
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(xmlNamespace))
+        {
+            return false;
         }
 
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)

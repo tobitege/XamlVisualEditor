@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Reactive;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -9,9 +10,11 @@ using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Dock.Avalonia.Themes.Fluent;
+using Avalonia.VisualTree;
 using ReactiveUI;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
+using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
@@ -23,22 +26,25 @@ namespace XamlVisualEditor.App;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
-    private const int DockVsCodeLightPresetIndex = 1;
-    private const int DockVsCodeDarkPresetIndex = 2;
     private IDisposable? _openFileHandler;
     private IDisposable? _saveFileHandler;
     private IDisposable? _renameSymbolHandler;
     private IDisposable? _definitionPickerHandler;
     private IDisposable? _codeActionPickerHandler;
     private IDisposable? _workspaceSymbolQueryHandler;
+    private IDisposable? _layoutNameHandler;
+    private IDisposable? _confirmLayoutDeleteHandler;
+    private IDisposable? _saveChangesHandler;
+    private IDisposable? _saveConflictHandler;
+    private bool _isConfirmingClose;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
+    private IDisposable? _extensionManagerHandler;
+    private ExtensionManagerDialog? _extensionManagerDialog;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
-    private IDisposable? _themeVariantHandler;
     private MainWindowViewModel? _keyBindingsSource;
     private readonly List<KeyBinding> _extensionKeyBindings = new();
-    private readonly DockFluentThemeManager _dockThemeManager = new();
 
     public MainWindow()
         : this(null)
@@ -64,19 +70,53 @@ public sealed partial class MainWindow : Window
         };
 
         // Dispose handlers when window is closing
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
+            // Modified documents keep the window open until the user decides; a confirmed close runs again.
+            if (!e.Cancel && DataContext is MainWindowViewModel closingVm && !closingVm.IsShutdownConfirmed
+                && closingVm.Documents.Any(document => document.IsModified))
+            {
+                e.Cancel = true;
+                if (_isConfirmingClose) return;
+                _isConfirmingClose = true;
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        if (!await closingVm.ConfirmShutdownAsync()) return;
+                    }
+                    finally
+                    {
+                        _isConfirmingClose = false;
+                    }
+                    Close();
+                });
+                return;
+            }
+
+            // Closing the window takes the tabs out of the visual tree; they have to let go of their dockables
+            // before, while they can still be found, or the layout save on shutdown logs a binding error per tab.
+            if (!e.Cancel)
+            {
+                DockViewRelease.Release(this);
+            }
+
+
             _openFileHandler?.Dispose();
             _saveFileHandler?.Dispose();
             _renameSymbolHandler?.Dispose();
             _definitionPickerHandler?.Dispose();
             _codeActionPickerHandler?.Dispose();
             _workspaceSymbolQueryHandler?.Dispose();
+            _layoutNameHandler?.Dispose();
+            _confirmLayoutDeleteHandler?.Dispose();
+            _saveChangesHandler?.Dispose();
+            _saveConflictHandler?.Dispose();
             _commandPaletteHandler?.Dispose();
             _extensionPackageOpenHandler?.Dispose();
+            _extensionManagerHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
-            _themeVariantHandler?.Dispose();
             UnbindExtensionKeyBindings();
         };
 
@@ -95,29 +135,32 @@ public sealed partial class MainWindow : Window
         _definitionPickerHandler?.Dispose();
         _codeActionPickerHandler?.Dispose();
         _workspaceSymbolQueryHandler?.Dispose();
+        _layoutNameHandler?.Dispose();
+        _confirmLayoutDeleteHandler?.Dispose();
+        _saveChangesHandler?.Dispose();
+        _saveConflictHandler?.Dispose();
         _commandPaletteHandler?.Dispose();
         _extensionPackageOpenHandler?.Dispose();
+        _extensionManagerHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
-        _themeVariantHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
         {
             FilePickerOpenOptions options = new()
             {
-                Title = "Open XAML, Project, or Solution",
+                Title = UiStrings.OpenFileTitle,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("All Supported")
+                    new FilePickerFileType(UiStrings.AllSupportedFiles)
                     {
-                        Patterns = new[] { "*.axaml", "*.xaml", "*.csproj", "*.sln", "*.slnx" }
+                        Patterns = new[] { "*.axaml", "*.xaml", "*.cs" }
                     },
-                    new FilePickerFileType("XAML Files") { Patterns = new[] { "*.axaml", "*.xaml" } },
-                    new FilePickerFileType("Projects") { Patterns = new[] { "*.csproj" } },
-                    new FilePickerFileType("Solutions") { Patterns = new[] { "*.sln", "*.slnx" } },
-                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    new FilePickerFileType(UiStrings.XamlFiles) { Patterns = new[] { "*.axaml", "*.xaml" } },
+                    new FilePickerFileType(UiStrings.CSharpFiles) { Patterns = new[] { "*.cs" } },
+                    new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };
 
@@ -137,13 +180,13 @@ public sealed partial class MainWindow : Window
         {
             FilePickerSaveOptions options = new()
             {
-                Title = "Save XAML File",
+                Title = UiStrings.SaveXamlFile,
                 DefaultExtension = ".axaml",
                 SuggestedFileName = interaction.Input,
                 FileTypeChoices = new[]
                 {
-                    new FilePickerFileType("XAML Files") { Patterns = new[] { "*.axaml", "*.xaml" } },
-                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    new FilePickerFileType(UiStrings.XamlFiles) { Patterns = new[] { "*.axaml", "*.xaml" } },
+                    new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };
 
@@ -206,9 +249,57 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
+        _layoutNameHandler = vm.LayoutNameInteraction.RegisterHandler(async interaction =>
+        {
+            InputBoxDialogViewModel dialogVm = new(new XamlVisualEditor.Extensions.InputBoxOptions(
+                UiStrings.LayoutSaveTitle,
+                UiStrings.LayoutSavePrompt,
+                interaction.Input));
+            InputBoxDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            string? result = await dialog.ShowDialog<string?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _confirmLayoutDeleteHandler = vm.ConfirmLayoutDeleteInteraction.RegisterHandler(async interaction =>
+        {
+            ConfirmDialogViewModel dialogVm = new(
+                UiStrings.ConfirmDelete,
+                string.Format(UiStrings.LayoutDeletePrompt, interaction.Input),
+                UiStrings.Delete);
+            ConfirmDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            bool result = await dialog.ShowDialog<bool>(this);
+            interaction.SetOutput(result);
+        });
+
+        _saveChangesHandler = vm.SaveChangesInteraction.RegisterHandler(async interaction =>
+        {
+            SaveChangesDialog dialog = new()
+            {
+                DataContext = new SaveChangesDialogViewModel(interaction.Input)
+            };
+            interaction.SetOutput(await dialog.ShowDialog<SaveChangesChoice>(this));
+        });
+
+        _saveConflictHandler = vm.SaveConflictInteraction.RegisterHandler(async interaction =>
+        {
+            SaveConflictDialog dialog = new()
+            {
+                DataContext = new SaveConflictDialogViewModel(interaction.Input)
+            };
+            interaction.SetOutput(await dialog.ShowDialog<SaveConflictChoice>(this));
+        });
+
         _commandPaletteHandler = vm.CommandPaletteInteraction.RegisterHandler(async interaction =>
         {
-            CommandPaletteDialogViewModel dialogVm = new(interaction.Input);
+            using CommandPaletteDialogViewModel dialogVm = new(interaction.Input);
             CommandPaletteDialog dialog = new()
             {
                 DataContext = dialogVm
@@ -219,20 +310,42 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
+        _extensionManagerHandler = vm.ExtensionManagerInteraction.RegisterHandler(async interaction =>
+        {
+            if (_extensionManagerDialog is not null)
+            {
+                _extensionManagerDialog.Activate();
+                interaction.SetOutput(RxVoid.Default);
+                return;
+            }
+
+            ExtensionManagerDialog dialog = new() { DataContext = vm.ExtensionManager };
+            _extensionManagerDialog = dialog;
+            try
+            {
+                await dialog.ShowDialog(this);
+            }
+            finally
+            {
+                _extensionManagerDialog = null;
+            }
+            interaction.SetOutput(RxVoid.Default);
+        });
+
         _extensionPackageOpenHandler = vm.ExtensionPackageOpenInteraction.RegisterHandler(async interaction =>
         {
             FilePickerOpenOptions options = new()
             {
-                Title = "Install Extension Package",
+                Title = UiStrings.InstallExtensionPackage,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("NuGet Package") { Patterns = new[] { "*.nupkg" } },
-                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    new FilePickerFileType(UiStrings.NuGetPackage) { Patterns = new[] { "*.nupkg" } },
+                    new FilePickerFileType(UiStrings.AllFiles) { Patterns = new[] { "*" } }
                 }
             };
 
-            var files = await StorageProvider.OpenFilePickerAsync(options);
+            var files = await (_extensionManagerDialog ?? (Window)this).StorageProvider.OpenFilePickerAsync(options);
             if (files.Count > 0)
             {
                 interaction.SetOutput(files[0].Path.LocalPath);
@@ -267,46 +380,7 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
-        _themeVariantHandler = vm.ThemeVariantInteraction.RegisterHandler(interaction =>
-        {
-            ApplyThemeVariant(interaction.Input);
-            interaction.SetOutput(RxVoid.Default);
-        });
-
-        ApplyThemeVariant(vm.SelectedThemeVariant);
         BindExtensionKeyBindings(vm);
-    }
-
-    private void ApplyThemeVariant(ThemeVariantOption option)
-    {
-        Application? application = Application.Current;
-        if (application is null)
-        {
-            return;
-        }
-
-        switch (option)
-        {
-            case ThemeVariantOption.Light:
-                _dockThemeManager.Switch(0);
-                _dockThemeManager.SwitchPreset(DockVsCodeLightPresetIndex);
-                break;
-            case ThemeVariantOption.Dark:
-                _dockThemeManager.Switch(1);
-                _dockThemeManager.SwitchPreset(DockVsCodeDarkPresetIndex);
-                break;
-            default:
-                application.RequestedThemeVariant = ThemeVariant.Default;
-                Dispatcher.UIThread.Post(() =>
-                {
-                    ThemeVariant actualTheme = application.ActualThemeVariant;
-                    int presetIndex = actualTheme == ThemeVariant.Light
-                        ? DockVsCodeLightPresetIndex
-                        : DockVsCodeDarkPresetIndex;
-                    _dockThemeManager.SwitchPreset(presetIndex);
-                }, DispatcherPriority.Render);
-                break;
-        }
     }
 
     private void BindExtensionKeyBindings(MainWindowViewModel vm)
@@ -363,7 +437,11 @@ public sealed partial class MainWindow : Window
             KeyBinding binding = new()
             {
                 Gesture = gesture,
-                Command = entry.Command
+                Command = entry.Scope == XamlVisualEditor.Extensions.CommandKeybindingScope.TextEditor
+                    ? new TextEditorFocusCommand(this, entry.Command)
+                    : entry.CommandId is "editing.undo" or "editing.redo" or "editing.cut" or "editing.copy"
+                        or "editing.paste" or "editing.delete" or "editing.selectAll" or "editing.duplicate"
+                        ? new FocusAwareEditingCommand(this, entry.Command) : entry.Command
             };
 
             KeyBindings.Add(binding);
@@ -379,6 +457,59 @@ public sealed partial class MainWindow : Window
         }
 
         _extensionKeyBindings.Clear();
+    }
+
+    private sealed class FocusAwareEditingCommand(Window window, ICommand command) : ICommand
+    {
+        public event EventHandler? CanExecuteChanged
+        {
+            add => command.CanExecuteChanged += value;
+            remove => command.CanExecuteChanged -= value;
+        }
+
+        public bool CanExecute(object? parameter)
+        {
+            for (Visual? visual = window.FocusManager?.GetFocusedElement() as Visual; visual is not null; visual = visual.GetVisualParent())
+            {
+                if (visual is TextBox or AvaloniaEdit.TextEditor
+                    or PreviewerSurfaceControl { Document.DesignSurface.IsEditMode: false }
+                    or DesignSurfaceView { DataContext: DesignSurfaceViewModel { IsEditMode: false } }) return false;
+            }
+            return command.CanExecute(parameter);
+        }
+
+        public void Execute(object? parameter)
+        {
+            if (CanExecute(parameter)) command.Execute(parameter);
+        }
+    }
+
+    // Runs a keybinding only while a text or code editor has the keyboard focus; elsewhere the keys stay free.
+    private sealed class TextEditorFocusCommand(Window window, ICommand command) : ICommand
+    {
+        public event EventHandler? CanExecuteChanged
+        {
+            add => command.CanExecuteChanged += value;
+            remove => command.CanExecuteChanged -= value;
+        }
+
+        public bool CanExecute(object? parameter)
+        {
+            for (Visual? visual = window.FocusManager?.GetFocusedElement() as Visual; visual is not null; visual = visual.GetVisualParent())
+            {
+                if (visual is AvaloniaEdit.TextEditor)
+                {
+                    return command.CanExecute(parameter);
+                }
+            }
+
+            return false;
+        }
+
+        public void Execute(object? parameter)
+        {
+            if (CanExecute(parameter)) command.Execute(parameter);
+        }
     }
 
     private static bool TryParseKeyGesture(string value, out KeyGesture? gesture)

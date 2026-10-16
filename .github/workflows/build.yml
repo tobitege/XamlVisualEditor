@@ -69,6 +69,10 @@ jobs:
         timeout-minutes: 15
         run: dotnet test tests/XamlVisualEditor.Tests.UI/XamlVisualEditor.Tests.UI.csproj -c Release --no-build --logger "trx;LogFileName=ui.trx" --results-directory artifacts/test/ui
 
+      - name: Build with CDP diagnostics
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet build src/XamlVisualEditor.App/XamlVisualEditor.App.csproj -c Debug -p:EnableCdpDiagnostics=true -p:ContinuousIntegrationBuild=true
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

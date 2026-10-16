@@ -1,8 +1,14 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.AcpExtension"
+             xmlns:views="using:XamlVisualEditor.AcpExtension.Views"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.AcpExtension.Views.AcpToolView"
              x:DataType="vm:AcpToolViewModel">
+  <i:Interaction.Behaviors>
+    <views:AcpToolViewBehavior />
+  </i:Interaction.Behaviors>
   <UserControl.DataTemplates>
     <DataTemplate DataType="{x:Type vm:AcpTranscriptMessageEntry}" x:DataType="vm:AcpTranscriptMessageEntry">
         <Border Background="#0F1116" CornerRadius="6" Padding="8" Margin="0,0,0,6">
@@ -18,6 +24,7 @@
         <Border Background="#151922" CornerRadius="6" Padding="8" Margin="0,0,0,6">
           <StackPanel Spacing="4">
             <TextBlock Text="{CompiledBinding TitleDisplay}" FontWeight="SemiBold" />
+            <TextBlock Text="{CompiledBinding OutputText}" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <TextBlock Text="{CompiledBinding ToolKindDisplay}" />
               <TextBlock Text="{CompiledBinding StatusDisplay}" />
@@ -26,7 +33,7 @@
             <TextBlock Text="{CompiledBinding TerminalDisplay}" IsVisible="{CompiledBinding HasTerminal}" />
             <Border Background="#0B0E13" CornerRadius="4" Padding="6" IsVisible="{CompiledBinding HasTerminalOutput}">
               <StackPanel Spacing="4">
-                <TextBlock Text="Terminal Output" FontSize="10" Opacity="0.7" />
+                <TextBlock Text="{x:Static loc:UiStrings.TerminalOutput}" FontSize="10" Opacity="0.7" />
                 <TextBlock Text="{CompiledBinding TerminalOutputDisplay}" TextWrapping="Wrap" FontFamily="Consolas" />
                 <TextBlock Text="{CompiledBinding TerminalStatusDisplay}" FontSize="10" Opacity="0.7" />
                 <TextBlock Text="{CompiledBinding TerminalTruncatedDisplay}" FontSize="10" Opacity="0.7" />
@@ -35,9 +42,9 @@
             <Border Background="#0E1015" CornerRadius="4" Padding="6" IsVisible="{CompiledBinding HasDiff}">
               <StackPanel Spacing="4">
                 <TextBlock Text="{CompiledBinding DiffPathDisplay}" FontWeight="SemiBold" />
-                <TextBlock Text="Old:" FontSize="10" Opacity="0.7" />
+                <TextBlock Text="{x:Static loc:UiStrings.OldLabel}" FontSize="10" Opacity="0.7" />
                 <TextBlock Text="{CompiledBinding DiffOldDisplay}" TextWrapping="Wrap" FontFamily="Consolas" />
-                <TextBlock Text="New:" FontSize="10" Opacity="0.7" />
+                <TextBlock Text="{x:Static loc:UiStrings.NewLabel}" FontSize="10" Opacity="0.7" />
                 <TextBlock Text="{CompiledBinding DiffNewDisplay}" TextWrapping="Wrap" FontFamily="Consolas" />
               </StackPanel>
             </Border>
@@ -59,18 +66,21 @@
 
   <DockPanel>
     <Border DockPanel.Dock="Top" Background="#1B1E24" Padding="10" CornerRadius="8" Margin="8,8,8,6">
-      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-        <StackPanel Orientation="Horizontal" Spacing="10">
-          <TextBlock Text="ACP" FontWeight="SemiBold" FontSize="14" />
+      <WrapPanel Orientation="Horizontal">
+        <WrapPanel.Styles>
+          <Style Selector="WrapPanel > Control">
+            <Setter Property="Margin" Value="0,0,6,6" />
+          </Style>
+        </WrapPanel.Styles>
           <Border Background="#2A2F39" CornerRadius="10" Padding="8,2">
-            <TextBlock Text="{CompiledBinding StatusText}" />
+            <TextBlock Name="AcpStatus" Text="{CompiledBinding StatusText}" TextWrapping="Wrap" MaxWidth="260" />
           </Border>
-          <TextBlock Text="{CompiledBinding AgentName}" Opacity="0.8" />
-          <Button Content="Profile" Padding="8,2">
+          <TextBlock Name="AcpAgentName" Text="{CompiledBinding AgentName}" Opacity="0.8" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+          <Button Content="{x:Static loc:UiStrings.Profile}" Padding="8,2">
             <Button.Flyout>
               <Flyout Placement="Bottom">
                 <StackPanel Spacing="10" Margin="10" Width="320">
-                  <TextBlock Text="Profile" FontWeight="SemiBold" />
+                  <TextBlock Text="{x:Static loc:UiStrings.Profile}" FontWeight="SemiBold" />
                   <ComboBox ItemsSource="{CompiledBinding Profiles}"
                             SelectedItem="{CompiledBinding SelectedProfile, Mode=TwoWay}">
                     <ComboBox.ItemTemplate>
@@ -80,36 +90,38 @@
                     </ComboBox.ItemTemplate>
                   </ComboBox>
 
-                  <TextBox Text="{CompiledBinding SelectedProfile.Command, Mode=TwoWay}" PlaceholderText="Command" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.ArgumentsText, Mode=TwoWay}" PlaceholderText="Args" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.Model, Mode=TwoWay}" PlaceholderText="Model" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.ModelEnvVar, Mode=TwoWay}" PlaceholderText="Model Env Var" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.ApiKeyEnvVar, Mode=TwoWay}" PlaceholderText="API Key Env Var" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.Command, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.Command}" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.ArgumentsText, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.Arguments}" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.Model, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.Model}" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.ModelEnvVar, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.ModelEnvironmentVariable}" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.ApiKeyEnvVar, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.ApiKeyEnvironmentVariable}" />
 
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="{CompiledBinding ApiKeyStatus}" VerticalAlignment="Center" />
-                    <TextBox Width="160" Text="{CompiledBinding ApiKeyInput, Mode=TwoWay}" PasswordChar="*" PlaceholderText="API Key" />
-                    <Button Content="Save" Command="{CompiledBinding SaveApiKeyCommand}" Padding="6,2" />
-                    <Button Content="Clear" Command="{CompiledBinding ClearApiKeyCommand}" Padding="6,2" />
+                    <TextBox Width="160" Text="{CompiledBinding ApiKeyInput, Mode=TwoWay}" PasswordChar="*" PlaceholderText="{x:Static loc:UiStrings.ApiKey}" />
+                    <Button Content="{x:Static loc:UiStrings.Save}" Command="{CompiledBinding SaveApiKeyCommand}" Padding="6,2" />
+                    <Button Content="{x:Static loc:UiStrings.Clear}" Command="{CompiledBinding ClearApiKeyCommand}" Padding="6,2" />
                   </StackPanel>
 
                   <Border Background="#13161B" CornerRadius="6" Padding="8">
                     <StackPanel Spacing="6">
-                      <TextBlock Text="OpenAI Web Auth" FontWeight="SemiBold" />
-                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthClientId, Mode=TwoWay}" PlaceholderText="Client Id" />
-                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthScopes, Mode=TwoWay}" PlaceholderText="Scopes" />
+                      <TextBlock Text="{x:Static loc:UiStrings.OAuthDeviceAuthentication}" FontWeight="SemiBold" />
+                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthClientId, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.ClientId}" />
+                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthDeviceCodeUrl, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.OAuthDeviceEndpoint}" />
+                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthTokenUrl, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.OAuthTokenEndpoint}" />
+                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthScopes, Mode=TwoWay}" PlaceholderText="{x:Static loc:UiStrings.Scopes}" />
                       <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="{CompiledBinding WebAuthStatus}" VerticalAlignment="Center" />
-                        <Button Content="Sign In" Command="{CompiledBinding StartWebAuthCommand}" Padding="6,2" />
-                        <Button Content="Sign Out" Command="{CompiledBinding ClearWebAuthCommand}" Padding="6,2" />
+                        <Button Content="{x:Static loc:UiStrings.SignIn}" Command="{CompiledBinding StartWebAuthCommand}" Padding="6,2" />
+                        <Button Content="{x:Static loc:UiStrings.SignOut}" Command="{CompiledBinding ClearWebAuthCommand}" Padding="6,2" />
                       </StackPanel>
                       <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{CompiledBinding WebAuthUserCode, StringFormat=Code: {0}}" />
-                        <Button Content="Copy" Command="{CompiledBinding CopyUserCodeCommand}" Padding="6,2" />
+                        <TextBlock Text="{CompiledBinding WebAuthUserCode, StringFormat={x:Static loc:UiStrings.CodeFormat}}" />
+                        <Button Content="{x:Static loc:UiStrings.Copy}" Command="{CompiledBinding CopyUserCodeCommand}" Padding="6,2" />
                       </StackPanel>
                       <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{CompiledBinding WebAuthVerificationUri, StringFormat=Verify: {0}}" TextWrapping="Wrap" />
-                        <Button Content="Open" Command="{CompiledBinding OpenVerificationUrlCommand}" Padding="6,2" />
+                        <TextBlock Text="{CompiledBinding WebAuthVerificationUri, StringFormat={x:Static loc:UiStrings.VerificationFormat}}" TextWrapping="Wrap" />
+                        <Button Content="{x:Static loc:UiStrings.Open}" Command="{CompiledBinding OpenVerificationUrlCommand}" Padding="6,2" />
                       </StackPanel>
                     </StackPanel>
                   </Border>
@@ -117,14 +129,14 @@
               </Flyout>
             </Button.Flyout>
           </Button>
-          <Button Content="Session" Padding="8,2">
+          <Button Content="{x:Static loc:UiStrings.Session}" Padding="8,2">
             <Button.Flyout>
               <Flyout Placement="Bottom">
                 <StackPanel Spacing="10" Margin="10" Width="320">
-                  <TextBlock Text="Active Session" FontWeight="SemiBold" />
+                  <TextBlock Text="{x:Static loc:UiStrings.ActiveSession}" FontWeight="SemiBold" />
                   <TextBlock Text="{CompiledBinding ActiveSessionId}" />
                   <Separator />
-                  <TextBlock Text="Sessions" FontWeight="SemiBold" />
+                  <TextBlock Text="{x:Static loc:UiStrings.Sessions}" FontWeight="SemiBold" />
                   <ListBox ItemsSource="{CompiledBinding Sessions}">
                     <ListBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:AcpSessionEntry">
@@ -141,11 +153,11 @@
               </Flyout>
             </Button.Flyout>
           </Button>
-          <Button Content="Activity" Padding="8,2">
+          <Button Content="{x:Static loc:UiStrings.Activity}" Padding="8,2">
             <Button.Flyout>
               <Flyout Placement="Bottom">
                 <StackPanel Spacing="10" Margin="10" Width="320">
-                  <TextBlock Text="Recent Activity" FontWeight="SemiBold" />
+                  <TextBlock Text="{x:Static loc:UiStrings.RecentActivity}" FontWeight="SemiBold" />
                   <ListBox ItemsSource="{CompiledBinding Activity}">
                     <ListBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:AcpActivityEntry">
@@ -161,31 +173,50 @@
               </Flyout>
             </Button.Flyout>
           </Button>
-        </StackPanel>
-
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-          <Button Content="Settings" Padding="8,2">
+          <Button Name="AcpSettings" Content="{x:Static loc:UiStrings.Settings}" Padding="8,2">
             <Button.Flyout>
               <Flyout Placement="Bottom">
                 <StackPanel Spacing="8" Margin="10">
-                  <TextBlock Text="Session Actions" FontWeight="SemiBold" />
-                  <Button Content="Connect" Command="{CompiledBinding ConnectProfileCommand}" />
-                  <Button Content="Connect Mock" Command="{CompiledBinding ConnectMockCommand}" />
-                  <Button Content="Disconnect" Command="{CompiledBinding DisconnectCommand}" />
+                  <TextBlock Text="{x:Static loc:UiStrings.SessionActions}" FontWeight="SemiBold" />
+                  <Button Content="{x:Static loc:UiStrings.Connect}" Command="{CompiledBinding ConnectProfileCommand}" />
+                  <Button Content="{x:Static loc:UiStrings.ConnectMock}" Command="{CompiledBinding ConnectMockCommand}" />
+                  <Button Content="{x:Static loc:UiStrings.Disconnect}" Command="{CompiledBinding DisconnectCommand}" />
+                  <ComboBox ItemsSource="{CompiledBinding AuthenticationMethods}"
+                            SelectedItem="{CompiledBinding SelectedAuthenticationMethod, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:AcpAuthenticationMethod">
+                        <TextBlock Text="{CompiledBinding Name}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <Button Content="{x:Static loc:UiStrings.SignIn}" Command="{CompiledBinding AuthenticateCommand}" />
                   <Separator />
-                  <Button Content="New Session" Command="{CompiledBinding NewSessionCommand}" />
-                  <Button Content="Cancel Prompt" Command="{CompiledBinding CancelPromptCommand}" />
+                  <Button Content="{x:Static loc:UiStrings.NewSession}" Command="{CompiledBinding NewSessionCommand}" />
+                  <Button Content="{x:Static loc:UiStrings.CancelPrompt}" Command="{CompiledBinding CancelPromptCommand}" />
                 </StackPanel>
               </Flyout>
             </Button.Flyout>
           </Button>
-        </StackPanel>
-      </Grid>
+      </WrapPanel>
     </Border>
 
     <Border Margin="8,4,8,8" Background="#13161B" CornerRadius="8" Padding="10">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="Transcript" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <TextBlock DockPanel.Dock="Top" Text="{x:Static loc:UiStrings.Transcript}" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
+          <TextBox Name="PromptInput" Text="{CompiledBinding PromptText, Mode=TwoWay}"
+                   PlaceholderText="{x:Static loc:UiStrings.AcpPromptPlaceholder}"
+                   AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" MaxHeight="180">
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Ctrl+Enter" Command="{CompiledBinding SendPromptCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
+          <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+            <Button Name="SendPrompt" Content="{x:Static loc:UiStrings.AcpSendPrompt}"
+                    Command="{CompiledBinding SendPromptCommand}" />
+            <Button Content="{x:Static loc:UiStrings.CancelPrompt}" Command="{CompiledBinding CancelPromptCommand}" />
+          </StackPanel>
+        </StackPanel>
         <ListBox ItemsSource="{CompiledBinding Transcript}" />
       </DockPanel>
     </Border>

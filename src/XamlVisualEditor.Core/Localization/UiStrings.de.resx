@@ -1,0 +1,1155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <data name="OptionsTitle" xml:space="preserve"><value>Optionen</value></data>
+  <data name="ResizeWindow" xml:space="preserve"><value>Fenstergröße ändern</value></data>
+  <data name="EditorThemeTitle" xml:space="preserve"><value>XVE-Theme</value></data>
+  <data name="EditorThemeHint" xml:space="preserve"><value>Theme-Wechsel werden sofort angezeigt. Speichern übernimmt die Auswahl; Abbrechen, ESC oder Schließen stellt das vorherige Theme wieder her. Designer und Vorschau behalten ihre eigene Theme-Auswahl.</value></data>
+  <data name="EditorThemeBuiltin" xml:space="preserve"><value>XVE-Standard</value></data>
+  <data name="EditorThemeSystem" xml:space="preserve"><value>System</value></data>
+  <data name="EditorThemeLight" xml:space="preserve"><value>Hell</value></data>
+  <data name="EditorThemeDark" xml:space="preserve"><value>Dunkel</value></data>
+  <data name="EditorThemeUnavailable" xml:space="preserve"><value>Das gewählte Editor-Theme ist nicht verfügbar. Aktiviere die zugehörige Extension oder wähle ein anderes Theme.</value></data>
+  <data name="EditorThemeInvalidCatalog" xml:space="preserve"><value>Die Extension liefert ungültige oder doppelte Theme-Kennungen.</value></data>
+  <data name="OptionsMenu" xml:space="preserve"><value>_Optionen...</value></data>
+  <data name="Language" xml:space="preserve"><value>Sprache</value></data>
+  <data name="LanguageRestartHint" xml:space="preserve"><value>Die Sprachänderung gilt nach einem Neustart von XVE.</value></data>
+  <data name="TerminalGroup" xml:space="preserve"><value>Terminal</value></data>
+  <data name="TerminalMode" xml:space="preserve"><value>Terminal öffnen</value></data>
+  <data name="TerminalInternal" xml:space="preserve"><value>Innerhalb von XVE</value></data>
+  <data name="TerminalExternal" xml:space="preserve"><value>In einem eigenen Fenster</value></data>
+  <data name="TerminalShell" xml:space="preserve"><value>Shell</value></data>
+  <data name="CommandPrompt" xml:space="preserve"><value>Eingabeaufforderung (cmd.exe)</value></data>
+  <data name="WindowsPowerShell" xml:space="preserve"><value>Windows PowerShell (powershell.exe)</value></data>
+  <data name="PowerShell7" xml:space="preserve"><value>PowerShell 7 (pwsh.exe)</value></data>
+  <data name="ExecutablePaths" xml:space="preserve"><value>Programmpfade</value></data>
+  <data name="TerminalPathsHint" xml:space="preserve"><value>Gib für jede Shell die ausführbare Datei an. Nur die ausgewählte Shell muss installiert sein.</value></data>
+  <data name="WindowsTerminalOptionsHint" xml:space="preserve"><value>Diese Shell-Optionen gelten für Windows.</value></data>
+  <data name="Browse" xml:space="preserve"><value>Durchsuchen...</value></data>
+  <data name="Save" xml:space="preserve"><value>Speichern</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="ExecutableNotFound" xml:space="preserve"><value>Shell-Programm nicht gefunden: {0}</value></data>
+  <data name="OptionsSaveError" xml:space="preserve"><value>Die Optionen konnten nicht gespeichert werden: {0}</value></data>
+  <data name="OptionsLoadError" xml:space="preserve"><value>Die Optionen konnten nicht geladen werden: {0}</value></data>
+  <data name="TerminalInternalStarted" xml:space="preserve"><value>Terminal gestartet</value></data>
+  <data name="TerminalExternalStarted" xml:space="preserve"><value>Externes Terminal gestartet</value></data>
+  <data name="TerminalStartFailed" xml:space="preserve"><value>Das Terminal konnte nicht gestartet werden: {0}</value></data>
+  <data name="OptionsSaved" xml:space="preserve"><value>Optionen gespeichert</value></data>
+  <data name="ExecutablePickerTitle" xml:space="preserve"><value>Shell-Programm auswählen</value></data>
+  <data name="ExecutableFiles" xml:space="preserve"><value>Ausführbare Dateien</value></data>
+  <data name="MenuFile" xml:space="preserve"><value>_Datei</value></data>
+  <data name="MenuNew" xml:space="preserve"><value>_Neu</value></data>
+  <data name="MenuOpen" xml:space="preserve"><value>Datei _öffnen...</value></data>
+  <data name="MenuOpenWorkspace" xml:space="preserve"><value>_Projekt/Solution öffnen...</value></data>
+  <data name="MenuCloseFile" xml:space="preserve"><value>Datei s_chließen</value></data>
+  <data name="MenuCloseWorkspace" xml:space="preserve"><value>Projekt/Solution schließen</value></data>
+  <data name="OpenFileTitle" xml:space="preserve"><value>Datei öffnen</value></data>
+  <data name="SelectProjectOrSolution" xml:space="preserve"><value>Projekt/Solution-Datei auswählen (.csproj, .slnx, .sln).</value></data>
+  <data name="WorkspacePickerFailed" xml:space="preserve"><value>Die Dateiauswahl konnte nicht geöffnet werden: {0}</value></data>
+  <data name="WorkspaceFiles" xml:space="preserve"><value>Projekte und Solutions</value></data>
+  <data name="CSharpFiles" xml:space="preserve"><value>C#-Dateien</value></data>
+  <data name="WorkspaceClosed" xml:space="preserve"><value>Workspace geschlossen</value></data>
+  <data name="WorkspaceCloseFailed" xml:space="preserve"><value>Workspace konnte nicht geschlossen werden: {0}</value></data>
+  <data name="MenuOpenRecent" xml:space="preserve"><value>_Zuletzt geöffnet</value></data>
+  <data name="MenuRecentProjects" xml:space="preserve"><value>Projekte/Solutions</value></data>
+  <data name="MenuRecentFiles" xml:space="preserve"><value>Dateien</value></data>
+  <data name="MenuRecentFolders" xml:space="preserve"><value>Ordner</value></data>
+  <data name="MenuClear" xml:space="preserve"><value>_Leeren</value></data>
+  <data name="MenuMore" xml:space="preserve"><value>_Mehr...</value></data>
+  <data name="MenuSave" xml:space="preserve"><value>_Speichern</value></data>
+  <data name="MenuSaveAll" xml:space="preserve"><value>_Alles speichern</value></data>
+  <data name="MenuSaveMode" xml:space="preserve"><value>Speicher_modus</value></data>
+  <data name="MenuAutoSave" xml:space="preserve"><value>_Automatisch speichern</value></data>
+  <data name="MenuSaveManually" xml:space="preserve"><value>_Manuell speichern</value></data>
+  <data name="MenuNoSaving" xml:space="preserve"><value>_Nicht speichern</value></data>
+  <data name="MenuExit" xml:space="preserve"><value>_Beenden</value></data>
+  <data name="MenuEdit" xml:space="preserve"><value>_Bearbeiten</value></data>
+  <data name="MenuView" xml:space="preserve"><value>_Ansicht</value></data>
+  <data name="MenuPanels" xml:space="preserve"><value>_Bereiche</value></data>
+  <data name="MenuServers" xml:space="preserve"><value>_Server</value></data>
+  <data name="MenuDocumentCanvas" xml:space="preserve"><value>_Dokumentfläche</value></data>
+  <data name="MenuWindow" xml:space="preserve"><value>_Fenster</value></data>
+  <data name="MenuResetLayout" xml:space="preserve"><value>Fensterlayout _zurücksetzen</value></data>
+  <data name="MenuLayoutSave" xml:space="preserve"><value>Fensterlayout _speichern</value></data>
+  <data name="MenuLayoutSaveAs" xml:space="preserve"><value>Fensterlayout speichern _unter...</value></data>
+  <data name="MenuLayoutLoad" xml:space="preserve"><value>Fensterlayout _anwenden</value></data>
+  <data name="MenuLayoutLoadFromTemplates" xml:space="preserve"><value>Layout_vorlage anwenden</value></data>
+  <data name="MenuManageLayouts" xml:space="preserve"><value>Layouts ver_walten...</value></data>
+  <data name="ManageLayoutsTitle" xml:space="preserve"><value>Fensterlayouts verwalten</value></data>
+  <data name="ManageLayoutsEmpty" xml:space="preserve"><value>Keine gespeicherten Layouts.</value></data>
+  <data name="LayoutNameExists" xml:space="preserve"><value>Ein Layout mit dem Namen '{0}' existiert bereits</value></data>
+  <data name="LayoutRenamed" xml:space="preserve"><value>Layout '{0}' in '{1}' umbenannt</value></data>
+  <data name="LayoutPresetDesigner" xml:space="preserve"><value>Designer</value></data>
+  <data name="LayoutPresetCode" xml:space="preserve"><value>Code</value></data>
+  <data name="LayoutPresetDebugging" xml:space="preserve"><value>Debuggen</value></data>
+  <data name="LayoutPresetAssistants" xml:space="preserve"><value>Assistenten &amp; Server</value></data>
+  <data name="LayoutPresetMinimal" xml:space="preserve"><value>Minimal</value></data>
+  <data name="LayoutSaveTitle" xml:space="preserve"><value>Layout speichern</value></data>
+  <data name="LayoutSavePrompt" xml:space="preserve"><value>Name des Layouts:</value></data>
+  <data name="LayoutSaved" xml:space="preserve"><value>Layout '{0}' gespeichert</value></data>
+  <data name="LayoutLoaded" xml:space="preserve"><value>Layout '{0}' geladen</value></data>
+  <data name="LayoutNotFound" xml:space="preserve"><value>Layout '{0}' wurde nicht gefunden</value></data>
+  <data name="LayoutLoadFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht geladen werden</value></data>
+  <data name="LayoutInvalidName" xml:space="preserve"><value>Der Layoutname ist leer oder enthält ungültige Zeichen</value></data>
+  <data name="MenuLayoutDelete" xml:space="preserve"><value>Layout _löschen</value></data>
+  <data name="MenuLayoutDeleteNamed" xml:space="preserve"><value>Layout '{0}' _löschen</value></data>
+  <data name="LayoutDeleted" xml:space="preserve"><value>Layout '{0}' gelöscht</value></data>
+  <data name="LayoutDeletePrompt" xml:space="preserve"><value>Layout '{0}' wirklich löschen? Dies kann nicht rückgängig gemacht werden.</value></data>
+  <data name="LayoutUnnamed" xml:space="preserve"><value>Unbenannt</value></data>
+  <data name="StatusLayoutFormat" xml:space="preserve"><value>Layout: {0}</value></data>
+  <data name="MenuDebug" xml:space="preserve"><value>Debu_ggen</value></data>
+  <data name="MenuTools" xml:space="preserve"><value>_Werkzeuge</value></data>
+  <data name="MenuPreviewer" xml:space="preserve"><value>_Vorschau</value></data>
+  <data name="MenuStart" xml:space="preserve"><value>_Starten</value></data>
+  <data name="MenuCommandPalette" xml:space="preserve"><value>_Befehlspalette...</value></data>
+  <data name="MenuWorkspace" xml:space="preserve"><value>A_rbeitsbereich</value></data>
+  <data name="MenuExtensions" xml:space="preserve"><value>_Erweiterungen</value></data>
+  <data name="MenuHelp" xml:space="preserve"><value>_Hilfe</value></data>
+  <data name="MenuAbout" xml:space="preserve"><value>_Über XVE</value></data>
+  <data name="MenuExtensionsManager" xml:space="preserve"><value>_Erweiterungen verwalten...</value></data>
+  <data name="NewTooltip" xml:space="preserve"><value>Neu (Ctrl+N)</value></data>
+  <data name="OpenTooltip" xml:space="preserve"><value>Öffnen (Ctrl+O)</value></data>
+  <data name="SaveTooltip" xml:space="preserve"><value>Speichern (Ctrl+S)</value></data>
+  <data name="StartPreviewerTooltip" xml:space="preserve"><value>Vorschau starten (Ctrl+Alt+P)</value></data>
+  <data name="CommandPaletteTooltip" xml:space="preserve"><value>Befehlspalette (Ctrl+Shift+P)</value></data>
+  <data name="LoadingWorkspace" xml:space="preserve"><value>Arbeitsbereich wird geladen...</value></data>
+  <data name="Ready" xml:space="preserve"><value>Bereit</value></data>
+  <data name="RecentFilesTitle" xml:space="preserve"><value>Zuletzt geöffnet</value></data>
+  <data name="SearchNameOrPath" xml:space="preserve"><value>Name oder Pfad suchen...</value></data>
+  <data name="RemoveFromList" xml:space="preserve"><value>Aus Liste entfernen</value></data>
+  <data name="Close" xml:space="preserve"><value>Schließen</value></data>
+  <data name="Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Path" xml:space="preserve"><value>Pfad</value></data>
+  <data name="SearchNodes" xml:space="preserve"><value>Knoten suchen...</value></data>
+  <data name="Node" xml:space="preserve"><value>Knoten</value></data>
+  <data name="Children" xml:space="preserve"><value>Unterelemente</value></data>
+  <data name="Git" xml:space="preserve"><value>Git</value></data>
+  <data name="BranchLabel" xml:space="preserve"><value>Branch:</value></data>
+  <data name="UpstreamLabel" xml:space="preserve"><value>Upstream:</value></data>
+  <data name="AheadLabel" xml:space="preserve"><value>Voraus:</value></data>
+  <data name="BehindLabel" xml:space="preserve"><value>Zurück:</value></data>
+  <data name="Refresh" xml:space="preserve"><value>Aktualisieren</value></data>
+  <data name="SearchChanges" xml:space="preserve"><value>Änderungen suchen...</value></data>
+  <data name="Stage" xml:space="preserve"><value>Stage</value></data>
+  <data name="Unstage" xml:space="preserve"><value>Unstage</value></data>
+  <data name="Discard" xml:space="preserve"><value>Discard</value></data>
+  <data name="StageAll" xml:space="preserve"><value>Stage All</value></data>
+  <data name="UnstageAll" xml:space="preserve"><value>Unstage All</value></data>
+  <data name="Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Commit" xml:space="preserve"><value>Commit</value></data>
+  <data name="CommitMessage" xml:space="preserve"><value>Commit-Nachricht</value></data>
+  <data name="TerminalOutput" xml:space="preserve"><value>Terminal-Ausgabe</value></data>
+  <data name="OldLabel" xml:space="preserve"><value>Alt:</value></data>
+  <data name="NewLabel" xml:space="preserve"><value>Neu:</value></data>
+  <data name="Acp" xml:space="preserve"><value>ACP</value></data>
+  <data name="Profile" xml:space="preserve"><value>Profil</value></data>
+  <data name="Command" xml:space="preserve"><value>Befehl</value></data>
+  <data name="Arguments" xml:space="preserve"><value>Argumente</value></data>
+  <data name="Model" xml:space="preserve"><value>Modell</value></data>
+  <data name="ModelEnvironmentVariable" xml:space="preserve"><value>Modell-Umgebungsvariable</value></data>
+  <data name="ApiKeyEnvironmentVariable" xml:space="preserve"><value>API-Schlüssel-Umgebungsvariable</value></data>
+  <data name="ApiKey" xml:space="preserve"><value>API-Schlüssel</value></data>
+  <data name="Clear" xml:space="preserve"><value>Leeren</value></data>
+  <data name="ClientId" xml:space="preserve"><value>Client-ID</value></data>
+  <data name="Scopes" xml:space="preserve"><value>Berechtigungsbereiche</value></data>
+  <data name="SignIn" xml:space="preserve"><value>Anmelden</value></data>
+  <data name="SignOut" xml:space="preserve"><value>Abmelden</value></data>
+  <data name="Copy" xml:space="preserve"><value>Kopieren</value></data>
+  <data name="Open" xml:space="preserve"><value>Öffnen</value></data>
+  <data name="Session" xml:space="preserve"><value>Sitzung</value></data>
+  <data name="ActiveSession" xml:space="preserve"><value>Aktive Sitzung</value></data>
+  <data name="Sessions" xml:space="preserve"><value>Sitzungen</value></data>
+  <data name="Activity" xml:space="preserve"><value>Aktivität</value></data>
+  <data name="RecentActivity" xml:space="preserve"><value>Letzte Aktivitäten</value></data>
+  <data name="Settings" xml:space="preserve"><value>Einstellungen</value></data>
+  <data name="SessionActions" xml:space="preserve"><value>Sitzungsaktionen</value></data>
+  <data name="Connect" xml:space="preserve"><value>Verbinden</value></data>
+  <data name="LspSettings" xml:space="preserve"><value>LSP-Einstellungen</value></data>
+  <data name="SettingsFileLabel" xml:space="preserve"><value>Einstellungsdatei:</value></data>
+  <data name="EnvironmentOverridesSettingsHint" xml:space="preserve"><value>Einträge aus Umgebungsvariablen haben Vorrang vor der Einstellungsdatei und erfordern einen Neustart.</value></data>
+  <data name="AddServer" xml:space="preserve"><value>Server hinzufügen</value></data>
+  <data name="RemoveSelected" xml:space="preserve"><value>Auswahl entfernen</value></data>
+  <data name="Reload" xml:space="preserve"><value>Neu laden</value></data>
+  <data name="LspRestartHint" xml:space="preserve"><value>LSP-Änderungen werden nach einem Neustart wirksam.</value></data>
+  <data name="ServerPath" xml:space="preserve"><value>Serverpfad</value></data>
+  <data name="ArgumentsLabel" xml:space="preserve"><value>Argumente</value></data>
+  <data name="WorkingDirectory" xml:space="preserve"><value>Arbeitsverzeichnis</value></data>
+  <data name="Extensions" xml:space="preserve"><value>Erweiterungen</value></data>
+  <data name="Collaboration" xml:space="preserve"><value>Zusammenarbeit</value></data>
+  <data name="StartSession" xml:space="preserve"><value>Sitzung starten</value></data>
+  <data name="JoinSession" xml:space="preserve"><value>Sitzung beitreten</value></data>
+  <data name="LeaveSession" xml:space="preserve"><value>Sitzung verlassen</value></data>
+  <data name="ShareLink" xml:space="preserve"><value>Link teilen</value></data>
+  <data name="SessionId" xml:space="preserve"><value>Sitzungs-ID</value></data>
+  <data name="InviteParticipant" xml:space="preserve"><value>Teilnehmer einladen</value></data>
+  <data name="Invite" xml:space="preserve"><value>Einladen</value></data>
+  <data name="ConnectMock" xml:space="preserve"><value>Testverbindung</value></data>
+  <data name="Disconnect" xml:space="preserve"><value>Trennen</value></data>
+  <data name="NewSession" xml:space="preserve"><value>Neue Sitzung</value></data>
+  <data name="CancelPrompt" xml:space="preserve"><value>Anfrage abbrechen</value></data>
+  <data name="Transcript" xml:space="preserve"><value>Verlauf</value></data>
+  <data name="IdeBridge" xml:space="preserve"><value>IDE-Anbindung</value></data>
+  <data name="EndpointLabel" xml:space="preserve"><value>Endpunkt:</value></data>
+  <data name="Apply" xml:space="preserve"><value>Anwenden</value></data>
+  <data name="Restart" xml:space="preserve"><value>Neu starten</value></data>
+  <data name="Enabled" xml:space="preserve"><value>Aktiviert</value></data>
+  <data name="Transport" xml:space="preserve"><value>Transport</value></data>
+  <data name="TcpPort" xml:space="preserve"><value>TCP-Port</value></data>
+  <data name="UnixPath" xml:space="preserve"><value>Unix-Pfad</value></data>
+  <data name="Workspace" xml:space="preserve"><value>Arbeitsbereich</value></data>
+  <data name="Clients" xml:space="preserve"><value>Clients</value></data>
+  <data name="Last" xml:space="preserve"><value>Zuletzt</value></data>
+  <data name="Allowlist" xml:space="preserve"><value>Freigabeliste</value></data>
+  <data name="Revoke" xml:space="preserve"><value>Entziehen</value></data>
+  <data name="ClearAll" xml:space="preserve"><value>Alles leeren</value></data>
+  <data name="Capabilities" xml:space="preserve"><value>Berechtigungen</value></data>
+  <data name="Granted" xml:space="preserve"><value>Gewährt</value></data>
+  <data name="Event" xml:space="preserve"><value>Ereignis</value></data>
+  <data name="SearchControls" xml:space="preserve"><value>Controls suchen...</value></data>
+  <data name="ClearFilters" xml:space="preserve"><value>Filter leeren</value></data>
+  <data name="CollapseAll" xml:space="preserve"><value>Alle zuklappen</value></data>
+  <data name="ExpandAll" xml:space="preserve"><value>Alle aufklappen</value></data>
+  <data name="OpenFolder" xml:space="preserve"><value>Ordner öffnen</value></data>
+  <data name="Folder" xml:space="preserve"><value>Ordner</value></data>
+  <data name="BrowseLabel" xml:space="preserve"><value>Durchsuchen</value></data>
+  <data name="Remove" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="DebugSettings" xml:space="preserve"><value>Debug-Einstellungen</value></data>
+  <data name="DebuggerService" xml:space="preserve"><value>Debugger-Dienst</value></data>
+  <data name="DebuggerAdapterPath" xml:space="preserve"><value>Debugger-Adapterpfad</value></data>
+  <data name="AutoDownloadNetcoredbg" xml:space="preserve"><value>netcoredbg automatisch herunterladen</value></data>
+  <data name="DownloadNetcoredbg" xml:space="preserve"><value>netcoredbg herunterladen</value></data>
+  <data name="References" xml:space="preserve"><value>Verweise</value></data>
+  <data name="SearchReferences" xml:space="preserve"><value>Verweise suchen...</value></data>
+  <data name="Reference" xml:space="preserve"><value>Verweis</value></data>
+  <data name="Actions" xml:space="preserve"><value>Aktionen</value></data>
+  <data name="CopySelected" xml:space="preserve"><value>Auswahl kopieren</value></data>
+  <data name="CopyAll" xml:space="preserve"><value>Alles kopieren</value></data>
+  <data name="ClearProblems" xml:space="preserve"><value>Problemliste leeren</value></data>
+  <data name="ShowFirstSeenTime" xml:space="preserve"><value>Zeitpunkt des ersten Auftretens anzeigen</value></data>
+  <data name="DiagnosticChannel" xml:space="preserve"><value>Diagnosekanal</value></data>
+  <data name="GroupProblemsBy" xml:space="preserve"><value>Probleme gruppieren nach</value></data>
+  <data name="DiagnosticSeverity" xml:space="preserve"><value>Schweregrad der Diagnose</value></data>
+  <data name="SearchDiagnostics" xml:space="preserve"><value>Diagnosen suchen...</value></data>
+  <data name="Since" xml:space="preserve"><value>Seit</value></data>
+  <data name="Message" xml:space="preserve"><value>Nachricht</value></data>
+  <data name="Severity" xml:space="preserve"><value>Schweregrad</value></data>
+  <data name="Location" xml:space="preserve"><value>Position</value></data>
+  <data name="Source" xml:space="preserve"><value>Quelle</value></data>
+  <data name="Mcp" xml:space="preserve"><value>MCP</value></data>
+  <data name="CopyHttp" xml:space="preserve"><value>HTTP-Adresse kopieren</value></data>
+  <data name="HttpPort" xml:space="preserve"><value>HTTP-Port</value></data>
+  <data name="HttpPath" xml:space="preserve"><value>HTTP-Pfad</value></data>
+  <data name="Access" xml:space="preserve"><value>Zugriff</value></data>
+  <data name="ExtensionOutput" xml:space="preserve"><value>Ausgabe (Erweiterung)</value></data>
+  <data name="ClearChannel" xml:space="preserve"><value>Kanal leeren</value></data>
+  <data name="CopySelectedTitle" xml:space="preserve"><value>Auswahl kopieren</value></data>
+  <data name="CopyAllTitle" xml:space="preserve"><value>Alles kopieren</value></data>
+  <data name="ClearFiltersTitle" xml:space="preserve"><value>Filter leeren</value></data>
+  <data name="SearchChannels" xml:space="preserve"><value>Kanäle suchen...</value></data>
+  <data name="SearchMessages" xml:space="preserve"><value>Nachrichten suchen...</value></data>
+  <data name="Channel" xml:space="preserve"><value>Kanal</value></data>
+  <data name="Time" xml:space="preserve"><value>Zeit</value></data>
+  <data name="Value" xml:space="preserve"><value>Wert</value></data>
+  <data name="Definition" xml:space="preserve"><value>Definition</value></data>
+  <data name="OpenInNewWindow" xml:space="preserve"><value>In neuem Fenster öffnen</value></data>
+  <data name="Back" xml:space="preserve"><value>Zurück</value></data>
+  <data name="Next" xml:space="preserve"><value>Weiter</value></data>
+  <data name="Create" xml:space="preserve"><value>Erstellen</value></data>
+  <data name="SearchTemplates" xml:space="preserve"><value>Templates suchen...</value></data>
+  <data name="InstallTemplateHint" xml:space="preserve"><value>Template-Paket oder Pfad installieren</value></data>
+  <data name="Install" xml:space="preserve"><value>Installieren</value></data>
+  <data name="ShortName" xml:space="preserve"><value>Kurzname</value></data>
+  <data name="Type" xml:space="preserve"><value>Typ</value></data>
+  <data name="Description" xml:space="preserve"><value>Beschreibung</value></data>
+  <data name="CreateProjectDirectory" xml:space="preserve"><value>Projektverzeichnis erstellen</value></data>
+  <data name="CreateSolution" xml:space="preserve"><value>Solution erstellen</value></data>
+  <data name="SolutionName" xml:space="preserve"><value>Name der Solution</value></data>
+  <data name="CreateSolutionDirectory" xml:space="preserve"><value>Solution-Verzeichnis erstellen</value></data>
+  <data name="AddProjectToSolution" xml:space="preserve"><value>Projekt zur Solution hinzufügen</value></data>
+  <data name="Add" xml:space="preserve"><value>Hinzufügen</value></data>
+  <data name="Project" xml:space="preserve"><value>Projekt</value></data>
+  <data name="CreateDirectory" xml:space="preserve"><value>Verzeichnis erstellen</value></data>
+  <data name="SolutionPathPreview" xml:space="preserve"><value>Vorschau des Solution-Pfads</value></data>
+  <data name="Breakpoints" xml:space="preserve"><value>Haltepunkte</value></data>
+  <data name="Enable" xml:space="preserve"><value>Aktivieren</value></data>
+  <data name="Disable" xml:space="preserve"><value>Deaktivieren</value></data>
+  <data name="ClearCondition" xml:space="preserve"><value>Bedingung löschen</value></data>
+  <data name="ClearHitCondition" xml:space="preserve"><value>Trefferbedingung löschen</value></data>
+  <data name="ClearLogMessage" xml:space="preserve"><value>Protokollnachricht löschen</value></data>
+  <data name="On" xml:space="preserve"><value>Aktiv</value></data>
+  <data name="File" xml:space="preserve"><value>Datei</value></data>
+  <data name="Line" xml:space="preserve"><value>Zeile</value></data>
+  <data name="Condition" xml:space="preserve"><value>Bedingung</value></data>
+  <data name="Hit" xml:space="preserve"><value>Treffer</value></data>
+  <data name="Log" xml:space="preserve"><value>Protokoll</value></data>
+  <data name="Verified" xml:space="preserve"><value>Bestätigt</value></data>
+  <data name="AddTimeline" xml:space="preserve"><value>Zeitleiste hinzufügen</value></data>
+  <data name="Play" xml:space="preserve"><value>Abspielen</value></data>
+  <data name="Stop" xml:space="preserve"><value>Stoppen</value></data>
+  <data name="Undo" xml:space="preserve"><value>Rückgängig</value></data>
+  <data name="Redo" xml:space="preserve"><value>Wiederholen</value></data>
+  <data name="Timeline" xml:space="preserve"><value>Zeitleiste</value></data>
+  <data name="Key" xml:space="preserve"><value>Schlüssel</value></data>
+  <data name="AnimationKeyExample" xml:space="preserve"><value>AnimationKey</value></data>
+  <data name="Duration" xml:space="preserve"><value>Dauer</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
+  <data name="CreateResource" xml:space="preserve"><value>Ressource erstellen</value></data>
+  <data name="Target" xml:space="preserve"><value>Ziel</value></data>
+  <data name="Track" xml:space="preserve"><value>Spur</value></data>
+  <data name="Opacity" xml:space="preserve"><value>Deckkraft</value></data>
+  <data name="AddTrack" xml:space="preserve"><value>Spur hinzufügen</value></data>
+  <data name="AddKeyframe" xml:space="preserve"><value>Schlüsselbild hinzufügen</value></data>
+  <data name="Paste" xml:space="preserve"><value>Einfügen</value></data>
+  <data name="Delete" xml:space="preserve"><value>Löschen</value></data>
+  <data name="Resources" xml:space="preserve"><value>Ressourcen</value></data>
+  <data name="Load" xml:space="preserve"><value>Laden</value></data>
+  <data name="Update" xml:space="preserve"><value>Aktualisieren</value></data>
+  <data name="Keyframe" xml:space="preserve"><value>Schlüsselbild</value></data>
+  <data name="Easing" xml:space="preserve"><value>Verlaufskurve</value></data>
+  <data name="Select" xml:space="preserve"><value>Auswählen</value></data>
+  <data name="Action" xml:space="preserve"><value>Aktion</value></data>
+  <data name="CallStack" xml:space="preserve"><value>Aufrufliste</value></data>
+  <data name="StackFrame" xml:space="preserve"><value>Aufruf</value></data>
+  <data name="YourName" xml:space="preserve"><value>Dein Name</value></data>
+  <data name="Leave" xml:space="preserve"><value>Verlassen</value></data>
+  <data name="JoinSessionIdPlaceholder" xml:space="preserve"><value>Sitzungs-ID zum Beitreten...</value></data>
+  <data name="Participants" xml:space="preserve"><value>Teilnehmer</value></data>
+  <data name="YouSuffix" xml:space="preserve"><value>(du)</value></data>
+  <data name="InstallDialog" xml:space="preserve"><value>Installieren...</value></data>
+  <data name="CheckUpdates" xml:space="preserve"><value>Nach Updates suchen</value></data>
+  <data name="Uninstall" xml:space="preserve"><value>Deinstallieren</value></data>
+  <data name="Version" xml:space="preserve"><value>Version</value></data>
+  <data name="UiThreadConstructorsHint" xml:space="preserve"><value>Control-Konstruktoren laufen auf dem UI-Thread.</value></data>
+  <data name="ZoomLabel" xml:space="preserve"><value>Zoom:</value></data>
+  <data name="ZoomRangeHint" xml:space="preserve"><value>25 % bis 300 %, in Schritten von 25 %</value></data>
+  <data name="Fit" xml:space="preserve"><value>Einpassen</value></data>
+  <data name="ZoomSelectionShort" xml:space="preserve"><value>Auswahl</value></data>
+  <data name="PreviewTheme" xml:space="preserve"><value>Vorschau-Theme</value></data>
+  <data name="ViewportGrid" xml:space="preserve"><value>Raster</value></data>
+  <data name="SnapGrid" xml:space="preserve"><value>Am Raster einrasten</value></data>
+  <data name="Variant" xml:space="preserve"><value>Variante</value></data>
+  <data name="Align" xml:space="preserve"><value>Ausrichten</value></data>
+  <data name="SnapAlign" xml:space="preserve"><value>An Ausrichtung einrasten</value></data>
+  <data name="Spacing" xml:space="preserve"><value>Abstand</value></data>
+  <data name="Guides" xml:space="preserve"><value>Hilfslinien</value></data>
+  <data name="SnapGuides" xml:space="preserve"><value>An Hilfslinien einrasten</value></data>
+  <data name="SnapGuidesHint" xml:space="preserve"><value>Controls beim Verschieben und Skalieren an Lineal-Hilfslinien einrasten lassen.</value></data>
+  <data name="Rulers" xml:space="preserve"><value>Lineale</value></data>
+  <data name="CanvasGap" xml:space="preserve"><value>Randabstand</value></data>
+  <data name="CanvasGapPixels" xml:space="preserve"><value>Randabstand in Pixeln</value></data>
+  <data name="CanvasGapHint" xml:space="preserve"><value>Abstand um die Zeichenfläche in Pixeln; 0 deaktiviert den Abstand.</value></data>
+  <data name="MarginPadding" xml:space="preserve"><value>Margin / Padding</value></data>
+  <data name="MarginPaddingHint" xml:space="preserve"><value>Margin- und Padding-Hilfslinien für das ausgewählte Control anzeigen.</value></data>
+  <data name="Split" xml:space="preserve"><value>Geteilt</value></data>
+  <data name="Design" xml:space="preserve"><value>Entwurf</value></data>
+  <data name="Xaml" xml:space="preserve"><value>XAML</value></data>
+  <data name="Previewer" xml:space="preserve"><value>Vorschau</value></data>
+  <data name="TopBottom" xml:space="preserve"><value>Oben/unten</value></data>
+  <data name="SplitHorizontallyHint" xml:space="preserve"><value>Horizontal teilen: oben/unten</value></data>
+  <data name="SideBySide" xml:space="preserve"><value>Nebeneinander</value></data>
+  <data name="SplitVerticallyHint" xml:space="preserve"><value>Vertikal teilen: nebeneinander</value></data>
+  <data name="Download" xml:space="preserve"><value>Herunterladen</value></data>
+  <data name="TypeCommand" xml:space="preserve"><value>Befehl eingeben...</value></data>
+  <data name="Run" xml:space="preserve"><value>Ausführen</value></data>
+  <data name="AddOpenDocument" xml:space="preserve"><value>Aktives Dokument hinzufügen</value></data>
+  <data name="AddAllOpenDocuments" xml:space="preserve"><value>Alle offenen Dokumente hinzufügen</value></data>
+  <data name="NewFile" xml:space="preserve"><value>Neue Datei</value></data>
+  <data name="NewFolder" xml:space="preserve"><value>Neuer Ordner</value></data>
+  <data name="CollapseAllTitle" xml:space="preserve"><value>Alle zuklappen</value></data>
+  <data name="Search" xml:space="preserve"><value>Suchen...</value></data>
+  <data name="OpenWorkspace" xml:space="preserve"><value>Projekt/Solution öffnen</value></data>
+  <data name="Rename" xml:space="preserve"><value>Umbenennen</value></data>
+  <data name="Edit" xml:space="preserve"><value>Bearbeiten</value></data>
+  <data name="AutomationIds" xml:space="preserve"><value>Automation-IDs</value></data>
+  <data name="AutomationIdsHint" xml:space="preserve"><value>Neu eingefügten Controls eindeutige AutomationProperties.AutomationId-Werte zuweisen. Bestehende Controls bleiben unverändert.</value></data>
+  <data name="SnapToGrid" xml:space="preserve"><value>Am Raster einrasten</value></data>
+  <data name="SnapToGridHint" xml:space="preserve"><value>Position und Größe am Raster einrasten lassen</value></data>
+  <data name="ArrangeSelectedControls" xml:space="preserve"><value>Ausgewählte Controls anordnen</value></data>
+  <data name="Locals" xml:space="preserve"><value>Lokale Variablen</value></data>
+  <data name="Scope" xml:space="preserve"><value>Gültigkeitsbereich</value></data>
+  <data name="Ok" xml:space="preserve"><value>OK</value></data>
+  <data name="CmdExecutable" xml:space="preserve"><value>cmd.exe</value></data>
+  <data name="WindowsPowerShellExecutable" xml:space="preserve"><value>powershell.exe</value></data>
+  <data name="PowerShellExecutable" xml:space="preserve"><value>pwsh.exe</value></data>
+  <data name="Output" xml:space="preserve"><value>Ausgabe</value></data>
+  <data name="Level" xml:space="preserve"><value>Stufe</value></data>
+  <data name="Column" xml:space="preserve"><value>Spalte</value></data>
+  <data name="AllowOnce" xml:space="preserve"><value>Einmal erlauben</value></data>
+  <data name="TrustWorkspace" xml:space="preserve"><value>Arbeitsbereich vertrauen</value></data>
+  <data name="Item" xml:space="preserve"><value>Eintrag</value></data>
+  <data name="SearchFiles" xml:space="preserve"><value>🔍 Dateien suchen...</value></data>
+  <data name="SetStartupProject" xml:space="preserve"><value>Als Startprojekt festlegen</value></data>
+  <data name="StartupProjectToolTip" xml:space="preserve"><value>Startprojekt: „Ausführen“ startet dieses Projekt.</value></data>
+  <data name="ExecutableProjectToolTip" xml:space="preserve"><value>Ausführbares Projekt: „Als Startprojekt festlegen“ im Kontextmenü lässt „Ausführen“ es starten.</value></data>
+  <data name="WordWrap" xml:space="preserve"><value>Zeilenumbruch</value></data>
+  <data name="Wrap" xml:space="preserve"><value>Umbruch</value></data>
+  <data name="ShowLineNumbers" xml:space="preserve"><value>Zeilennummern anzeigen</value></data>
+  <data name="LineNumbersShort" xml:space="preserve"><value>Nr.</value></data>
+  <data name="FormatDocument" xml:space="preserve"><value>Dokument formatieren</value></data>
+  <data name="Format" xml:space="preserve"><value>Formatieren</value></data>
+  <data name="Watches" xml:space="preserve"><value>Überwachung</value></data>
+  <data name="Expression" xml:space="preserve"><value>Ausdruck</value></data>
+  <data name="Result" xml:space="preserve"><value>Ergebnis</value></data>
+  <data name="WorkspaceReloadCommand" xml:space="preserve"><value>Arbeitsbereich: Neu laden</value></data>
+  <data name="WorkspaceRestoreCommand" xml:space="preserve"><value>Arbeitsbereich: Pakete wiederherstellen</value></data>
+  <data name="WorkspaceBuildCommand" xml:space="preserve"><value>Arbeitsbereich: Erstellen</value></data>
+  <data name="WorkspaceRebuildCommand" xml:space="preserve"><value>Arbeitsbereich: Neu erstellen</value></data>
+  <data name="WorkspaceCleanCommand" xml:space="preserve"><value>Arbeitsbereich: Bereinigen</value></data>
+  <data name="EditUndoCommand" xml:space="preserve"><value>Bearbeiten: Rückgängig</value></data>
+  <data name="EditRedoCommand" xml:space="preserve"><value>Bearbeiten: Wiederholen</value></data>
+  <data name="EditCutCommand" xml:space="preserve"><value>Bearbeiten: Ausschneiden</value></data>
+  <data name="EditCopyCommand" xml:space="preserve"><value>Bearbeiten: Kopieren</value></data>
+  <data name="EditPasteCommand" xml:space="preserve"><value>Bearbeiten: Einfügen</value></data>
+  <data name="EditDeleteCommand" xml:space="preserve"><value>Bearbeiten: Löschen</value></data>
+  <data name="EditSelectAllCommand" xml:space="preserve"><value>Bearbeiten: Alles auswählen</value></data>
+  <data name="NavigationRenameCommand" xml:space="preserve"><value>Navigation: Symbol umbenennen</value></data>
+  <data name="Navigation" xml:space="preserve"><value>Navigation</value></data>
+  <data name="NavigationFormatCommand" xml:space="preserve"><value>Navigation: Dokument formatieren</value></data>
+  <data name="NavigationCodeActionsCommand" xml:space="preserve"><value>Navigation: Codeaktionen</value></data>
+  <data name="NavigationDocumentSymbolsCommand" xml:space="preserve"><value>Navigation: Dokumentsymbole</value></data>
+  <data name="NavigationWorkspaceSymbolsCommand" xml:space="preserve"><value>Navigation: Symbole im Arbeitsbereich</value></data>
+  <data name="DebugStartCommand" xml:space="preserve"><value>Debuggen: Starten</value></data>
+  <data name="Debug" xml:space="preserve"><value>Debuggen</value></data>
+  <data name="DebugStopCommand" xml:space="preserve"><value>Debuggen: Stoppen</value></data>
+  <data name="DebugContinueCommand" xml:space="preserve"><value>Debuggen: Fortsetzen</value></data>
+  <data name="DebugStepOverCommand" xml:space="preserve"><value>Debuggen: Prozedurschritt</value></data>
+  <data name="DebugStepInCommand" xml:space="preserve"><value>Debuggen: Einzelschritt</value></data>
+  <data name="DebugStepOutCommand" xml:space="preserve"><value>Debuggen: Prozedur verlassen</value></data>
+  <data name="DebugPauseCommand" xml:space="preserve"><value>Debuggen: Unterbrechen</value></data>
+  <data name="DebugToggleBreakpointCommand" xml:space="preserve"><value>Debuggen: Haltepunkt umschalten</value></data>
+  <data name="RunStartCommand" xml:space="preserve"><value>Ausführen: Starten</value></data>
+  <data name="RunStopCommand" xml:space="preserve"><value>Ausführen: Stoppen</value></data>
+  <data name="TerminalNewCommand" xml:space="preserve"><value>Terminal: Neues Terminal</value></data>
+  <data name="Tools" xml:space="preserve"><value>Werkzeuge</value></data>
+  <data name="WorkspaceStartupProjectCommand" xml:space="preserve"><value>Arbeitsbereich: Startprojekt festlegen</value></data>
+  <data name="ReloadWorkspace" xml:space="preserve"><value>Arbeitsbereich neu laden</value></data>
+  <data name="Restore" xml:space="preserve"><value>Pakete wiederherstellen</value></data>
+  <data name="Build" xml:space="preserve"><value>Erstellen</value></data>
+  <data name="Rebuild" xml:space="preserve"><value>Neu erstellen</value></data>
+  <data name="Clean" xml:space="preserve"><value>Bereinigen</value></data>
+  <data name="Cut" xml:space="preserve"><value>Ausschneiden</value></data>
+  <data name="SelectAll" xml:space="preserve"><value>Alles auswählen</value></data>
+  <data name="RenameSymbol" xml:space="preserve"><value>Symbol umbenennen</value></data>
+  <data name="CodeActions" xml:space="preserve"><value>Codeaktionen</value></data>
+  <data name="DocumentSymbols" xml:space="preserve"><value>Dokumentsymbole</value></data>
+  <data name="WorkspaceSymbols" xml:space="preserve"><value>Symbole im Arbeitsbereich</value></data>
+  <data name="Start" xml:space="preserve"><value>Starten</value></data>
+  <data name="Continue" xml:space="preserve"><value>Fortsetzen</value></data>
+  <data name="StepOver" xml:space="preserve"><value>Prozedurschritt</value></data>
+  <data name="StepIn" xml:space="preserve"><value>Einzelschritt</value></data>
+  <data name="StepOut" xml:space="preserve"><value>Prozedur verlassen</value></data>
+  <data name="Pause" xml:space="preserve"><value>Unterbrechen</value></data>
+  <data name="ToggleBreakpoint" xml:space="preserve"><value>Haltepunkt umschalten</value></data>
+  <data name="StartRun" xml:space="preserve"><value>Ausführung starten</value></data>
+  <data name="StopRun" xml:space="preserve"><value>Ausführung stoppen</value></data>
+  <data name="NewTerminal" xml:space="preserve"><value>Neues Terminal</value></data>
+  <data name="CreateTerminalSession" xml:space="preserve"><value>Terminalsitzung erstellen</value></data>
+  <data name="UndoTooltip" xml:space="preserve"><value>Rückgängig (Ctrl+Z)</value></data>
+  <data name="RedoTooltip" xml:space="preserve"><value>Wiederholen (Ctrl+Y)</value></data>
+  <data name="CutTooltip" xml:space="preserve"><value>Ausschneiden (Ctrl+X)</value></data>
+  <data name="CopyTooltip" xml:space="preserve"><value>Kopieren (Ctrl+C)</value></data>
+  <data name="PasteTooltip" xml:space="preserve"><value>Einfügen (Ctrl+V)</value></data>
+  <data name="RestoreWorkspace" xml:space="preserve"><value>Pakete des Arbeitsbereichs wiederherstellen</value></data>
+  <data name="BuildWorkspace" xml:space="preserve"><value>Arbeitsbereich erstellen</value></data>
+  <data name="RebuildWorkspace" xml:space="preserve"><value>Arbeitsbereich neu erstellen</value></data>
+  <data name="CleanWorkspace" xml:space="preserve"><value>Arbeitsbereich bereinigen</value></data>
+  <data name="StartupProjectPathRequired" xml:space="preserve"><value>Zum Festlegen des Startprojekts ist ein Projektpfad erforderlich.</value></data>
+  <data name="NoWorkspaceLoaded" xml:space="preserve"><value>Kein Arbeitsbereich geladen.</value></data>
+  <data name="OpenWorkspaceFolderDialog" xml:space="preserve"><value>Ordner öffnen...</value></data>
+  <data name="FileExplorer" xml:space="preserve"><value>Datei-Explorer</value></data>
+  <data name="ToggleHiddenFiles" xml:space="preserve"><value>Versteckte Dateien ein-/ausblenden</value></data>
+  <data name="FileExplorerIconsDialog" xml:space="preserve"><value>Symbole im Datei-Explorer...</value></data>
+  <data name="FileExplorerDockDialog" xml:space="preserve"><value>Datei-Explorer andocken...</value></data>
+  <data name="OpenWorkspaceFolder" xml:space="preserve"><value>Ordner öffnen</value></data>
+  <data name="OpenFolderHint" xml:space="preserve"><value>Ordner öffnen</value></data>
+  <data name="View" xml:space="preserve"><value>Ansicht</value></data>
+  <data name="OpenInCurrentWindow" xml:space="preserve"><value>Im aktuellen Fenster öffnen</value></data>
+  <data name="ReplaceWorkspaceHint" xml:space="preserve"><value>Aktuellen Arbeitsbereich ersetzen</value></data>
+  <data name="OpenFolderInNewWindowHint" xml:space="preserve"><value>Ordner in einem neuen Fenster öffnen</value></data>
+  <data name="HiddenFilesVisible" xml:space="preserve"><value>Versteckte Dateien werden angezeigt.</value></data>
+  <data name="HiddenFilesHidden" xml:space="preserve"><value>Versteckte Dateien werden ausgeblendet.</value></data>
+  <data name="NativeIcons" xml:space="preserve"><value>Systemsymbole</value></data>
+  <data name="NativeIconsHint" xml:space="preserve"><value>Symbole des Betriebssystems verwenden</value></data>
+  <data name="Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="BundledIconsHint" xml:space="preserve"><value>Mitgeliefertes Symbol-Theme verwenden</value></data>
+  <data name="FileExplorerIcons" xml:space="preserve"><value>Symbole im Datei-Explorer</value></data>
+  <data name="Left" xml:space="preserve"><value>Links</value></data>
+  <data name="Right" xml:space="preserve"><value>Rechts</value></data>
+  <data name="Bottom" xml:space="preserve"><value>Unten</value></data>
+  <data name="DockLeftHint" xml:space="preserve"><value>Im linken Werkzeugbereich andocken</value></data>
+  <data name="DockRightHint" xml:space="preserve"><value>Im rechten Werkzeugbereich andocken</value></data>
+  <data name="DockBottomHint" xml:space="preserve"><value>Im unteren Bereich andocken</value></data>
+  <data name="FileExplorerDock" xml:space="preserve"><value>Datei-Explorer andocken</value></data>
+  <data name="SolutionExplorer" xml:space="preserve"><value>Solution-Explorer</value></data>
+  <data name="Extension" xml:space="preserve"><value>Erweiterung</value></data>
+  <data name="Canvas" xml:space="preserve"><value>Zeichenfläche</value></data>
+  <data name="LeftTools" xml:space="preserve"><value>Linker Werkzeugbereich</value></data>
+  <data name="RightTools" xml:space="preserve"><value>Rechter Werkzeugbereich</value></data>
+  <data name="BottomTools" xml:space="preserve"><value>Unterer Werkzeugbereich</value></data>
+  <data name="Documents" xml:space="preserve"><value>Dokumente</value></data>
+  <data name="RootArea" xml:space="preserve"><value>Hauptbereich</value></data>
+  <data name="Pinned" xml:space="preserve"><value>Angeheftet</value></data>
+  <data name="ReadingXaml" xml:space="preserve"><value>XAML wird gelesen...</value></data>
+  <data name="ParsingXaml" xml:space="preserve"><value>XAML wird analysiert...</value></data>
+  <data name="InitializingLanguageServices" xml:space="preserve"><value>Sprachdienste werden initialisiert...</value></data>
+  <data name="DownloadDebugTool" xml:space="preserve"><value>Debug-Werkzeug herunterladen</value></data>
+  <data name="ApplicationName" xml:space="preserve"><value>XAML Visual Editor</value></data>
+  <data name="SaveModeAutoStatus" xml:space="preserve"><value>Speichermodus: Automatisch speichern</value></data>
+  <data name="SaveModeManualStatus" xml:space="preserve"><value>Speichermodus: Manuell speichern</value></data>
+  <data name="SaveModeDisabledStatus" xml:space="preserve"><value>Speichermodus: Nicht speichern</value></data>
+  <data name="AboutSummary" xml:space="preserve"><value>XAML Visual Editor – WYSIWYG-XAML-Editor auf Avalonia-Basis</value></data>
+  <data name="DocumentCreated" xml:space="preserve"><value>{0} erstellt</value></data>
+  <data name="DocumentCreateFailed" xml:space="preserve"><value>Dokument konnte nicht erstellt werden: {0}</value></data>
+  <data name="DocumentOpenFailed" xml:space="preserve"><value>Dokument konnte nicht geöffnet werden: {0}</value></data>
+  <data name="DocumentSaveFailed" xml:space="preserve"><value>Dokument konnte nicht gespeichert werden; die Änderungen bleiben im Editor: {0}</value></data>
+  <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(schreibgeschützt)</value></data>
+  <data name="ReadOnlyFileBanner" xml:space="preserve"><value>Diese Datei ist schreibgeschützt. Änderungen lassen sich erst speichern, wenn der Schreibschutz aufgehoben ist, zum Beispiel durch Auschecken in der Quellcodeverwaltung.</value></data>
+  <data name="DocumentSaveReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gespeichert werden; die Änderungen bleiben im Editor.</value></data>
+  <data name="SavingDisabled" xml:space="preserve"><value>Speichern ist deaktiviert</value></data>
+  <data name="DocumentSaved" xml:space="preserve"><value>{0} gespeichert</value></data>
+  <data name="AllDocumentsSaved" xml:space="preserve"><value>Alle Dokumente gespeichert</value></data>
+  <data name="SaveCanceled" xml:space="preserve"><value>Speichern abgebrochen</value></data>
+  <data name="SaveEmptyDocument" xml:space="preserve"><value>Speichern fehlgeschlagen: kein Dokumentinhalt</value></data>
+  <data name="RenameUnavailable" xml:space="preserve"><value>Umbenennen ist nicht verfügbar</value></data>
+  <data name="RenameNoChanges" xml:space="preserve"><value>Umbenennen ergab keine Änderungen</value></data>
+  <data name="SymbolRenamed" xml:space="preserve"><value>{0} in {1} umbenannt</value></data>
+  <data name="FormatNoChanges" xml:space="preserve"><value>Formatieren: keine Änderungen</value></data>
+  <data name="FormatApplied" xml:space="preserve"><value>Formatierung angewendet</value></data>
+  <data name="NoCodeActions" xml:space="preserve"><value>Keine Codeaktionen</value></data>
+  <data name="ActionApplied" xml:space="preserve"><value>Angewendet: {0}</value></data>
+  <data name="NoDocumentSymbols" xml:space="preserve"><value>Keine Dokumentsymbole</value></data>
+  <data name="NoWorkspaceSymbols" xml:space="preserve"><value>Keine Symbole im Arbeitsbereich</value></data>
+  <data name="NavigatedToFile" xml:space="preserve"><value>Zu {0} navigiert</value></data>
+  <data name="DocumentAutoSaved" xml:space="preserve"><value>{0} automatisch gespeichert</value></data>
+  <data name="NoExtensionCommands" xml:space="preserve"><value>Keine Erweiterungsbefehle verfügbar.</value></data>
+  <data name="ExtensionCommandUnavailable" xml:space="preserve"><value>Erweiterungsbefehl nicht verfügbar: {0}</value></data>
+  <data name="ExtensionCommandFailed" xml:space="preserve"><value>Erweiterungsbefehl fehlgeschlagen: {0}</value></data>
+  <data name="LayoutReset" xml:space="preserve"><value>Layout zurückgesetzt</value></data>
+  <data name="DebugPausedReason" xml:space="preserve"><value>Unterbrochen ({0})</value></data>
+  <data name="DebugPausedDescription" xml:space="preserve"><value>Unterbrochen ({0}): {1}</value></data>
+  <data name="Running" xml:space="preserve"><value>Wird ausgeführt</value></data>
+  <data name="DebugNeedsWorkspace" xml:space="preserve"><value>Zum Debuggen muss ein Arbeitsbereich geladen sein.</value></data>
+  <data name="DebuggerNotConfigured" xml:space="preserve"><value>Kein Debugger-Dienst konfiguriert.</value></data>
+  <data name="NoDebugProject" xml:space="preserve"><value>Kein Projekt zum Debuggen ausgewählt.</value></data>
+  <data name="DebugProjectNotExecutable" xml:space="preserve"><value>Debug-Start fehlgeschlagen: Das ausgewählte Projekt ist nicht ausführbar.</value></data>
+  <data name="DebugAssemblyUnresolved" xml:space="preserve"><value>Die Ausgabe-Assembly zum Debuggen konnte nicht ermittelt werden.</value></data>
+  <data name="DebugOutputNotRunnable" xml:space="preserve"><value>Debug-Start fehlgeschlagen: Die ausgewählte Ausgabe ist nicht ausführbar.</value></data>
+  <data name="DebugServiceMissing" xml:space="preserve"><value>Debug-Start fehlgeschlagen: {0} nicht gefunden.</value></data>
+  <data name="DebuggingFile" xml:space="preserve"><value>{0} wird debuggt</value></data>
+  <data name="DebugStartFailed" xml:space="preserve"><value>Debug-Start fehlgeschlagen: {0}</value></data>
+  <data name="DebuggerDownloadFailed" xml:space="preserve"><value>Download von netcoredbg fehlgeschlagen: {0}</value></data>
+  <data name="StartupProjectCleared" xml:space="preserve"><value>Startprojekt zurückgesetzt</value></data>
+  <data name="StartupProjectStatus" xml:space="preserve"><value>Startprojekt: {0}</value></data>
+  <data name="DebuggingStopped" xml:space="preserve"><value>Debuggen beendet</value></data>
+  <data name="DebugStopFailed" xml:space="preserve"><value>Beenden des Debuggers fehlgeschlagen: {0}</value></data>
+  <data name="RunNeedsWorkspace" xml:space="preserve"><value>Zum Ausführen muss ein Arbeitsbereich geladen sein.</value></data>
+  <data name="NoRunProject" xml:space="preserve"><value>Kein Projekt zum Ausführen ausgewählt.</value></data>
+  <data name="ProgramAlreadyRunning" xml:space="preserve"><value>Es wird bereits ein Programm ausgeführt.</value></data>
+  <data name="RunProjectNotExecutable" xml:space="preserve"><value>Ausführen fehlgeschlagen: Das ausgewählte Projekt ist nicht ausführbar.</value></data>
+  <data name="RunAssemblyUnresolved" xml:space="preserve"><value>Die Ausgabe-Assembly zum Ausführen konnte nicht ermittelt werden.</value></data>
+  <data name="RunOutputNotRunnable" xml:space="preserve"><value>Ausführen fehlgeschlagen: Die ausgewählte Ausgabe ist nicht ausführbar.</value></data>
+  <data name="RunDirectoryUnresolved" xml:space="preserve"><value>Das Arbeitsverzeichnis zum Ausführen konnte nicht ermittelt werden.</value></data>
+  <data name="ProgramExited" xml:space="preserve"><value>Programm beendet</value></data>
+  <data name="RunningProject" xml:space="preserve"><value>{0} wird ausgeführt</value></data>
+  <data name="RunFailed" xml:space="preserve"><value>Ausführen fehlgeschlagen: {0}</value></data>
+  <data name="ProgramStopped" xml:space="preserve"><value>Programm gestoppt</value></data>
+  <data name="DocumentClosed" xml:space="preserve"><value>{0} geschlossen</value></data>
+  <data name="FolderNotFound" xml:space="preserve"><value>Ordner nicht gefunden</value></data>
+  <data name="FolderOpened" xml:space="preserve"><value>Ordner {0} geöffnet</value></data>
+  <data name="FilesOpened" xml:space="preserve"><value>{0} Dateien geöffnet</value></data>
+  <data name="FileNotFoundStatus" xml:space="preserve"><value>Datei nicht gefunden: {0}</value></data>
+  <data name="FileOpened" xml:space="preserve"><value>{0} geöffnet</value></data>
+  <data name="WorkspaceServicesUnavailable" xml:space="preserve"><value>Arbeitsbereichsdienste sind nicht verfügbar</value></data>
+  <data name="WorkspaceBusy" xml:space="preserve"><value>Ein Vorgang im Arbeitsbereich wird bereits ausgeführt</value></data>
+  <data name="WorkspaceLoadingStatus" xml:space="preserve"><value>Arbeitsbereich {0} wird geladen</value></data>
+  <data name="WorkspaceLoadFailed" xml:space="preserve"><value>Arbeitsbereich konnte nicht geladen werden: {0}</value></data>
+  <data name="WorkspaceAssembliesLoading" xml:space="preserve"><value>Arbeitsbereich {0} wird geladen: Assemblies werden gelesen...</value></data>
+  <data name="WorkspaceLoadedStatus" xml:space="preserve"><value>Arbeitsbereich {0} geladen</value></data>
+  <data name="DotnetCommandFailed" xml:space="preserve"><value>dotnet {0} fehlgeschlagen</value></data>
+  <data name="PreviewerStartCanceled" xml:space="preserve"><value>Vorschaustart abgebrochen</value></data>
+  <data name="PreviewerStarted" xml:space="preserve"><value>Vorschau gestartet</value></data>
+  <data name="PreviewerStartFailed" xml:space="preserve"><value>Vorschaustart fehlgeschlagen</value></data>
+  <data name="NoWorkspaceLoadedStatus" xml:space="preserve"><value>Kein Arbeitsbereich geladen</value></data>
+  <data name="ReloadWorkspaceFileRequired" xml:space="preserve"><value>Zum erneuten Laden ist eine Solution- oder Projektdatei erforderlich</value></data>
+  <data name="WorkspaceFileNotFound" xml:space="preserve"><value>Datei des Arbeitsbereichs nicht gefunden: {0}</value></data>
+  <data name="DotnetCommandRunning" xml:space="preserve"><value>dotnet {0} wird ausgeführt...</value></data>
+  <data name="DotnetCommandCompleted" xml:space="preserve"><value>dotnet {0} abgeschlossen</value></data>
+  <data name="NavigationFindReferencesCommand" xml:space="preserve"><value>Navigation: Verweise suchen</value></data>
+  <data name="NavigationFindFilesCommand" xml:space="preserve"><value>Navigation: In Dateien suchen</value></data>
+  <data name="NavigationDefinitionCommand" xml:space="preserve"><value>Navigation: Zur Definition</value></data>
+  <data name="NavigationQuickOpenCommand" xml:space="preserve"><value>Navigation: Schnell öffnen</value></data>
+  <data name="NavigationGoToLineCommand" xml:space="preserve"><value>Navigation: Gehe zu Zeile</value></data>
+  <data name="NavigationBackCommand" xml:space="preserve"><value>Navigation: Zurück</value></data>
+  <data name="NavigationForwardCommand" xml:space="preserve"><value>Navigation: Vorwärts</value></data>
+  <data name="ToggleReferencesCommand" xml:space="preserve"><value>Ansicht: Verweise ein-/ausblenden</value></data>
+  <data name="NavigateBack" xml:space="preserve"><value>Zurück navigieren</value></data>
+  <data name="NavigateForward" xml:space="preserve"><value>Vorwärts navigieren</value></data>
+  <data name="QuickOpenFile" xml:space="preserve"><value>Datei schnell öffnen</value></data>
+  <data name="FindInFiles" xml:space="preserve"><value>In Dateien suchen</value></data>
+  <data name="GoToLine" xml:space="preserve"><value>Gehe zu Zeile</value></data>
+  <data name="GoToDefinition" xml:space="preserve"><value>Zur Definition</value></data>
+  <data name="FindReferences" xml:space="preserve"><value>Verweise suchen</value></data>
+  <data name="QuickOpenDialog" xml:space="preserve"><value>Schnell öffnen...</value></data>
+  <data name="GoToLineDialog" xml:space="preserve"><value>Gehe zu Zeile...</value></data>
+  <data name="FindInFilesDialog" xml:space="preserve"><value>In Dateien suchen...</value></data>
+  <data name="WorkspaceSearchPrompt" xml:space="preserve"><value>Suchtext für die Dateien im Arbeitsbereich eingeben</value></data>
+  <data name="SearchNoMatches" xml:space="preserve"><value>Keine Treffer für &apos;{0}&apos; gefunden.</value></data>
+  <data name="SearchFirstMatches" xml:space="preserve"><value>Die ersten {0} Treffer für &apos;{1}&apos; werden angezeigt.</value></data>
+  <data name="QuickOpenNoFiles" xml:space="preserve"><value>Keine Dateien zum schnellen Öffnen im Arbeitsbereich verfügbar.</value></data>
+  <data name="QuickOpen" xml:space="preserve"><value>Schnell öffnen</value></data>
+  <data name="NoActiveTextDocument" xml:space="preserve"><value>Kein aktives Textdokument.</value></data>
+  <data name="GoToLinePrompt" xml:space="preserve"><value>Zeile oder Zeile:Spalte eingeben</value></data>
+  <data name="InvalidTextLocation" xml:space="preserve"><value>Ungültiges Positionsformat. Verwende Zeile oder Zeile:Spalte.</value></data>
+  <data name="NavigationLocationUnavailable" xml:space="preserve"><value>Die angeforderte Position konnte nicht geöffnet werden.</value></data>
+  <data name="ToggleCollaborationCommand" xml:space="preserve"><value>Ansicht: Zusammenarbeit ein-/ausblenden</value></data>
+  <data name="CollaborationStartCommand" xml:space="preserve"><value>Zusammenarbeit: Sitzung starten</value></data>
+  <data name="CollaborationJoinCommand" xml:space="preserve"><value>Zusammenarbeit: Sitzung beitreten</value></data>
+  <data name="CollaborationLeaveCommand" xml:space="preserve"><value>Zusammenarbeit: Sitzung verlassen</value></data>
+  <data name="CollaborationShareCommand" xml:space="preserve"><value>Zusammenarbeit: Freigabelink kopieren</value></data>
+  <data name="CollaborationInviteCommand" xml:space="preserve"><value>Zusammenarbeit: Teilnehmer einladen</value></data>
+  <data name="StartCollaborationSession" xml:space="preserve"><value>Sitzung zur Zusammenarbeit starten</value></data>
+  <data name="JoinCollaborationSession" xml:space="preserve"><value>Sitzung zur Zusammenarbeit beitreten</value></data>
+  <data name="LeaveCollaborationSession" xml:space="preserve"><value>Sitzung zur Zusammenarbeit verlassen</value></data>
+  <data name="CopyCollaborationLink" xml:space="preserve"><value>Freigabelink zur Zusammenarbeit kopieren</value></data>
+  <data name="InviteCollaborationParticipant" xml:space="preserve"><value>Teilnehmer zur Zusammenarbeit einladen</value></data>
+  <data name="SessionIdPrompt" xml:space="preserve"><value>Sitzungs-ID eingeben</value></data>
+  <data name="JoinCollaborationFailed" xml:space="preserve"><value>Beitritt zur Sitzung nicht möglich.</value></data>
+  <data name="ShareSessionRequired" xml:space="preserve"><value>Starte eine Sitzung oder tritt einer Sitzung bei, bevor du einen Link teilst.</value></data>
+  <data name="ShareLinkPrefix" xml:space="preserve"><value>Freigabelink: </value></data>
+  <data name="InviteParticipantTitle" xml:space="preserve"><value>Teilnehmer einladen</value></data>
+  <data name="ParticipantPrompt" xml:space="preserve"><value>Name oder E-Mail-Adresse des Teilnehmers eingeben</value></data>
+  <data name="InviteSessionRequired" xml:space="preserve"><value>Einladung nicht möglich. Starte zunächst eine Sitzung oder tritt einer Sitzung bei.</value></data>
+  <data name="InvitePreparedPrefix" xml:space="preserve"><value>Einladung vorbereitet für </value></data>
+  <data name="CollaborationCount" xml:space="preserve"><value>Zusammenarbeit: {0}</value></data>
+  <data name="SessionOneParticipant" xml:space="preserve"><value>Sitzung {0} (1 Teilnehmer)</value></data>
+  <data name="SessionParticipants" xml:space="preserve"><value>Sitzung {0} ({1} Teilnehmer)</value></data>
+  <data name="Unknown" xml:space="preserve"><value>unbekannt</value></data>
+  <data name="VisualTree" xml:space="preserve"><value>Visueller Baum</value></data>
+  <data name="LogicalTree" xml:space="preserve"><value>Logischer Baum</value></data>
+  <data name="Tree" xml:space="preserve"><value>Baum</value></data>
+  <data name="VisualRevealSelection" xml:space="preserve"><value>Visueller Baum: Auswahl anzeigen</value></data>
+  <data name="LogicalRevealSelection" xml:space="preserve"><value>Logischer Baum: Auswahl anzeigen</value></data>
+  <data name="VisualRefresh" xml:space="preserve"><value>Visueller Baum: Aktualisieren</value></data>
+  <data name="LogicalRefresh" xml:space="preserve"><value>Logischer Baum: Aktualisieren</value></data>
+  <data name="NoTreeSelection" xml:space="preserve"><value>Keine ausgewählten Knoten zum Anzeigen im Baum.</value></data>
+  <data name="RevealTreeSelectionFailed" xml:space="preserve"><value>Die Auswahl kann im {0} Baum nicht angezeigt werden. Öffne zunächst ein Designer-Dokument.</value></data>
+  <data name="VisualTreeQualifier" xml:space="preserve"><value>visuellen</value></data>
+  <data name="LogicalTreeQualifier" xml:space="preserve"><value>logischen</value></data>
+  <data name="ShowProblemsCommand" xml:space="preserve"><value>Probleme: Problemliste anzeigen</value></data>
+  <data name="NextProblemCommand" xml:space="preserve"><value>Probleme: Nächstes Problem</value></data>
+  <data name="PreviousProblemCommand" xml:space="preserve"><value>Probleme: Vorheriges Problem</value></data>
+  <data name="Problems" xml:space="preserve"><value>Probleme</value></data>
+  <data name="NoDiagnostics" xml:space="preserve"><value>Keine Diagnosen verfügbar.</value></data>
+  <data name="ExtensionRefreshFailed" xml:space="preserve"><value>Erweiterungen konnten nicht aktualisiert werden: {0}</value></data>
+  <data name="NoExtensionsInstalled" xml:space="preserve"><value>Keine Erweiterungen installiert.</value></data>
+  <data name="InstallCanceled" xml:space="preserve"><value>Installation abgebrochen.</value></data>
+  <data name="InstalledPrefix" xml:space="preserve"><value>Installiert: </value></data>
+  <data name="InstallFailedPrefix" xml:space="preserve"><value>Installation fehlgeschlagen: </value></data>
+  <data name="UninstalledPrefix" xml:space="preserve"><value>Deinstalliert: </value></data>
+  <data name="UninstallFailedPrefix" xml:space="preserve"><value>Deinstallation fehlgeschlagen: </value></data>
+  <data name="ExtensionsCurrent" xml:space="preserve"><value>Die Erweiterungen sind aktuell.</value></data>
+  <data name="UpdatesAvailable" xml:space="preserve"><value>Updates verfügbar.</value></data>
+  <data name="EnabledPrefix" xml:space="preserve"><value>Aktiviert: </value></data>
+  <data name="DisabledPrefix" xml:space="preserve"><value>Deaktiviert: </value></data>
+  <data name="EnablementFailedPrefix" xml:space="preserve"><value>Aktivierung fehlgeschlagen: </value></data>
+  <data name="NewProjectDialog" xml:space="preserve"><value>Neues Projekt...</value></data>
+  <data name="NewSolutionDialog" xml:space="preserve"><value>Neue Solution...</value></data>
+  <data name="NewFileTemplateDialog" xml:space="preserve"><value>Neue Datei aus Template...</value></data>
+  <data name="NewProject" xml:space="preserve"><value>Neues Projekt</value></data>
+  <data name="CreateNewProject" xml:space="preserve"><value>Neues .NET-Projekt aus einer Vorlage erstellen (dotnet new)</value></data>
+  <data name="TemplateNoFilePath" xml:space="preserve"><value>Die Template-Erstellung hat keinen Dateipfad zurückgegeben.</value></data>
+  <data name="LoadingTemplates" xml:space="preserve"><value>Templates werden geladen...</value></data>
+  <data name="InstallingTemplate" xml:space="preserve"><value>Template wird installiert...</value></data>
+  <data name="TemplateInstallFailed" xml:space="preserve"><value>Template-Installation fehlgeschlagen.</value></data>
+  <data name="InvalidProjectName" xml:space="preserve"><value>Der Projektname ist ungültig.</value></data>
+  <data name="ValidProjectNamesRequired" xml:space="preserve"><value>Gib gültige Projektnamen an.</value></data>
+  <data name="CreatingFile" xml:space="preserve"><value>Datei wird erstellt...</value></data>
+  <data name="CreatingProject" xml:space="preserve"><value>Projekt wird erstellt...</value></data>
+  <data name="TemplateCreationFailed" xml:space="preserve"><value>Template-Erstellung fehlgeschlagen.</value></data>
+  <data name="TemplateOutputPathMissing" xml:space="preserve"><value>Die Template-Erstellung war erfolgreich, hat aber keinen Ausgabepfad zurückgegeben.</value></data>
+  <data name="OpenWorkspaceNow" xml:space="preserve"><value>&apos;{0}&apos; jetzt öffnen?</value></data>
+  <data name="AllSupportedFiles" xml:space="preserve"><value>Alle unterstützten Dateien</value></data>
+  <data name="XamlFiles" xml:space="preserve"><value>XAML-Dateien</value></data>
+  <data name="Projects" xml:space="preserve"><value>Projekte</value></data>
+  <data name="Solutions" xml:space="preserve"><value>Solutions</value></data>
+  <data name="AllFiles" xml:space="preserve"><value>Alle Dateien</value></data>
+  <data name="SaveXamlFile" xml:space="preserve"><value>XAML-Datei speichern</value></data>
+  <data name="InstallExtensionPackage" xml:space="preserve"><value>Erweiterungspaket installieren</value></data>
+  <data name="NuGetPackage" xml:space="preserve"><value>NuGet-Paket</value></data>
+  <data name="TimelineCreated" xml:space="preserve"><value>Zeitleiste {0} erstellt</value></data>
+  <data name="SelectTimelineForTrack" xml:space="preserve"><value>Wähle eine Zeitleiste zum Hinzufügen von Spuren aus.</value></data>
+  <data name="TrackAdded" xml:space="preserve"><value>Spur {0} hinzugefügt.</value></data>
+  <data name="SelectTrackForKeyframe" xml:space="preserve"><value>Wähle eine Spur zum Hinzufügen von Schlüsselbildern aus.</value></data>
+  <data name="UndoAddKeyframe" xml:space="preserve"><value>Schlüsselbild hinzufügen</value></data>
+  <data name="KeyframeAdded" xml:space="preserve"><value>Schlüsselbild hinzugefügt.</value></data>
+  <data name="UndoRemoveKeyframes" xml:space="preserve"><value>Schlüsselbilder entfernen</value></data>
+  <data name="KeyframesRemoved" xml:space="preserve"><value>Schlüsselbilder entfernt.</value></data>
+  <data name="UndoRemoveKeyframe" xml:space="preserve"><value>Schlüsselbild entfernen</value></data>
+  <data name="KeyframeRemoved" xml:space="preserve"><value>Schlüsselbild entfernt.</value></data>
+  <data name="UndoRemoveTrack" xml:space="preserve"><value>Spur entfernen</value></data>
+  <data name="TrackRemoved" xml:space="preserve"><value>Spur entfernt.</value></data>
+  <data name="NoActiveDocument" xml:space="preserve"><value>Kein aktives Dokument.</value></data>
+  <data name="SelectTimelineForResource" xml:space="preserve"><value>Wähle eine Zeitleiste zum Erstellen einer Ressource aus.</value></data>
+  <data name="KeyframeRequiredForResource" xml:space="preserve"><value>Füge vor dem Erstellen einer Ressource mindestens ein Schlüsselbild hinzu.</value></data>
+  <data name="AnimationAdded" xml:space="preserve"><value>Animation {0} hinzugefügt.</value></data>
+  <data name="PreviewServiceUnavailable" xml:space="preserve"><value>Vorschaudienst nicht verfügbar.</value></data>
+  <data name="SelectTimelineAndTarget" xml:space="preserve"><value>Wähle eine Zeitleiste und ein Ziel für die Vorschau aus.</value></data>
+  <data name="AnimationPreviewRunning" xml:space="preserve"><value>Animationsvorschau läuft.</value></data>
+  <data name="PreviewStopped" xml:space="preserve"><value>Vorschau beendet.</value></data>
+  <data name="SelectResourceToLoad" xml:space="preserve"><value>Wähle eine Ressource zum Laden aus.</value></data>
+  <data name="ResourceLoaded" xml:space="preserve"><value>{0} geladen.</value></data>
+  <data name="SelectTimelineAndResource" xml:space="preserve"><value>Wähle eine Zeitleiste und eine Ressource zum Aktualisieren aus.</value></data>
+  <data name="KeyframeRequiredForUpdate" xml:space="preserve"><value>Füge vor dem Aktualisieren mindestens ein Schlüsselbild hinzu.</value></data>
+  <data name="ResourceKeyRequired" xml:space="preserve"><value>Ein Ressourcenschlüssel ist erforderlich.</value></data>
+  <data name="ResourceUpdated" xml:space="preserve"><value>{0} aktualisiert.</value></data>
+  <data name="SelectResourceToDelete" xml:space="preserve"><value>Wähle eine Ressource zum Löschen aus.</value></data>
+  <data name="ResourceDeleted" xml:space="preserve"><value>Ressource gelöscht.</value></data>
+  <data name="UndoMoveKeyframe" xml:space="preserve"><value>Schlüsselbild verschieben</value></data>
+  <data name="SelectKeyframesToCopy" xml:space="preserve"><value>Wähle die zu kopierenden Schlüsselbilder aus.</value></data>
+  <data name="KeyframesCopied" xml:space="preserve"><value>Schlüsselbilder kopiert: {0}.</value></data>
+  <data name="SelectTrackToPaste" xml:space="preserve"><value>Wähle eine Spur als Einfügeziel aus.</value></data>
+  <data name="ClipboardEmpty" xml:space="preserve"><value>Die Zwischenablage ist leer.</value></data>
+  <data name="UndoPasteKeyframes" xml:space="preserve"><value>Schlüsselbilder einfügen</value></data>
+  <data name="KeyframesPasted" xml:space="preserve"><value>Schlüsselbilder eingefügt: {0}.</value></data>
+  <data name="MissingDocument" xml:space="preserve"><value>Dokument fehlt.</value></data>
+  <data name="DocumentRootMissing" xml:space="preserve"><value>Das Wurzelelement des Dokuments fehlt.</value></data>
+  <data name="AnimationKeyRequired" xml:space="preserve"><value>Ein Animationsschlüssel ist erforderlich.</value></data>
+  <data name="TrackRequired" xml:space="preserve"><value>Mindestens eine Spur ist erforderlich.</value></data>
+  <data name="NewKeyRequired" xml:space="preserve"><value>Ein neuer Schlüssel ist erforderlich.</value></data>
+  <data name="AnimationResourceNotFound" xml:space="preserve"><value>Animationsressource nicht gefunden.</value></data>
+  <data name="NoSelectedResourceElement" xml:space="preserve"><value>Kein ausgewähltes Element für Ressourcen verfügbar.</value></data>
+  <data name="UnknownResourceScope" xml:space="preserve"><value>Unbekannter Ressourcenbereich.</value></data>
+  <data name="NoResourceStylesScope" xml:space="preserve"><value>Kein Styles-Bereich für Ressourcen verfügbar.</value></data>
+  <data name="ResourceOwnerNotFound" xml:space="preserve"><value>Das Element mit den Ressourcen wurde nicht gefunden.</value></data>
+  <data name="StylesScopeNotFound" xml:space="preserve"><value>Styles-Bereich nicht gefunden.</value></data>
+  <data name="ResourcesContainerNotFound" xml:space="preserve"><value>Ressourcencontainer nicht gefunden.</value></data>
+  <data name="NewNamePrompt" xml:space="preserve"><value>Neuen Namen eingeben</value></data>
+  <data name="FileOrFolderExists" xml:space="preserve"><value>Eine Datei oder ein Ordner mit diesem Namen ist bereits vorhanden.</value></data>
+  <data name="RenameFailed" xml:space="preserve"><value>Umbenennen fehlgeschlagen: {0}</value></data>
+  <data name="PermanentlyDeleteItem" xml:space="preserve"><value>Eintrag dauerhaft löschen</value></data>
+  <data name="KeepItem" xml:space="preserve"><value>Eintrag behalten</value></data>
+  <data name="ConfirmDelete" xml:space="preserve"><value>Löschen bestätigen</value></data>
+  <data name="DeleteFailed" xml:space="preserve"><value>Löschen fehlgeschlagen: {0}</value></data>
+  <data name="DeleteReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gelöscht werden.</value></data>
+  <data name="FileIsReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt.</value></data>
+  <data name="FileAccessDenied" xml:space="preserve"><value>Der Zugriff auf „{0}“ wurde verweigert.</value></data>
+  <data name="FileInUse" xml:space="preserve"><value>„{0}“ wird von einem anderen Prozess verwendet.</value></data>
+  <data name="FileChangedOutsideEditor" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Vor dem Speichern neu laden.</value></data>
+  <data name="FileNamePrompt" xml:space="preserve"><value>Dateinamen eingeben</value></data>
+  <data name="CreateFileFailed" xml:space="preserve"><value>Datei konnte nicht erstellt werden: {0}</value></data>
+  <data name="FolderNamePrompt" xml:space="preserve"><value>Ordnernamen eingeben</value></data>
+  <data name="CreateFolderFailed" xml:space="preserve"><value>Ordner konnte nicht erstellt werden: {0}</value></data>
+  <data name="ToggleAnimationViewCommand" xml:space="preserve"><value>Ansicht: Animationseditor ein-/ausblenden</value></data>
+  <data name="RefreshAnimationPreviewCommand" xml:space="preserve"><value>Animation: Vorschau aktualisieren</value></data>
+  <data name="Animation" xml:space="preserve"><value>Animation</value></data>
+  <data name="ToggleAnimationEditor" xml:space="preserve"><value>Animationseditor ein-/ausblenden</value></data>
+  <data name="AlignLeft" xml:space="preserve"><value>Links ausrichten</value></data>
+  <data name="CenterHorizontally" xml:space="preserve"><value>Horizontal zentrieren</value></data>
+  <data name="AlignRight" xml:space="preserve"><value>Rechts ausrichten</value></data>
+  <data name="AlignTop" xml:space="preserve"><value>Oben ausrichten</value></data>
+  <data name="CenterVertically" xml:space="preserve"><value>Vertikal zentrieren</value></data>
+  <data name="AlignBottom" xml:space="preserve"><value>Unten ausrichten</value></data>
+  <data name="DistributeHorizontally" xml:space="preserve"><value>Horizontal verteilen</value></data>
+  <data name="DistributeVertically" xml:space="preserve"><value>Vertikal verteilen</value></data>
+  <data name="SameWidth" xml:space="preserve"><value>Gleiche Breite</value></data>
+  <data name="SameHeight" xml:space="preserve"><value>Gleiche Höhe</value></data>
+  <data name="DotnetTemplateListFailed" xml:space="preserve"><value>dotnet new list fehlgeschlagen</value></data>
+  <data name="TemplateShortNameRequired" xml:space="preserve"><value>Ein Template-Kurzname ist erforderlich.</value></data>
+  <data name="ProjectNameRequired" xml:space="preserve"><value>Ein Projektname ist erforderlich.</value></data>
+  <data name="LocationRequired" xml:space="preserve"><value>Ein Speicherort ist erforderlich.</value></data>
+  <data name="DotnetNewFailed" xml:space="preserve"><value>dotnet new fehlgeschlagen</value></data>
+  <data name="SolutionNameRequired" xml:space="preserve"><value>Ein Name für die Solution ist erforderlich.</value></data>
+  <data name="DotnetNewSolutionFailed" xml:space="preserve"><value>dotnet new sln fehlgeschlagen</value></data>
+  <data name="DotnetSolutionAddFailed" xml:space="preserve"><value>dotnet sln add fehlgeschlagen</value></data>
+  <data name="AllowReadOnly" xml:space="preserve"><value>Nur Lesezugriff erlauben</value></data>
+  <data name="ReadFilesDiagnostics" xml:space="preserve"><value>Dateien und Diagnosen lesen</value></data>
+  <data name="ReadFilesDiagnosticsEditor" xml:space="preserve"><value>Dateien, Diagnosen und Editorstatus lesen</value></data>
+  <data name="AllowFullAccess" xml:space="preserve"><value>Vollzugriff erlauben</value></data>
+  <data name="FullAccessDescription" xml:space="preserve"><value>Dateien lesen und schreiben, Befehle und Terminals verwenden</value></data>
+  <data name="Deny" xml:space="preserve"><value>Ablehnen</value></data>
+  <data name="BlockClient" xml:space="preserve"><value>Diesen Client blockieren</value></data>
+  <data name="IdeBridgeAccess" xml:space="preserve"><value>Zugriff über IDE-Anbindung</value></data>
+  <data name="McpAccess" xml:space="preserve"><value>MCP-Zugriff</value></data>
+  <data name="NotConnected" xml:space="preserve"><value>Nicht verbunden</value></data>
+  <data name="ToggleDebugSettingsCommand" xml:space="preserve"><value>Ansicht: Debug-Einstellungen ein-/ausblenden</value></data>
+  <data name="ToggleDebugSettings" xml:space="preserve"><value>Debug-Einstellungen ein-/ausblenden</value></data>
+  <data name="ToggleLspSettingsCommand" xml:space="preserve"><value>Ansicht: LSP-Einstellungen ein-/ausblenden</value></data>
+  <data name="ToggleLspSettings" xml:space="preserve"><value>LSP-Einstellungen ein-/ausblenden</value></data>
+  <data name="UndoAddNode" xml:space="preserve"><value>{0} hinzufügen</value></data>
+  <data name="UndoRemoveNode" xml:space="preserve"><value>Knoten entfernen</value></data>
+  <data name="UndoMoveNode" xml:space="preserve"><value>Knoten verschieben</value></data>
+  <data name="UndoSetProperty" xml:space="preserve"><value>{0} setzen</value></data>
+  <data name="UndoEditText" xml:space="preserve"><value>Text bearbeiten</value></data>
+  <data name="NoProjectForXaml" xml:space="preserve"><value>Kein Projekt für die XAML-Datei gefunden.</value></data>
+  <data name="ProjectAssemblyMissing" xml:space="preserve"><value>Ausgabe-Assembly des Projekts nicht gefunden. Erstelle zunächst das Projekt.</value></data>
+  <data name="ProjectOutputDirectoryUnknown" xml:space="preserve"><value>Das Ausgabeverzeichnis des Projekts konnte nicht ermittelt werden.</value></data>
+  <data name="GrantOnceHint" xml:space="preserve"><value>Zugriff nur für diese Anfrage erlauben</value></data>
+  <data name="RememberAllowHint" xml:space="preserve"><value>Entscheidung speichern und künftige Anfragen erlauben</value></data>
+  <data name="DenyOnceHint" xml:space="preserve"><value>Nur diese Anfrage blockieren</value></data>
+  <data name="RememberDenyHint" xml:space="preserve"><value>Entscheidung speichern und künftige Anfragen blockieren</value></data>
+  <data name="RequestsPrefix" xml:space="preserve"><value> fordert </value></data>
+  <data name="PermissionAllowOnce" xml:space="preserve"><value>Einmal erlauben</value></data>
+  <data name="PermissionAlwaysAllow" xml:space="preserve"><value>Immer erlauben</value></data>
+  <data name="PermissionDenyOnce" xml:space="preserve"><value>Einmal ablehnen</value></data>
+  <data name="PermissionAlwaysDeny" xml:space="preserve"><value>Immer ablehnen</value></data>
+  <data name="HighRiskCapability" xml:space="preserve"><value>Berechtigung mit hohem Risiko</value></data>
+  <data name="StandardCapability" xml:space="preserve"><value>Standardberechtigung</value></data>
+  <data name="DebugInstallerUnavailable" xml:space="preserve"><value>Installation von Debug-Werkzeugen ist nicht verfügbar.</value></data>
+  <data name="DownloadingNetcoredbg" xml:space="preserve"><value>netcoredbg wird heruntergeladen...</value></data>
+  <data name="NetcoredbgInstalled" xml:space="preserve"><value>netcoredbg installiert.</value></data>
+  <data name="NetcoredbgDownloadCanceled" xml:space="preserve"><value>Download von netcoredbg abgebrochen.</value></data>
+  <data name="DownloadFailed" xml:space="preserve"><value>Download fehlgeschlagen: {0}</value></data>
+  <data name="DesignSurfaceUnavailable" xml:space="preserve"><value>Die Designfläche ist nicht verfügbar.</value></data>
+  <data name="SelectPreviewTarget" xml:space="preserve"><value>Wähle ein Zielelement für die Vorschau aus.</value></data>
+  <data name="TrackRequiredForPreview" xml:space="preserve"><value>Füge mindestens eine Spur für die Vorschau hinzu.</value></data>
+  <data name="PreviewTargetNotFound" xml:space="preserve"><value>Das Zielelement für die Vorschau konnte nicht gefunden werden.</value></data>
+  <data name="PreviewKeyframesUnavailable" xml:space="preserve"><value>Es konnten keine gültigen Schlüsselbilder für die Vorschau erstellt werden.</value></data>
+  <data name="NoReferencesFound" xml:space="preserve"><value>Keine Verweise gefunden.</value></data>
+  <data name="NoDefinitionsFound" xml:space="preserve"><value>Keine Definitionen gefunden.</value></data>
+  <data name="SelectDefinition" xml:space="preserve"><value>Definition auswählen</value></data>
+  <data name="OpenDocumentForNavigation" xml:space="preserve"><value>Kein aktives Dokument. Öffne ein Dokument und setze den Cursor auf ein Symbol.</value></data>
+  <data name="Disconnected" xml:space="preserve"><value>Nicht verbunden</value></data>
+  <data name="Connected" xml:space="preserve"><value>Verbunden</value></data>
+  <data name="AcpAgent" xml:space="preserve"><value>ACP-Agent</value></data>
+  <data name="NewSolution" xml:space="preserve"><value>Neue Solution</value></data>
+  <data name="SelectTemplate" xml:space="preserve"><value>Template auswählen</value></data>
+  <data name="Configure" xml:space="preserve"><value>Konfigurieren</value></data>
+  <data name="HostingSession" xml:space="preserve"><value>Sitzung {0} wird bereitgestellt</value></data>
+  <data name="JoinedSession" xml:space="preserve"><value>Sitzung {0} beigetreten</value></data>
+  <data name="PermissionRequired" xml:space="preserve"><value>Berechtigung erforderlich</value></data>
+  <data name="OperationFallback" xml:space="preserve"><value>ein Vorgang</value></data>
+  <data name="ToolFallback" xml:space="preserve"><value>Werkzeug</value></data>
+  <data name="AgentPermissionRequest" xml:space="preserve"><value>Der Agent bittet um Erlaubnis zur Ausführung von {0}: {1}.</value></data>
+  <data name="NoLspServers" xml:space="preserve"><value>Keine LSP-Server konfiguriert.</value></data>
+  <data name="LspSettingsLoaded" xml:space="preserve"><value>LSP-Einstellungen geladen.</value></data>
+  <data name="LspSettingsSaved" xml:space="preserve"><value>LSP-Einstellungen gespeichert. Neustart erforderlich.</value></data>
+  <data name="LspSettingsUpdated" xml:space="preserve"><value>LSP-Einstellungen aktualisiert.</value></data>
+  <data name="LspStoreUnavailable" xml:space="preserve"><value>Speicher für LSP-Einstellungen nicht verfügbar.</value></data>
+  <data name="Stopped" xml:space="preserve"><value>Gestoppt</value></data>
+  <data name="GitUnavailable" xml:space="preserve"><value>Git-Dienst nicht verfügbar</value></data>
+  <data name="GitDiscardConfirmTitle" xml:space="preserve"><value>Änderungen verwerfen?</value></data>
+  <data name="GitDiscardTooltip" xml:space="preserve"><value>Discard fragt vor dem Verwerfen nach. Untracked-Dateien können hier nicht entfernt werden.</value></data>
+  <data name="GitShowDiff" xml:space="preserve"><value>Diff anzeigen</value></data>
+  <data name="GitHideDiff" xml:space="preserve"><value>Diff ausblenden</value></data>
+  <data name="GitResizeDiff" xml:space="preserve"><value>Diff-Breite ändern</value></data>
+  <data name="GitMonitoringOn" xml:space="preserve"><value>Git: Ein</value></data>
+  <data name="GitMonitoringOff" xml:space="preserve"><value>Git: Aus</value></data>
+  <data name="GitMonitoringToggle" xml:space="preserve"><value>Git-Status und Dateiüberwachung ein- oder ausschalten</value></data>
+  <data name="WorkspaceNotGitRepository" xml:space="preserve"><value>Der Arbeitsbereich ist kein Git-Repository</value></data>
+  <data name="XamlRootMissing" xml:space="preserve"><value>Das XAML-Dokument hat kein Wurzelelement.</value></data>
+  <data name="XamlTagsRepaired" xml:space="preserve"><value>Das Dokument wurde automatisch repariert; nicht geschlossene Tags wurden ergänzt.</value></data>
+  <data name="XamlPartialParse" xml:space="preserve"><value>Ein Teil des Dokuments wurde eingelesen; der Text wurde an der Fehlerstelle abgeschnitten.</value></data>
+  <data name="CloseXamlElement" xml:space="preserve"><value>Element &lt;{0}&gt; schließen</value></data>
+  <data name="SelectTreeNodeFailed" xml:space="preserve"><value>{0} in {1} konnte nicht ausgewählt werden: {2}</value></data>
+  <data name="DapRequestFailed" xml:space="preserve"><value>DAP-Anfrage fehlgeschlagen</value></data>
+  <data name="SelectFolder" xml:space="preserve"><value>Ordner auswählen</value></data>
+  <data name="Input" xml:space="preserve"><value>Eingabe</value></data>
+  <data name="PreviewerTransportError" xml:space="preserve"><value>Transportfehler der Vorschau: {0}</value></data>
+  <data name="PreviewerConnectionLost" xml:space="preserve"><value>Der Vorschauprozess hat die Verbindung beendet. Details im Output.</value></data>
+  <data name="PreviewerExitedWithCode" xml:space="preserve"><value>Der Vorschauprozess wurde mit Exit-Code {0} beendet.</value></data>
+  <data name="PreviewStatus" xml:space="preserve"><value>Vorschaustatus</value></data>
+  <data name="PreviewStatusOutOfDate" xml:space="preserve"><value>Vorschau veraltet. Details unter Problems.</value></data>
+  <data name="PreviewStatusDisconnected" xml:space="preserve"><value>Vorschau getrennt; das letzte Bild wird angezeigt.</value></data>
+  <data name="PreviewStatusUnavailable" xml:space="preserve"><value>Vorschau nicht verfügbar. Details unter Problems.</value></data>
+  <data name="PreviewStatusWaiting" xml:space="preserve"><value>Warte auf das erste Vorschaubild …</value></data>
+  <data name="PreviewStatusAddRoot" xml:space="preserve"><value>Für eine Vorschau ein Wurzel-Control hinzufügen.</value></data>
+  <data name="PreviewStatusNotEditable" xml:space="preserve"><value>Vorschau veraltet und nicht bearbeitbar. Renderfehler unter Problems.</value></data>
+  <data name="PreviewStatusRenderUnavailable" xml:space="preserve"><value>Vorschau nicht verfügbar. Renderfehler unter Problems.</value></data>
+  <data name="PreviewStatusIncomplete" xml:space="preserve"><value>Vorschau unvollständig: {0} Control(s) nicht verfügbar. Details unter Problems.</value></data>
+  <data name="DesignThemesNoAppXaml" xml:space="preserve"><value>Design-Themes: keine App.axaml oder App.xaml im Workspace gefunden (mit {0} lassen sich die Themes einer anderen Anwendung verwenden)</value></data>
+  <data name="DesignThemesLoaded" xml:space="preserve"><value>Design-Themes aus {0}: {1}</value></data>
+  <data name="DesignThemesFailed" xml:space="preserve"><value>Design-Themes aus {0} konnten nicht geladen werden: {1}</value></data>
+  <data name="DesignThemesScopeFailed" xml:space="preserve"><value>Die Design-Themes aus {0} ließen sich im Editor nicht als ein Bereich kompilieren ({1}); ladbare Includes und Theme-Elemente werden einzeln angewendet.</value></data>
+  <data name="DesignThemesSkipped" xml:space="preserve"><value>Übersprungene Design-Themes aus {0}: {1}</value></data>
+  <data name="PreviewerInvalidNumber" xml:space="preserve"><value>„{0}“ ist keine gültige Zahl für {1}.</value></data>
+  <data name="PreviewerInvalidValue" xml:space="preserve"><value>„{0}“ ist kein gültiger {2}-Wert für {1}.</value></data>
+  <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>„{0}“ ist kein gültiger Wert für {1}. Erlaubt: {2}.</value></data>
+  <data name="PreviewerSingleChild" xml:space="preserve"><value>&lt;{0}&gt; kann in {1} nur ein Element aufnehmen.</value></data>
+  <data name="PreviewerUnknownProperty" xml:space="preserve"><value>&lt;{0}&gt; hat keine Eigenschaft „{1}“.</value></data>
+  <data name="PreviewerUnknownElement" xml:space="preserve"><value>Unbekanntes Element &lt;{0}&gt;; Name und xmlns-Namespace prüfen.</value></data>
+  <data name="PreviewerTextNotAllowed" xml:space="preserve"><value>Text „{0}“ kann nicht direkt in &lt;{1}&gt; stehen, dort sind nur Controls erlaubt. Den Text in einen TextBlock setzen oder entfernen.</value></data>
+  <data name="WorkspaceThemeLoadFailed" xml:space="preserve"><value>Das Vorschau-Theme des Arbeitsbereichs konnte nicht geladen werden: {0}</value></data>
+  <data name="WorkspaceThemeSaveFailed" xml:space="preserve"><value>Das Vorschau-Theme des Arbeitsbereichs konnte nicht gespeichert werden: {0}</value></data>
+  <data name="ControlReferencesRenamed" xml:space="preserve"><value>Control und C#-Verweise umbenannt.</value></data>
+  <data name="CanvasDocuments" xml:space="preserve"><value>Dokumente auf der Zeichenfläche</value></data>
+  <data name="SelectLocation" xml:space="preserve"><value>Speicherort auswählen</value></data>
+  <data name="DiagnosticFirstSeen" xml:space="preserve"><value>{0}{1}Erstmals aufgetreten: {2}</value></data>
+  <data name="ApplicationStartupFailed" xml:space="preserve"><value>Anwendungsstart fehlgeschlagen: {0}</value></data>
+  <data name="StartingStatus" xml:space="preserve"><value>Wird gestartet...</value></data>
+  <data name="ActivatingExtensionStatus" xml:space="preserve"><value>Erweiterung {0} wird aktiviert...</value></data>
+  <data name="LanguageWorkspaceWarmupStatus" xml:space="preserve"><value>Sprachdienste für {0} werden vorbereitet...</value></data>
+  <data name="InvalidPathRejected" xml:space="preserve"><value>Ungültiger Pfad abgewiesen: {0}</value></data>
+  <data name="OpenCanceled" xml:space="preserve"><value>Öffnen von {0} abgebrochen</value></data>
+  <data name="FollowDesignerSelection" xml:space="preserve"><value>Zum im Designer ausgewählten Element springen und seine Zeilen markieren</value></data>
+  <data name="FollowDesignerSelectionShort" xml:space="preserve"><value>Folgen</value></data>
+  <data name="AcpRequestFailed" xml:space="preserve"><value>ACP-Anfrage fehlgeschlagen.</value></data>
+  <data name="OpenAiAcpAgent" xml:space="preserve"><value>ACP-Agent für OpenAI Codex</value></data>
+  <data name="AnthropicAcpAgent" xml:space="preserve"><value>ACP-Agent für Anthropic Claude</value></data>
+  <data name="MissingView" xml:space="preserve"><value>Keine Ansicht für {0}</value></data>
+  <data name="OAuthRequestFailedPrefix" xml:space="preserve"><value>OAuth-Anfrage fehlgeschlagen (</value></data>
+  <data name="OpenDefinition" xml:space="preserve"><value>Definition öffnen</value></data>
+  <data name="Layout" xml:space="preserve"><value>Layout</value></data>
+  <data name="NoSelection" xml:space="preserve"><value>Keine Auswahl</value></data>
+  <data name="ProjectOutputsCount" xml:space="preserve"><value>Projektausgaben: {0}</value></data>
+  <data name="ProjectOutputsNone" xml:space="preserve"><value>Projektausgaben: keine</value></data>
+  <data name="MissingOutputsSuffix" xml:space="preserve"><value> (fehlende Ausgaben erkannt)</value></data>
+  <data name="GitAddedSuffix" xml:space="preserve"><value> Added</value></data>
+  <data name="GitModifiedSuffix" xml:space="preserve"><value> Modified</value></data>
+  <data name="GitDeletedSuffix" xml:space="preserve"><value> Deleted</value></data>
+  <data name="GitRenamedSuffix" xml:space="preserve"><value> Renamed</value></data>
+  <data name="GitCopiedSuffix" xml:space="preserve"><value> Copied</value></data>
+  <data name="GitTypeChangedSuffix" xml:space="preserve"><value> Type Changed</value></data>
+  <data name="GitUnmergedSuffix" xml:space="preserve"><value> Unmerged</value></data>
+  <data name="GitChangedSuffix" xml:space="preserve"><value> Changed</value></data>
+  <data name="LocalValues" xml:space="preserve"><value>Lokale Werte</value></data>
+  <data name="ExtensionUpToDate" xml:space="preserve"><value>Aktuell</value></data>
+  <data name="ExtensionUpdatePrefix" xml:space="preserve"><value>Aktualisierung </value></data>
+  <data name="DocumentResources" xml:space="preserve"><value>Dokumentressourcen</value></data>
+  <data name="SelectedElementResources" xml:space="preserve"><value>Ressourcen des ausgewählten Elements</value></data>
+  <data name="StylesResources" xml:space="preserve"><value>Style-Ressourcen</value></data>
+  <data name="CreateAnimationResourceFailed" xml:space="preserve"><value>Die Animationsressource konnte nicht erstellt werden.</value></data>
+  <data name="PreviewFailed" xml:space="preserve"><value>Die Vorschau ist fehlgeschlagen.</value></data>
+  <data name="UpdateResourceFailed" xml:space="preserve"><value>Die Ressource konnte nicht aktualisiert werden.</value></data>
+  <data name="DeleteResourceFailed" xml:space="preserve"><value>Die Ressource konnte nicht gelöscht werden.</value></data>
+  <data name="KeyframeTimeRange" xml:space="preserve"><value>Die Zeit muss innerhalb der Zeitleistendauer liegen.</value></data>
+  <data name="ValueCannotBeEmpty" xml:space="preserve"><value>Der Wert darf nicht leer sein.</value></data>
+  <data name="InvalidEasing" xml:space="preserve"><value>Easing ist ungültig. Verwenden Sie ein Schlüsselwort oder cubic-bezier.</value></data>
+  <data name="EditKeyframeTime" xml:space="preserve"><value>Keyframe-Zeit bearbeiten</value></data>
+  <data name="EditKeyframeValue" xml:space="preserve"><value>Keyframe-Wert bearbeiten</value></data>
+  <data name="EditKeyframeEasing" xml:space="preserve"><value>Keyframe-Easing bearbeiten</value></data>
+  <data name="EditKeyframe" xml:space="preserve"><value>Keyframe bearbeiten</value></data>
+  <data name="LspServerSettings" xml:space="preserve"><value>LSP-Servereinstellungen</value></data>
+  <data name="LspSettingsDescription" xml:space="preserve"><value>Konfigurierte Sprachservereinträge.</value></data>
+  <data name="LspSettingsListExpected" xml:space="preserve"><value>Eine Liste mit LSP-Servereinstellungen wird erwartet.</value></data>
+  <data name="LanguageIdRequired" xml:space="preserve"><value>LanguageId darf nicht leer sein.</value></data>
+  <data name="ServerPathRequired" xml:space="preserve"><value>ServerPath darf nicht leer sein.</value></data>
+  <data name="CannotCutRoot" xml:space="preserve"><value>Das Dokumentwurzelelement kann nicht ausgeschnitten werden.</value></data>
+  <data name="CutSelectionChanged" xml:space="preserve"><value>Ausschneiden wurde abgebrochen, weil sich das Dokument oder die Auswahl geändert hat.</value></data>
+  <data name="PasteSelectionChanged" xml:space="preserve"><value>Einfügen wurde abgebrochen, weil sich das Dokument oder die Auswahl geändert hat.</value></data>
+  <data name="CommandPalette" xml:space="preserve"><value>Befehlspalette</value></data>
+  <data name="WebviewUnavailable" xml:space="preserve"><value>Webviews werden noch nicht unterstützt.</value></data>
+  <data name="ViewTypeUnsupported" xml:space="preserve"><value>Nicht unterstützter Ansichtstyp.</value></data>
+  <data name="ExtensionManagerUnavailable" xml:space="preserve"><value>Die Erweiterungsverwaltung ist nicht verfügbar.</value></data>
+  <data name="TerminalServiceUnavailable" xml:space="preserve"><value>Der Terminal-Dienst ist nicht verfügbar.</value></data>
+  <data name="NetcoredbgDownloadStarting" xml:space="preserve"><value>netcoredbg wurde nicht gefunden. Download wird versucht...</value></data>
+  <data name="PreviewerNeedsProject" xml:space="preserve"><value>Öffnen Sie vor dem Starten der Vorschau ein Projekt.</value></data>
+  <data name="PreviewerStartFailedText" xml:space="preserve"><value>Die Vorschau konnte nicht gestartet werden.</value></data>
+  <data name="StartPreviewer" xml:space="preserve"><value>Vorschau starten</value></data>
+  <data name="PreviewerTrustExplanation" xml:space="preserve"><value>Die Vorschau führt Projektcode in einem eigenen Prozess aus. Fahren Sie nur fort, wenn Sie diesem Arbeitsbereich vertrauen.</value></data>
+  <data name="DesignerDocumentNotOpen" xml:space="preserve"><value>Das Dokument ist nicht als Designer-Dokument geöffnet.</value></data>
+  <data name="PreviewerTrustDenied" xml:space="preserve"><value>Der Vorschau wurde nicht vertraut.</value></data>
+  <data name="NoPreviewerSession" xml:space="preserve"><value>Keine Vorschausitzung verfügbar.</value></data>
+  <data name="PreviewerFrameTimeout" xml:space="preserve"><value>Innerhalb des Zeitlimits wurde kein Vorschaubild empfangen.</value></data>
+  <data name="TextEdit" xml:space="preserve"><value>Text bearbeiten</value></data>
+  <data name="AnimationPreviewRefresh" xml:space="preserve"><value>Animationsvorschau aktualisieren</value></data>
+  <data name="SettingsApplied" xml:space="preserve"><value>Einstellungen übernommen.</value></data>
+  <data name="ServerRestarted" xml:space="preserve"><value>Server neu gestartet.</value></data>
+  <data name="PermissionRevokedPrefix" xml:space="preserve"><value>Berechtigung widerrufen für </value></data>
+  <data name="PermissionsCleared" xml:space="preserve"><value>Alle Berechtigungen entfernt.</value></data>
+  <data name="HttpEndpointCopied" xml:space="preserve"><value>HTTP-Endpunkt kopiert.</value></data>
+  <data name="MarkupParameterHints" xml:space="preserve"><value>Parameterhinweise für Markup-Erweiterungen</value></data>
+  <data name="BuildingDesignSurface" xml:space="preserve"><value>Designer-Oberfläche wird aufgebaut...</value></data>
+  <data name="InsertPrefix" xml:space="preserve"><value>Einfügen: </value></data>
+  <data name="NoValidXamlRoot" xml:space="preserve"><value>Das Dokument enthält kein gültiges XAML-Wurzelelement für die Darstellung.</value></data>
+  <data name="MoveSelection" xml:space="preserve"><value>Auswahl verschieben</value></data>
+  <data name="ResizeSelection" xml:space="preserve"><value>Auswahlgröße ändern</value></data>
+  <data name="DebugSettingsDescription" xml:space="preserve"><value>Pfad zum Debugger-Adapter und Downloadverhalten der Debug-Werkzeuge.</value></data>
+  <data name="DebugSettingsDocumentExpected" xml:space="preserve"><value>Ein Dokumentwert mit Debug-Einstellungen wird erwartet.</value></data>
+  <data name="NotSignedIn" xml:space="preserve"><value>Nicht angemeldet</value></data>
+  <data name="ConnectedMockAgent" xml:space="preserve"><value>Mit Testagent verbunden.</value></data>
+  <data name="ConnectFailedPrefix" xml:space="preserve"><value>Verbindung fehlgeschlagen: </value></data>
+  <data name="ConnectedToPrefix" xml:space="preserve"><value>Verbunden mit </value></data>
+  <data name="DisconnectFailedPrefix" xml:space="preserve"><value>Trennen fehlgeschlagen: </value></data>
+  <data name="CancelSessionPrefix" xml:space="preserve"><value>Abbruch angefordert für Sitzung </value></data>
+  <data name="CancelFailedPrefix" xml:space="preserve"><value>Abbruch fehlgeschlagen: </value></data>
+  <data name="CreatedSessionPrefix" xml:space="preserve"><value>Sitzung erstellt: </value></data>
+  <data name="CreateSessionFailedPrefix" xml:space="preserve"><value>Sitzung konnte nicht erstellt werden: </value></data>
+  <data name="ApiKeyNotStored" xml:space="preserve"><value>Für dieses Profil ist kein API-Schlüssel gespeichert.</value></data>
+  <data name="ApiKeyStored" xml:space="preserve"><value>API-Schlüssel gespeichert.</value></data>
+  <data name="ApiKeyRemoved" xml:space="preserve"><value>API-Schlüssel entfernt.</value></data>
+  <data name="StoredOAuth" xml:space="preserve"><value>Gespeichert (OAuth)</value></data>
+  <data name="NotSet" xml:space="preserve"><value>Nicht festgelegt</value></data>
+  <data name="SignedIn" xml:space="preserve"><value>Angemeldet</value></data>
+  <data name="OAuthClientIdRequired" xml:space="preserve"><value>Eine OAuth-Client-ID ist erforderlich.</value></data>
+  <data name="MissingClientId" xml:space="preserve"><value>Client-ID fehlt</value></data>
+  <data name="RequestingDeviceCode" xml:space="preserve"><value>Gerätecode wird angefordert...</value></data>
+  <data name="WaitingAuthorization" xml:space="preserve"><value>Warten auf Autorisierung</value></data>
+  <data name="SignInFailed" xml:space="preserve"><value>Anmeldung fehlgeschlagen</value></data>
+  <data name="OAuthFailedPrefix" xml:space="preserve"><value>OAuth fehlgeschlagen: </value></data>
+  <data name="OAuthSignOutComplete" xml:space="preserve"><value>OAuth-Abmeldung abgeschlossen.</value></data>
+  <data name="VerificationCodeCopied" xml:space="preserve"><value>Bestätigungscode kopiert.</value></data>
+  <data name="PlanUpdate" xml:space="preserve"><value>Planaktualisierung</value></data>
+  <data name="ToolCall" xml:space="preserve"><value>Werkzeugaufruf</value></data>
+  <data name="TerminalOutputFailedPrefix" xml:space="preserve"><value>Terminal-Ausgabe fehlgeschlagen: </value></data>
+  <data name="EntriesPrefix" xml:space="preserve"><value>Einträge: </value></data>
+  <data name="CurrentPrefix" xml:space="preserve"><value>Aktuell: </value></data>
+  <data name="OptionsPrefix" xml:space="preserve"><value>Optionen: </value></data>
+  <data name="FileName" xml:space="preserve"><value>Dateiname</value></data>
+  <data name="ProjectName" xml:space="preserve"><value>Projektname</value></data>
+  <data name="FilePathPreview" xml:space="preserve"><value>Dateipfad-Vorschau</value></data>
+  <data name="ProjectPathPreview" xml:space="preserve"><value>Projektpfad-Vorschau</value></data>
+  <data name="CodeFormat" xml:space="preserve"><value>Code: {0}</value></data>
+  <data name="VerificationFormat" xml:space="preserve"><value>Bestätigen: {0}</value></data>
+  <data name="SessionFormat" xml:space="preserve"><value>Sitzung: {0}</value></data>
+  <data name="KindFormat" xml:space="preserve"><value>Art: {0}</value></data>
+  <data name="TitleFormat" xml:space="preserve"><value>Titel: {0}</value></data>
+  <data name="ToolCallFormat" xml:space="preserve"><value>Werkzeugaufruf: {0}</value></data>
+  <data name="CountFormat" xml:space="preserve"><value>Anzahl: {0}</value></data>
+  <data name="StagedCountFormat" xml:space="preserve"><value>Staged ({0})</value></data>
+  <data name="UnstagedCountFormat" xml:space="preserve"><value>Unstaged ({0})</value></data>
+  <data name="DiffCountFormat" xml:space="preserve"><value>Diff ({0})</value></data>
+  <data name="LineColumnFormat" xml:space="preserve"><value>Zeile {0}, Spalte {1}</value></data>
+  <data name="TimeSecondsFormat" xml:space="preserve"><value>Zeit {0:0.00}s</value></data>
+  <data name="ToolFormat" xml:space="preserve"><value>Werkzeug: {0}</value></data>
+  <data name="VersionFormat" xml:space="preserve"><value>Version: {0}</value></data>
+  <data name="DownloadFormat" xml:space="preserve"><value>Download: {0}</value></data>
+  <data name="InstallToFormat" xml:space="preserve"><value>Installationsziel: {0}</value></data>
+  <data name="ErrorsCountFormat" xml:space="preserve"><value>Fehler: {0}</value></data>
+  <data name="WarningsCountFormat" xml:space="preserve"><value>Warnungen: {0}</value></data>
+  <data name="CategoryAppearance" xml:space="preserve"><value>Darstellung</value></data>
+  <data name="CategoryCommon" xml:space="preserve"><value>Allgemein</value></data>
+  <data name="CategoryMisc" xml:space="preserve"><value>Sonstiges</value></data>
+  <data name="CategoryMiscellaneous" xml:space="preserve"><value>Verschiedenes</value></data>
+  <data name="CategoryCustom" xml:space="preserve"><value>Benutzerdefiniert</value></data>
+  <data name="CategoryControls" xml:space="preserve"><value>Controls</value></data>
+  <data name="CategoryText" xml:space="preserve"><value>Text</value></data>
+  <data name="CategoryContent" xml:space="preserve"><value>Inhalt</value></data>
+  <data name="CategoryLibraryContent" xml:space="preserve"><value>Bibliotheksinhalt</value></data>
+  <data name="FilterAll" xml:space="preserve"><value>Alle</value></data>
+  <data name="FilterNone" xml:space="preserve"><value>Keine</value></data>
+  <data name="SeverityError" xml:space="preserve"><value>Fehler</value></data>
+  <data name="SeverityWarning" xml:space="preserve"><value>Warnung</value></data>
+  <data name="SeverityInfo" xml:space="preserve"><value>Info</value></data>
+  <data name="GitUntracked" xml:space="preserve"><value>Untracked</value></data>
+  <data name="GitStaged" xml:space="preserve"><value>Staged</value></data>
+  <data name="GitUnstaged" xml:space="preserve"><value>Unstaged</value></data>
+  <data name="AnyLanguage" xml:space="preserve"><value>Beliebig</value></data>
+  <data name="TemplateLabel" xml:space="preserve"><value>Vorlage</value></data>
+  <data name="StateUnknown" xml:space="preserve"><value>Unbekannt</value></data>
+  <data name="StateUnavailable" xml:space="preserve"><value>Nicht verfügbar</value></data>
+  <data name="StateStored" xml:space="preserve"><value>Gespeichert</value></data>
+  <data name="StateExpired" xml:space="preserve"><value>Abgelaufen</value></data>
+  <data name="StateActive" xml:space="preserve"><value>Aktiv</value></data>
+  <data name="ModeLabel" xml:space="preserve"><value>Modus</value></data>
+  <data name="ConfigLabel" xml:space="preserve"><value>Konfiguration</value></data>
+  <data name="StateUpdated" xml:space="preserve"><value>aktualisiert</value></data>
+  <data name="StateChanged" xml:space="preserve"><value>geändert</value></data>
+  <data name="DisconnectedMessage" xml:space="preserve"><value>Verbindung getrennt.</value></data>
+  <data name="DockPreviewDock" xml:space="preserve"><value>Andocken</value></data>
+  <data name="DockPreviewFloat" xml:space="preserve"><value>Abdocken</value></data>
+  <data name="DockFloat" xml:space="preserve"><value>_Abdocken</value></data>
+  <data name="DockFloatAll" xml:space="preserve"><value>Alle abdocken</value></data>
+  <data name="DockClose" xml:space="preserve"><value>_Schließen</value></data>
+  <data name="DockCloseOtherTabs" xml:space="preserve"><value>Andere Tabs schließen</value></data>
+  <data name="DockCloseAllTabs" xml:space="preserve"><value>Alle Tabs schließen</value></data>
+  <data name="DockCloseTabsLeft" xml:space="preserve"><value>Tabs _links schließen</value></data>
+  <data name="DockCloseTabsRight" xml:space="preserve"><value>Tabs _rechts schließen</value></data>
+  <data name="DockCloseTabsAbove" xml:space="preserve"><value>Alle Tabs _oberhalb schließen</value></data>
+  <data name="DockCloseTabsBelow" xml:space="preserve"><value>Alle Tabs _unterhalb schließen</value></data>
+  <data name="DockNewHorizontal" xml:space="preserve"><value>Neuer horizontaler Dokumentbereich</value></data>
+  <data name="DockNewVertical" xml:space="preserve"><value>Neuer vertikaler Dokumentbereich</value></data>
+  <data name="DockRevealInFileExplorer" xml:space="preserve"><value>Im Datei-Explorer öffnen</value></data>
+  <data name="DockRevealInSolutionExplorer" xml:space="preserve"><value>Im Solution-Explorer öffnen</value></data>
+  <data name="DockCopyPath" xml:space="preserve"><value>Pfad kopieren</value></data>
+  <data name="DockCopyFileName" xml:space="preserve"><value>Dateiname kopieren</value></data>
+  <data name="FileNotInFileExplorer" xml:space="preserve"><value>{0} ist nicht im Datei-Explorer enthalten.</value></data>
+  <data name="FileNotInSolutionExplorer" xml:space="preserve"><value>{0} ist nicht im Solution-Explorer enthalten.</value></data>
+  <data name="DockTabLayout" xml:space="preserve"><value>Tab-Anordnung</value></data>
+  <data name="DockTabsLeft" xml:space="preserve"><value>Tabs _links anordnen</value></data>
+  <data name="DockTabsTop" xml:space="preserve"><value>Tabs _oben anordnen</value></data>
+  <data name="DockTabsRight" xml:space="preserve"><value>Tabs _rechts anordnen</value></data>
+  <data name="DockLayoutMode" xml:space="preserve"><value>Anordnungsmodus</value></data>
+  <data name="DockTabbed" xml:space="preserve"><value>Tabs</value></data>
+  <data name="DockShow" xml:space="preserve"><value>_Anzeigen</value></data>
+  <data name="DockAsDocument" xml:space="preserve"><value>Als Dokument-Tab andocken</value></data>
+  <data name="DockDock" xml:space="preserve"><value>An_docken</value></data>
+  <data name="DockAutoHide" xml:space="preserve"><value>Automatisch _ausblenden</value></data>
+  <data name="NoDocumentsOpen" xml:space="preserve"><value>Keine Dokumente geöffnet</value></data>
+  <data name="AcpPromptPlaceholder" xml:space="preserve"><value>Nachricht an den Agenten. Strg+Eingabe zum Senden.</value></data>
+  <data name="AcpSendPrompt" xml:space="preserve"><value>Senden</value></data>
+  <data name="AcpPromptFailed" xml:space="preserve"><value>Anfrage fehlgeschlagen: {0}</value></data>
+  <data name="AcpAuthenticationFailed" xml:space="preserve"><value>Anmeldung beim Agenten fehlgeschlagen: {0}</value></data>
+  <data name="OAuthDeviceAuthentication" xml:space="preserve"><value>Benutzerdefinierte OAuth-Geräteanmeldung</value></data>
+  <data name="OAuthDeviceEndpoint" xml:space="preserve"><value>URL des Gerätecode-Endpunkts</value></data>
+  <data name="OAuthTokenEndpoint" xml:space="preserve"><value>URL des Token-Endpunkts</value></data>
+  <data name="OAuthEndpointsRequired" xml:space="preserve"><value>Zuerst beide OAuth-Endpunkt-URLs konfigurieren.</value></data>
+  <data name="StartupGroup" xml:space="preserve"><value>Start</value></data>
+  <data name="RestoreLastWorkspace" xml:space="preserve"><value>Beim Start den zuletzt geöffneten Arbeitsbereich oder Ordner öffnen</value></data>
+  <data name="RestoreLastWorkspaceHint" xml:space="preserve"><value>Gilt, wenn der Editor ohne Datei oder Arbeitsbereich in der Befehlszeile startet.</value></data>
+  <data name="SaveChangesTitle" xml:space="preserve"><value>Änderungen speichern?</value></data>
+  <data name="SaveChangesPrompt" xml:space="preserve"><value>Folgende Dateien haben ungespeicherte Änderungen:
+{0}</value></data>
+  <data name="DontSave" xml:space="preserve"><value>Nicht speichern</value></data>
+  <data name="FoldersBeforeFiles" xml:space="preserve"><value>Ordner vor Dateien anzeigen</value></data>
+  <data name="WindowGroup" xml:space="preserve"><value>Fenster</value></data>
+  <data name="ShowFullPathInTitle" xml:space="preserve"><value>Vollständigen Dateipfad im Fenstertitel anzeigen</value></data>
+  <data name="ShowGridHint" xml:space="preserve"><value>Raster anzeigen</value></data>
+  <data name="ShowRulersHint" xml:space="preserve"><value>Lineale anzeigen</value></data>
+  <data name="GridSize" xml:space="preserve"><value>Rastergröße</value></data>
+  <data name="GridSizePixels" xml:space="preserve"><value>Rastergröße in Pixeln</value></data>
+  <data name="GridSizeHint" xml:space="preserve"><value>Abstand der Rasterlinien in Pixeln; das Einrasten am Raster verwendet dieselbe Größe.</value></data>
+  <data name="CoordinateStrip" xml:space="preserve"><value>Positionsleiste</value></data>
+  <data name="CoordinateStripHint" xml:space="preserve"><value>Pixelpositionen relativ zum Wurzelelement unter der Fläche anzeigen</value></data>
+  <data name="CoordinateStripPointer" xml:space="preserve"><value>X {0}  Y {1}</value></data>
+  <data name="CoordinateStripSelection" xml:space="preserve"><value>X {0}  Y {1}  B {2}  H {3}</value></data>
+  <data name="CoordinateStripSelectionCount" xml:space="preserve"><value>{0}  ({1} ausgewählt)</value></data>
+  <data name="CoordinateStripChange" xml:space="preserve"><value>ΔX {0}  ΔY {1}  ΔB {2}  ΔH {3}</value></data>
+  <data name="CoordinateStripMeasure" xml:space="preserve"><value>ΔX {0}  ΔY {1}  Abstand {2}</value></data>
+  <data name="PointerPosition" xml:space="preserve"><value>Zeigerposition</value></data>
+  <data name="PointerPositionHint" xml:space="preserve"><value>Pixel unter dem Zeiger, relativ zum Wurzelelement. Klicken kopiert den Wert als x,y.</value></data>
+  <data name="ElementUnderPointer" xml:space="preserve"><value>Element unter dem Zeiger</value></data>
+  <data name="ElementUnderPointerHint" xml:space="preserve"><value>Typ und Name des Elements unter dem Zeiger. Klicken kopiert den Wert.</value></data>
+  <data name="SelectionBounds" xml:space="preserve"><value>Position und Größe der Auswahl</value></data>
+  <data name="SelectionBoundsHint" xml:space="preserve"><value>Position und Größe der Auswahl, relativ zum Wurzelelement. Klicken kopiert den Wert als x,y,Breite,Höhe.</value></data>
+  <data name="SelectionChange" xml:space="preserve"><value>Änderung der Auswahl beim Verschieben oder Ändern der Größe</value></data>
+  <data name="Measure" xml:space="preserve"><value>Messen</value></data>
+  <data name="MeasureHint" xml:space="preserve"><value>Messen: auf der Fläche ziehen, um einen Abstand in Pixeln zu messen</value></data>
+  <data name="MeasureResult" xml:space="preserve"><value>Gemessener Abstand</value></data>
+  <data name="MeasureResultHint" xml:space="preserve"><value>Waagerechter und senkrechter Abstand sowie direkte Länge. Klicken kopiert den Wert als dx,dy.</value></data>
+  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Laden Sie das zugehörige Projekt, bevor Sie Control-Namen umgestalten.</value></data>
+  <data name="CodeBehindRenameOwningProjectMissing" xml:space="preserve"><value>Das Projekt, zu dem das Control gehört, ist nicht geladen.</value></data>
+  <data name="CodeBehindRenameInvalidName" xml:space="preserve"><value>Der neue Control-Name ist kein gültiger C#-Membername.</value></data>
+  <data name="CodeBehindRenameCompilationUnavailable" xml:space="preserve"><value>Die Kompilierung des Projekts ist nicht verfügbar.</value></data>
+  <data name="CodeBehindRenameClassMissing" xml:space="preserve"><value>Die Code-Behind-Klasse '{0}' konnte nicht aufgelöst werden.</value></data>
+  <data name="CodeBehindRenameClassForeign" xml:space="preserve"><value>Die Code-Behind-Klasse ist nicht im zugehörigen Projekt definiert.</value></data>
+  <data name="CodeBehindRenameMemberExists" xml:space="preserve"><value>Die Code-Behind-Klasse enthält bereits einen Member namens '{0}'.</value></data>
+  <data name="CodeBehindRenameNameReferenced" xml:space="preserve"><value>Der Name '{0}' wird im Code-Behind verwendet und kann nicht entfernt werden.</value></data>
+  <data name="CodeBehindRenameConflictingEdits" xml:space="preserve"><value>Widersprüchliche Umbenennungen in '{0}'.</value></data>
+  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Laden Sie das Projekt des Formulars, bevor Sie einen Event-Handler zuweisen.</value></data>
+  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Geben Sie einen C#-Methodennamen für den Event-Handler ein.</value></data>
+  <data name="EventHandlerFormClassMissing" xml:space="preserve"><value>Die Formularklasse '{0}' ist im geladenen C#-Projekt nicht verfügbar.</value></data>
+  <data name="EventHandlerFormClassAmbiguous" xml:space="preserve"><value>Die Formularklasse '{0}' gehört zu mehreren Projekten. Öffnen Sie das zugehörige Projekt.</value></data>
+  <data name="EventHandlerControlTypeMissing" xml:space="preserve"><value>Der Control-Typ '{0}' ist im Projekt des Formulars nicht verfügbar.</value></data>
+  <data name="EventHandlerGenericControl" xml:space="preserve"><value>Die Event-Prüfung für ein generisches Control benötigt dessen konkrete Typargumente.</value></data>
+  <data name="EventHandlerEventMissing" xml:space="preserve"><value>Das Control deklariert das Event '{0}' nicht.</value></data>
+  <data name="EventHandlerFormDeclarationMissing" xml:space="preserve"><value>Die Formularklasse hat im geladenen Projekt keine C#-Deklaration.</value></data>
+  <data name="EventHandlerSignatureUnrepresentable" xml:space="preserve"><value>Die Event-Signatur lässt sich in C# nicht darstellen.</value></data>
+  <data name="EventHandlerAssignmentError" xml:space="preserve"><value>'{0}' kann '{1}' nicht zugewiesen werden: {2}</value></data>
+  <data name="EventHandlerIncompatibleMethod" xml:space="preserve"><value>Der Handler-Name muss auf eine kompatible C#-Methode verweisen.</value></data>
+  <data name="EventHandlerMappingFailed" xml:space="preserve"><value>Der Handler konnte dem ursprünglichen Projekt nicht zugeordnet werden.</value></data>
+  <data name="DropTargetUnavailable" xml:space="preserve"><value>Das Ablageziel gehört nicht zur Entwurfsoberfläche.</value></data>
+  <data name="DropPositionUnavailable" xml:space="preserve"><value>Das Element kann nicht neben dem Ablageziel platziert werden.</value></data>
+  <data name="GitDiscardWorkingChangesPrompt" xml:space="preserve"><value>Änderungen in der Arbeitsdatei verwerfen: {0}? Die Datei wird auf den Stand im Git-Index oder im letzten Commit zurückgesetzt; Änderungen im Git-Index bleiben erhalten.</value></data>
+  <data name="OAuthTokenExpired" xml:space="preserve"><value>Die OAuth-Anmeldung ist abgelaufen und konnte nicht erneuert werden. Melden Sie sich erneut an oder hinterlegen Sie die URL des Token-Endpunkts.</value></data>
+  <data name="DocumentOpenFailedNamed" xml:space="preserve"><value>„{0}“ konnte nicht geöffnet werden: {1}</value></data>
+  <data name="DocumentNotUtf8Reason" xml:space="preserve"><value>Die Datei ist kein gültiger UTF-8-Text.</value></data>
+  <data name="CommandFailed" xml:space="preserve"><value>Der Befehl ist fehlgeschlagen: {0}</value></data>
+  <data name="LayoutSaveFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gespeichert werden</value></data>
+  <data name="PreviewThemeLoadHint" xml:space="preserve"><value>Starte oder aktualisiere die Vorschau, um die Themes der Bibliothek zu laden.</value></data>
+  <data name="PreviewThemeProviderError" xml:space="preserve"><value>Theme-Provider '{0}': {1}</value></data>
+  <data name="PreviewThemeUnavailable" xml:space="preserve"><value>Nicht verfügbar: {0}</value></data>
+  <data name="PreviewThemePreviewOnly" xml:space="preserve"><value>{0} (nur Vorschau)</value></data>
+  <data name="Duplicate" xml:space="preserve"><value>Duplizieren</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
+  <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
+  <data name="GitCommandFailed" xml:space="preserve"><value>Git-Befehl fehlgeschlagen: {0}</value></data>
+  <data name="SaveConflictTitle" xml:space="preserve"><value>Datei auf dem Datenträger geändert</value></data>
+  <data name="SaveConflictPrompt" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Mit dem Text aus dem Editor überschreiben oder vom Datenträger neu laden und die Änderungen im Editor verwerfen?</value></data>
+  <data name="Overwrite" xml:space="preserve"><value>Überschreiben</value></data>
+  <data name="DocumentReloadedFromDisk" xml:space="preserve"><value>„{0}“ wurde vom Datenträger neu geladen; die Änderungen im Editor wurden verworfen</value></data>
+  <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht umbenannt werden: {1}</value></data>
+  <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gelöscht werden: {1}</value></data>
+  <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Beheben Sie die XAML-Fehler, bevor Sie das Dokument hier bearbeiten.</value></data>
+</root>

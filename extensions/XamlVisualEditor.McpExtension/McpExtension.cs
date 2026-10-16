@@ -2,6 +2,7 @@ using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.Mcp;
 
@@ -10,6 +11,7 @@ namespace XamlVisualEditor.McpExtension;
 public sealed class McpExtension : IXveExtension
 {
     private const string ViewId = "mcp.panel";
+    private const string ToggleViewCommandId = "mcp.toggleView";
     private McpPanelViewModel? _viewModel;
     private McpRuntimeController? _controller;
 
@@ -33,10 +35,20 @@ public sealed class McpExtension : IXveExtension
 
         ExtensionViewContribution view = new(
             ViewId,
-            "MCP",
+            UiStrings.Mcp,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Right,
-            36);
+            36)
+        {
+            AutoHideByDefault = true
+        };
+
+        context.Subscriptions.Add(context.Commands.Register(
+            ToggleViewCommandId,
+            _ => context.ViewHost.ToggleAsync(ViewId, CancellationToken.None)));
+        context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
+            context.ExtensionId,
+            new[] { new ExtensionMenuContribution(ToggleViewCommandId, UiStrings.Mcp, ExtensionMenuLocations.ViewServers, "servers", 36) }));
 
         IDisposable viewRegistration = context.Contributions.RegisterViews(context.ExtensionId, new[] { view });
         IDisposable providerRegistration = context.Views.RegisterCustomViewProvider(ViewId, new McpViewProvider(_viewModel));

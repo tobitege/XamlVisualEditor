@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Workspace;
 
@@ -40,7 +41,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
             if (!fallbackResult.Success)
             {
                 string error = string.IsNullOrWhiteSpace(fallbackResult.StandardError)
-                    ? "dotnet new list failed"
+                    ? UiStrings.DotnetTemplateListFailed
                     : fallbackResult.StandardError.Trim();
                 throw new InvalidOperationException(error);
             }
@@ -72,17 +73,17 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
     {
         if (string.IsNullOrWhiteSpace(request.TemplateShortName))
         {
-            return new DotNetNewResult { Success = false, ErrorMessage = "Template short name is required." };
+            return new DotNetNewResult { Success = false, ErrorMessage = UiStrings.TemplateShortNameRequired };
         }
 
         if (string.IsNullOrWhiteSpace(request.ProjectName))
         {
-            return new DotNetNewResult { Success = false, ErrorMessage = "Project name is required." };
+            return new DotNetNewResult { Success = false, ErrorMessage = UiStrings.ProjectNameRequired };
         }
 
         if (string.IsNullOrWhiteSpace(request.Location))
         {
-            return new DotNetNewResult { Success = false, ErrorMessage = "Location is required." };
+            return new DotNetNewResult { Success = false, ErrorMessage = UiStrings.LocationRequired };
         }
 
         string outputDir = request.CreateProjectDirectory
@@ -101,7 +102,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
             {
                 Success = false,
                 ErrorMessage = string.IsNullOrWhiteSpace(result.StandardError)
-                    ? "dotnet new failed"
+                    ? UiStrings.DotnetNewFailed
                     : result.StandardError.Trim(),
                 StandardOutput = result.StandardOutput
             };
@@ -124,12 +125,12 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
     {
         if (string.IsNullOrWhiteSpace(request.SolutionName))
         {
-            return new DotNetNewResult { Success = false, ErrorMessage = "Solution name is required." };
+            return new DotNetNewResult { Success = false, ErrorMessage = UiStrings.SolutionNameRequired };
         }
 
         if (string.IsNullOrWhiteSpace(request.Location))
         {
-            return new DotNetNewResult { Success = false, ErrorMessage = "Location is required." };
+            return new DotNetNewResult { Success = false, ErrorMessage = UiStrings.LocationRequired };
         }
 
         string solutionRoot = request.CreateSolutionDirectory
@@ -148,7 +149,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
             {
                 Success = false,
                 ErrorMessage = string.IsNullOrWhiteSpace(slnResult.StandardError)
-                    ? "dotnet new sln failed"
+                    ? UiStrings.DotnetNewSolutionFailed
                     : slnResult.StandardError.Trim(),
                 StandardOutput = slnResult.StandardOutput
             };
@@ -199,7 +200,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
                         {
                             Success = false,
                             ErrorMessage = string.IsNullOrWhiteSpace(addResult.StandardError)
-                                ? "dotnet sln add failed"
+                                ? UiStrings.DotnetSolutionAddFailed
                                 : addResult.StandardError.Trim(),
                             StandardOutput = addResult.StandardOutput
                         };

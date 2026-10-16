@@ -4,6 +4,14 @@
              xmlns:dockFluent="clr-namespace:Dock.Avalonia.Themes.Fluent;assembly=Dock.Avalonia.Themes.Fluent"
              x:Class="XamlVisualEditor.App.App"
              RequestedThemeVariant="Dark">
+    <Application.Resources>
+        <SolidColorBrush x:Key="EditorWindowBackgroundBrush" Color="{DynamicResource SystemAltHighColor}" />
+        <SolidColorBrush x:Key="EditorWindowForegroundBrush" Color="{DynamicResource SystemBaseHighColor}" />
+        <SolidColorBrush x:Key="EditorStatusBarBackgroundBrush" Color="#007ACC" />
+        <SolidColorBrush x:Key="EditorStatusBarForegroundBrush" Color="White" />
+        <SolidColorBrush x:Key="EditorStatusBarSeparatorBrush" Color="#66FFFFFF" />
+        <SolidColorBrush x:Key="EditorErrorBrush" Color="Tomato" />
+    </Application.Resources>
     <Application.DataTemplates>
         <local:ViewLocator />
     </Application.DataTemplates>
@@ -12,5 +20,8 @@
         <dockFluent:DockFluentTheme />
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.v2.xaml" />
+        <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorDensity.axaml" />
+        <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorTheme.axaml" />
+        <StyleInclude Source="avares://XamlVisualEditor.App/Styles/EditorContextMenu.axaml" />
     </Application.Styles>
 </Application>

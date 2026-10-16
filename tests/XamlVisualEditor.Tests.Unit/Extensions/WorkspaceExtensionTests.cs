@@ -150,7 +150,7 @@ public sealed class WorkspaceExtensionTests
         await commands.ExecuteAsync("workspace.build", null, CancellationToken.None);
 
         Assert.Equal(0, workspaceCommands.BuildCalls);
-        Assert.Contains("No workspace loaded.", window.Messages);
+        Assert.Contains(XamlVisualEditor.Core.Localization.UiStrings.NoWorkspaceLoaded, window.Messages);
     }
 
     private static ExtensionContext CreateContext(

@@ -9,10 +9,31 @@ namespace XamlVisualEditor.Extensions.Hosting.Mcp;
 public static class McpProtocol
 {
     /// <summary>Current MCP protocol version.</summary>
-    public const string ProtocolVersion = "2024-11-05";
+    public const string ProtocolVersion = "2025-11-25";
+
+    /// <summary>Protocol versions served over Streamable HTTP, newest first.</summary>
+    /// <remarks>
+    /// The server uses only features common to these versions. 2025-03-26 clients may send JSON-RPC batches,
+    /// which both transports accept.
+    /// </remarks>
+    public static IReadOnlyList<string> HttpProtocolVersions { get; } = ["2025-11-25", "2025-06-18", "2025-03-26"];
+
+    /// <summary>Protocol versions served over stdio, newest first.</summary>
+    /// <remarks>
+    /// 2024-11-05 used a different HTTP transport; its stdio transport and the messages this server exchanges
+    /// are unchanged in the later versions.
+    /// </remarks>
+    public static IReadOnlyList<string> StdioProtocolVersions { get; } = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+
+    /// <summary>
+    /// Returns <paramref name="requested"/> when it is one of <paramref name="supported"/>, otherwise the newest
+    /// supported version, which the client may decline by disconnecting.
+    /// </summary>
+    public static string NegotiateVersion(string? requested, IReadOnlyList<string> supported) =>
+        requested is not null && supported.Contains(requested, StringComparer.Ordinal) ? requested : supported[0];
 
     public const string InitializeMethod = "initialize";
-    public const string InitializedNotification = "initialized";
+    public const string InitializedNotification = "notifications/initialized";
 
     public const string ToolsListMethod = "tools/list";
     public const string ToolsCallMethod = "tools/call";
@@ -26,10 +47,10 @@ public static class McpProtocol
 
 /// <summary>Initialize request parameters.</summary>
 public sealed record McpInitializeParams(
-    string? SessionToken,
     string? WorkspaceId,
     McpClientInfo? ClientInfo,
-    McpClientCapabilities? Capabilities);
+    McpClientCapabilities? Capabilities,
+    string? ProtocolVersion = null);
 
 /// <summary>Client metadata.</summary>
 public sealed record McpClientInfo(
@@ -63,7 +84,6 @@ public sealed record McpServerCapabilities(
     McpToolsCapability Tools,
     McpResourcesCapability Resources,
     McpPromptsCapability Prompts,
-    McpLoggingCapability Logging,
     object? Experimental = null);
 
 /// <summary>Tools capability.</summary>
@@ -74,9 +94,6 @@ public sealed record McpResourcesCapability(bool Subscribe = false, bool ListCha
 
 /// <summary>Prompts capability.</summary>
 public sealed record McpPromptsCapability(bool ListChanged = false);
-
-/// <summary>Logging capability.</summary>
-public sealed record McpLoggingCapability(bool SupportsLevel = true);
 
 /// <summary>Tool descriptor.</summary>
 public sealed record McpToolDefinition(
@@ -158,7 +175,7 @@ public sealed record McpPromptGetParams(
 /// <summary>Prompt message.</summary>
 public sealed record McpPromptMessage(
     string Role,
-    IReadOnlyList<McpContent> Content);
+    McpContent Content);
 
 /// <summary>Prompt response payload.</summary>
 public sealed record McpPromptsGetResult(
@@ -171,11 +188,12 @@ public enum McpAccessLevel
     Full
 }
 
-/// <summary>Session info for MCP clients.</summary>
+/// <summary>Session info for MCP clients, with the protocol version negotiated at initialization.</summary>
 public sealed record McpSessionInfo(
     string WorkspaceId,
     McpAccessLevel AccessLevel,
-    string SessionToken);
+    string SessionToken,
+    string ProtocolVersion = McpProtocol.ProtocolVersion);
 
 /// <summary>Settings stored for MCP server.</summary>
 public sealed record McpSettings(

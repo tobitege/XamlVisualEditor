@@ -1,23 +1,24 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:collab="using:XamlVisualEditor.Collaboration.UI"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.CollaborationPanelView"
              x:DataType="collab:CollaborationPanelViewModel">
 
     <DockPanel>
         <!-- Session controls -->
         <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="4">
-            <TextBlock Text="Collaboration" FontWeight="SemiBold" FontSize="14" />
+            <TextBlock Text="{x:Static loc:UiStrings.Collaboration}" FontWeight="SemiBold" FontSize="14" />
 
-            <TextBox PlaceholderText="Your name"
+            <TextBox PlaceholderText="{x:Static loc:UiStrings.YourName}"
                      Text="{CompiledBinding LocalUserName, Mode=TwoWay}" />
 
             <StackPanel Orientation="Horizontal" Spacing="4">
-                <Button Content="Start Session"
+                <Button Content="{x:Static loc:UiStrings.StartSession}"
                         Command="{CompiledBinding StartSessionCommand}"
                         IsVisible="{CompiledBinding !IsSessionActive}"
                         Padding="8,4" />
-                <Button Content="Leave"
+                <Button Content="{x:Static loc:UiStrings.Leave}"
                         Command="{CompiledBinding LeaveSessionCommand}"
                         IsVisible="{CompiledBinding IsSessionActive}"
                         Padding="8,4" />
@@ -26,10 +27,10 @@
             <TextBlock Text="{CompiledBinding StatusMessage}"
                        Opacity="0.7" FontSize="12" Margin="0,4" />
 
-            <TextBox PlaceholderText="Session ID to join..."
+            <TextBox PlaceholderText="{x:Static loc:UiStrings.JoinSessionIdPlaceholder}"
                      Text="{CompiledBinding SessionId, Mode=TwoWay}"
                      IsVisible="{CompiledBinding !IsSessionActive}" />
-            <Button Content="Join Session"
+            <Button Content="{x:Static loc:UiStrings.JoinSession}"
                     Command="{CompiledBinding JoinSessionCommand}"
                     IsVisible="{CompiledBinding !IsSessionActive}"
                     Padding="8,4" />
@@ -39,7 +40,7 @@
 
         <!-- Participants list -->
         <DockPanel>
-            <TextBlock DockPanel.Dock="Top" Text="Participants" FontWeight="SemiBold" Margin="4" />
+            <TextBlock DockPanel.Dock="Top" Text="{x:Static loc:UiStrings.Participants}" FontWeight="SemiBold" Margin="4" />
             <ListBox ItemsSource="{CompiledBinding Participants}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="collab:ParticipantViewModel">
@@ -48,7 +49,7 @@
                                     VerticalAlignment="Center"
                                     Background="{CompiledBinding Color}" />
                             <TextBlock Text="{CompiledBinding DisplayName}" VerticalAlignment="Center" />
-                            <TextBlock Text="(you)"
+                            <TextBlock Text="{x:Static loc:UiStrings.YouSuffix}"
                                        IsVisible="{CompiledBinding IsLocal}"
                                        Opacity="0.5" FontStyle="Italic"
                                        VerticalAlignment="Center" />

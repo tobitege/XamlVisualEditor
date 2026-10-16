@@ -16,6 +16,7 @@ using ReactiveUI.Primitives.Concurrency;
 using ReactiveUI.Primitives.Signals;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -62,8 +63,9 @@ public sealed class ReferencesGroupViewModel : ReactiveObject
     }
 }
 
-public sealed class ReferencesPanelViewModel : ReactiveObject
+public sealed class ReferencesPanelViewModel : ReactiveObject, IDisposable
 {
+    private readonly IDisposable _filterSubscription;
     private readonly ILanguageNavigationService _navigation;
     private readonly IEditorServices _editor;
     private readonly IWindow _window;
@@ -156,10 +158,17 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         this.WhenAnyValue(x => x.SelectedRow)
             .Subscribe(row => SelectedItem = row?.Item);
 
-        this.WhenAnyValue(x => x.FilterText)
+        _filterSubscription = this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
+    }
+
+    /// <summary>Stops the pending filter timer and the group subscriptions.</summary>
+    public void Dispose()
+    {
+        _filterSubscription.Dispose();
+        _groupDisposables.Dispose();
     }
 
     public async Task FindReferencesAsync(CancellationToken cancellationToken)
@@ -173,7 +182,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         IReadOnlyList<LanguageLocation> locations = await _navigation.FindReferencesAsync(context, cancellationToken).ConfigureAwait(false);
         if (locations.Count == 0)
         {
-            await _window.ShowInformationMessageAsync("No references found.", cancellationToken);
+            await _window.ShowInformationMessageAsync(UiStrings.NoReferencesFound, cancellationToken);
         }
 
         ReplaceItems(BuildReferenceItems(locations));
@@ -190,7 +199,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         IReadOnlyList<LanguageLocation> locations = await _navigation.FindDefinitionsAsync(context, cancellationToken).ConfigureAwait(false);
         if (locations.Count == 0)
         {
-            await _window.ShowInformationMessageAsync("No definitions found.", cancellationToken);
+            await _window.ShowInformationMessageAsync(UiStrings.NoDefinitionsFound, cancellationToken);
             return;
         }
 
@@ -212,7 +221,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
 
         QuickPickItem? selection = await _window.ShowQuickPickAsync(
             items,
-            new QuickPickOptions("Select Definition", CanPickMany: false),
+            new QuickPickOptions(UiStrings.SelectDefinition, CanPickMany: false),
             cancellationToken);
         if (selection is null)
         {
@@ -380,7 +389,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
         if (document is null)
         {
             await _window.ShowWarningMessageAsync(
-                "No active document. Open a document and place the caret on a symbol first.",
+                UiStrings.OpenDocumentForNavigation,
                 cancellationToken);
             return null;
         }

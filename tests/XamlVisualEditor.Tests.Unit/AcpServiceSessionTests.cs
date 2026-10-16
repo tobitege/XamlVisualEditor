@@ -51,7 +51,7 @@ public sealed class AcpServiceSessionTests
 
         await service.ConnectAsync(new AcpAgentProcessOptions { FileName = "test" }, cts.Token);
 
-        _ = await service.PromptAsync("session-456", new { content = "hello" }, cts.Token);
+        _ = await service.PromptAsync("session-456", new[] { new { type = "text", text = "hello" } }, cts.Token);
         await service.CancelAsync("session-456", cts.Token);
 
         await serverTask;
@@ -94,7 +94,7 @@ public sealed class AcpServiceSessionTests
         {
             jsonrpc = "2.0",
             id = initId,
-            result = new { agentInfo = new { name = "mock" } }
+            result = new { protocolVersion = 1, agentInfo = new { name = "mock" } }
         }));
 
         JsonElement sessionNew = await ReadMessageAsync(pipe.ServerReader, ct);
@@ -116,6 +116,9 @@ public sealed class AcpServiceSessionTests
 
         JsonElement parameters = prompt.GetProperty("params");
         Assert.Equal("session-456", parameters.GetProperty("sessionId").GetString());
+        Assert.False(parameters.TryGetProperty("content", out _));
+        Assert.Equal("text", parameters.GetProperty("prompt")[0].GetProperty("type").GetString());
+        Assert.Equal("hello", parameters.GetProperty("prompt")[0].GetProperty("text").GetString());
 
         long promptId = prompt.GetProperty("id").GetInt64();
         await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new
@@ -127,6 +130,90 @@ public sealed class AcpServiceSessionTests
 
         JsonElement cancel = await ReadMessageAsync(pipe.ServerReader, ct);
         Assert.Equal("session/cancel", cancel.GetProperty("method").GetString());
+    }
+
+    [Theory]
+    [InlineData("allow", "selected")]
+    [InlineData(null, "cancelled")]
+    [InlineData("unadvertised", "cancelled")]
+    public async Task PermissionResponsesUseTheAcpDiscriminator(string? selected, string expected)
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        await using AcpProtocolClient client = pipe.CreateClient();
+        client.Start(timeout.Token);
+        await using AcpAgentHost host = AcpAgentHost.CreateForTests(Process.GetCurrentProcess(), client);
+        AcpService service = new(new StubHostFactory(host));
+        service.SetPermissionHandler((_, _) => Task.FromResult(selected is null
+            ? AcpPermissionOutcome.Cancelled() : AcpPermissionOutcome.Selected(selected)));
+        await service.ConnectAsync(new AcpAgentProcessOptions { FileName = "test" }, timeout.Token);
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1","toolCall":{"toolCallId":"t1"},"options":[{"optionId":"allow","name":"Allow","kind":"allow_once"}]}}""");
+        JsonElement response = await ReadMessageAsync(pipe.ServerReader, timeout.Token);
+        JsonElement outcome = response.GetProperty("result").GetProperty("outcome");
+        Assert.Equal(expected, outcome.GetProperty("outcome").GetString());
+        Assert.Equal(expected == "selected", outcome.TryGetProperty("optionId", out _));
+    }
+
+    [Fact]
+    public async Task CancelPromptCancelsPendingPermissionWithoutBlockingTheResponse()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        await using AcpProtocolClient client = pipe.CreateClient();
+        client.Start(timeout.Token);
+        await using AcpAgentHost host = AcpAgentHost.CreateForTests(Process.GetCurrentProcess(), client);
+        AcpService service = new(new StubHostFactory(host));
+        TaskCompletionSource permissionStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.SetPermissionHandler(async (_, ct) =>
+        {
+            permissionStarted.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return AcpPermissionOutcome.Selected("allow");
+        });
+        await service.ConnectAsync(new AcpAgentProcessOptions { FileName = "test" }, timeout.Token);
+        Task<JsonElement> prompt = service.PromptAsync("s1", new[] { new { type = "text", text = "test" } }, timeout.Token);
+        JsonElement promptRequest = await ReadMessageAsync(pipe.ServerReader, timeout.Token);
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":"permission","method":"session/request_permission","params":{"sessionId":"s1","options":[{"optionId":"allow","name":"Allow","kind":"allow_once"}]}}""");
+        await permissionStarted.Task.WaitAsync(timeout.Token);
+        await service.CancelAsync("s1", timeout.Token);
+        JsonElement first = await ReadMessageAsync(pipe.ServerReader, timeout.Token);
+        JsonElement second = await ReadMessageAsync(pipe.ServerReader, timeout.Token);
+        JsonElement permission = first.TryGetProperty("result", out _) ? first : second;
+        JsonElement cancellation = first.TryGetProperty("method", out _) ? first : second;
+        Assert.Equal("cancelled", permission.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+        Assert.Equal("session/cancel", cancellation.GetProperty("method").GetString());
+        await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new
+        {
+            jsonrpc = "2.0", id = promptRequest.GetProperty("id").GetInt64(), result = new { stopReason = "cancelled" }
+        }));
+        Assert.Equal("cancelled", (await prompt).GetProperty("stopReason").GetString());
+    }
+
+    [Fact]
+    public async Task TerminalOutputIsLocalAndRemainsAvailableAfterRelease()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(15));
+        await using AcpProtocolClient client = pipe.CreateClient();
+        client.Start(timeout.Token);
+        await using AcpAgentHost host = AcpAgentHost.CreateForTests(Process.GetCurrentProcess(), client);
+        AcpService service = new(new StubHostFactory(host));
+        await service.ConnectAsync(new AcpAgentProcessOptions { FileName = "test" }, timeout.Token);
+        try
+        {
+            await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":1,"method":"terminal/create","params":{"sessionId":"s1","command":"dotnet","args":["--version"],"outputByteLimit":4096}}""");
+            string terminalId = (await ReadMessageAsync(pipe.ServerReader, timeout.Token)).GetProperty("result").GetProperty("terminalId").GetString()!;
+            foreach (string method in new[] { "terminal/wait_for_exit", "terminal/release" })
+            {
+                await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method, @params = new { sessionId = "s1", terminalId } }));
+                JsonElement response = await ReadMessageAsync(pipe.ServerReader, timeout.Token);
+                Assert.False(response.TryGetProperty("error", out _));
+            }
+            JsonElement output = Assert.IsType<JsonElement>(service.GetTerminalOutput(terminalId));
+            Assert.False(string.IsNullOrWhiteSpace(output.GetProperty("output").GetString()));
+            Assert.Equal(0, output.GetProperty("exitStatus").GetProperty("exitCode").GetInt32());
+        }
+        finally { await service.DisconnectAsync(); }
     }
 
     private static async Task<JsonElement> ReadMessageAsync(StreamReader reader, CancellationToken ct)

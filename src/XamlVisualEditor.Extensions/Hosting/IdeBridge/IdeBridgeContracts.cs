@@ -90,7 +90,6 @@ public static class IdeBridgeProtocol
 
 /// <summary>Initialize request parameters.</summary>
 public sealed record BridgeInitializeParams(
-    string? SessionToken,
     string? WorkspaceId,
     string? ClientName,
     string? ClientVersion);

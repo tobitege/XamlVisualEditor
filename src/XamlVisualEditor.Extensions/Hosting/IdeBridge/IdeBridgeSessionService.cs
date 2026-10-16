@@ -19,34 +19,51 @@ public sealed class IdeBridgeSessionService
         _workspaceInfo = workspaceInfo ?? throw new ArgumentNullException(nameof(workspaceInfo));
     }
 
-    /// <summary>Initializes a session for a client.</summary>
-    public async Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request, CancellationToken ct)
+    /// <summary>Initializes a session for a client of the active workspace.</summary>
+    public Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request, CancellationToken ct) =>
+        InitializeAsync(request, null, ct);
+
+    /// <summary>
+    /// Initializes a session for a client of the active workspace. <paramref name="register"/> receives the
+    /// new session before a revocation of the consent can run.
+    /// </summary>
+    public async Task<BridgeInitializeResult> InitializeAsync(BridgeInitializeParams? request,
+        Action<BridgeInitializeResult>? register, CancellationToken ct)
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
+        BridgeInitializeResult? result = null;
         IdeBridgeWorkspacePermissionState? state = await _permissions
-            .AuthorizeAsync(workspaceId, request?.SessionToken, ct)
+            .AuthorizeAsync(workspaceId, granted =>
+            {
+                result = new BridgeInitializeResult(
+                    IdeBridgeProtocol.ProtocolVersion,
+                    IdeBridgePermissionService.GetCapabilities(granted.AccessLevel),
+                    workspaceId,
+                    Guid.NewGuid().ToString("N"));
+                register?.Invoke(result);
+            }, ct)
             .ConfigureAwait(false);
 
-        if (state is null)
+        if (state is null || result is null)
         {
             throw new IdeBridgeJsonRpcException(-32000, "Permission denied.");
         }
 
-        return new BridgeInitializeResult(
-            IdeBridgeProtocol.ProtocolVersion,
-            state.Capabilities,
-            workspaceId,
-            state.SessionToken);
+        return result;
     }
 
+    // The session is bound to the active workspace; a client may name it but cannot select another one.
     private string ResolveWorkspaceId(string? requestedId)
     {
-        string? path = requestedId ?? _workspaceInfo.WorkspacePath;
-        if (string.IsNullOrWhiteSpace(path))
+        string? path = _workspaceInfo.WorkspacePath;
+        string workspaceId = string.IsNullOrWhiteSpace(path) ? "default" : Path.GetFullPath(path);
+        if (!string.IsNullOrWhiteSpace(requestedId)
+            && !string.Equals(workspaceId, Path.GetFullPath(requestedId),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
-            return "default";
+            throw new IdeBridgeJsonRpcException(-32602, "The requested workspace is not the active workspace.");
         }
 
-        return Path.GetFullPath(path);
+        return workspaceId;
     }
 }

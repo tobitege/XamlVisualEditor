@@ -2,6 +2,7 @@ using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.TreeInspectorExtension;
@@ -28,14 +29,14 @@ public sealed class TreeInspectorExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     VisualViewId,
-                    "Visual Tree",
+                    UiStrings.VisualTree,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Right,
                     30,
                     ActivateByDefault: true),
                 new ExtensionViewContribution(
                     LogicalViewId,
-                    "Logical Tree",
+                    UiStrings.LogicalTree,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Right,
                     35,
@@ -71,36 +72,36 @@ public sealed class TreeInspectorExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             VisualRevealCommandId,
             new CommandMetadata(
-                Title: "Visual Tree: Reveal Selection",
-                Category: "Tree",
+                Title: UiStrings.VisualRevealSelection,
+                Category: UiStrings.Tree,
                 Priority: 50)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             LogicalRevealCommandId,
             new CommandMetadata(
-                Title: "Logical Tree: Reveal Selection",
-                Category: "Tree",
+                Title: UiStrings.LogicalRevealSelection,
+                Category: UiStrings.Tree,
                 Priority: 60)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             VisualRefreshCommandId,
             new CommandMetadata(
-                Title: "Visual Tree: Refresh",
-                Category: "Tree",
+                Title: UiStrings.VisualRefresh,
+                Category: UiStrings.Tree,
                 Priority: 70)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             LogicalRefreshCommandId,
             new CommandMetadata(
-                Title: "Logical Tree: Refresh",
-                Category: "Tree",
+                Title: UiStrings.LogicalRefresh,
+                Category: UiStrings.Tree,
                 Priority: 80)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
             new[]
             {
-                new ExtensionCommandPaletteContribution(VisualRevealCommandId, "Visual Tree: Reveal Selection", "Tree"),
-                new ExtensionCommandPaletteContribution(LogicalRevealCommandId, "Logical Tree: Reveal Selection", "Tree"),
-                new ExtensionCommandPaletteContribution(VisualRefreshCommandId, "Visual Tree: Refresh", "Tree"),
-                new ExtensionCommandPaletteContribution(LogicalRefreshCommandId, "Logical Tree: Refresh", "Tree")
+                new ExtensionCommandPaletteContribution(VisualRevealCommandId, UiStrings.VisualRevealSelection, UiStrings.Tree),
+                new ExtensionCommandPaletteContribution(LogicalRevealCommandId, UiStrings.LogicalRevealSelection, UiStrings.Tree),
+                new ExtensionCommandPaletteContribution(VisualRefreshCommandId, UiStrings.VisualRefresh, UiStrings.Tree),
+                new ExtensionCommandPaletteContribution(LogicalRefreshCommandId, UiStrings.LogicalRefresh, UiStrings.Tree)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
@@ -109,13 +110,13 @@ public sealed class TreeInspectorExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     VisualToggleCommandId,
-                    "Visual Tree",
+                    UiStrings.VisualTree,
                     ExtensionMenuLocations.View,
                     "views.right",
                     20),
                 new ExtensionMenuContribution(
                     LogicalToggleCommandId,
-                    "Logical Tree",
+                    UiStrings.LogicalTree,
                     ExtensionMenuLocations.View,
                     "views.right",
                     25)
@@ -167,7 +168,7 @@ public sealed class TreeInspectorExtension : IXveExtension
         if (selected.Count == 0)
         {
             await context.Window.ShowWarningMessageAsync(
-                "No selected nodes to reveal in the tree.",
+                UiStrings.NoTreeSelection,
                 cancellationToken);
             return;
         }
@@ -176,9 +177,9 @@ public sealed class TreeInspectorExtension : IXveExtension
         bool revealed = await context.Designer.RevealNodeAsync(nodeId, cancellationToken);
         if (!revealed)
         {
-            string treeName = kind == TreeKind.Visual ? "visual" : "logical";
+            string treeName = kind == TreeKind.Visual ? UiStrings.VisualTreeQualifier : UiStrings.LogicalTreeQualifier;
             await context.Window.ShowWarningMessageAsync(
-                $"Unable to reveal selection in the {treeName} tree. Open a designer document first.",
+                string.Format(UiStrings.RevealTreeSelectionFailed, treeName),
                 cancellationToken);
         }
     }

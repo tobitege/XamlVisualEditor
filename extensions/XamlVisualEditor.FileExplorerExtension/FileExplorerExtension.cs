@@ -1,5 +1,6 @@
 using System.Reactive.Disposables;
 using System.Threading;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.FileExplorerExtension.ViewModels;
 using XamlVisualEditor.FileExplorerExtension.Views;
@@ -80,11 +81,11 @@ public sealed class FileExplorerExtension : IXveExtension
 
         ExtensionMenuContribution[] menuItems =
         {
-            new(OpenFolderCommandId, "Open Folder...", ExtensionMenuLocations.File, "workspace", 5),
-            new(ToggleViewCommandId, "File Explorer", ExtensionMenuLocations.View, "views.left", 5),
-            new(ToggleHiddenCommandId, "Toggle Hidden Files", ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 10),
-            new(SetIconProviderCommandId, "File Explorer Icons...", ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 20),
-            new(SetViewLocationCommandId, "File Explorer Dock...", ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 30)
+            new(OpenFolderCommandId, UiStrings.OpenWorkspaceFolderDialog, ExtensionMenuLocations.File, "workspace", 5),
+            new(ToggleViewCommandId, UiStrings.FileExplorer, ExtensionMenuLocations.View, "views.left", 5),
+            new(ToggleHiddenCommandId, UiStrings.ToggleHiddenFiles, ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 10),
+            new(SetIconProviderCommandId, UiStrings.FileExplorerIconsDialog, ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 20),
+            new(SetViewLocationCommandId, UiStrings.FileExplorerDockDialog, ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 30)
         };
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(context.ExtensionId, menuItems));
 
@@ -92,21 +93,21 @@ public sealed class FileExplorerExtension : IXveExtension
         {
             new(
                 OpenFolderCommandId,
-                "Open Folder",
-                "Open a folder",
+                UiStrings.OpenWorkspaceFolder,
+                UiStrings.OpenFolderHint,
                 ExtensionToolbarLocations.Main,
-                "workspace",
-                5,
+                "1.workspace",
+                10,
                 OpenFolderIconPath)
         };
         context.Subscriptions.Add(context.Contributions.RegisterToolbarItems(context.ExtensionId, toolbarItems));
 
         ExtensionCommandPaletteContribution[] paletteItems =
         {
-            new(OpenFolderCommandId, "Open Folder...", "File"),
-            new(ToggleHiddenCommandId, "Toggle Hidden Files", "View"),
-            new(SetIconProviderCommandId, "File Explorer Icons...", "View"),
-            new(SetViewLocationCommandId, "File Explorer Dock...", "View")
+            new(OpenFolderCommandId, UiStrings.OpenWorkspaceFolderDialog, UiStrings.File),
+            new(ToggleHiddenCommandId, UiStrings.ToggleHiddenFiles, UiStrings.View),
+            new(SetIconProviderCommandId, UiStrings.FileExplorerIconsDialog, UiStrings.View),
+            new(SetViewLocationCommandId, UiStrings.FileExplorerDockDialog, UiStrings.View)
         };
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(context.ExtensionId, paletteItems));
 
@@ -139,7 +140,7 @@ public sealed class FileExplorerExtension : IXveExtension
         }
         else
         {
-            path = await _folderPicker.PickFolderAsync("Open Folder", CancellationToken.None);
+            path = await _folderPicker.PickFolderAsync(UiStrings.OpenFolder, CancellationToken.None);
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -149,17 +150,17 @@ public sealed class FileExplorerExtension : IXveExtension
 
         QuickPickItem[] options =
         {
-            new("Open in Current Window", "Replace the current workspace", null),
-            new("Open in New Window", "Open the folder in a new window", null)
+            new(UiStrings.OpenInCurrentWindow, UiStrings.ReplaceWorkspaceHint, null),
+            new(UiStrings.OpenInNewWindow, UiStrings.OpenFolderInNewWindowHint, null)
         };
 
         QuickPickItem? choice = await context.Window.ShowQuickPickAsync(
             options,
-            new QuickPickOptions("Open Folder", CanPickMany: false),
+            new QuickPickOptions(UiStrings.OpenFolder, CanPickMany: false),
             CancellationToken.None);
 
-        WorkspaceOpenMode mode = choice is not null
-            && choice.Label.StartsWith("Open in New", StringComparison.OrdinalIgnoreCase)
+        if (choice is null) return;
+        WorkspaceOpenMode mode = choice.Label == options[1].Label
                 ? WorkspaceOpenMode.NewWindow
                 : WorkspaceOpenMode.CurrentWindow;
 
@@ -173,7 +174,7 @@ public sealed class FileExplorerExtension : IXveExtension
 
         UpdateProviderSettings();
         return context.Window.ShowInformationMessageAsync(
-            showHidden ? "Hidden files are now visible." : "Hidden files are now hidden.",
+            showHidden ? UiStrings.HiddenFilesVisible : UiStrings.HiddenFilesHidden,
             CancellationToken.None);
     }
 
@@ -181,13 +182,13 @@ public sealed class FileExplorerExtension : IXveExtension
     {
         QuickPickItem[] options =
         {
-            new("Native", "Use OS-specific icon provider", null),
-            new("Theme", "Use bundled icon theme", null)
+            new(UiStrings.NativeIcons, UiStrings.NativeIconsHint, null),
+            new(UiStrings.Theme, UiStrings.BundledIconsHint, null)
         };
 
         QuickPickItem? choice = await context.Window.ShowQuickPickAsync(
             options,
-            new QuickPickOptions("File Explorer Icons", CanPickMany: false),
+            new QuickPickOptions(UiStrings.FileExplorerIcons, CanPickMany: false),
             CancellationToken.None);
 
         if (choice is null)
@@ -195,7 +196,7 @@ public sealed class FileExplorerExtension : IXveExtension
             return;
         }
 
-        string selected = choice.Label.Equals("Theme", StringComparison.OrdinalIgnoreCase)
+        string selected = choice.Label == options[1].Label
             ? "theme"
             : "native";
 
@@ -265,7 +266,7 @@ public sealed class FileExplorerExtension : IXveExtension
         _viewRegistration?.Dispose();
         ExtensionViewContribution view = new(
             ViewId,
-            "File Explorer",
+            UiStrings.FileExplorer,
             ExtensionViewType.Tree,
             ResolveViewLocation(),
             15,
@@ -278,14 +279,14 @@ public sealed class FileExplorerExtension : IXveExtension
     {
         QuickPickItem[] options =
         {
-            new("Left", "Dock in the left tool panel", null),
-            new("Right", "Dock in the right tool panel", null),
-            new("Bottom", "Dock in the bottom panel", null)
+            new(UiStrings.Left, UiStrings.DockLeftHint, null),
+            new(UiStrings.Right, UiStrings.DockRightHint, null),
+            new(UiStrings.Bottom, UiStrings.DockBottomHint, null)
         };
 
         QuickPickItem? choice = await context.Window.ShowQuickPickAsync(
             options,
-            new QuickPickOptions("File Explorer Dock", CanPickMany: false),
+            new QuickPickOptions(UiStrings.FileExplorerDock, CanPickMany: false),
             CancellationToken.None);
 
         if (choice is null)
@@ -293,7 +294,9 @@ public sealed class FileExplorerExtension : IXveExtension
             return;
         }
 
-        string selected = choice.Label.ToLowerInvariant();
+        int index = Array.FindIndex(options, item => item.Label == choice.Label);
+        if (index < 0) return;
+        string selected = index switch { 1 => "right", 2 => "bottom", _ => "left" };
         await _settings.UpdateAsync(ViewLocationKey, selected, SettingsTarget.User, CancellationToken.None);
         RegisterViewContribution();
     }

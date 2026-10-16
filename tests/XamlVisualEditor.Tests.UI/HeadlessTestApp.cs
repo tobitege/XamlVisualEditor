@@ -3,6 +3,9 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 
 [assembly: AvaloniaTestApplication(typeof(XamlVisualEditor.Tests.UI.HeadlessTestAppBuilder))]
+// All tests share one headless UI thread and Application.Current.Styles; interleaving test classes
+// lets one test's theme add/remove re-template another test's open window.
+[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
 
 namespace XamlVisualEditor.Tests.UI;
 
@@ -20,6 +23,7 @@ public static class HeadlessTestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp()
     {
+        XamlVisualEditor.Core.Localization.UiStrings.Culture = System.Globalization.CultureInfo.GetCultureInfo("en");
         return AppBuilder.Configure<HeadlessTestApp>()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions());
     }

@@ -5,16 +5,17 @@
              xmlns:i="using:Avalonia.Xaml.Interactivity"
              xmlns:ia="using:Avalonia.Xaml.Interactions.Core"
              xmlns:vm="using:XamlVisualEditor.NavigationExtension"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.NavigationExtension.Views.ReferencesPanelView"
              x:DataType="vm:ReferencesPanelViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="4,2">
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="References" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
-        <TextBlock Text="{CompiledBinding TotalCount, StringFormat='Count: {0}'}"
+        <TextBlock Text="{x:Static loc:UiStrings.References}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
+        <TextBlock Text="{CompiledBinding TotalCount, StringFormat={x:Static loc:UiStrings.CountFormat}}"
                    VerticalAlignment="Center" Opacity="0.7" />
       </StackPanel>
-      <TextBox PlaceholderText="Search references..."
+      <TextBox PlaceholderText="{x:Static loc:UiStrings.SearchReferences}"
                Text="{CompiledBinding FilterText, Mode=TwoWay}" />
     </StackPanel>
 
@@ -27,6 +28,7 @@
                 SearchModel="{CompiledBinding SearchModel}"
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
+                CanUserResizeColumns="True"
                 CanUserSortColumns="True"
                 IsReadOnly="True">
       <i:Interaction.Behaviors>
@@ -43,7 +45,7 @@
         </DataTemplate>
       </dg:DataGrid.DataTemplates>
       <dg:DataGrid.Columns>
-        <dg:DataGridHierarchicalColumn Header="Reference"
+        <dg:DataGridHierarchicalColumn Header="{x:Static loc:UiStrings.Reference}"
                                        Width="*"
                                        Binding="{CompiledBinding Item}"
                                        SortMemberPath="Item.DisplayText"

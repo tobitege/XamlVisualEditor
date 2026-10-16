@@ -43,7 +43,7 @@ public sealed class ExtensionUpdateService : IExtensionUpdateService
         return updates.Count == 0 ? Array.Empty<ExtensionUpdateInfo>() : updates;
     }
 
-    private static class ExtensionVersionComparer
+    internal static class ExtensionVersionComparer
     {
         public static bool IsNewer(string candidate, string current)
         {

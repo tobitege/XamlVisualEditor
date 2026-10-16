@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Headless.XUnit;
 using Xunit;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
@@ -68,6 +69,58 @@ public sealed class ExtensionTreeViewModelTests
         await viewModel.OpenSelectedCommand.Execute().ToTask();
 
         Assert.True(provider.Opened);
+    }
+
+    // Runs on the UI dispatcher like the shell; the hierarchical model is not safe for concurrent refreshes.
+    [AvaloniaFact]
+    public async Task LoadAsync_NotifiesAWideLevelOnce()
+    {
+        // The hierarchical model rebuilds a level per notification; one notification per item made
+        // a folder with thousands of entries freeze the window.
+        var contribution = new ExtensionViewContribution(
+            "view.tree",
+            "Tree",
+            ExtensionViewType.Tree,
+            ExtensionViewLocation.Left,
+            0);
+        // The test assembly runs main-thread work on the calling thread; the model belongs to the UI dispatcher.
+        ReactiveUI.Primitives.Concurrency.ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
+        using IDisposable scheduler = System.Reactive.Disposables.Disposable.Create(() => ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler);
+        ReactiveUI.RxSchedulers.MainThreadScheduler = ReactiveUI.Primitives.Concurrency.AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
+        var viewModel = new ExtensionTreeViewModel(contribution, new WideTreeProvider(5000));
+        int rootNotifications = 0;
+        viewModel.RootItems.CollectionChanged += (_, _) => rootNotifications++;
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(5000, viewModel.RootItems.Count);
+        Assert.Equal(1, rootNotifications);
+    }
+
+    private sealed class WideTreeProvider(int width) : IExtensionTreeDataProvider
+    {
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
+
+        public Task<IReadOnlyList<object>> GetChildrenAsync(object? element, CancellationToken cancellationToken)
+        {
+            if (element is not null)
+            {
+                return Task.FromResult<IReadOnlyList<object>>(Array.Empty<object>());
+            }
+
+            object[] items = new object[width];
+            for (int index = 0; index < width; index++) items[index] = "item" + index;
+            return Task.FromResult<IReadOnlyList<object>>(items);
+        }
+
+        public Task<TreeItem> GetTreeItemAsync(object element, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new TreeItem(element.ToString() ?? string.Empty, null, null));
+        }
     }
 
     private sealed class TestExtensionTreeProvider : IExtensionTreeDataProvider

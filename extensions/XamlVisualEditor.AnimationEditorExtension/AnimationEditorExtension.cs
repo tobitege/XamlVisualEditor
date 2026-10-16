@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.AnimationEditorExtension;
@@ -22,14 +23,14 @@ public sealed class AnimationEditorExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ToggleAnimationCommandId,
             new CommandMetadata(
-                Title: "View: Toggle Animation Editor",
-                Category: "View",
+                Title: UiStrings.ToggleAnimationViewCommand,
+                Category: UiStrings.View,
                 Priority: 95)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             RefreshPreviewCommandId,
             new CommandMetadata(
-                Title: "Animation: Refresh Preview",
-                Category: "Animation",
+                Title: UiStrings.RefreshAnimationPreviewCommand,
+                Category: UiStrings.Animation,
                 Priority: 30)));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(
@@ -38,7 +39,7 @@ public sealed class AnimationEditorExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     AnimationViewId,
-                    "Animation",
+                    UiStrings.Animation,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     40,
@@ -51,7 +52,7 @@ public sealed class AnimationEditorExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleAnimationCommandId,
-                    "Animation",
+                    UiStrings.Animation,
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     60)
@@ -63,12 +64,12 @@ public sealed class AnimationEditorExtension : IXveExtension
             {
                 new ExtensionCommandPaletteContribution(
                     ToggleAnimationCommandId,
-                    "Toggle Animation Editor",
-                    "View"),
+                    UiStrings.ToggleAnimationEditor,
+                    UiStrings.View),
                 new ExtensionCommandPaletteContribution(
                     RefreshPreviewCommandId,
-                    "Animation: Refresh Preview",
-                    "Animation")
+                    UiStrings.RefreshAnimationPreviewCommand,
+                    UiStrings.Animation)
             }));
 
         IAnimationEditorPanelModel? panelModel = context.AnimationEditor.PanelModel;
@@ -81,7 +82,7 @@ public sealed class AnimationEditorExtension : IXveExtension
 
     private static async Task RefreshPreviewAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
-        using IDisposable transaction = context.AnimationEditor.BeginTransaction("Animation preview refresh");
+        using IDisposable transaction = context.AnimationEditor.BeginTransaction(UiStrings.AnimationPreviewRefresh);
         await context.AnimationEditor.RefreshPreviewAsync(cancellationToken).ConfigureAwait(false);
     }
 

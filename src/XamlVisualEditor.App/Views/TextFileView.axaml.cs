@@ -31,17 +31,55 @@ public sealed partial class TextFileView : UserControl
     private CompositeDisposable? _vmSubscriptions;
     private RegistryOptions? _registryOptions;
     private ThemeName? _currentTextMateTheme;
-    private bool _suppressCaretUpdate;
-    private bool _suppressSelectionUpdate;
+    private EditorSelectionSync? _selectionSync;
     private CancellationTokenSource? _hoverCts;
     private readonly HoverRangeColorizer _hoverRangeColorizer = new();
 
     public TextFileView()
     {
         InitializeComponent();
+        AddHandler(KeyDownEvent, OnHistoryKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Loaded += OnLoaded;
         DataContextChanged += OnDataContextChanged;
         DetachedFromLogicalTree += OnDetachedFromLogicalTree;
+    }
+
+    private void OnHistoryKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || DataContext is not TextDocumentViewModel document)
+        {
+            return;
+        }
+
+        KeyModifiers modifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        bool undo = e.Key == Key.Z && e.KeyModifiers == modifier;
+        bool redo = e.Key == Key.Z && e.KeyModifiers == (modifier | KeyModifiers.Shift) ||
+                    !OperatingSystem.IsMacOS() && e.Key == Key.Y && e.KeyModifiers == modifier;
+        if (!undo && !redo)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        try
+        {
+            if (redo)
+            {
+                document.Redo();
+            }
+            else
+            {
+                document.Undo();
+            }
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Warning(exception, "Document history replay failed");
+            if (TopLevel.GetTopLevel(this)?.DataContext is MainWindowViewModel shell)
+            {
+                shell.StatusText = exception.Message;
+            }
+        }
     }
 
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)
@@ -60,12 +98,13 @@ public sealed partial class TextFileView : UserControl
 
         if (_textEditor is not null)
         {
-            _textEditor.TextArea.Caret.PositionChanged -= OnCaretPositionChanged;
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
             _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
-            _textEditor.TextArea.SelectionChanged -= OnSelectionChanged;
         }
+
+        _selectionSync?.Dispose();
+        _selectionSync = null;
 
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = null;
@@ -84,24 +123,25 @@ public sealed partial class TextFileView : UserControl
         }
     }
 
+    // Dock keeps the view of a document while its tab is hidden, so every load sets the editor up again after the
+    // teardown of the previous detach.
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        Loaded -= OnLoaded;
+        if (_textEditor is not null)
+        {
+            return;
+        }
+
         _textEditor = this.FindControl<TextEditor>("TextEditor");
         if (_textEditor is null)
         {
             return;
         }
 
-        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
-        ActualThemeVariantChanged += OnActualThemeVariantChanged;
-        ApplyTextMateTheme();
-
-        _textEditor.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
+        _selectionSync = new EditorSelectionSync(_textEditor, ReportSelection, ReportCaret);
         _textEditor.TextArea.TextEntered += OnTextEntered;
         _textEditor.TextArea.TextEntering += OnTextEntering;
         _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
-        _textEditor.TextArea.SelectionChanged += OnSelectionChanged;
 
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(_hoverRangeColorizer))
         {
@@ -111,8 +151,14 @@ public sealed partial class TextFileView : UserControl
         if (DataContext is TextDocumentViewModel vm)
         {
             BindViewModel(vm);
-            ApplyGrammar(vm);
         }
+
+        // TextMate starts after the document is set: installing it on the empty initial document first creates a
+        // second tokenizer, which waits for the grammar the first one compiles and then tokenizes nothing until
+        // the view scrolls.
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+        ApplyTextMateTheme();
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
@@ -122,7 +168,7 @@ public sealed partial class TextFileView : UserControl
 
     private void BindViewModel(TextDocumentViewModel vm)
     {
-        if (_textEditor is null)
+        if (_textEditor is null || _selectionSync is not { } selectionSync)
         {
             return;
         }
@@ -130,7 +176,9 @@ public sealed partial class TextFileView : UserControl
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = new CompositeDisposable();
 
-        _textEditor.Document = vm.Document;
+        // A new document resets the caret and selection of the editor; the view model keeps its own, which the
+        // subscriptions below apply.
+        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
         _textEditor.FontSize = vm.FontSize;
         _textEditor.ShowLineNumbers = vm.ShowLineNumbers;
         _textEditor.WordWrap = vm.WordWrap;
@@ -153,25 +201,13 @@ public sealed partial class TextFileView : UserControl
         _vmSubscriptions.Add(wordWrapSubscription);
 
         IDisposable caretSubscription = vm.WhenAnyValue(x => x.CaretOffset)
-            .Subscribe(offset =>
-            {
-                _suppressCaretUpdate = true;
-                _textEditor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _textEditor.Document.TextLength);
-                _textEditor.TextArea.Caret.BringCaretToView();
-                _suppressCaretUpdate = false;
-            });
+            .Subscribe(selectionSync.ApplyCaret);
         _vmSubscriptions.Add(caretSubscription);
 
+        // The pair can still hold the old value of the property that changes second, so the selection is read
+        // from the view model itself.
         IDisposable selectionSubscription = vm.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
-            .Subscribe(selection =>
-            {
-                _suppressSelectionUpdate = true;
-                int start = Math.Clamp(selection.Property1, 0, _textEditor.Document.TextLength);
-                int length = Math.Clamp(selection.Property2, 0, _textEditor.Document.TextLength - start);
-                _textEditor.SelectionStart = start;
-                _textEditor.SelectionLength = length;
-                _suppressSelectionUpdate = false;
-            });
+            .Subscribe(_ => selectionSync.ApplySelection(vm.SelectionStart, vm.SelectionLength, vm.CaretOffset));
         _vmSubscriptions.Add(selectionSubscription);
 
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.DiagnosticColorizer))
@@ -222,8 +258,8 @@ public sealed partial class TextFileView : UserControl
         _textMateInstallation?.Dispose();
         _registryOptions = new RegistryOptions(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(_registryOptions);
+        TextMateEditorColors.Apply(_textEditor, _textMateInstallation);
         _currentTextMateTheme = targetTheme;
-
         if (DataContext is TextDocumentViewModel vm)
         {
             ApplyGrammar(vm);
@@ -254,18 +290,8 @@ public sealed partial class TextFileView : UserControl
         }
     }
 
-    private void OnCaretPositionChanged(object? sender, EventArgs e)
+    private void ReportCaret(Caret caret)
     {
-        if (_suppressCaretUpdate)
-        {
-            return;
-        }
-
-        if (_textEditor?.TextArea.Caret is not Caret caret)
-        {
-            return;
-        }
-
         if (DataContext is TextDocumentViewModel vm)
         {
             vm.CaretOffset = caret.Offset;
@@ -274,17 +300,12 @@ public sealed partial class TextFileView : UserControl
         }
     }
 
-    private void OnSelectionChanged(object? sender, EventArgs e)
+    private void ReportSelection(int start, int length)
     {
-        if (_suppressSelectionUpdate || _textEditor is null)
-        {
-            return;
-        }
-
         if (DataContext is TextDocumentViewModel vm)
         {
-            vm.SelectionStart = _textEditor.SelectionStart;
-            vm.SelectionLength = _textEditor.SelectionLength;
+            vm.SelectionStart = start;
+            vm.SelectionLength = length;
         }
     }
 

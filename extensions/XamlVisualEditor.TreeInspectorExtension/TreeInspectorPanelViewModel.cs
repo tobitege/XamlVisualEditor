@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls.DataGridHierarchical;
 using ReactiveUI;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
@@ -63,7 +65,7 @@ public sealed class TreeInspectorNodeViewModel : ReactiveObject
 
 public sealed class TreeInspectorGridViewModel : ReactiveObject
 {
-    private HierarchicalNode? _selectedRow;
+    private TreeInspectorNodeViewModel? _selectedRow;
     private TreeInspectorNodeViewModel? _selectedNode;
 
     public TreeInspectorGridViewModel()
@@ -83,14 +85,14 @@ public sealed class TreeInspectorGridViewModel : ReactiveObject
         Model.SetRoots(RootItems);
 
         this.WhenAnyValue(x => x.SelectedRow)
-            .Subscribe(row => SelectedNode = row?.Item as TreeInspectorNodeViewModel);
+            .Subscribe(row => SelectedNode = row);
     }
 
     public ObservableCollection<TreeInspectorNodeViewModel> RootItems { get; } = new();
 
     public HierarchicalModel Model { get; }
 
-    public HierarchicalNode? SelectedRow
+    public TreeInspectorNodeViewModel? SelectedRow
     {
         get => _selectedRow;
         set => this.RaiseAndSetIfChanged(ref _selectedRow, value);
@@ -120,8 +122,8 @@ public sealed class TreeInspectorGridViewModel : ReactiveObject
             return;
         }
 
-        Model.TryExpandToItem(node, out HierarchicalNode? found);
-        SelectedRow = found ?? Model.FindNode(node);
+        Model.TryExpandToItem(node, out _);
+        SelectedRow = node;
     }
 }
 
@@ -131,10 +133,12 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     private readonly TreeKind _kind;
     private readonly CompositeDisposable _disposables = new();
     private readonly HashSet<string> _expandedNodeIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _collapseAllRequested;
     private IReadOnlyList<DesignerNodeSummary> _snapshot = Array.Empty<DesignerNodeSummary>();
     private Dictionary<string, TreeInspectorNodeViewModel> _nodeIndex = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _loadCts;
     private string? _searchText;
+    private string? _statusText;
     private bool _suspendSelection;
     private string? _lastActiveDocumentPath;
     private string? _lastSelectedNodeId;
@@ -150,6 +154,10 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         _kind = kind;
         _nodeGlyph = GetNodeGlyph(kind);
         TreeModel = new TreeInspectorGridViewModel();
+        CollapseAllCommand = ReactiveCommand.Create(() => SetAllExpanded(false));
+        ExpandAllCommand = ReactiveCommand.Create(() => SetAllExpanded(true));
+        _disposables.Add(CollapseAllCommand);
+        _disposables.Add(ExpandAllCommand);
 
         _disposables.Add(this.WhenAnyValue(x => x.SearchText)
             .Subscribe(_ => RebuildTree()));
@@ -171,7 +179,15 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     }
 
     public TreeInspectorGridViewModel TreeModel { get; }
-    public string PanelTitle => _kind == TreeKind.Visual ? "Visual Tree" : "Logical Tree";
+    public ReactiveCommand<RxVoid, RxVoid> CollapseAllCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ExpandAllCommand { get; }
+    public string PanelTitle => _kind == TreeKind.Visual ? UiStrings.VisualTree : UiStrings.LogicalTree;
+
+    public string? StatusText
+    {
+        get => _statusText;
+        private set => this.RaiseAndSetIfChanged(ref _statusText, value);
+    }
 
     public string? SearchText
     {
@@ -301,14 +317,18 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     {
         try
         {
+            StatusText = null;
             CancellationToken token = _loadCts?.Token ?? CancellationToken.None;
             await _designer.SelectNodeAsync(nodeId, token);
         }
         catch (OperationCanceledException)
         {
         }
-        catch
+        catch (Exception exception)
         {
+            string nodeName = _nodeIndex.TryGetValue(nodeId, out TreeInspectorNodeViewModel? node)
+                ? node.DisplayText : nodeId;
+            StatusText = string.Format(UiStrings.SelectTreeNodeFailed, nodeName, _designer.ActiveDocumentPath, exception.Message);
         }
     }
 
@@ -402,7 +422,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         CollectExpandedIds();
 
         (List<TreeInspectorNodeViewModel> roots, Dictionary<string, TreeInspectorNodeViewModel> index) =
-            BuildTree(_snapshot, SearchText, _expandedNodeIds, _nodeGlyph);
+            BuildTree(_snapshot, SearchText, _expandedNodeIds, _nodeGlyph, !_collapseAllRequested);
 
         TreeModel.SetRoots(roots);
         _nodeIndex = index;
@@ -412,6 +432,21 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
             _suspendSelection = true;
             TreeModel.SelectNode(selected);
             _suspendSelection = false;
+        }
+    }
+
+    private void SetAllExpanded(bool expanded)
+    {
+        if (expanded) TreeModel.Model.ExpandAll();
+        else TreeModel.Model.CollapseAll();
+
+        _collapseAllRequested = !expanded;
+        _expandedNodeIds.Clear();
+        foreach (TreeInspectorNodeViewModel node in _nodeIndex.Values)
+        {
+            bool isExpanded = expanded && node.Children.Count > 0;
+            node.IsExpanded = isExpanded;
+            if (isExpanded) _expandedNodeIds.Add(node.NodeId);
         }
     }
 
@@ -441,7 +476,8 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         IReadOnlyList<DesignerNodeSummary> nodes,
         string? filter,
         ISet<string> expandedIds,
-        string nodeGlyph)
+        string nodeGlyph,
+        bool expandRootByDefault)
     {
         Dictionary<string, TreeInspectorNodeViewModel> entries = new(nodes.Count, StringComparer.OrdinalIgnoreCase);
         Dictionary<string, List<TreeInspectorNodeViewModel>> children = new(nodes.Count, StringComparer.OrdinalIgnoreCase);
@@ -502,7 +538,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         {
             foreach (TreeInspectorNodeViewModel root in roots)
             {
-                PopulateChildren(root, children, expandedIds, index);
+                PopulateChildren(root, children, expandedIds, index, expandRootByDefault);
             }
 
             return (roots, index);
@@ -526,17 +562,18 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         TreeInspectorNodeViewModel node,
         IReadOnlyDictionary<string, List<TreeInspectorNodeViewModel>> children,
         ISet<string> expandedIds,
-        IDictionary<string, TreeInspectorNodeViewModel> index)
+        IDictionary<string, TreeInspectorNodeViewModel> index,
+        bool expandRootByDefault)
     {
         index[node.NodeId] = node;
         node.IsExpanded = expandedIds.Contains(node.NodeId)
-            || (expandedIds.Count == 0 && string.IsNullOrWhiteSpace(node.ParentNodeId));
+            || (expandRootByDefault && expandedIds.Count == 0 && string.IsNullOrWhiteSpace(node.ParentNodeId));
         if (children.TryGetValue(node.NodeId, out List<TreeInspectorNodeViewModel>? list))
         {
             foreach (TreeInspectorNodeViewModel child in list)
             {
                 node.Children.Add(child);
-                PopulateChildren(child, children, expandedIds, index);
+                PopulateChildren(child, children, expandedIds, index, expandRootByDefault);
             }
         }
     }

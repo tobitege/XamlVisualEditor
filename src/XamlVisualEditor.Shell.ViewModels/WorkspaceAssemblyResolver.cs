@@ -131,7 +131,10 @@ internal sealed class WorkspaceAssemblyResolver : IDisposable
 
     private void LogMissingManaged(AssemblyName name)
     {
-        if (string.IsNullOrWhiteSpace(name.Name))
+        // A missing satellite assembly is the normal case for an untranslated culture: the runtime
+        // falls back to the neutral resources, so it is no resolution failure.
+        if (string.IsNullOrWhiteSpace(name.Name)
+            || !string.IsNullOrEmpty(name.CultureName) && name.Name.EndsWith(".resources", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }

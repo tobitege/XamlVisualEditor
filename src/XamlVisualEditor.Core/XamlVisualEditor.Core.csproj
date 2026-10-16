@@ -2,9 +2,19 @@
   <PropertyGroup>
     <RootNamespace>XamlVisualEditor.Core</RootNamespace>
     <Description>Core primitives, interfaces, enums, and shared types for XamlVisualEditor</Description>
+    <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Localization\UiStrings.resx">
+      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+      <StronglyTypedNamespace>XamlVisualEditor.Core.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>UiStrings</StronglyTypedClassName>
+      <StronglyTypedFileName>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\UiStrings.g.cs</StronglyTypedFileName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>

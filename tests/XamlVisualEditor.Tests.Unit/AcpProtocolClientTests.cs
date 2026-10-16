@@ -104,6 +104,103 @@ public sealed class AcpProtocolClientTests
         Assert.True(root.GetProperty("result").GetProperty("pong").GetBoolean());
     }
 
+    [Fact]
+    public async Task NonStringMethodIsAnsweredWithInvalidRequestAndTheClientKeepsReading()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        await using AcpProtocolClient client = pipe.CreateClient();
+
+        client.RegisterRequestHandler("ping", (_, _) => Task.FromResult<JsonElement?>(JsonSerializer.SerializeToElement(new { pong = true })));
+        client.Start(cts.Token);
+
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":3,"method":42}""");
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":4,"method":"ping"}""");
+
+        using JsonDocument invalid = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(cts.Token))!);
+        Assert.Equal(3, invalid.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(-32600, invalid.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.False(invalid.RootElement.TryGetProperty("result", out _));
+        using JsonDocument ping = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(cts.Token))!);
+        Assert.Equal(4, ping.RootElement.GetProperty("id").GetInt32());
+        Assert.True(ping.RootElement.GetProperty("result").GetProperty("pong").GetBoolean());
+        Assert.True(client.IsRunning);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PendingRequestEndsWhenCancelledOrDisconnected(bool disconnect)
+    {
+        using DuplexPipe pipe = new();
+        await using AcpProtocolClient client = pipe.CreateClient();
+        client.Start(CancellationToken.None);
+        using CancellationTokenSource cancellation = new();
+        Task<JsonElement> response = client.SendRequestAsync("session/prompt", new { }, cancellation.Token);
+        await pipe.ServerReader.ReadLineAsync();
+        if (disconnect)
+        {
+            pipe.ServerWriter.Dispose();
+            await Assert.ThrowsAsync<EndOfStreamException>(() => response.WaitAsync(TimeSpan.FromSeconds(2)));
+            Assert.False(client.IsRunning);
+        }
+        else
+        {
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => response.WaitAsync(TimeSpan.FromSeconds(2)));
+        }
+    }
+
+    [Fact]
+    public async Task WaitingAgentRequestDoesNotBlockOtherRequests()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        await using AcpProtocolClient client = pipe.CreateClient();
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.RegisterRequestHandler("slow", async (_, ct) =>
+        {
+            await release.Task.WaitAsync(ct);
+            return JsonSerializer.SerializeToElement(new { });
+        });
+        client.RegisterRequestHandler("ping", (_, _) => Task.FromResult<JsonElement?>(JsonSerializer.SerializeToElement(new { })));
+        client.Start(timeout.Token);
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":1,"method":"slow"}""");
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":2,"method":"ping"}""");
+        using JsonDocument fast = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
+        Assert.Equal(2, fast.RootElement.GetProperty("id").GetInt32());
+        release.SetResult();
+        using JsonDocument slow = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
+        Assert.Equal(1, slow.RootElement.GetProperty("id").GetInt32());
+    }
+
+    [Fact]
+    public async Task FileCallbacksPreserveTextAndAllowAnEmptyFile()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        await using AcpProtocolClient client = pipe.CreateClient();
+        new AcpFileSystemHandler().Register(client);
+        client.Start(timeout.Token);
+        string path = Path.Combine(Path.GetTempPath(), "acp-file-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            string original = "\n\nGrüße\r\n";
+            await File.WriteAllTextAsync(path, original);
+            await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 1, method = "fs/read_text_file", @params = new { sessionId = "s", path } }));
+            using JsonDocument read = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
+            Assert.Equal(original, read.RootElement.GetProperty("result").GetProperty("content").GetString());
+            await pipe.ServerWriter.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "fs/write_text_file", @params = new { sessionId = "s", path, content = "" } }));
+            using JsonDocument write = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(timeout.Token))!);
+            Assert.True(write.RootElement.TryGetProperty("result", out _));
+            Assert.Equal(string.Empty, await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private sealed class DuplexPipe : IDisposable
     {
         private readonly Pipe _clientToServer = new();

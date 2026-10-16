@@ -17,10 +17,15 @@ public sealed class CSharpWorkspaceManager : IDisposable
     private readonly ConcurrentDictionary<string, DocumentId> _documentIds =
         new(FileSystemPathComparison.Comparer);
     private readonly ILogger<CSharpWorkspaceManager> _logger;
+    private readonly ConcurrentDictionary<string, DocumentId> _adhocDocumentIds =
+        new(FileSystemPathComparison.Comparer);
     private MSBuildWorkspace? _msbuildWorkspace;
     private AdhocWorkspace? _adhocWorkspace;
-    private Workspace? _workspace;
     private Solution? _solution;
+
+    // Files outside the loaded projects live in their own workspace, so the project workspace stays in place.
+    private Solution? _adhocSolution;
+    private ProjectId? _adhocProjectId;
     private string? _workspacePath;
     private Task? _workspaceLoadTask;
     private CancellationTokenSource? _workspaceLoadCancellation;
@@ -53,13 +58,15 @@ public sealed class CSharpWorkspaceManager : IDisposable
             oldLoadCancellation = _workspaceLoadCancellation;
             _msbuildWorkspace = null;
             _adhocWorkspace = null;
-            _workspace = null;
+            _adhocSolution = null;
+            _adhocProjectId = null;
             _solution = null;
             _workspacePath = workspacePath;
             _workspaceLoadTask = null;
             _workspaceLoadCancellation = null;
             _workspaceGeneration++;
             _documentIds.Clear();
+            _adhocDocumentIds.Clear();
         }
 
         oldLoadCancellation?.Cancel();
@@ -81,13 +88,15 @@ public sealed class CSharpWorkspaceManager : IDisposable
             oldLoadCancellation = _workspaceLoadCancellation;
             _msbuildWorkspace = null;
             _adhocWorkspace = null;
+            _adhocSolution = null;
+            _adhocProjectId = null;
             _workspacePath = null;
             _solution = null;
-            _workspace = null;
             _workspaceLoadTask = null;
             _workspaceLoadCancellation = null;
             _workspaceGeneration++;
             _documentIds.Clear();
+            _adhocDocumentIds.Clear();
         }
 
         oldLoadCancellation?.Cancel();
@@ -121,9 +130,28 @@ public sealed class CSharpWorkspaceManager : IDisposable
         return await AddOrUpdateAdhocDocumentAsync(filePath, text, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Tells whether the document belongs to a loaded project. A file outside the projects has only the runtime
+    /// assemblies as references, so its references to other assemblies cannot be checked.
+    /// </summary>
+    public bool IsProjectDocument(Document document)
+    {
+        lock (_gate)
+        {
+            return _adhocProjectId is null || document.Project.Id != _adhocProjectId;
+        }
+    }
+
     public Task WarmWorkspaceAsync(CancellationToken ct)
     {
         return EnsureMsbuildWorkspaceAsync(ct);
+    }
+
+    /// <summary>Gets an immutable snapshot of the initialized project workspace.</summary>
+    public async Task<Solution?> GetSolutionAsync(CancellationToken ct)
+    {
+        await EnsureMsbuildWorkspaceAsync(ct).ConfigureAwait(false);
+        lock (_gate) return _solution;
     }
 
     private async Task EnsureMsbuildWorkspaceAsync(CancellationToken ct)
@@ -192,7 +220,6 @@ public sealed class CSharpWorkspaceManager : IDisposable
                 if (accepted)
                 {
                     _msbuildWorkspace = workspace;
-                    _workspace = workspace;
                     _solution = solution;
                     workspace = null;
                 }
@@ -243,7 +270,15 @@ public sealed class CSharpWorkspaceManager : IDisposable
             sourceText,
             PreservationMode.PreserveValue);
 
-        ApplySolution(newSolution);
+        if (IsProjectDocument(document))
+        {
+            ApplySolution(newSolution);
+        }
+        else
+        {
+            ApplyAdhocSolution(newSolution);
+        }
+
         Document updated = newSolution.GetDocument(document.Id) ?? document;
         await updated.GetTextAsync(ct).ConfigureAwait(false);
         return updated;
@@ -269,28 +304,32 @@ public sealed class CSharpWorkspaceManager : IDisposable
             metadataReferences: GetDefaultReferences());
 
         workspace.AddProject(projectInfo);
-        _adhocWorkspace = workspace;
-        _workspace = workspace;
-        _solution = workspace.CurrentSolution;
+        lock (_gate)
+        {
+            _adhocWorkspace = workspace;
+            _adhocSolution = workspace.CurrentSolution;
+            _adhocProjectId = projectId;
+        }
     }
 
     private async Task<Document?> AddOrUpdateAdhocDocumentAsync(string filePath, string text, CancellationToken ct)
     {
-        if (_workspace is not AdhocWorkspace adhoc || _solution is null)
+        Solution? adhocSolution = _adhocSolution;
+        if (adhocSolution is null)
         {
             return null;
         }
 
-        if (_documentIds.TryGetValue(filePath, out DocumentId? existingId))
+        if (_adhocDocumentIds.TryGetValue(filePath, out DocumentId? existingId))
         {
-            Document? existing = _solution.GetDocument(existingId);
+            Document? existing = adhocSolution.GetDocument(existingId);
             if (existing is not null)
             {
                 return await UpdateDocumentTextAsync(existing, text, ct).ConfigureAwait(false);
             }
         }
 
-        Project? project = _solution.Projects.FirstOrDefault();
+        Project? project = adhocSolution.Projects.FirstOrDefault();
         if (project is null)
         {
             return null;
@@ -304,9 +343,9 @@ public sealed class CSharpWorkspaceManager : IDisposable
             filePath: filePath,
             loader: TextLoader.From(TextAndVersion.Create(sourceText, VersionStamp.Create())));
 
-        Solution newSolution = _solution.AddDocument(docInfo);
-        ApplySolution(newSolution);
-        _documentIds[filePath] = docId;
+        Solution newSolution = adhocSolution.AddDocument(docInfo);
+        ApplyAdhocSolution(newSolution);
+        _adhocDocumentIds[filePath] = docId;
         Document? document = newSolution.GetDocument(docId);
         if (document is not null)
         {
@@ -316,17 +355,27 @@ public sealed class CSharpWorkspaceManager : IDisposable
         return document;
     }
 
+    // The project snapshot stays in memory: MSBuildWorkspace.TryApplyChanges would write every changed document
+    // to disk, including read-only files and edits the shell applies to the files itself.
     private void ApplySolution(Solution solution)
     {
         _solution = solution;
-        if (_workspace is not null)
-        {
-            _workspace.TryApplyChanges(solution);
-        }
+    }
+
+    private void ApplyAdhocSolution(Solution solution)
+    {
+        _adhocSolution = solution;
+        _adhocWorkspace?.TryApplyChanges(solution);
     }
 
     public void UpdateSolution(Solution solution)
     {
+        if (_adhocWorkspace is not null && ReferenceEquals(solution.Workspace, _adhocWorkspace))
+        {
+            ApplyAdhocSolution(solution);
+            return;
+        }
+
         ApplySolution(solution);
     }
 

@@ -9,6 +9,7 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Animation;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Sync;
@@ -89,19 +90,19 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
     public partial string NewTrackPropertyName { get; set; } = string.Empty;
 
     [Reactive]
-    public partial string StatusMessage { get; private set; } = "Ready";
+    public partial string StatusMessage { get; private set; } = UiStrings.Ready;
 
     [Reactive]
     public partial Guid? TargetNodeId { get; private set; }
 
     [Reactive]
-    public partial string TargetDisplayName { get; private set; } = "No selection";
+    public partial string TargetDisplayName { get; private set; } = UiStrings.NoSelection;
 
     public ObservableCollection<AnimationResourceScopeEntry> ResourceScopes { get; } = new()
     {
-        new AnimationResourceScopeEntry(AnimationResourceScope.DocumentResources, "Document Resources"),
-        new AnimationResourceScopeEntry(AnimationResourceScope.SelectedElementResources, "Selected Element Resources"),
-        new AnimationResourceScopeEntry(AnimationResourceScope.StylesResources, "Styles Resources")
+        new AnimationResourceScopeEntry(AnimationResourceScope.DocumentResources, UiStrings.DocumentResources),
+        new AnimationResourceScopeEntry(AnimationResourceScope.SelectedElementResources, UiStrings.SelectedElementResources),
+        new AnimationResourceScopeEntry(AnimationResourceScope.StylesResources, UiStrings.StylesResources)
     };
 
     [Reactive]
@@ -203,6 +204,27 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             .Subscribe(SubscribeKeyframeChanges);
         _disposables.Add(selectedKeyframeSubscription);
 
+        IDisposable selectedTrackSubscription = this.WhenAnyValue(x => x.SelectedTrack)
+            .Buffer(2, 1)
+            .Subscribe(pair =>
+            {
+                if (pair.Count < 2)
+                {
+                    return;
+                }
+
+                if (pair[0] is AnimationTrackViewModel previous)
+                {
+                    previous.IsSelected = false;
+                }
+
+                if (pair[1] is AnimationTrackViewModel current)
+                {
+                    current.IsSelected = true;
+                }
+            });
+        _disposables.Add(selectedTrackSubscription);
+
         IDisposable selectedTimelineValidationSubscription = Observable.Switch(this.WhenAnyValue(x => x.SelectedTimeline)
             .Select(timeline => timeline is null
                 ? Observable.Return(0.0)
@@ -221,7 +243,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
     {
         ActiveDocument = document;
         TargetNodeId = null;
-        TargetDisplayName = "No selection";
+        TargetDisplayName = UiStrings.NoSelection;
         AvailableResources.Clear();
 
         if (document is null)
@@ -243,14 +265,14 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
 
         if (nodeId is null)
         {
-            TargetDisplayName = "No selection";
+            TargetDisplayName = UiStrings.NoSelection;
             return;
         }
 
         MutableAstNode? node = document.NodeMap.FindById(nodeId.Value);
         if (node is not MutableAstObjectNode objNode)
         {
-            TargetDisplayName = "No selection";
+            TargetDisplayName = UiStrings.NoSelection;
             return;
         }
 
@@ -274,14 +296,14 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         Timelines.Add(timeline);
         SelectedTimeline = timeline;
         RebuildRulerTicks();
-        StatusMessage = $"Created timeline {name}";
+        StatusMessage = string.Format(UiStrings.TimelineCreated, name);
     }
 
     private void AddTrack()
     {
         if (SelectedTimeline is null)
         {
-            StatusMessage = "Select a timeline to add tracks.";
+            StatusMessage = UiStrings.SelectTimelineForTrack;
             return;
         }
 
@@ -293,14 +315,14 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         SelectedTimeline.Tracks.Add(track);
         SelectedTrack = track;
         NewTrackPropertyName = string.Empty;
-        StatusMessage = $"Added track {property}.";
+        StatusMessage = string.Format(UiStrings.TrackAdded, property);
     }
 
     private void AddKeyframe()
     {
         if (SelectedTrack is null)
         {
-            StatusMessage = "Select a track to add keyframes.";
+            StatusMessage = UiStrings.SelectTrackForKeyframe;
             return;
         }
 
@@ -314,10 +336,10 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         SelectedTrack.Keyframes.Add(keyframe);
         SelectSingleKeyframe(keyframe);
         RecordEdit(new AnimationEdit(
-            description: "Add keyframe",
+            description: UiStrings.UndoAddKeyframe,
             apply: () => SelectedTrack.Keyframes.Add(keyframe),
             undo: () => SelectedTrack.Keyframes.Remove(keyframe)));
-        StatusMessage = "Added keyframe.";
+        StatusMessage = UiStrings.KeyframeAdded;
     }
 
     private string ResolveKeyframeValue()
@@ -354,11 +376,11 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             List<KeyframeRemoval> removals = CaptureRemovals(SelectedKeyframes);
             RemoveKeyframes(removals);
             RecordEdit(new AnimationEdit(
-                description: "Remove keyframes",
+                description: UiStrings.UndoRemoveKeyframes,
                 apply: () => RemoveKeyframes(removals),
                 undo: () => RestoreKeyframes(removals)));
             ClearKeyframeSelection();
-            StatusMessage = "Removed keyframes.";
+            StatusMessage = UiStrings.KeyframesRemoved;
             return;
         }
 
@@ -370,10 +392,10 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             SelectedKeyframe.IsSelected = false;
             SelectedKeyframe = null;
             RecordEdit(new AnimationEdit(
-                description: "Remove keyframe",
+                description: UiStrings.UndoRemoveKeyframe,
                 apply: () => SelectedTrack.Keyframes.Remove(removed),
                 undo: () => InsertKeyframe(SelectedTrack, removed, index)));
-            StatusMessage = "Removed keyframe.";
+            StatusMessage = UiStrings.KeyframeRemoved;
             return;
         }
 
@@ -384,10 +406,10 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             SelectedTimeline.Tracks.Remove(SelectedTrack);
             SelectedTrack = null;
             RecordEdit(new AnimationEdit(
-                description: "Remove track",
+                description: UiStrings.UndoRemoveTrack,
                 apply: () => SelectedTimeline.Tracks.Remove(removed),
                 undo: () => InsertTrack(SelectedTimeline, removed, index)));
-            StatusMessage = "Removed track.";
+            StatusMessage = UiStrings.TrackRemoved;
         }
     }
 
@@ -395,13 +417,13 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
     {
         if (ActiveDocument?.SyncEngine.CurrentDocument is not MutableAstDocument document)
         {
-            StatusMessage = "No active document.";
+            StatusMessage = UiStrings.NoActiveDocument;
             return;
         }
 
         if (SelectedTimeline is null)
         {
-            StatusMessage = "Select a timeline to create a resource.";
+            StatusMessage = UiStrings.SelectTimelineForResource;
             return;
         }
 
@@ -436,7 +458,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
 
         if (tracks.Count == 0)
         {
-            StatusMessage = "Add at least one keyframe before creating a resource.";
+            StatusMessage = UiStrings.KeyframeRequiredForResource;
             return;
         }
 
@@ -453,29 +475,40 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             scope: SelectedScope.Scope,
             scopeOwner: owner);
 
-        bool added = AnimationResourceWriter.TryAddAnimationResource(document, definition, out string? error);
-        if (!added)
+        if (!ActiveDocument.SyncEngine.CanEditAst)
         {
-            StatusMessage = error ?? "Failed to create animation resource.";
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
             return;
         }
 
-        ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface);
+        bool added = AnimationResourceWriter.TryAddAnimationResource(document, definition, out string? error);
+        if (!added)
+        {
+            StatusMessage = error ?? UiStrings.CreateAnimationResourceFailed;
+            return;
+        }
+
+        if (!ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface))
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         RefreshResources();
-        StatusMessage = $"Added animation {SelectedTimeline.ResourceKey}.";
+        StatusMessage = string.Format(UiStrings.AnimationAdded, SelectedTimeline.ResourceKey);
     }
 
     private void PlayPreview()
     {
         if (_previewService is null)
         {
-            StatusMessage = "Preview service unavailable.";
+            StatusMessage = UiStrings.PreviewServiceUnavailable;
             return;
         }
 
         if (ActiveDocument is null || SelectedTimeline is null)
         {
-            StatusMessage = "Select a timeline and target to preview.";
+            StatusMessage = UiStrings.SelectTimelineAndTarget;
             return;
         }
 
@@ -488,17 +521,17 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
 
         if (!started)
         {
-            StatusMessage = error ?? "Preview failed.";
+            StatusMessage = error ?? UiStrings.PreviewFailed;
             return;
         }
 
-        StatusMessage = "Previewing animation.";
+        StatusMessage = UiStrings.AnimationPreviewRunning;
     }
 
     private void StopPreview()
     {
         _previewService?.StopPreview();
-        StatusMessage = "Preview stopped.";
+        StatusMessage = UiStrings.PreviewStopped;
     }
 
     private void RefreshResources()
@@ -522,27 +555,27 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
     {
         if (entry is null)
         {
-            StatusMessage = "Select a resource to load.";
+            StatusMessage = UiStrings.SelectResourceToLoad;
             return;
         }
 
         AnimationTimelineViewModel timeline = BuildTimelineViewModel(entry.Snapshot);
         Timelines.Add(timeline);
         SelectedTimeline = timeline;
-        StatusMessage = $"Loaded {entry.Snapshot.Key}.";
+        StatusMessage = string.Format(UiStrings.ResourceLoaded, entry.Snapshot.Key);
     }
 
     private void UpdateResource()
     {
         if (ActiveDocument?.SyncEngine.CurrentDocument is not MutableAstDocument document)
         {
-            StatusMessage = "No active document.";
+            StatusMessage = UiStrings.NoActiveDocument;
             return;
         }
 
         if (SelectedTimeline is null || SelectedResource is null)
         {
-            StatusMessage = "Select a timeline and resource to update.";
+            StatusMessage = UiStrings.SelectTimelineAndResource;
             return;
         }
 
@@ -573,13 +606,13 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
 
         if (tracks.Count == 0)
         {
-            StatusMessage = "Add at least one keyframe before updating.";
+            StatusMessage = UiStrings.KeyframeRequiredForUpdate;
             return;
         }
 
         if (string.IsNullOrWhiteSpace(SelectedTimeline.ResourceKey))
         {
-            StatusMessage = "Resource key is required.";
+            StatusMessage = UiStrings.ResourceKeyRequired;
             return;
         }
 
@@ -597,44 +630,66 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             scope: snapshot.Scope,
             scopeOwner: owner);
 
-        bool updated = AnimationResourceWriter.TryUpdateAnimationResource(document, definition, snapshot, out string? error);
-        if (!updated)
+        if (!ActiveDocument.SyncEngine.CanEditAst)
         {
-            StatusMessage = error ?? "Failed to update resource.";
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
             return;
         }
 
-        ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface);
+        bool updated = AnimationResourceWriter.TryUpdateAnimationResource(document, definition, snapshot, out string? error);
+        if (!updated)
+        {
+            StatusMessage = error ?? UiStrings.UpdateResourceFailed;
+            return;
+        }
+
+        if (!ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface))
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         RefreshResources();
         SelectedResource = AvailableResources.FirstOrDefault(r => string.Equals(r.Snapshot.Key, definition.Key, StringComparison.Ordinal));
-        StatusMessage = $"Updated {definition.Key}.";
+        StatusMessage = string.Format(UiStrings.ResourceUpdated, definition.Key);
     }
 
     private void DeleteResource()
     {
         if (ActiveDocument?.SyncEngine.CurrentDocument is not MutableAstDocument document)
         {
-            StatusMessage = "No active document.";
+            StatusMessage = UiStrings.NoActiveDocument;
             return;
         }
 
         if (SelectedResource is null)
         {
-            StatusMessage = "Select a resource to delete.";
+            StatusMessage = UiStrings.SelectResourceToDelete;
+            return;
+        }
+
+        if (!ActiveDocument.SyncEngine.CanEditAst)
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
             return;
         }
 
         bool deleted = AnimationResourceWriter.TryDeleteAnimationResource(document, SelectedResource.Snapshot, out string? error);
         if (!deleted)
         {
-            StatusMessage = error ?? "Failed to delete resource.";
+            StatusMessage = error ?? UiStrings.DeleteResourceFailed;
             return;
         }
 
-        ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface);
+        if (!ActiveDocument.SyncEngine.NotifyAstChanged(document, SyncSource.DesignSurface))
+        {
+            StatusMessage = UiStrings.DocumentHasXamlErrors;
+            return;
+        }
+
         RefreshResources();
         SelectedResource = null;
-        StatusMessage = "Deleted resource.";
+        StatusMessage = UiStrings.ResourceDeleted;
     }
 
     private void SetCurrentTime(double timeSeconds)
@@ -844,15 +899,15 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
 
         if (!IsKeyframeTimeValid)
         {
-            KeyframeValidationMessage = "Time must be within the timeline duration.";
+            KeyframeValidationMessage = UiStrings.KeyframeTimeRange;
         }
         else if (!IsKeyframeValueValid)
         {
-            KeyframeValidationMessage = "Value cannot be empty.";
+            KeyframeValidationMessage = UiStrings.ValueCannotBeEmpty;
         }
         else if (!IsKeyframeEasingValid)
         {
-            KeyframeValidationMessage = "Easing is invalid. Use a keyword or cubic-bezier.";
+            KeyframeValidationMessage = UiStrings.InvalidEasing;
         }
         else
         {
@@ -905,7 +960,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         }
 
         RecordEdit(new AnimationEdit(
-            description: "Move keyframe",
+            description: UiStrings.UndoMoveKeyframe,
             apply: () => commit.Keyframe.TimeSeconds = commit.NewTime,
             undo: () => commit.Keyframe.TimeSeconds = commit.OldTime));
     }
@@ -915,18 +970,18 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         return change.Kind switch
         {
             AnimationKeyframeEditKind.Time => new AnimationEdit(
-                "Edit keyframe time",
+                UiStrings.EditKeyframeTime,
                 apply: () => change.Keyframe.TimeSeconds = Convert.ToDouble(change.NewValue ?? 0.0),
                 undo: () => change.Keyframe.TimeSeconds = Convert.ToDouble(change.OldValue ?? 0.0)),
             AnimationKeyframeEditKind.Value => new AnimationEdit(
-                "Edit keyframe value",
+                UiStrings.EditKeyframeValue,
                 apply: () => change.Keyframe.Value = Convert.ToString(change.NewValue) ?? string.Empty,
                 undo: () => change.Keyframe.Value = Convert.ToString(change.OldValue) ?? string.Empty),
             AnimationKeyframeEditKind.Easing => new AnimationEdit(
-                "Edit keyframe easing",
+                UiStrings.EditKeyframeEasing,
                 apply: () => change.Keyframe.Easing = Convert.ToString(change.NewValue),
                 undo: () => change.Keyframe.Easing = Convert.ToString(change.OldValue)),
-            _ => new AnimationEdit("Edit keyframe", () => { }, () => { })
+            _ => new AnimationEdit(UiStrings.EditKeyframe, () => { }, () => { })
         };
     }
 
@@ -1079,7 +1134,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
 
         if (source.Count == 0)
         {
-            StatusMessage = "Select keyframes to copy.";
+            StatusMessage = UiStrings.SelectKeyframesToCopy;
             return;
         }
 
@@ -1088,20 +1143,20 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             .OrderBy(k => k.TimeSeconds)
             .Select(k => new KeyframeClipboardEntry(k.TimeSeconds - baseTime, k.Value, k.Easing))
             .ToList();
-        StatusMessage = $"Copied {source.Count} keyframe(s).";
+        StatusMessage = string.Format(UiStrings.KeyframesCopied, source.Count);
     }
 
     private void PasteKeyframes()
     {
         if (SelectedTrack is null)
         {
-            StatusMessage = "Select a track to paste into.";
+            StatusMessage = UiStrings.SelectTrackToPaste;
             return;
         }
 
         if (_keyframeClipboard.Count == 0)
         {
-            StatusMessage = "Clipboard is empty.";
+            StatusMessage = UiStrings.ClipboardEmpty;
             return;
         }
 
@@ -1127,7 +1182,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
         }
 
         RecordEdit(new AnimationEdit(
-            description: "Paste keyframes",
+            description: UiStrings.UndoPasteKeyframes,
             apply: () => added.ForEach(k => SelectedTrack.Keyframes.Add(k)),
             undo: () => added.ForEach(k => SelectedTrack.Keyframes.Remove(k))));
 
@@ -1137,7 +1192,7 @@ public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposab
             SelectAdditionalKeyframe(keyframe);
         }
         SelectedKeyframe = added.LastOrDefault();
-        StatusMessage = $"Pasted {added.Count} keyframe(s).";
+        StatusMessage = string.Format(UiStrings.KeyframesPasted, added.Count);
     }
 
     private static List<KeyframeRemoval> CaptureRemovals(IEnumerable<AnimationKeyframeViewModel> keyframes)
@@ -1196,6 +1251,10 @@ public sealed partial class AnimationTrackViewModel : ReactiveObject
 {
     [Reactive]
     public partial string PropertyName { get; set; } = string.Empty;
+
+    /// <summary>True while this track is the editor's <see cref="AnimationEditorViewModel.SelectedTrack"/>.</summary>
+    [Reactive]
+    public partial bool IsSelected { get; internal set; }
 
     public ObservableCollection<AnimationKeyframeViewModel> Keyframes { get; } = new();
 }

@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -77,7 +78,7 @@ public sealed class FileExtensionStateStore : IExtensionStateStore
             return;
         }
 
-        string json = File.ReadAllText(_stateFilePath);
+        string json = SharedFileReader.ReadAllText(_stateFilePath);
         ExtensionStateFile? state = JsonSerializer.Deserialize<ExtensionStateFile>(json);
         if (state?.Extensions is null)
         {

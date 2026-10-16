@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Acp;
 
@@ -13,6 +15,8 @@ public sealed class AcpProtocolClient : IAsyncDisposable
     private readonly AcpMessageReader _reader;
     private readonly AcpMessageWriter _writer;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pending = new();
+    private readonly ConcurrentDictionary<Task, byte> _incomingRequests = new();
+    private volatile bool _isRunning;
     private readonly ConcurrentDictionary<string, Func<JsonElement?, CancellationToken, Task<JsonElement?>>> _requestHandlers = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private long _sequence;
@@ -26,11 +30,15 @@ public sealed class AcpProtocolClient : IAsyncDisposable
     }
 
     public event Action<string, JsonElement?>? NotificationReceived;
+    public event Action<Exception?>? Disconnected;
+    public bool IsRunning => _isRunning;
 
     public void Start(CancellationToken ct)
     {
+        if (_readLoop is not null) throw new InvalidOperationException("ACP client has already started.");
         _loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _readLoop = Task.Run(() => ReadLoopAsync(_loopCts.Token), _loopCts.Token);
+        _isRunning = true;
+        _readLoop = Task.Run(() => ReadLoopAsync(_loopCts.Token));
     }
 
     public void RegisterRequestHandler(string method, Func<JsonElement?, CancellationToken, Task<JsonElement?>> handler)
@@ -50,6 +58,7 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
     public async Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken ct)
     {
+        if (!_isRunning) throw new InvalidOperationException("ACP connection is closed.");
         if (string.IsNullOrWhiteSpace(method))
         {
             throw new ArgumentException("Method name is required.", nameof(method));
@@ -68,8 +77,13 @@ public sealed class AcpProtocolClient : IAsyncDisposable
             @params = parameters
         };
 
-        await SendAsync(payload, ct).ConfigureAwait(false);
-        return await tcs.Task.ConfigureAwait(false);
+        try
+        {
+            if (!_isRunning) throw new EndOfStreamException("ACP connection closed.");
+            await SendAsync(payload, ct).ConfigureAwait(false);
+            return await tcs.Task.WaitAsync(ct).ConfigureAwait(false);
+        }
+        finally { _pending.TryRemove(key, out _); }
     }
 
     public async Task SendNotificationAsync(string method, object? parameters, CancellationToken ct)
@@ -105,6 +119,9 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
     private async Task ReadLoopAsync(CancellationToken ct)
     {
+        Exception? failure = null;
+        try
+        {
         while (!ct.IsCancellationRequested)
         {
             string? json = await _reader.ReadMessageAsync(ct).ConfigureAwait(false);
@@ -134,6 +151,16 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
                 if (hasMethod)
                 {
+                    if (methodElement.ValueKind != JsonValueKind.String)
+                    {
+                        if (hasId && TryGetIdValue(idElement, out object? invalidId) && invalidId is not null)
+                        {
+                            await SendErrorAsync(invalidId, -32600, "Invalid Request", ct).ConfigureAwait(false);
+                        }
+
+                        continue;
+                    }
+
                     string? method = methodElement.GetString();
                     if (string.IsNullOrWhiteSpace(method))
                     {
@@ -146,20 +173,37 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
                     if (hasId)
                     {
-                        await HandleRequestAsync(method, idElement, parameters, ct).ConfigureAwait(false);
+                        Task request = HandleRequestAsync(method, idElement.Clone(), parameters, ct);
+                        _incomingRequests.TryAdd(request, 0);
+                        _ = request.ContinueWith(completed =>
+                        {
+                            _incomingRequests.TryRemove(completed, out _);
+                            _ = completed.Exception;
+                        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
                         continue;
                     }
 
                     NotificationReceived?.Invoke(method, parameters);
                 }
             }
-            catch
+            catch (JsonException)
             {
             }
             finally
             {
                 document?.Dispose();
             }
+        }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { failure = error; }
+        finally
+        {
+            _isRunning = false;
+            _loopCts?.Cancel();
+            foreach (var pending in _pending.Values)
+                pending.TrySetException(failure ?? new EndOfStreamException("ACP connection closed."));
+            Disconnected?.Invoke(failure);
         }
     }
 
@@ -203,7 +247,7 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
         try
         {
-            JsonElement? result = await handler(parameters, ct).ConfigureAwait(false);
+            JsonElement? result = await handler(parameters, ct).WaitAsync(ct).ConfigureAwait(false);
             await SendResultAsync(idValue, result, ct).ConfigureAwait(false);
         }
         catch (JsonRpcException ex)
@@ -257,7 +301,7 @@ public sealed class AcpProtocolClient : IAsyncDisposable
             : -32000;
         string message = errorElement.TryGetProperty("message", out JsonElement messageElement)
             ? messageElement.GetString() ?? "ACP request failed."
-            : "ACP request failed.";
+            : UiStrings.AcpRequestFailed;
         return new JsonRpcException(code, message);
     }
 
@@ -332,6 +376,9 @@ public sealed class AcpProtocolClient : IAsyncDisposable
         {
             pending.TrySetCanceled();
         }
+
+        try { await Task.WhenAll(_incomingRequests.Keys).ConfigureAwait(false); }
+        catch (Exception) when (_loopCts?.IsCancellationRequested == true) { }
 
         _sendLock.Dispose();
         _loopCts?.Dispose();

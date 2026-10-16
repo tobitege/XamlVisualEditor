@@ -3,6 +3,7 @@
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
              xmlns:dock="using:Dock.Avalonia.Controls"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.InfiniteCanvasView"
              x:DataType="vm:InfiniteCanvasViewModel">
   <DockPanel>
@@ -21,10 +22,10 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <Button Content="Add Open Doc"
+        <Button Content="{x:Static loc:UiStrings.AddOpenDocument}"
                 Command="{CompiledBinding AddOpenDocumentCommand}"
                 CommandParameter="{CompiledBinding SelectedOpenDocument}" />
-        <Button Content="Add All Open Docs"
+        <Button Content="{x:Static loc:UiStrings.AddAllOpenDocuments}"
                 Command="{CompiledBinding AddAllOpenDocumentsCommand}" />
       </StackPanel>
     </Border>

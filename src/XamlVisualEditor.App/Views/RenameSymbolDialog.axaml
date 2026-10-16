@@ -1,18 +1,21 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
         x:Class="XamlVisualEditor.App.Views.RenameSymbolDialog"
+        Classes="editor-chrome"
         x:DataType="vm:RenameSymbolDialogViewModel"
-        Width="360" Height="160"
+        Title="{CompiledBinding Title}"
+        Width="360" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
   <StackPanel Margin="16" Spacing="8">
     <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
-    <TextBlock Text="{CompiledBinding Prompt}" Opacity="0.7" />
+    <TextBlock Text="{CompiledBinding Prompt}" Opacity="0.7" TextWrapping="Wrap" />
     <TextBox Text="{CompiledBinding Name, Mode=TwoWay}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
-      <Button Content="Rename" Command="{CompiledBinding ConfirmCommand}" IsDefault="True" />
+      <Button Content="{x:Static loc:UiStrings.Cancel}" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+      <Button Content="{x:Static loc:UiStrings.Rename}" Command="{CompiledBinding ConfirmCommand}" IsDefault="True" />
     </StackPanel>
   </StackPanel>
 </Window>

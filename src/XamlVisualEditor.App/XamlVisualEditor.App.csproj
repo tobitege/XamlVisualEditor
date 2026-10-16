@@ -5,7 +5,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>XamlVisualEditor.App</RootNamespace>
     <Description>Avalonia application entry point, composition root, views, and resource dictionaries</Description>
+    <!-- Opt-in CDP diagnostics endpoint (docs/CDP-DEBUG.md); independent of the build configuration so that
+         restore and build always resolve the same package graph. -->
+    <EnableCdpDiagnostics Condition="'$(EnableCdpDiagnostics)' == ''">false</EnableCdpDiagnostics>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(EnableCdpDiagnostics)' == 'true'">
+    <DefineConstants>$(DefineConstants);CDP_DIAGNOSTICS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableCdpDiagnostics)' == 'true'">
+    <PackageReference Include="Chrome.DevTools.Avalonia" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" PrivateAssets="all" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" PrivateAssets="all" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
@@ -34,6 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.UI" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" />
@@ -94,7 +106,7 @@
   <Target Name="CopyPreviewerHost" AfterTargets="Build">
     <PropertyGroup>
       <_PreviewerHostOutputDirectory>..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\</_PreviewerHostOutputDirectory>
-      <_PreviewerHostOutputDirectory Condition="'$(RuntimeIdentifier)' != ''">$(_PreviewerHostOutputDirectory)$(RuntimeIdentifier)\</_PreviewerHostOutputDirectory>
+      <_PreviewerHostOutputDirectory Condition="'$(RuntimeIdentifier)' != '' and '$(AppendRuntimeIdentifierToOutputPath)' != 'false'">$(_PreviewerHostOutputDirectory)$(RuntimeIdentifier)\</_PreviewerHostOutputDirectory>
     </PropertyGroup>
     <MSBuild Projects="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj"
              Targets="Build"

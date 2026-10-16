@@ -15,7 +15,11 @@ public sealed class McpToolsHandler : IMcpRequestHandler
 
     public void Register(McpRequestRouter router)
     {
-        router.Register(McpProtocol.ToolsListMethod, (_, _, _) => Task.FromResult<object?>(new McpToolsListResult(_catalog.ListTools())));
+        router.Register(McpProtocol.ToolsListMethod, (context, _, _) =>
+        {
+            RequireSession(context);
+            return Task.FromResult<object?>(new McpToolsListResult(_catalog.ListTools()));
+        });
         router.Register(McpProtocol.ToolsCallMethod, (context, paramsElement, ct) => HandleToolCallAsync(context, paramsElement, ct));
     }
 
@@ -26,7 +30,7 @@ public sealed class McpToolsHandler : IMcpRequestHandler
 
         if (!_catalog.TryGet(request.Name, out McpToolCatalog.McpTool tool))
         {
-            throw new McpJsonRpcException(-32601, "Tool not found.");
+            throw new McpJsonRpcException(-32602, "Tool not found.");
         }
 
         if (tool.RequiresWrite && session.AccessLevel != McpAccessLevel.Full)
@@ -34,8 +38,11 @@ public sealed class McpToolsHandler : IMcpRequestHandler
             throw new McpJsonRpcException(-32000, "Write permission denied.");
         }
 
-        McpToolCallResult result = await tool.Handler(request.Arguments, ct).ConfigureAwait(false);
-        return result;
+        try { return await tool.Handler(request.Arguments, ct).ConfigureAwait(false); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return new McpToolCallResult(new[] { new McpContent("text", Text: error.Message) }, IsError: true);
+        }
     }
 
     private static McpSessionInfo RequireSession(McpRequestContext context)

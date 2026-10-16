@@ -17,6 +17,7 @@ using ReactiveUI;
 using ReactiveUI.Primitives.Concurrency;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
@@ -80,6 +81,9 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
         Documents.CollectionChanged += OnDocumentsChanged;
 
         DropFilesCommand = ReactiveCommand.CreateFromTask<CanvasDropInfo>(HandleDropAsync);
+        // Without a subscriber ReactiveUI ends the application when a dropped file cannot be added.
+        _disposables.Add(DropFilesCommand.ThrownExceptions
+            .Subscribe(error => _logger.LogWarning("Failed to add dropped files: {Message}", error.Message)));
         AddOpenDocumentCommand = ReactiveCommand.Create<OpenDocumentEntry?>(AddOpenDocument);
         AddAllOpenDocumentsCommand = ReactiveCommand.Create(AddAllOpenDocuments);
 
@@ -324,7 +328,7 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
                 return;
             }
 
-            string json = File.ReadAllText(path);
+            string json = SharedFileReader.ReadAllText(path);
             MdiCanvasLayoutState? layout = JsonSerializer.Deserialize<MdiCanvasLayoutState>(json);
             if (layout?.Items is null)
             {
@@ -396,10 +400,7 @@ public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposabl
 
     private static string GetLayoutPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "mdi-canvas-layout.json");
+        return Path.Combine(ShellSettingsPaths.GetRoot(), "mdi-canvas-layout.json");
     }
 
     private static bool IsSupportedPath(string filePath)

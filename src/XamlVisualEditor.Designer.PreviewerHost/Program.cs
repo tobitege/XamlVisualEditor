@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
@@ -10,14 +12,21 @@ namespace XamlVisualEditor.Designer.PreviewerHost;
 
 public static class Program
 {
+    private static Assembly? s_targetAssembly;
+    private static TargetAssemblyResolver? s_resolver;
+
     public static void Main(string[] args)
     {
         string targetAssemblyPath = ResolveTargetAssemblyPath(args);
         TargetAssemblyResolver resolver = new(targetAssemblyPath);
         AssemblyLoadContext.Default.Resolving += resolver.Resolve;
         AssemblyLoadContext.Default.ResolvingUnmanagedDll += resolver.ResolveUnmanaged;
+        AppDomain.CurrentDomain.AssemblyLoad += (_, e) => resolver.RegisterImportResolver(e.LoadedAssembly);
 
-        _ = AssemblyLoadContext.Default.LoadFromAssemblyPath(targetAssemblyPath);
+        s_targetAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(targetAssemblyPath);
+        s_resolver = resolver;
+        if (s_targetAssembly == typeof(Program).Assembly)
+            throw new InvalidOperationException("The preview target must be a project assembly, not the previewer host.");
 
         RuntimeXamlLoaderRegistrar.Configure(targetAssemblyPath);
         RuntimeXamlLoaderRegistrar.Register();
@@ -36,7 +45,28 @@ public static class Program
             throw new InvalidOperationException("Unable to locate RemoteDesignerEntryPoint.Main method.");
         }
 
-        _ = mainMethod.Invoke(null, new object[] { args });
+        string[] remoteArguments = (string[])args.Clone();
+        for (int index = remoteArguments.Length - 1; index >= 0; index--)
+        {
+            if (HasAssemblyExtension(remoteArguments[index]) &&
+                string.Equals(Path.GetFullPath(remoteArguments[index]), targetAssemblyPath,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                remoteArguments[index] = typeof(Program).Assembly.Location;
+                break;
+            }
+        }
+        _ = mainMethod.Invoke(null, new object[] { remoteArguments });
+    }
+
+    public static object BuildAvaloniaApp()
+    {
+        if (s_targetAssembly is null || s_resolver is null)
+            throw new InvalidOperationException("No preview target has been configured.");
+        object builder = LibraryPreviewBootstrap.CreateAppBuilder(s_targetAssembly,
+            name => LoadAssemblyByName(s_resolver, name));
+        IncrementalPreviewInput.Register(builder);
+        return builder;
     }
 
     private static Assembly LoadAssemblyByName(TargetAssemblyResolver resolver, string assemblyName)
@@ -87,15 +117,52 @@ public static class Program
             || string.Equals(extension, ".exe", StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed class TargetAssemblyResolver
+    internal sealed class TargetAssemblyResolver
     {
         private readonly AssemblyDependencyResolver _resolver;
+        private readonly AssemblyDependencyResolver? _editorResolver;
         private readonly string _targetDirectory;
+        private readonly string _hostDirectory;
+        private readonly string _runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
 
         public TargetAssemblyResolver(string mainAssemblyPath)
+            : this(mainAssemblyPath, AppContext.BaseDirectory)
+        {
+        }
+
+        internal TargetAssemblyResolver(string mainAssemblyPath, string hostDirectory)
         {
             _resolver = new AssemblyDependencyResolver(mainAssemblyPath);
             _targetDirectory = Path.GetDirectoryName(mainAssemblyPath) ?? string.Empty;
+            _hostDirectory = hostDirectory;
+            string editorAssembly = Path.Combine(hostDirectory, "XamlVisualEditor.App.dll");
+            if (File.Exists(editorAssembly)) _editorResolver = new AssemblyDependencyResolver(editorAssembly);
+        }
+
+        // The default lookup falls back to the PATH before ResolvingUnmanagedDll is raised, so an unrelated
+        // native library of the same name (for example an older libSkiaSharp of Git for Windows) would win.
+        // A per-assembly import resolver runs first and prefers the libraries shipped with the target and host.
+        public void RegisterImportResolver(Assembly assembly)
+        {
+            if (assembly.IsDynamic
+                || string.IsNullOrEmpty(assembly.Location)
+                || assembly.Location.StartsWith(_runtimeDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            try
+            {
+                NativeLibrary.SetDllImportResolver(assembly, (name, _, _) =>
+                {
+                    string? path = ResolveUnmanagedPath(name);
+                    return path != null && NativeLibrary.TryLoad(path, out IntPtr handle) ? handle : IntPtr.Zero;
+                });
+            }
+            catch (InvalidOperationException)
+            {
+                // The assembly registered its own resolver.
+            }
         }
 
         public Assembly? Resolve(AssemblyLoadContext context, AssemblyName assemblyName)
@@ -124,22 +191,58 @@ public static class Program
                 }
             }
 
+            path ??= _editorResolver?.ResolveAssemblyToPath(assemblyName);
+            if (path is null)
+            {
+                string editorAssembly = Path.Combine(AppContext.BaseDirectory, assemblyName.Name + ".dll");
+                if (File.Exists(editorAssembly)) path = editorAssembly;
+            }
             return path;
         }
 
         public string? ResolveUnmanagedPath(string unmanagedDllName)
         {
-            string? path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
-            if (path == null && !string.IsNullOrWhiteSpace(_targetDirectory))
+            string? path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName)
+                ?? _editorResolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
+            if (path != null)
             {
-                string candidate = Path.Combine(_targetDirectory, unmanagedDllName);
-                if (File.Exists(candidate))
+                return path;
+            }
+
+            // Framework-dependent outputs without a runtime identifier keep native assets below runtimes/<rid>/native.
+            string fileName = Path.HasExtension(unmanagedDllName) ? unmanagedDllName : unmanagedDllName + GetNativeLibraryExtension();
+            foreach (string directory in new[] { _targetDirectory, _hostDirectory })
+            {
+                if (string.IsNullOrWhiteSpace(directory))
                 {
-                    path = candidate;
+                    continue;
+                }
+
+                foreach (string candidate in new[]
+                {
+                    Path.Combine(directory, unmanagedDllName),
+                    Path.Combine(directory, fileName),
+                    Path.Combine(directory, "runtimes", RuntimeInformation.RuntimeIdentifier, "native", fileName),
+                    Path.Combine(directory, "runtimes", GetPortableRuntimeIdentifier(), "native", fileName)
+                })
+                {
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
 
-            return path;
+            return null;
+        }
+
+        private static string GetNativeLibraryExtension() =>
+            OperatingSystem.IsWindows() ? ".dll" : OperatingSystem.IsMacOS() ? ".dylib" : ".so";
+
+        private static string GetPortableRuntimeIdentifier()
+        {
+            string os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+            return os + "-" + RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
         }
     }
 }
@@ -147,6 +250,33 @@ public static class Program
 internal static class RuntimeXamlLoaderRegistrar
 {
     private static string? s_targetDirectory;
+    private static DesignerThemeProviderSession? s_themeProviders;
+    private static XamlVisualEditor.Core.DesignerThemeCatalog? s_pendingThemeCatalog;
+    private static string? s_themeError;
+    private static readonly IncrementalPreviewUpdater s_incremental = new();
+    private static readonly HashSet<string> s_referenceScans = new(StringComparer.OrdinalIgnoreCase);
+
+    internal static XamlVisualEditor.Core.DesignerUpdateResult ApplyIncrementalUpdate(XamlVisualEditor.Core.DesignerUpdateRequest request) =>
+        s_incremental.Apply(request, DesignTreeReporter.FindControls, DesignTreeReporter.Refresh);
+
+    /// <summary>
+    /// Applies a theme request received on standard input. The editor sends the matching document afterwards and
+    /// accepts the catalog only for that document, so the next load reports the catalog and fails while the
+    /// selection is rejected.
+    /// </summary>
+    internal static XamlVisualEditor.Core.DesignerThemeResult ApplyThemeRequest(XamlVisualEditor.Core.DesignerThemeRequest request)
+    {
+        try
+        {
+            (s_pendingThemeCatalog, s_themeError) = (s_themeProviders ??= new DesignerThemeProviderSession()).Apply(request);
+        }
+        catch (Exception error)
+        {
+            s_pendingThemeCatalog = null;
+            s_themeError = error.GetBaseException().Message;
+        }
+        return new(request.RequestId, s_themeError);
+    }
 
     public static void Configure(string targetAssemblyPath)
     {
@@ -331,20 +461,54 @@ internal static class RuntimeXamlLoaderRegistrar
 
     private static object LoadRuntimeXaml(object document, object configuration)
     {
+        s_incremental.Reset();
         Assembly? localAssembly = GetLocalAssembly(configuration);
         Assembly? resolvedAssembly = EnsureLocalAssemblyInContext(localAssembly);
         if (resolvedAssembly != null)
         {
             SetLocalAssembly(configuration, resolvedAssembly);
         }
+        EnsureReferencedAssembliesLoaded(resolvedAssembly ?? localAssembly);
+        EnsureIdentityAssemblyLoaded();
 
-        if (TryLoadWithRuntimeLoader(document, configuration, out object? result))
+        object? stream = GetPropertyValue(document, "Stream") ?? GetPropertyValue(document, "XamlStream")
+            ?? GetPropertyValue(document, "ContentStream");
+        string? source = stream is Stream { CanSeek: false } ? null : GetXamlFromDocument(document);
+        if (s_pendingThemeCatalog is { } themeCatalog)
         {
-            return result ?? throw new InvalidOperationException(
-                "AvaloniaRuntimeXamlLoader.Load returned null.");
+            s_pendingThemeCatalog = null;
+            Console.WriteLine(XamlVisualEditor.Core.DesignerThemeProtocol.CatalogPrefix
+                + System.Text.Json.JsonSerializer.Serialize(themeCatalog));
         }
+        if (s_themeError is { } themeError) throw new InvalidOperationException(themeError);
 
-        return LoadWithAvaloniaXamlLoader(document);
+        object loaded = TryLoadWithRuntimeLoader(document, configuration, out object? result)
+            ? result ?? throw new InvalidOperationException("AvaloniaRuntimeXamlLoader.Load returned null.")
+            : LoadWithAvaloniaXamlLoader(document);
+        DesignTreeReporter.Track(loaded);
+        if (source is not null && DesignTreeReporter.CurrentRenderId is { } renderId)
+        {
+            Type documentType = document.GetType();
+            object? baseUri = GetPropertyValue(document, "BaseUri");
+            s_incremental.Record(source, renderId, (control, fragment) =>
+            {
+                object patchDocument = Activator.CreateInstance(documentType, new[] { control, fragment })!;
+                documentType.GetProperty("BaseUri")?.SetValue(patchDocument, baseUri);
+                Type nameScope = Type.GetType("Avalonia.Controls.NameScope, Avalonia.Base", throwOnError: true)!;
+                object? previousScope = nameScope.GetMethod("GetNameScope")!.Invoke(null, new[] { control });
+                try
+                {
+                    if (!TryLoadWithRuntimeLoader(patchDocument, configuration, out _))
+                        throw new InvalidOperationException("Runtime population is unavailable.");
+                }
+                finally
+                {
+                    nameScope.GetMethod("SetNameScope")!.Invoke(null, new[] { control, previousScope });
+                    if (GetPropertyValue(patchDocument, "XamlStream") is IDisposable patchStream) patchStream.Dispose();
+                }
+            });
+        }
+        return loaded;
     }
 
     private static bool TryLoadWithRuntimeLoader(
@@ -360,7 +524,18 @@ internal static class RuntimeXamlLoaderRegistrar
         }
 
         MethodInfo loadMethod = FindLoadMethod(loaderType);
-        result = loadMethod.Invoke(null, new[] { document, configuration });
+        try
+        {
+            result = loadMethod.Invoke(null, new[] { document, configuration });
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            Exception cause = exception.InnerException;
+            while (cause is AggregateException aggregate && aggregate.InnerExceptions.Count > 0)
+                cause = aggregate.InnerExceptions[0];
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(cause).Throw();
+            throw;
+        }
         if (result == null)
         {
             throw new InvalidOperationException("AvaloniaRuntimeXamlLoader.Load returned null.");
@@ -1071,6 +1246,115 @@ internal static class RuntimeXamlLoaderRegistrar
         {
             return localAssembly;
         }
+    }
+
+    /// <summary>
+    /// Loads the application assemblies the local assembly references, directly or through other application assemblies.
+    /// The runtime XAML compiler resolves a <c>using:</c> namespace only in assemblies that are already loaded, so a
+    /// referenced library whose types no code has touched yet would stay unresolvable.
+    /// </summary>
+    // The editor marks preview elements with DesignNodeIdentity attached properties. Their assembly ships with
+    // the editor, not with the previewed project, so EnsureReferencedAssembliesLoaded never loads it; the runtime
+    // XAML compiler only resolves types of loaded assemblies. The host resolver finds it next to the editor.
+    internal static void EnsureIdentityAssemblyLoaded()
+    {
+        const string assemblyName = "XamlVisualEditor.Designer.Rendering";
+        AssemblyLoadContext? context = AssemblyLoadContext.GetLoadContext(typeof(RuntimeXamlLoaderRegistrar).Assembly);
+        if (context == null || context.Assemblies.Any(assembly => assembly.GetName().Name == assemblyName))
+        {
+            return;
+        }
+
+        try
+        {
+            _ = context.LoadFromAssemblyName(new AssemblyName(assemblyName));
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
+        {
+            // Without the assembly the compiler reports the unresolved identity type, as before.
+        }
+    }
+
+    private static void EnsureReferencedAssembliesLoaded(Assembly? localAssembly)
+    {
+        AssemblyLoadContext? context = AssemblyLoadContext.GetLoadContext(typeof(RuntimeXamlLoaderRegistrar).Assembly);
+        if (localAssembly == null || context == null || string.IsNullOrWhiteSpace(s_targetDirectory)
+            || !s_referenceScans.Add(localAssembly.FullName ?? localAssembly.Location))
+        {
+            return;
+        }
+
+        Queue<Assembly> pending = new();
+        pending.Enqueue(localAssembly);
+        while (pending.Count > 0)
+        {
+            foreach (AssemblyName reference in pending.Dequeue().GetReferencedAssemblies())
+            {
+                string candidatePath = Path.Combine(s_targetDirectory, (reference.Name ?? string.Empty) + ".dll");
+                if (reference.Name is not { } name || !s_referenceScans.Add(name) || !File.Exists(candidatePath)
+                    || !HasLoadableAssemblyAttributes(candidatePath, context))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    pending.Enqueue(context.LoadFromAssemblyName(reference));
+                }
+                catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
+                {
+                    // An unloadable reference only matters when the XAML uses it; the compiler then reports the type.
+                }
+            }
+        }
+    }
+
+    // The runtime XAML compiler reads the assembly-level attributes of every loaded assembly to find the
+    // XmlnsDefinition mappings. An assembly whose attribute types live in an assembly this runtime cannot load
+    // (for example System.Xaml, referenced by a .NET Framework library) makes that scan throw for every
+    // document, so such an assembly is not loaded for the preview.
+    internal static bool HasLoadableAssemblyAttributes(string assemblyPath, AssemblyLoadContext context)
+    {
+        try
+        {
+            using FileStream stream = File.OpenRead(assemblyPath);
+            using PEReader peReader = new(stream);
+            if (!peReader.HasMetadata) return false;
+            MetadataReader reader = peReader.GetMetadataReader();
+            if (!reader.IsAssembly) return false;
+            foreach (CustomAttributeHandle handle in reader.GetAssemblyDefinition().GetCustomAttributes())
+            {
+                CustomAttribute attribute = reader.GetCustomAttribute(handle);
+                if (attribute.Constructor.Kind != HandleKind.MemberReference) continue;
+                MemberReference constructor = reader.GetMemberReference((MemberReferenceHandle)attribute.Constructor);
+                if (constructor.Parent.Kind != HandleKind.TypeReference) continue;
+                EntityHandle scope = reader.GetTypeReference((TypeReferenceHandle)constructor.Parent).ResolutionScope;
+                while (scope.Kind == HandleKind.TypeReference)
+                    scope = reader.GetTypeReference((TypeReferenceHandle)scope).ResolutionScope;
+                if (scope.Kind != HandleKind.AssemblyReference) continue;
+                string referenceName = reader.GetString(reader.GetAssemblyReference((AssemblyReferenceHandle)scope).Name);
+                if (!CanResolveAssembly(referenceName, context)) return false;
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or BadImageFormatException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool CanResolveAssembly(string assemblyName, AssemblyLoadContext context)
+    {
+        if (context.Assemblies.Any(assembly => string.Equals(assembly.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        string fileName = assemblyName + ".dll";
+        if (s_targetDirectory is { } targetDirectory && File.Exists(Path.Combine(targetDirectory, fileName))
+            || File.Exists(Path.Combine(AppContext.BaseDirectory, fileName)))
+            return true;
+        return (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Any(path => string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase)) == true;
     }
 
     private static object GetCurrentMutable()

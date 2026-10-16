@@ -26,6 +26,24 @@ public sealed class CSharpLanguageServiceTests
     }
 
     [Fact]
+    public async Task FileOutsideAProjectReportsSyntaxErrorsButNoMissingReferences()
+    {
+        CSharpLanguageService service = new();
+        string filePath = Path.Combine(Path.GetTempPath(), "Outside.cs");
+        LanguageDocumentContext context = new()
+        {
+            FilePath = filePath,
+            Text = "using Company.Basis; class C { Company.Basis.Helper helper; void M() { int x = ; } }"
+        };
+
+        IReadOnlyList<XamlVisualEditor.Core.LanguageDiagnostic> diagnostics =
+            await service.GetDiagnosticsAsync(context);
+
+        XamlVisualEditor.Core.LanguageDiagnostic diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("CS1525", diagnostic.Code);
+    }
+
+    [Fact]
     public async Task HoverReturnsSymbolInfo()
     {
         CSharpLanguageService service = new();

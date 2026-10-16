@@ -51,6 +51,7 @@ public sealed class ExtensionPackageLoader
         IReadOnlyList<string> activationEvents = GetStringArray(root, "activationEvents");
         JsonElement? engines = GetOptionalElement(root, "engines");
         JsonElement? contributes = GetOptionalElement(root, "contributes");
+        IReadOnlyList<string> capabilities = GetStringArray(root, "capabilities");
 
         return new ExtensionManifest
         {
@@ -61,7 +62,8 @@ public sealed class ExtensionPackageLoader
             Main = main,
             ActivationEvents = activationEvents,
             Engines = engines,
-            Contributes = contributes
+            Contributes = contributes,
+            Capabilities = capabilities
         };
     }
 

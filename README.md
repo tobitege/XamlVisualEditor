@@ -329,7 +329,7 @@ The IDE bridge uses JSON-RPC 2.0 messages with `Content-Length` framing.
 Initialize the bridge before you send document or preview requests.
 
 ```json
-{"jsonrpc":"2.0","id":1,"method":"bridge.initialize","params":{"sessionToken":null,"workspaceId":null,"clientName":"automation","clientVersion":"1"}}
+{"jsonrpc":"2.0","id":1,"method":"bridge.initialize","params":{"workspaceId":null,"clientName":"automation","clientVersion":"1"}}
 ```
 
 Use `XVE_IDEBRIDGE_AUTOCONSENT=readonly` for unattended read-only sessions:

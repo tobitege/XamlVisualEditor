@@ -15,43 +15,67 @@ public sealed class McpSessionService
         _workspaceInfo = workspaceInfo ?? throw new ArgumentNullException(nameof(workspaceInfo));
     }
 
-    public async Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, CancellationToken ct)
+    public Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, CancellationToken ct) =>
+        InitializeAsync(request, McpProtocol.StdioProtocolVersions, ct);
+
+    /// <summary>Authorizes the client and answers with the requested protocol version when it is one of <paramref name="supportedVersions"/>.</summary>
+    public Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, IReadOnlyList<string> supportedVersions, CancellationToken ct) =>
+        InitializeAsync(request, supportedVersions, null, ct);
+
+    /// <summary>
+    /// Authorizes the client and answers with the requested protocol version when it is one of <paramref name="supportedVersions"/>.
+    /// <paramref name="register"/> receives the new session before a revocation of the consent can run.
+    /// </summary>
+    public async Task<McpInitializeOutcome> InitializeAsync(McpInitializeParams? request, IReadOnlyList<string> supportedVersions,
+        Action<McpInitializeOutcome>? register, CancellationToken ct)
     {
         string workspaceId = ResolveWorkspaceId(request?.WorkspaceId);
+        McpInitializeOutcome? outcome = null;
         McpWorkspacePermissionState? state = await _permissions
-            .AuthorizeAsync(workspaceId, request?.SessionToken, ct)
+            .AuthorizeAsync(workspaceId, granted =>
+            {
+                outcome = CreateOutcome(request, supportedVersions, workspaceId, granted);
+                register?.Invoke(outcome);
+            }, ct)
             .ConfigureAwait(false);
 
-        if (state is null)
+        if (state is null || outcome is null)
         {
             throw new McpJsonRpcException(-32000, "Permission denied.");
         }
 
+        return outcome;
+    }
+
+    private static McpInitializeOutcome CreateOutcome(McpInitializeParams? request, IReadOnlyList<string> supportedVersions,
+        string workspaceId, McpWorkspacePermissionState state)
+    {
         McpServerInfo serverInfo = new("XamlVisualEditor", ExtensionSdkInfo.ApiVersion.ToString());
         McpServerCapabilities capabilities = new(
             new McpToolsCapability(),
             new McpResourcesCapability(),
-            new McpPromptsCapability(),
-            new McpLoggingCapability());
+            new McpPromptsCapability());
 
         McpInitializeResult result = new(
-            McpProtocol.ProtocolVersion,
+            McpProtocol.NegotiateVersion(request?.ProtocolVersion, supportedVersions),
             serverInfo,
             capabilities,
             workspaceId,
-            state.SessionToken);
+            Guid.NewGuid().ToString("N"));
 
         return new McpInitializeOutcome(result, state.AccessLevel);
     }
 
     private string ResolveWorkspaceId(string? requestedId)
     {
-        string? path = requestedId ?? _workspaceInfo.WorkspacePath;
-        if (string.IsNullOrWhiteSpace(path))
+        string? path = _workspaceInfo.WorkspacePath;
+        string workspaceId = string.IsNullOrWhiteSpace(path) ? "default" : Path.GetFullPath(path);
+        if (!string.IsNullOrWhiteSpace(requestedId)
+            && !string.Equals(workspaceId, Path.GetFullPath(requestedId),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
-            return "default";
+            throw new McpJsonRpcException(-32602, "The requested workspace is not the active workspace.");
         }
-
-        return Path.GetFullPath(path);
+        return workspaceId;
     }
 }

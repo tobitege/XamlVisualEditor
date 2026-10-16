@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.SaveConflictDialog"
+        Classes="editor-chrome"
+        x:DataType="vm:SaveConflictDialogViewModel"
+        Title="{CompiledBinding Title}"
+        Width="460"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{CompiledBinding CancelCommand}" />
+  </Window.KeyBindings>
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+    <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+    <TextBlock Grid.Row="1" Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="OverwriteButton" Content="{CompiledBinding OverwriteText}" Command="{CompiledBinding OverwriteCommand}" />
+      <Button Name="ReloadButton" Content="{CompiledBinding ReloadText}" Command="{CompiledBinding ReloadCommand}" />
+      <Button Name="CancelButton" Content="{CompiledBinding CancelText}" Command="{CompiledBinding CancelCommand}" IsDefault="True" IsCancel="True" />
+    </StackPanel>
+  </Grid>
+</Window>

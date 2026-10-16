@@ -6,6 +6,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
@@ -29,7 +30,7 @@ public sealed partial class InputBoxDialogViewModel : ReactiveObject
 
     public InputBoxDialogViewModel(InputBoxOptions options)
     {
-        Title = string.IsNullOrWhiteSpace(options.Title) ? "Input" : options.Title;
+        Title = string.IsNullOrWhiteSpace(options.Title) ? UiStrings.Input : options.Title;
         Prompt = options.Prompt ?? string.Empty;
         Value = options.Value ?? string.Empty;
 
@@ -59,7 +60,7 @@ public sealed partial class QuickPickDialogViewModel : ReactiveObject
 
     public QuickPickDialogViewModel(string? title, IReadOnlyList<QuickPickItem> items)
     {
-        Title = string.IsNullOrWhiteSpace(title) ? "Select" : title;
+        Title = string.IsNullOrWhiteSpace(title) ? UiStrings.Select : title;
 
         foreach (QuickPickItem item in items)
         {
@@ -112,6 +113,7 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
     public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
     public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
     public MessageDialogViewModel(string title, string message)
     {
@@ -120,5 +122,64 @@ public sealed partial class MessageDialogViewModel : ReactiveObject
 
         ConfirmCommand = ReactiveCommand.CreateFromTask(async () =>
             await CloseInteraction.Handle(true));
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(false));
+    }
+}
+
+/// <summary>
+/// ViewModel for a modal, indeterminate progress dialog. The close interaction carries true when the user cancelled.
+/// </summary>
+public sealed class ProgressDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+    public string Message { get; }
+    public string CancelText { get; }
+
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
+
+    public ProgressDialogViewModel(string title, string message, string? cancelText = null)
+    {
+        Title = title;
+        Message = message;
+        CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(true));
+    }
+}
+
+/// <summary>
+/// ViewModel for a yes/no confirmation dialog. The close interaction carries true when the
+/// user confirmed and false when the dialog was cancelled.
+/// </summary>
+public sealed partial class ConfirmDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+    public string Message { get; }
+    public string ConfirmText { get; }
+    public string CancelText { get; }
+    public bool IsDestructive { get; }
+    public bool IsConfirmDefault => !IsDestructive;
+
+    public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<RxVoid, RxVoid> ConfirmCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
+
+    public ConfirmDialogViewModel(string title, string message, string? confirmText = null, bool isDestructive = false,
+        string? cancelText = null)
+    {
+        Title = title;
+        Message = message;
+        ConfirmText = string.IsNullOrWhiteSpace(confirmText) ? UiStrings.Ok : confirmText;
+        CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
+        IsDestructive = isDestructive;
+
+        ConfirmCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(true));
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(false));
     }
 }

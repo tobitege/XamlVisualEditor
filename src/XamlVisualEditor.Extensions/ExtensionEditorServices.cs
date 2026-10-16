@@ -20,10 +20,27 @@ public interface IEditorServices
     /// <summary>Opens a document and navigates to a location.</summary>
     Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct);
 
+    /// <summary>
+    /// Opens a document at the start of a diagnostic location. An editor that supports it marks the location in the
+    /// error color instead of selecting its range; otherwise this behaves like <see cref="OpenLocationAsync"/>.
+    /// </summary>
+    Task<bool> OpenDiagnosticLocationAsync(LanguageLocation location, CancellationToken ct)
+    {
+        return OpenLocationAsync(location, ct);
+    }
+
     /// <summary>Closes an open document without saving; returns false when it is not open.</summary>
     Task<bool> CloseDocumentAsync(string filePath, CancellationToken ct)
     {
         return Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// Marks whether an extension lifts the write protection of a file on its first edit, for example by a source control
+    /// check-out. The editor hides the read-only notice of such a file.
+    /// </summary>
+    void SetWriteProtectionManaged(string filePath, bool managed)
+    {
     }
 
     /// <summary>Renders an open designer document in the previewer and saves the frame as PNG.</summary>
@@ -71,6 +88,15 @@ public interface IEditorDocument
 
     /// <summary>Gets or sets the selection length.</summary>
     int SelectionLength { get; set; }
+
+    /// <summary>Sets selection and caret in one step, so that no combination of old and new values shows.</summary>
+    void SetSelection(int start, int length, int caretOffset)
+    {
+        SelectionLength = 0;
+        SelectionStart = start;
+        SelectionLength = length;
+        CaretOffset = caretOffset;
+    }
 
     /// <summary>Gets the document text.</summary>
     Task<string> GetTextAsync(CancellationToken ct);

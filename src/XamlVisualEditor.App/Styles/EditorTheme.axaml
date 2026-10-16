@@ -1,0 +1,236 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="using:Dock.Avalonia.Controls"
+        xmlns:recycling="using:Avalonia.Controls.Recycling"
+        xmlns:dockmodel="using:Dock.Model.Core"
+        xmlns:dps="using:Dock.Controls.ProportionalStackPanel"
+        xmlns:styles="using:XamlVisualEditor.App.Styles"
+        xmlns:v="using:XamlVisualEditor.App.Views">
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#333333" />
+                    <SolidColorBrush x:Key="EditorDialogButtonHoverBrush" Color="#424242" />
+                    <SolidColorBrush x:Key="EditorDialogButtonPressedBrush" Color="#292929" />
+                    <SolidColorBrush x:Key="EditorDialogButtonForegroundBrush" Color="#F2F2F2" />
+                    <SolidColorBrush x:Key="EditorDialogButtonBorderBrush" Color="#666666" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBackgroundBrush" Color="#272727" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledForegroundBrush" Color="#808080" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBorderBrush" Color="#3B3B3B" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryBrush" Color="#007ACC" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryHoverBrush" Color="#0784DB" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryPressedBrush" Color="#0063A6" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
+                    <SolidColorBrush x:Key="EditorSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
+                    <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
+                    <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#1E1E1E" />
+                    <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D01E1E1E" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#F4F4F4" />
+                    <SolidColorBrush x:Key="EditorDialogButtonHoverBrush" Color="#E6E6E6" />
+                    <SolidColorBrush x:Key="EditorDialogButtonPressedBrush" Color="#D8D8D8" />
+                    <SolidColorBrush x:Key="EditorDialogButtonForegroundBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="EditorDialogButtonBorderBrush" Color="#929292" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBackgroundBrush" Color="#EEEEEE" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledForegroundBrush" Color="#929292" />
+                    <SolidColorBrush x:Key="EditorDialogButtonDisabledBorderBrush" Color="#D0D0D0" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryBrush" Color="#006DB5" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryHoverBrush" Color="#005F9F" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryPressedBrush" Color="#004E83" />
+                    <SolidColorBrush x:Key="EditorDialogPrimaryForegroundBrush" Color="White" />
+                    <SolidColorBrush x:Key="EditorSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#E8E8E8" />
+                    <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D0F3F3F3" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <!-- The DataGrid theme brightens the accent of a selected row under the mouse; with a light accent the
+                 text of the row becomes unreadable, so a selected row keeps its color while hovered. -->
+            <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">0.6</x:Double>
+            <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">0.6</x:Double>
+            <!-- File commands that DocumentTabContextMenus moves into the document context menus of Dock; every lookup
+                 creates new items, because a control can belong to one menu only. The items inherit the dockable of
+                 the tab as data context; the converters read its file commands, since the menus also exist without a
+                 tab and a dockable can show no file. -->
+            <ContextMenu x:Key="DocumentFileMenuItems" x:Shared="False">
+                <Separator IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabRevealInFileExplorerString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=RevealInFileExplorerCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabRevealInSolutionExplorerString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=RevealInSolutionExplorerCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabCopyPathString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=CopyPathCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+                <MenuItem Header="{DynamicResource DocumentTabCopyFileNameString}"
+                          Command="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.Command}, ConverterParameter=CopyFileNameCommand}"
+                          CommandParameter="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.FilePath}}"
+                          IsVisible="{CompiledBinding $self.DataContext, Converter={x:Static v:DocumentTabMenuConverters.HasFileCommands}}" />
+            </ContextMenu>
+        </ResourceDictionary>
+    </Styles.Resources>
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource EditorWindowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorWindowForegroundBrush}" />
+    </Style>
+
+    <!-- Owned windows get the class from DialogAppearance; the frame stays visible without focus. -->
+    <Style Selector="Window.editor-dialog-frame /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
+    </Style>
+
+    <!-- A tool dock without tools (the collapsed bottom dock, the idle pinned-tool dock) is not built at all: its
+         title bar binds to the active tool, which such a dock does not have. -->
+    <Style Selector="dock|ToolDockControl" x:DataType="dockmodel:IDock">
+        <Setter Property="IsVisible" Value="{CompiledBinding VisibleDockables.Count, Converter={x:Static styles:DockConverters.HasDockables}, FallbackValue=False}" />
+    </Style>
+
+    <!-- Dock builds the view of a tab again on every activation unless its dock control has a view cache; Dock
+         keeps one cache per factory. -->
+    <Style Selector="dock|DockControl">
+        <Setter Property="recycling:ControlRecyclingDataTemplate.ControlRecycling">
+            <recycling:ControlRecycling />
+        </Setter>
+    </Style>
+
+    <!-- The chrome binds ActiveDockable.* of its dock; an empty dock has no active dockable. -->
+    <Style Selector="dock|ToolChromeControl">
+        <Setter Property="styles:ToolChromeDataContext.ReleaseWhenEmpty" Value="True" />
+    </Style>
+
+    <!-- The selected tool tab keeps the dock background; an accent frame and a bold title mark it.
+         Every tab reserves the frame so the title does not shift when the selection changes. -->
+    <Style Selector="dock|ToolTabStripItem">
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="dock|ToolTabStripItem:selected">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
+    </Style>
+
+    <!-- All tool tabs stay visible like in Visual Studio: tabs that do not fit shrink and shorten their titles with an
+         ellipsis instead of scrolling; the tooltip shows the full title. -->
+    <Style Selector="dock|ToolTabStrip">
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <styles:CompactTabStripPanel />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="dock|ToolTabStripItem" x:DataType="dockmodel:IDockable">
+        <Setter Property="ToolTip.Tip" Value="{CompiledBinding Title}" />
+    </Style>
+
+    <!-- Document tabs show the full path of their file; the tab itself only has room for the file name. -->
+    <Style Selector="dock|DocumentTabStripItem" x:DataType="dockmodel:IDockable">
+        <Setter Property="ToolTip.Tip">
+            <MultiBinding Converter="{x:Static v:DockableToolTipConverter.Instance}">
+                <Binding />
+                <Binding Path="Title" />
+            </MultiBinding>
+        </Setter>
+    </Style>
+
+    <!-- Splitters between design surface and XAML code and between docked panels rest in a muted accent, so
+         they read as handles; the full accent marks them under the pointer and while dragging. -->
+    <Style Selector="GridSplitter.designer-splitter, dps|ProportionalStackPanelSplitter">
+        <Setter Property="Background" Value="{DynamicResource EditorSplitterIdleBrush}" />
+    </Style>
+    <Style Selector="dps|ProportionalStackPanelSplitter.collapsed">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="GridSplitter.designer-splitter:pointerover, GridSplitter.designer-splitter:pressed, dps|ProportionalStackPanelSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
+    </Style>
+
+    <!-- Dialog buttons only; designer controls and dock toolbars keep their styles. -->
+    <Style Selector="Window.editor-chrome Button">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+    </Style>
+    <Style Selector="Window.editor-chrome Button[IsDefault=true]">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryBrush}" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryHoverBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryPressedBrush}" />
+        </Style>
+    </Style>
+    <Style Selector="Window.editor-chrome Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogButtonDisabledBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonDisabledForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonDisabledBorderBrush}" />
+    </Style>
+
+    <!-- Command buttons of the designer toolbars carry the accent like the switched-on toggles, so that they do not look
+         disabled; switched-off toggles use the dialog button look. -->
+    <Style Selector=".designer-toolbar Button">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryHoverBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogPrimaryPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogPrimaryForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogPrimaryPressedBrush}" />
+        </Style>
+        <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonDisabledBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonDisabledForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonDisabledBorderBrush}" />
+        </Style>
+    </Style>
+    <Style Selector=".designer-toolbar ToggleButton:not(:checked)">
+        <Setter Property="Background" Value="{DynamicResource EditorDialogButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonPressedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonBorderBrush}" />
+        </Style>
+        <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource EditorDialogButtonDisabledBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource EditorDialogButtonDisabledForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EditorDialogButtonDisabledBorderBrush}" />
+        </Style>
+    </Style>
+</Styles>

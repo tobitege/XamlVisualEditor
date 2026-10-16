@@ -22,14 +22,41 @@ public sealed class TypeMetadata
     /// <summary>Gets the assembly name.</summary>
     public required string AssemblyName { get; init; }
 
+    /// <summary>Version of the assembly that was actually read.</summary>
+    public string? AssemblyVersion { get; init; }
+
     /// <summary>Gets whether this type derives from Control.</summary>
     public bool IsControl { get; init; }
+
+    /// <summary>Gets whether this type provides a collection of Avalonia styles.</summary>
+    public bool IsStyle { get; init; }
+
+    /// <summary>Gets whether the type comes from an official Avalonia assembly.</summary>
+    public bool IsStandardControl { get; init; }
 
     /// <summary>Gets whether this type derives from Panel.</summary>
     public bool IsPanel { get; init; }
 
     /// <summary>Gets whether this type derives from ContentControl.</summary>
     public bool IsContentControl { get; init; }
+
+    /// <summary>Gets whether this type derives from ItemsControl.</summary>
+    public bool IsItemsControl { get; init; }
+
+    /// <summary>Gets whether this type requires a top-level document rather than a parent control.</summary>
+    public bool IsTopLevel { get; init; }
+
+    /// <summary>Gets whether XAML can construct this public, non-generic type without constructor arguments.</summary>
+    public bool IsInstantiable { get; init; }
+
+    /// <summary>Gets the display name declared by the control library, when present.</summary>
+    public string? DisplayName { get; init; }
+
+    /// <summary>Gets the toolbox category declared by the control library, when present.</summary>
+    public string? Category { get; init; }
+
+    /// <summary>Gets whether the library permits this type to appear in a toolbox.</summary>
+    public bool IsToolboxVisible { get; init; } = true;
 
     /// <summary>Gets the base type metadata, if any.</summary>
     public TypeMetadata? BaseType { get; init; }
@@ -59,6 +86,9 @@ public sealed class PropertyMetadata
 
     /// <summary>Gets the owner type for attached properties.</summary>
     public string? OwnerType { get; init; }
+
+    /// <summary>Gets the type that declares the property, also for inherited properties.</summary>
+    public string? DeclaringTypeName { get; init; }
 
     /// <summary>Gets whether the property is read-only.</summary>
     public bool IsReadOnly { get; init; }

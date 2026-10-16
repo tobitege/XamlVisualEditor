@@ -7,5 +7,17 @@
     <Description>Out-of-process Avalonia preview host for rendering designer documents.</Description>
   </PropertyGroup>
 
-  <ItemGroup />
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The host uses only the protocol types of XamlVisualEditor.Core. Every assembly in the host's deps.json is on
+       the trusted platform list and binds before the preview application's own versions, so the packages that
+       XamlVisualEditor.Core references stay out of the host's runtime dependencies. -->
+  <ItemGroup>
+    <PackageReference Include="System.Reactive" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

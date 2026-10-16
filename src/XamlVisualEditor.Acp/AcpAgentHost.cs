@@ -13,6 +13,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
     private readonly CancellationTokenSource _stderrCts;
     private Task? _stderrLoop;
     private readonly bool _ownsProcess;
+    private int _disposed;
 
     private AcpAgentHost(
         Process process,
@@ -73,7 +74,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
         AcpMessageReader reader = new(input);
         AcpMessageWriter writer = new(output);
         AcpProtocolClient client = new(reader, writer);
-        client.Start(ct);
+        client.Start(CancellationToken.None);
 
         CancellationTokenSource stderrCts = new();
         AcpAgentHost host = new(process, client, stderrCts, null, ownsProcess: true);
@@ -110,6 +111,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         await _client.DisposeAsync().ConfigureAwait(false);
 
         _stderrCts.Cancel();

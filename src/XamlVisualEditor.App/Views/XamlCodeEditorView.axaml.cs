@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
@@ -20,7 +21,9 @@ using ReactiveUI.Primitives.Signals;
 using Serilog;
 using System.Reactive.Linq;
 using TextMateSharp.Grammars;
+using XamlVisualEditor.App.Services;
 using XamlVisualEditor.CodeEditor;
+using XamlVisualEditor.Core.Localization;
 using XmlFoldingStrategy = XamlVisualEditor.CodeEditor.XmlFoldingStrategy;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -35,16 +38,15 @@ namespace XamlVisualEditor.App.Views;
 /// The Document is assigned programmatically rather than via compiled binding
 /// to ensure AvaloniaEdit's TextEditor properly initializes with the shared TextDocument.
 /// </summary>
-public sealed partial class XamlCodeEditorView : UserControl
+public sealed partial class XamlCodeEditorView : UserControl, IDisposable
 {
     private TextMate.Installation? _textMateInstallation;
     private CompletionWindow? _completionWindow;
     private OverloadInsightWindow? _insightWindow;
     private TextEditor? _textEditor;
-    private EventHandler? _caretPositionChangedHandler;
+    private EditorSelectionSync? _selectionSync;
     private CompositeDisposable? _vmSubscriptions;
     private ThemeName? _currentTextMateTheme;
-    private bool _suppressCaretUpdate;
     private FoldingManager? _foldingManager;
     private readonly XmlFoldingStrategy _foldingStrategy = new();
     private IDisposable? _foldingSubscription;
@@ -58,9 +60,53 @@ public sealed partial class XamlCodeEditorView : UserControl
         Loaded += OnLoaded;
         DataContextChanged += OnDataContextChanged;
         DetachedFromLogicalTree += OnDetachedFromLogicalTree;
+        AddHandler(KeyDownEvent, OnHistoryKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        LostFocus += OnEditorLostFocus;
     }
 
+    private void OnHistoryKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not CodeEditorViewModel vm ||
+            (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) == 0 ||
+            (e.KeyModifiers & KeyModifiers.Alt) != 0 || e.Key is not (Key.Z or Key.Y))
+        {
+            return;
+        }
+
+        bool redo = e.Key == Key.Y || (e.KeyModifiers & KeyModifiers.Shift) != 0;
+        System.Windows.Input.ICommand command = redo ? vm.RedoCommand : vm.UndoCommand;
+        if (command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnEditorLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is CodeEditorViewModel vm)
+        {
+            vm.FlushPendingTextChanges();
+        }
+    }
+
+    // The dock caches the view of a hidden tab and attaches it again, so a detach keeps the editor set up with its
+    // foldings and tokenized lines; only the popups and the pending hover request end here.
     private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)
+    {
+        _completionWindow?.Close();
+        _completionWindow = null;
+        _insightWindow?.Close();
+        _insightWindow = null;
+
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
+        _hoverCts = null;
+    }
+
+    /// <summary>Releases the editor setup when the view is discarded, for example when its tab closes.</summary>
+    public void Dispose()
     {
         // Dispose TextMate native resources
         _textMateInstallation?.Dispose();
@@ -78,12 +124,13 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
-            if (_caretPositionChangedHandler is not null)
-            {
-                _textEditor.TextArea.Caret.PositionChanged -= _caretPositionChangedHandler;
-            }
             _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
+            _textEditor.RemoveHandler(DragDrop.DragOverEvent, OnDragOver);
+            _textEditor.RemoveHandler(DragDrop.DropEvent, OnDrop);
         }
+
+        _selectionSync?.Dispose();
+        _selectionSync = null;
 
         _hoverCts?.Cancel();
         _hoverCts?.Dispose();
@@ -91,7 +138,11 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         _foldingSubscription?.Dispose();
         _foldingSubscription = null;
-        _foldingManager = null;
+        if (_foldingManager is not null)
+        {
+            FoldingManager.Uninstall(_foldingManager);
+            _foldingManager = null;
+        }
 
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = null;
@@ -108,9 +159,14 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
     }
 
+    // Dock keeps the view of a document while its tab is hidden; a load after the view was disposed sets the editor
+    // up again.
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        Loaded -= OnLoaded;
+        if (_textEditor is not null)
+        {
+            return;
+        }
 
         _textEditor = this.FindControl<TextEditor>("TextEditor");
         if (_textEditor is null)
@@ -118,36 +174,8 @@ public sealed partial class XamlCodeEditorView : UserControl
             return;
         }
 
-        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
-        ActualThemeVariantChanged += OnActualThemeVariantChanged;
-
-        // Install TextMate with XML grammar for XAML highlighting.
-        ApplyTextMateTheme();
-
-        // Wire up caret position tracking
-        _caretPositionChangedHandler = (_, _) =>
-        {
-            if (_suppressCaretUpdate)
-            {
-                return;
-            }
-
-            TextEditor? editor = _textEditor;
-            TextArea? textArea = editor?.TextArea;
-            Caret? caret = textArea?.Caret;
-            if (caret is null)
-            {
-                return;
-            }
-
-            if (DataContext is CodeEditorViewModel vm)
-            {
-                vm.CaretOffset = caret.Offset;
-                vm.CurrentLine = caret.Line;
-                vm.CurrentColumn = caret.Column;
-            }
-        };
-        _textEditor.TextArea.Caret.PositionChanged += _caretPositionChangedHandler;
+        // Wire up caret and selection tracking
+        _selectionSync = new EditorSelectionSync(_textEditor, ReportSelection, ReportCaret);
 
         // Wire text input for auto-completion triggers
         _textEditor.TextArea.TextEntered += OnTextEntered;
@@ -167,6 +195,24 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             BindViewModel(codeVm);
         }
+
+        // Install TextMate with XML grammar for XAML highlighting, after the document is set: installing it on the
+        // empty initial document first creates a second tokenizer, which waits for the grammar the first one
+        // compiles and then tokenizes nothing until the view scrolls.
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+        ApplyTextMateTheme();
+    }
+
+    // Runs after the caret sync has brought the caret just into view, so a line at the viewport edge moves to the
+    // middle; a line that already lies in the middle part of the viewport stays where it is.
+    private void RevealLine(int line)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_textEditor?.Document is { } document && line >= 1 && line <= document.LineCount)
+                _textEditor.ScrollToLine(line);
+        }, DispatcherPriority.Background);
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e)
@@ -191,6 +237,7 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         RegistryOptions registryOptions = new(targetTheme);
         _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
+        TextMateEditorColors.Apply(_textEditor, _textMateInstallation);
         _textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("xml"));
         _currentTextMateTheme = targetTheme;
     }
@@ -208,7 +255,7 @@ public sealed partial class XamlCodeEditorView : UserControl
     /// </summary>
     private void BindViewModel(CodeEditorViewModel vm)
     {
-        if (_textEditor is null)
+        if (_textEditor is null || _selectionSync is not { } selectionSync)
         {
             return;
         }
@@ -216,9 +263,9 @@ public sealed partial class XamlCodeEditorView : UserControl
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = new CompositeDisposable();
 
-        // Set the shared TextDocument directly — this is the critical line
-        _textEditor.Document = vm.Document;
-
+        // Set the shared TextDocument directly — this is the critical line. The editor resets its caret and
+        // selection for the new document; the view model keeps its own, which the subscriptions below apply.
+        selectionSync.ChangeEditor(() => _textEditor.Document = vm.Document);
         if (_textEditor.TextArea.LeftMargins.FirstOrDefault(m => m is FoldingMargin) is null)
         {
             _textEditor.TextArea.LeftMargins.Insert(0, new FoldingMargin());
@@ -226,13 +273,25 @@ public sealed partial class XamlCodeEditorView : UserControl
 
         _foldingManager ??= FoldingManager.Install(_textEditor.TextArea);
 
+        // Next to the text, so the marker of the selected element sits between the line numbers and the code.
+        if (_textEditor.TextArea.LeftMargins.OfType<SelectedElementMargin>().FirstOrDefault() is not { } selectedElementMargin)
+        {
+            selectedElementMargin = new SelectedElementMargin();
+            _textEditor.TextArea.LeftMargins.Add(selectedElementMargin);
+        }
+
+        _vmSubscriptions.Add(vm.WhenAnyValue(x => x.SelectedElementLines)
+            .Subscribe(lines => selectedElementMargin.Lines = lines));
+        _vmSubscriptions.Add(vm.WhenAnyValue(x => x.DiagnosticLines)
+            .Subscribe(lines => selectedElementMargin.DiagnosticLines = lines));
+        _vmSubscriptions.Add(vm.RevealLineRequests.Subscribe(RevealLine));
+
         _foldingSubscription?.Dispose();
         _foldingSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
                 h => vm.Document.TextChanged += h,
                 h => vm.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => UpdateFoldings());
+            .Subscribe(_ => Dispatcher.UIThread.Post(UpdateFoldings));
         _vmSubscriptions.Add(_foldingSubscription);
         UpdateFoldings();
 
@@ -255,20 +314,14 @@ public sealed partial class XamlCodeEditorView : UserControl
         _vmSubscriptions.Add(wordWrapSubscription);
 
         IDisposable caretSubscription = vm.WhenAnyValue(x => x.CaretOffset)
-            .Subscribe(offset =>
-            {
-                _suppressCaretUpdate = true;
-                _textEditor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _textEditor.Document.TextLength);
-                try
-                {
-                    _textEditor.TextArea.Caret.BringCaretToView();
-                }
-                catch (ArgumentException)
-                {
-                }
-                _suppressCaretUpdate = false;
-            });
+            .Subscribe(selectionSync.ApplyCaret);
         _vmSubscriptions.Add(caretSubscription);
+
+        // The pair can still hold the old value of the property that changes second, so the selection is read
+        // from the view model itself.
+        IDisposable selectionSubscription = vm.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
+            .Subscribe(_ => selectionSync.ApplySelection(vm.SelectionStart, vm.SelectionLength, vm.CaretOffset));
+        _vmSubscriptions.Add(selectionSubscription);
 
         // Add diagnostic colorizer for error squiggles
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.DiagnosticColorizer))
@@ -316,6 +369,26 @@ public sealed partial class XamlCodeEditorView : UserControl
         _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
     }
 
+    private void ReportCaret(Caret caret)
+    {
+        if (DataContext is CodeEditorViewModel vm)
+        {
+            vm.CaretOffset = caret.Offset;
+            vm.CurrentLine = caret.Line;
+            vm.CurrentColumn = caret.Column;
+        }
+    }
+
+    // Edit commands and extensions read the selection from the view model.
+    private void ReportSelection(int start, int length)
+    {
+        if (DataContext is CodeEditorViewModel vm)
+        {
+            vm.SelectionStart = start;
+            vm.SelectionLength = length;
+        }
+    }
+
     private void UpdateHoverHighlight(DocumentLine line, XamlDiagnostic diag)
     {
         if (_textEditor?.Document is null)
@@ -347,6 +420,9 @@ public sealed partial class XamlCodeEditorView : UserControl
         _textEditor.TextArea.TextView.InvalidateVisual();
     }
 
+    /// <summary>Gets how often the folding regions were computed again for the text.</summary>
+    internal int FoldingUpdateCount { get; private set; }
+
     private void UpdateFoldings()
     {
         if (_textEditor?.Document is null || _foldingManager is null)
@@ -354,6 +430,7 @@ public sealed partial class XamlCodeEditorView : UserControl
             return;
         }
 
+        FoldingUpdateCount++;
         TextDocument document = _textEditor.Document;
         int length = document.TextLength;
         if (length == 0)
@@ -379,8 +456,23 @@ public sealed partial class XamlCodeEditorView : UserControl
             .ToList();
 
         int currentLength = document.TextLength;
+        // Regions folded by the user from a selection are not produced by the strategy; they are passed in again so
+        // that the update keeps them, and one of them replaces a strategy region with the same start.
+        List<FoldingSection> manualSections = _foldingManager.AllFoldings
+            .Where(section => TextEditorViewHost.IsManualFolding(section) && section.Length > 0)
+            .ToList();
         List<NewFolding> safeFoldings = foldings
             .Where(folding => folding.StartOffset >= 0 && folding.EndOffset <= currentLength)
+            .Where(folding => manualSections.All(section => section.StartOffset != folding.StartOffset))
+            .Concat(manualSections.Select(section => new NewFolding(section.StartOffset, section.EndOffset)
+            {
+                Name = section.Title,
+                DefaultClosed = section.IsFolded
+            }))
+            .OrderBy(folding => folding.StartOffset)
+            .ToList();
+        List<(int Start, int End, string Title, bool IsFolded)> manual = manualSections
+            .Select(section => (section.StartOffset, section.EndOffset, section.Title, section.IsFolded))
             .ToList();
 
         try
@@ -389,6 +481,18 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
         catch (ArgumentException)
         {
+        }
+
+        // The update matches existing regions by start offset only, so the manual marker and fold state are set again.
+        foreach ((int start, int end, string title, bool isFolded) in manual)
+        {
+            if (_foldingManager.AllFoldings.FirstOrDefault(candidate =>
+                    candidate.StartOffset == start && candidate.EndOffset == end) is { } section)
+            {
+                TextEditorViewHost.MarkManualFolding(section);
+                section.Title = title;
+                section.IsFolded = isFolded;
+            }
         }
     }
 
@@ -846,7 +950,7 @@ internal sealed class MarkupExtensionInsightProvider : IOverloadProvider
 
     public object CurrentHeader => s_hints[SelectedIndex];
 
-    public object CurrentContent => "Markup extension parameter hints";
+    public object CurrentContent => UiStrings.MarkupParameterHints;
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 

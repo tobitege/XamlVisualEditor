@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Reactive.Linq;
+using System.Text.Json.Nodes;
 using Dock.Avalonia.Controls;
 using Dock.Model.Controls;
 using Dock.Model.Core;
@@ -14,6 +15,8 @@ using Dock.Serializer.SystemTextJson;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
 
@@ -31,14 +34,14 @@ public sealed partial class SolutionExplorerTool : Tool
     public SolutionExplorerTool()
     {
         Id = "SolutionExplorer";
-        Title = "Solution Explorer";
+        Title = UiStrings.SolutionExplorer;
     }
 
     public SolutionExplorerTool(SolutionExplorerViewModel solutionExplorerViewModel)
     {
         SolutionExplorerViewModel = solutionExplorerViewModel;
         Id = "SolutionExplorer";
-        Title = "Solution Explorer";
+        Title = UiStrings.SolutionExplorer;
     }
 }
 
@@ -54,14 +57,14 @@ public sealed partial class OutputTool : Tool
     public OutputTool()
     {
         Id = "Output";
-        Title = "Output";
+        Title = UiStrings.Output;
     }
 
     public OutputTool(OutputViewModel outputViewModel)
     {
         OutputViewModel = outputViewModel;
         Id = "Output";
-        Title = "Output";
+        Title = UiStrings.Output;
     }
 }
 
@@ -77,7 +80,7 @@ public sealed partial class TerminalTool : Tool
     public TerminalTool()
     {
         Id = "Terminal";
-        Title = "Terminal";
+        Title = UiStrings.TerminalGroup;
     }
 
     public TerminalTool(TerminalViewModel terminalViewModel)
@@ -100,14 +103,14 @@ public sealed partial class BreakpointsTool : Tool
     public BreakpointsTool()
     {
         Id = "Breakpoints";
-        Title = "Breakpoints";
+        Title = UiStrings.Breakpoints;
     }
 
     public BreakpointsTool(BreakpointsViewModel breakpoints)
     {
         BreakpointsViewModel = breakpoints;
         Id = "Breakpoints";
-        Title = "Breakpoints";
+        Title = UiStrings.Breakpoints;
     }
 }
 
@@ -123,14 +126,14 @@ public sealed partial class CallStackTool : Tool
     public CallStackTool()
     {
         Id = "CallStack";
-        Title = "Call Stack";
+        Title = UiStrings.CallStack;
     }
 
     public CallStackTool(CallStackViewModel callStack)
     {
         CallStackViewModel = callStack;
         Id = "CallStack";
-        Title = "Call Stack";
+        Title = UiStrings.CallStack;
     }
 }
 
@@ -146,14 +149,14 @@ public sealed partial class LocalsTool : Tool
     public LocalsTool()
     {
         Id = "Locals";
-        Title = "Locals";
+        Title = UiStrings.Locals;
     }
 
     public LocalsTool(LocalsViewModel locals)
     {
         LocalsViewModel = locals;
         Id = "Locals";
-        Title = "Locals";
+        Title = UiStrings.Locals;
     }
 }
 
@@ -169,36 +172,14 @@ public sealed partial class WatchesTool : Tool
     public WatchesTool()
     {
         Id = "Watches";
-        Title = "Watches";
+        Title = UiStrings.Watches;
     }
 
     public WatchesTool(WatchesViewModel watches)
     {
         WatchesViewModel = watches;
         Id = "Watches";
-        Title = "Watches";
-    }
-}
-
-/// <summary>
-/// Dock tool for extension management.
-/// </summary>
-public sealed partial class ExtensionManagerTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public partial ExtensionManagerViewModel? ExtensionManagerViewModel { get; set; }
-
-    public ExtensionManagerTool()
-    {
-        Id = "ExtensionsManager";
-        Title = "Extensions";
-    }
-
-    public ExtensionManagerTool(ExtensionManagerViewModel viewModel)
-        : this()
-    {
-        ExtensionManagerViewModel = viewModel;
+        Title = UiStrings.Watches;
     }
 }
 
@@ -220,7 +201,7 @@ public sealed partial class ExtensionTool : Tool
     public ExtensionTool()
     {
         Id = "Extension";
-        Title = "Extension";
+        Title = UiStrings.Extension;
     }
 
     public ExtensionTool(ExtensionViewModel viewModel)
@@ -239,12 +220,33 @@ public sealed partial class ExtensionTool : Tool
 }
 
 /// <summary>
+/// A dock document that shows a file; the document tab shows its full path as tooltip and offers the file commands
+/// in its context menu.
+/// </summary>
+public interface IFileDockable
+{
+    /// <summary>Gets the full path of the shown file.</summary>
+    string FilePath { get; }
+
+    /// <summary>Gets the commands of the tab context menu, or null when the tab offers none.</summary>
+    DocumentTabCommands? TabCommands { get; }
+}
+
+/// <summary>
 /// Dock document for a XAML designer document.
 /// </summary>
-public sealed partial class DesignerDocument : Document
+public sealed partial class DesignerDocument : Document, IFileDockable
 {
     [IgnoreDataMember]
     public DesignerDocumentViewModel DocumentViewModel { get; }
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public string FilePath => DocumentViewModel.FilePath;
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public DocumentTabCommands? TabCommands { get; set; }
 
     public DesignerDocument(DesignerDocumentViewModel documentViewModel)
     {
@@ -258,10 +260,18 @@ public sealed partial class DesignerDocument : Document
 /// <summary>
 /// Dock document for a text file.
 /// </summary>
-public sealed partial class TextDocument : Document
+public sealed partial class TextDocument : Document, IFileDockable
 {
     [IgnoreDataMember]
     public TextDocumentViewModel DocumentViewModel { get; }
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public string FilePath => DocumentViewModel.FilePath;
+
+    /// <inheritdoc />
+    [IgnoreDataMember]
+    public DocumentTabCommands? TabCommands { get; set; }
 
     public TextDocument(TextDocumentViewModel documentViewModel)
     {
@@ -284,7 +294,7 @@ public sealed partial class InfiniteCanvasDocument : Document
     public InfiniteCanvasDocument()
     {
         Id = "InfiniteCanvas";
-        Title = "Canvas";
+        Title = UiStrings.Canvas;
         CanClose = true;
     }
 
@@ -292,7 +302,7 @@ public sealed partial class InfiniteCanvasDocument : Document
     {
         CanvasViewModel = canvasViewModel;
         Id = "InfiniteCanvas";
-        Title = "Canvas";
+        Title = UiStrings.Canvas;
         CanClose = true;
     }
 }
@@ -302,8 +312,14 @@ public sealed partial class InfiniteCanvasDocument : Document
 /// </summary>
 public sealed partial class XamlEditorDockFactory : Factory
 {
+    public override IDocumentDock CreateDocumentDock() => new DocumentDock
+    {
+        EmptyContent = UiStrings.NoDocumentsOpen
+    };
+
     private static readonly bool LogLayoutWarnings = true;
     private const string SolutionExplorerViewId = "solutionExplorer.panel";
+    private const string LAYOUT_NAME_KEY = "LayoutName";
     private readonly MainWindowViewModel _mainVm;
     private readonly ILogger<XamlEditorDockFactory> _logger;
     private static readonly DockSerializer s_serializer = new(typeof(ObservableCollection<>));
@@ -317,25 +333,33 @@ public sealed partial class XamlEditorDockFactory : Factory
     }
 
     /// <summary>
-    /// Creates the default layout with docking panels arranged in a VS/Blend style.
+    /// Creates the dock structure of a new layout with docking panels arranged in a VS/Blend style.
     /// </summary>
-    public IRootDock CreateDefaultLayout()
+    /// <param name="includeTool">
+    /// Selects the built-in tools (Output, Breakpoints, CallStack, Locals, Watches) of the bottom dock by id;
+    /// null includes all of them. Extension panels are not part of the structure.
+    /// </param>
+    public IRootDock CreateDefaultLayout(Predicate<string>? includeTool = null)
     {
         // Left tools: extensions will populate
 
         // Bottom tools: output and debugging panels (extensions contribute the rest).
-        OutputTool outputTool = new(_mainVm.Output);
-        BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
-        CallStackTool callStackTool = new(_mainVm.CallStack);
-        LocalsTool localsTool = new(_mainVm.Locals);
-        WatchesTool watchesTool = new(_mainVm.Watches);
-        ExtensionManagerTool extensionManagerTool = new(_mainVm.ExtensionManager);
+        IDockable[] bottomTools = new Tool[]
+            {
+                new OutputTool(_mainVm.Output),
+                new BreakpointsTool(_mainVm.Breakpoints),
+                new CallStackTool(_mainVm.CallStack),
+                new LocalsTool(_mainVm.Locals),
+                new WatchesTool(_mainVm.Watches)
+            }
+            .Where(tool => includeTool?.Invoke(tool.Id) ?? true)
+            .ToArray();
 
         // Left tool dock
         ToolDock leftToolDock = new()
         {
             Id = "LeftToolDock",
-            Title = "Left Tools",
+            Title = UiStrings.LeftTools,
             Proportion = 0.2,
             ActiveDockable = null,
             VisibleDockables = CreateList<IDockable>(),
@@ -346,7 +370,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         ToolDock rightToolDock = new()
         {
             Id = "RightToolDock",
-            Title = "Right Tools",
+            Title = UiStrings.RightTools,
             Proportion = 0.25,
             ActiveDockable = null,
             VisibleDockables = CreateList<IDockable>(),
@@ -357,16 +381,10 @@ public sealed partial class XamlEditorDockFactory : Factory
         ToolDock bottomToolDock = new()
         {
             Id = "BottomToolDock",
-            Title = "Bottom Tools",
+            Title = UiStrings.BottomTools,
             Proportion = 0.25,
             ActiveDockable = null,
-            VisibleDockables = CreateList<IDockable>(
-                outputTool,
-                breakpointsTool,
-                callStackTool,
-                localsTool,
-                watchesTool,
-                extensionManagerTool),
+            VisibleDockables = CreateList(bottomTools),
             Alignment = Alignment.Bottom,
             AutoHide = true,
             IsExpanded = false
@@ -376,7 +394,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         DocumentDock documentDock = new()
         {
             Id = "DocumentDock",
-            Title = "Documents",
+            Title = UiStrings.Documents,
             IsCollapsable = false,
             VisibleDockables = CreateList<IDockable>(),
             ActiveDockable = null,
@@ -411,7 +429,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         RootDock rootDock = new()
         {
             Id = "Root",
-            Title = "Root",
+            Title = UiStrings.RootArea,
             IsCollapsable = false,
             ActiveDockable = mainLayout,
             DefaultDockable = mainLayout,
@@ -432,43 +450,42 @@ public sealed partial class XamlEditorDockFactory : Factory
         if (solutionTool is not null)
         {
             solutionTool.SolutionExplorerViewModel = _mainVm.SolutionExplorer;
+            solutionTool.Title = UiStrings.SolutionExplorer;
         }
 
         OutputTool? outputTool = FindDockable<OutputTool>(rootDock, "Output");
         if (outputTool is not null)
         {
             outputTool.OutputViewModel = _mainVm.Output;
+            outputTool.Title = UiStrings.Output;
         }
 
         BreakpointsTool? breakpointsTool = FindDockable<BreakpointsTool>(rootDock, "Breakpoints");
         if (breakpointsTool is not null)
         {
             breakpointsTool.BreakpointsViewModel = _mainVm.Breakpoints;
+            breakpointsTool.Title = UiStrings.Breakpoints;
         }
 
         CallStackTool? callStackTool = FindDockable<CallStackTool>(rootDock, "CallStack");
         if (callStackTool is not null)
         {
             callStackTool.CallStackViewModel = _mainVm.CallStack;
+            callStackTool.Title = UiStrings.CallStack;
         }
 
         LocalsTool? localsTool = FindDockable<LocalsTool>(rootDock, "Locals");
         if (localsTool is not null)
         {
             localsTool.LocalsViewModel = _mainVm.Locals;
+            localsTool.Title = UiStrings.Locals;
         }
 
         WatchesTool? watchesTool = FindDockable<WatchesTool>(rootDock, "Watches");
         if (watchesTool is not null)
         {
             watchesTool.WatchesViewModel = _mainVm.Watches;
-        }
-
-        ExtensionManagerTool? extensionManagerTool =
-            FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager");
-        if (extensionManagerTool is not null)
-        {
-            extensionManagerTool.ExtensionManagerViewModel = _mainVm.ExtensionManager;
+            watchesTool.Title = UiStrings.Watches;
         }
 
         foreach (ExtensionTool extensionTool in FindDockables<ExtensionTool>(rootDock))
@@ -497,36 +514,6 @@ public sealed partial class XamlEditorDockFactory : Factory
         }
     }
 
-    // Debug traces for the dock state flow: which code path activates, pins, or
-    // restores which dockable. Layout regressions (a collapsed dock expanding on
-    // startup, a tool reappearing) are otherwise invisible in the log.
-    public override void SetActiveDockable(IDockable dockable)
-    {
-        _logger.LogDebug(
-            "Dock SetActiveDockable: {Id} (owner {OwnerId})",
-            dockable.Id,
-            (dockable.Owner as IDockable)?.Id);
-        base.SetActiveDockable(dockable);
-    }
-
-    public override void SetFocusedDockable(IDock dock, IDockable? dockable)
-    {
-        _logger.LogDebug("Dock SetFocusedDockable: {Id} in {DockId}", dockable?.Id, dock.Id);
-        base.SetFocusedDockable(dock, dockable);
-    }
-
-    public override void PinDockable(IDockable dockable)
-    {
-        _logger.LogDebug("Dock PinDockable: {Id}", dockable.Id);
-        base.PinDockable(dockable);
-    }
-
-    public override void RestoreDockable(IDockable dockable)
-    {
-        _logger.LogDebug("Dock RestoreDockable: {Id}", dockable.Id);
-        base.RestoreDockable(dockable);
-    }
-
     public override void InitLayout(IDockable layout)
     {
         HostWindowLocator = new Dictionary<string, Func<IHostWindow?>>
@@ -535,6 +522,12 @@ public sealed partial class XamlEditorDockFactory : Factory
         };
 
         base.InitLayout(layout);
+    }
+
+    public override void InitDockable(IDockable dockable, IDockable? owner)
+    {
+        DockCapabilityDefaults.Apply(dockable);
+        base.InitDockable(dockable, owner);
     }
 
     public void EnsureOwnerReferences(IRootDock rootDock)
@@ -602,14 +595,25 @@ public sealed partial class XamlEditorDockFactory : Factory
         ToolDock? toolDock = FindDockable<ToolDock>(rootDock, "BottomToolDock");
         if (toolDock is not null)
         {
+            bool wasCollapsed = toolDock.Proportion == 0;
             TerminalTool tool = new(terminalViewModel)
             {
                 Title = terminalViewModel.Title
             };
             AddDockable(toolDock, tool);
             SetOwnerRecursive(tool, toolDock);
-            SetActiveDockable(tool);
-            SetFocusedDockable(toolDock, tool);
+            toolDock.IsEmpty = false;
+            if (wasCollapsed)
+            {
+                PinDockable(tool);
+                EnsurePinnedToolSize(tool);
+                PreviewPinnedDockable(tool);
+            }
+            else
+            {
+                SetActiveDockable(tool);
+                SetFocusedDockable(toolDock, tool);
+            }
             return tool;
         }
 
@@ -631,6 +635,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             foreach (IDockable tool in tools)
             {
                 PinDockable(tool);
+                EnsurePinnedToolSize(tool);
             }
 
             if (double.IsFinite(bottomDock.Proportion) && bottomDock.Proportion > 0)
@@ -650,6 +655,13 @@ public sealed partial class XamlEditorDockFactory : Factory
             pinnedDock.IsActive = false;
             pinnedDock.IsExpanded = false;
         }
+    }
+
+    private static void EnsurePinnedToolSize(IDockable tool)
+    {
+        tool.GetPinnedBounds(out _, out _, out double width, out double height);
+        if (!double.IsFinite(width) || width <= 0 || !double.IsFinite(height) || height <= 0)
+            tool.SetPinnedBounds(0, 0, 400, 300);
     }
 
     public ExtensionTool? AddExtensionTool(IRootDock rootDock, ExtensionViewModel viewModel)
@@ -678,6 +690,9 @@ public sealed partial class XamlEditorDockFactory : Factory
         toolDock ??= FindDockable<ToolDock>(rootDock, fallbackDockId);
         if (toolDock is not null)
         {
+            bool isBottomToolDock = string.Equals(toolDock.Id, "BottomToolDock", StringComparison.Ordinal);
+            bool wasBottomCollapsed = isBottomToolDock && toolDock.Proportion == 0;
+            double collapsedProportion = toolDock.CollapsedProportion;
             ExtensionTool tool = new(viewModel);
             int? desiredInsertIndex = null;
             if (toolDock.VisibleDockables is ObservableCollection<IDockable> dockables)
@@ -730,20 +745,18 @@ public sealed partial class XamlEditorDockFactory : Factory
                 }
             }
 
-            bool isBottomToolDock = string.Equals(toolDock.Id, "BottomToolDock", StringComparison.Ordinal);
-
-            // A collapsed bottom dock stays collapsed: extension views registering
-            // after startup would otherwise activate their tool and expand the dock
-            // over the restored layout on every run. Their tools go to the pin strip
-            // instead, matching the tools pinned at startup.
-            bool bottomCollapsed = isBottomToolDock && !toolDock.IsExpanded;
-            if (bottomCollapsed)
+            if (viewModel.AutoHideByDefault)
             {
                 PinDockable(tool);
-                return tool;
+                EnsurePinnedToolSize(tool);
             }
-
-            if (viewModel.ActivateByDefault || (!isBottomToolDock && toolDock.ActiveDockable is null))
+            else if (wasBottomCollapsed)
+            {
+                CollapseBottomToolDock(rootDock);
+                if (double.IsFinite(collapsedProportion) && collapsedProportion > 0)
+                    toolDock.CollapsedProportion = collapsedProportion;
+            }
+            else if (viewModel.ActivateByDefault || (!isBottomToolDock && toolDock.ActiveDockable is null))
             {
                 SetActiveDockable(tool);
                 SetFocusedDockable(toolDock, tool);
@@ -756,47 +769,20 @@ public sealed partial class XamlEditorDockFactory : Factory
 
     public static T? FindDockable<T>(IDockable dockable, string id) where T : class, IDockable
     {
-        if (dockable is T typed && dockable.Id == id)
-        {
-            return typed;
-        }
-
-        if (dockable is IDock dock && dock.VisibleDockables is not null)
-        {
-            foreach (IDockable child in dock.VisibleDockables)
-            {
-                T? result = FindDockable<T>(child, id);
-                if (result is not null)
-                {
-                    return result;
-                }
-            }
-        }
-
-        if (dockable is IRootDock rootDock)
-        {
-            foreach (IDockable child in EnumerateDetachedDockables(rootDock))
-            {
-                T? result = FindDockable<T>(child, id);
-                if (result is not null)
-                {
-                    return result;
-                }
-            }
-        }
-
-        return null;
+        return FindDockables<T>(dockable).FirstOrDefault(candidate => candidate.Id == id);
     }
 
     public static IReadOnlyList<T> FindDockables<T>(IDockable dockable) where T : class, IDockable
     {
         List<T> results = new();
-        CollectDockables(dockable, results);
+        CollectDockables(dockable, results, new HashSet<IDockable>(ReferenceEqualityComparer.Instance));
         return results;
     }
 
-    private static void CollectDockables<T>(IDockable dockable, List<T> results) where T : class, IDockable
+    private static void CollectDockables<T>(IDockable dockable, List<T> results, HashSet<IDockable> visited)
+        where T : class, IDockable
     {
+        if (!visited.Add(dockable)) return;
         if (dockable is T typed)
         {
             results.Add(typed);
@@ -806,170 +792,85 @@ public sealed partial class XamlEditorDockFactory : Factory
         {
             foreach (IDockable child in dock.VisibleDockables)
             {
-                CollectDockables(child, results);
+                CollectDockables(child, results, visited);
             }
         }
-
-        if (dockable is IRootDock rootDock)
+        if (dockable is IRootDock root)
         {
-            foreach (IDockable child in EnumerateDetachedDockables(rootDock))
+            foreach (IList<IDockable>? children in new[]
+                     {
+                         root.HiddenDockables, root.LeftPinnedDockables, root.RightPinnedDockables,
+                         root.TopPinnedDockables, root.BottomPinnedDockables
+                     })
             {
-                CollectDockables(child, results);
+                if (children is null) continue;
+                foreach (IDockable child in children)
+                    CollectDockables(child, results, visited);
             }
-        }
-    }
+            if (root.PinnedDock is not null)
+                CollectDockables(root.PinnedDock, results, visited);
 
-    /// <summary>
-    /// Enumerates the dockables of a root dock that live outside the visible tree:
-    /// hidden dockables and the four pinned dockable lists. Without them a pinned tool
-    /// is invisible to the search helpers and gets recreated on every start.
-    /// </summary>
-    private static IEnumerable<IDockable> EnumerateDetachedDockables(IRootDock rootDock)
-    {
-        IEnumerable<IList<IDockable>?> lists = new[]
-        {
-            rootDock.HiddenDockables,
-            rootDock.LeftPinnedDockables,
-            rootDock.RightPinnedDockables,
-            rootDock.TopPinnedDockables,
-            rootDock.BottomPinnedDockables
-        };
-
-        foreach (IList<IDockable>? list in lists)
-        {
-            if (list is null)
+            // Floating windows hold their tools in a layout of their own.
+            if (root.Windows is not null)
             {
-                continue;
-            }
-
-            foreach (IDockable dockable in list)
-            {
-                yield return dockable;
+                foreach (IDockWindow window in root.Windows)
+                {
+                    if (window.Layout is not null)
+                        CollectDockables(window.Layout, results, visited);
+                }
             }
         }
     }
-
-    /// <summary>
-    /// Overrides the directory holding the persisted layout state. Tests MUST set
-    /// this to an isolated directory: they build real shell view models, and
-    /// without the override they read and overwrite the user's layout files.
-    /// </summary>
-    public static string? SettingsRootOverride { get; set; }
 
     /// <summary>
     /// Gets the default layout file path.
     /// </summary>
     public static string GetDefaultLayoutPath()
     {
-        string dir = SettingsRootOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "XamlVisualEditor");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "dock-layout.json");
-    }
-
-    /// <summary>
-    /// Gets the path of the persisted closed-tools list.
-    /// </summary>
-    public static string GetClosedToolsPath()
-    {
-        return Path.Combine(
-            Path.GetDirectoryName(GetDefaultLayoutPath())!,
-            "dock-closed-tools.json");
-    }
-
-    // Tools the user closed, persisted next to the layout: the shell recreates
-    // missing tools on every start (default debug tools, extension panels), so
-    // without this list a closed tool reappears on the next run.
-    private HashSet<string>? _closedTools;
-
-    private HashSet<string> ClosedTools => _closedTools ??= LoadClosedTools();
-
-    /// <summary>Returns whether the user closed the tool with the given id.</summary>
-    public bool IsToolClosed(string id)
-    {
-        return ClosedTools.Contains(id);
-    }
-
-    /// <summary>Records that the user closed the tool with the given id.</summary>
-    public void MarkToolClosed(string id)
-    {
-        if (ClosedTools.Add(id))
-        {
-            SaveClosedTools();
-        }
-    }
-
-    /// <summary>Removes the closed mark, so the tool may be recreated again.</summary>
-    public void MarkToolReopened(string id)
-    {
-        if (ClosedTools.Remove(id))
-        {
-            SaveClosedTools();
-        }
-    }
-
-    /// <summary>Clears all closed marks (layout reset).</summary>
-    public void ClearClosedTools()
-    {
-        if (ClosedTools.Count > 0)
-        {
-            ClosedTools.Clear();
-            SaveClosedTools();
-        }
-    }
-
-    private HashSet<string> LoadClosedTools()
-    {
-        try
-        {
-            string path = GetClosedToolsPath();
-            if (File.Exists(path))
-            {
-                string[]? ids = System.Text.Json.JsonSerializer.Deserialize<string[]>(File.ReadAllText(path));
-                if (ids is not null)
-                {
-                    return new HashSet<string>(ids, StringComparer.Ordinal);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Failed to load closed-tools list: {Message}", ex.Message);
-        }
-
-        return new HashSet<string>(StringComparer.Ordinal);
-    }
-
-    private void SaveClosedTools()
-    {
-        try
-        {
-            File.WriteAllText(
-                GetClosedToolsPath(),
-                System.Text.Json.JsonSerializer.Serialize(ClosedTools.OrderBy(id => id, StringComparer.Ordinal)));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Failed to save closed-tools list: {Message}", ex.Message);
-        }
+        return Path.Combine(ViewModels.ShellSettingsPaths.GetRoot(), "dock-layout.json");
     }
 
     /// <summary>
     /// Saves the current dock layout to a JSON file.
     /// </summary>
-    public void SaveLayout(IRootDock rootDock, string? filePath = null)
+    /// <param name="rootDock">The layout to save.</param>
+    /// <param name="filePath">The target file; null saves the working layout of the next start.</param>
+    /// <param name="layoutName">The name of the saved user layout that the working layout came from, if any.</param>
+    /// <returns>False when the layout could not be written; the previous file then stays unchanged.</returns>
+    public bool SaveLayout(IRootDock rootDock, string? filePath = null, string? layoutName = null)
     {
+        if (filePath is null && !HasDesktopLifetime()) return true;
         filePath ??= GetDefaultLayoutPath();
-        List<Action> restoreActions = DetachToolViewModels(rootDock);
-        restoreActions.AddRange(DetachNonPersistentExtensionTools(rootDock));
-        restoreActions.AddRange(DetachTransientDocuments(rootDock));
-        restoreActions.AddRange(DetachPinnedDock(rootDock));
-        restoreActions.AddRange(DetachDockRuntimeReferences(rootDock));
+        string tempPath = filePath + ".tmp";
+        List<Action> restoreActions = DetachRuntimeDocuments(rootDock);
+        restoreActions.InsertRange(0, DetachNonPersistentExtensionTools(rootDock));
+        restoreActions.InsertRange(0, DetachToolViewModels(rootDock));
+        restoreActions.InsertRange(0, DetachDockRuntimeReferences(rootDock));
         try
         {
-            string json = s_serializer.Serialize(rootDock);
-            File.WriteAllText(filePath, json);
+            JsonObject snapshot = JsonNode.Parse(s_serializer.Serialize(rootDock)) as JsonObject
+                ?? throw new InvalidOperationException("The dock serializer did not return a layout object.");
+            snapshot.Remove(nameof(IRootDock.PinnedDock));
+            snapshot.Remove(nameof(IRootDock.Window));
+            snapshot.Remove(nameof(IRootDock.Windows));
+            JsonObject pinnedSizes = new();
+            foreach (IDockable tool in rootDock.BottomPinnedDockables ?? Array.Empty<IDockable>())
+            {
+                tool.GetPinnedBounds(out _, out _, out double width, out double height);
+                if (!string.IsNullOrWhiteSpace(tool.Id) && double.IsFinite(width) && width > 0
+                    && double.IsFinite(height) && height > 0)
+                    pinnedSizes[tool.Id] = new JsonObject { ["Width"] = width, ["Height"] = height };
+            }
+            snapshot["PinnedToolSizes"] = pinnedSizes;
+            if (!string.IsNullOrWhiteSpace(layoutName))
+            {
+                snapshot[LAYOUT_NAME_KEY] = layoutName;
+            }
+
+            // The move replaces the file in one step, so an interrupted write never leaves a truncated layout.
+            File.WriteAllText(tempPath, snapshot.ToJsonString());
+            File.Move(tempPath, filePath, overwrite: true);
+            return true;
         }
         catch (Exception ex)
         {
@@ -977,6 +878,9 @@ public sealed partial class XamlEditorDockFactory : Factory
             {
                 _logger.LogWarning("Failed to save dock layout: {Message}", ex.Message);
             }
+
+            TryDeleteFile(tempPath);
+            return false;
         }
         finally
         {
@@ -987,11 +891,29 @@ public sealed partial class XamlEditorDockFactory : Factory
         }
     }
 
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     /// <summary>
     /// Loads a dock layout from a JSON file.
     /// </summary>
-    public IRootDock? LoadLayout(string? filePath = null)
+    public IRootDock? LoadLayout(string? filePath = null) => LoadLayout(out _, filePath);
+
+    /// <summary>
+    /// Loads a dock layout from a JSON file together with the name of the user layout it came from.
+    /// </summary>
+    public IRootDock? LoadLayout(out string? layoutName, string? filePath = null)
     {
+        layoutName = null;
+        if (filePath is null && !HasDesktopLifetime()) return null;
         filePath ??= GetDefaultLayoutPath();
         try
         {
@@ -1000,17 +922,43 @@ public sealed partial class XamlEditorDockFactory : Factory
                 return null;
             }
 
-            string json = File.ReadAllText(filePath);
-            // The serializer registers polymorphism ($type) on the dock interfaces only,
-            // so the layout must be deserialized via IRootDock, not the concrete RootDock.
-            IRootDock? rootDock = s_serializer.Deserialize<IRootDock>(json);
+            string json = SharedFileReader.ReadAllText(filePath);
+            JsonObject? persisted = JsonNode.Parse(json) as JsonObject;
+            JsonObject? pinnedSizes = persisted?["PinnedToolSizes"] as JsonObject;
+            persisted?.Remove("PinnedToolSizes");
+            if (persisted?[LAYOUT_NAME_KEY] is JsonValue nameValue && nameValue.TryGetValue(out string? storedName))
+            {
+                layoutName = storedName;
+            }
+
+            persisted?.Remove(LAYOUT_NAME_KEY);
+            persisted?.Remove(nameof(IRootDock.PinnedDock));
+            persisted?.Remove(nameof(IRootDock.Window));
+            persisted?.Remove(nameof(IRootDock.Windows));
+            RemoveExtensionManagerDock(persisted);
+            RemoveRuntimeDocuments(persisted);
+            if (persisted is not null && persisted[nameof(IRootDock.ActiveDockable)] is null)
+            {
+                persisted.Remove(nameof(IRootDock.DefaultDockable));
+            }
+            IRootDock? rootDock = s_serializer.Deserialize<IRootDock>(persisted?.ToJsonString() ?? json);
             if (rootDock is not null)
             {
                 EnsureLayoutDefaults(rootDock);
-                ReconnectDockableReferences(rootDock);
-                PruneDuplicatePinnedDockables(rootDock);
-                RemoveClosedTools(rootDock);
-                EnsureDebugTools(rootDock);
+                NormalizeDockReferences(rootDock);
+                foreach (IDockable tool in rootDock.BottomPinnedDockables ?? Array.Empty<IDockable>())
+                {
+                    if (!string.IsNullOrWhiteSpace(tool.Id) && pinnedSizes?[tool.Id] is JsonObject size
+                        && size["Width"] is JsonValue widthValue && widthValue.TryGetValue(out double width)
+                        && size["Height"] is JsonValue heightValue && heightValue.TryGetValue(out double height)
+                        && double.IsFinite(width) && width > 0 && double.IsFinite(height) && height > 0)
+                        tool.SetPinnedBounds(0, 0, width, height);
+                    EnsurePinnedToolSize(tool);
+                }
+                IDockable? mainLayout = rootDock.VisibleDockables?
+                    .FirstOrDefault(dockable => dockable.Id == "MainLayout");
+                rootDock.ActiveDockable ??= mainLayout;
+                rootDock.DefaultDockable ??= mainLayout;
                 bool hasLeft = FindDockable<ToolDock>(rootDock, "LeftToolDock") is not null;
                 bool hasRight = FindDockable<ToolDock>(rootDock, "RightToolDock") is not null;
                 bool hasBottom = FindDockable<ToolDock>(rootDock, "BottomToolDock") is not null;
@@ -1020,10 +968,6 @@ public sealed partial class XamlEditorDockFactory : Factory
                     if (LogLayoutWarnings)
                     {
                         _logger.LogWarning("Dock layout missing required docks. Resetting to defaults.");
-                    }
-                    if (File.Exists(filePath))
-                    {
-                        File.Delete(filePath);
                     }
                     return null;
                 }
@@ -1036,28 +980,72 @@ public sealed partial class XamlEditorDockFactory : Factory
             {
                 _logger.LogWarning("Failed to load dock layout: {Message}", ex.Message);
             }
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                }
-            }
-            catch (Exception deleteEx)
-            {
-                if (LogLayoutWarnings)
-                {
-                    _logger.LogWarning("Failed to delete invalid dock layout: {Message}", deleteEx.Message);
-                }
-            }
             return null;
         }
     }
 
+    private static void RemoveExtensionManagerDock(JsonNode? node) => RemoveMatchingNodes(node, IsExtensionManagerDock);
+
+    // Open documents belong to the session, not to the layout, and cannot be deserialized. SaveLayout leaves them
+    // out; a layout file that an earlier version wrote with a document reference must still load.
+    private static void RemoveRuntimeDocuments(JsonNode? node) => RemoveMatchingNodes(node, IsRuntimeDocument);
+
+    private static void RemoveMatchingNodes(JsonNode? node, Func<JsonNode?, bool> matches)
+    {
+        if (node is JsonArray items)
+        {
+            for (int index = items.Count - 1; index >= 0; index--)
+            {
+                if (matches(items[index])) items.RemoveAt(index);
+                else RemoveMatchingNodes(items[index], matches);
+            }
+        }
+        else if (node is JsonObject entry)
+        {
+            foreach (KeyValuePair<string, JsonNode?> property in entry.ToArray())
+            {
+                if (matches(property.Value)) entry.Remove(property.Key);
+                else RemoveMatchingNodes(property.Value, matches);
+            }
+        }
+    }
+
+    private static bool IsExtensionManagerDock(JsonNode? node) =>
+        node is JsonObject entry && entry[nameof(IDockable.Id)]?.GetValue<string>() == "ExtensionsManager";
+
+    private static bool IsRuntimeDocument(JsonNode? node) =>
+        node is JsonObject entry
+        && entry["$type"]?.GetValue<string>() is { } type
+        && (type == typeof(TextDocument).FullName || type == typeof(DesignerDocument).FullName);
+
+    /// <summary>
+    /// Gives a side tool dock without width its last width, or the default width, when it shows a tool again.
+    /// A side dock keeps a zero proportion after its last tool was hidden, which would leave the tool invisible.
+    /// </summary>
+    public static void RestoreSideDockWidth(IDockable dockable)
+    {
+        if (dockable.Owner is not ToolDock dock) return;
+        double defaultWidth = dock.Id switch
+        {
+            "LeftToolDock" => DefaultLeftToolDockWidth,
+            "RightToolDock" => DefaultRightToolDockWidth,
+            _ => 0
+        };
+        if (defaultWidth <= 0 || (double.IsFinite(dock.Proportion) && dock.Proportion > 0)) return;
+
+        dock.Proportion = double.IsFinite(dock.CollapsedProportion) && dock.CollapsedProportion > 0
+            ? dock.CollapsedProportion
+            : defaultWidth;
+        dock.IsEmpty = false;
+    }
+
+    private const double DefaultLeftToolDockWidth = 0.2;
+    private const double DefaultRightToolDockWidth = 0.25;
+
     public static void EnsureLayoutDefaults(IRootDock rootDock)
     {
-        const double leftWidth = 0.2;
-        const double rightWidth = 0.25;
+        const double leftWidth = DefaultLeftToolDockWidth;
+        const double rightWidth = DefaultRightToolDockWidth;
         const double bottomHeight = 0.25;
         const double documentWidth = 0.75;
 
@@ -1066,9 +1054,24 @@ public sealed partial class XamlEditorDockFactory : Factory
             rootDock.Id = "Root";
         }
 
-        if (string.IsNullOrWhiteSpace(rootDock.Title))
+        rootDock.Title = UiStrings.RootArea;
+        foreach (IDockable dock in FindDockables<IDockable>(rootDock))
         {
-            rootDock.Title = "Root";
+            if (dock is IDocumentDock emptyDocumentDock)
+            {
+                emptyDocumentDock.EmptyContent = UiStrings.NoDocumentsOpen;
+            }
+
+            string? title = dock.Id switch
+            {
+                "LeftToolDock" => UiStrings.LeftTools,
+                "RightToolDock" => UiStrings.RightTools,
+                "BottomToolDock" => UiStrings.BottomTools,
+                "DocumentDock" => UiStrings.Documents,
+                "PinnedDock" => UiStrings.Pinned,
+                _ => null
+            };
+            if (title is not null) dock.Title = title;
         }
 
         rootDock.VisibleDockables ??= new ObservableCollection<IDockable>();
@@ -1084,7 +1087,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             rootDock.PinnedDock = new ToolDock
             {
                 Id = "PinnedDock",
-                Title = "Pinned",
+                Title = UiStrings.Pinned,
                 Alignment = Alignment.Left,
                 VisibleDockables = new ObservableCollection<IDockable>()
             };
@@ -1098,9 +1101,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         if (bottomDock is not null)
         {
             bottomDock.VisibleDockables ??= new ObservableCollection<IDockable>();
-            // Repair only a missing proportion: zero is the legitimate collapsed
-            // state, and resetting it reopened the bottom dock on every start.
-            if (double.IsNaN(bottomDock.Proportion))
+            if (!double.IsFinite(bottomDock.Proportion) || bottomDock.Proportion < 0)
             {
                 bottomDock.Proportion = bottomHeight;
             }
@@ -1203,12 +1204,6 @@ public sealed partial class XamlEditorDockFactory : Factory
                 restore);
         }
 
-        DetachToolViewModel(
-            FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager"),
-            tool => tool.ExtensionManagerViewModel,
-            (tool, vm) => tool.ExtensionManagerViewModel = vm,
-            restore);
-
         return restore;
     }
 
@@ -1254,348 +1249,15 @@ public sealed partial class XamlEditorDockFactory : Factory
         return restore;
     }
 
-    /// <summary>
-    /// Removes open designer and text documents from the layout for the duration of a save.
-    /// Their view models represent open files that are not rehydrated on load, and the
-    /// document types have no parameterless constructor, so persisted instances would make
-    /// the saved layout impossible to deserialize.
-    /// </summary>
-    private static IReadOnlyList<Action> DetachTransientDocuments(IRootDock rootDock)
-    {
-        List<Action> restore = new();
-
-        List<IDockable> transientDocuments = new();
-        transientDocuments.AddRange(FindDockables<DesignerDocument>(rootDock));
-        transientDocuments.AddRange(FindDockables<TextDocument>(rootDock));
-        if (transientDocuments.Count == 0)
-        {
-            return restore;
-        }
-
-        HashSet<IDockable> transientSet = new(transientDocuments);
-
-        foreach (IDock dock in FindDockables<IDock>(rootDock))
-        {
-            IDock target = dock;
-
-            if (target.ActiveDockable is { } active && transientSet.Contains(active))
-            {
-                target.ActiveDockable = target.VisibleDockables?.FirstOrDefault(d => !transientSet.Contains(d));
-                restore.Add(() => target.ActiveDockable = active);
-            }
-
-            if (target.DefaultDockable is { } defaultDockable && transientSet.Contains(defaultDockable))
-            {
-                target.DefaultDockable = null;
-                restore.Add(() => target.DefaultDockable = defaultDockable);
-            }
-
-            if (target.FocusedDockable is { } focused && transientSet.Contains(focused))
-            {
-                target.FocusedDockable = null;
-                restore.Add(() => target.FocusedDockable = focused);
-            }
-        }
-
-        foreach (IDockable document in transientDocuments)
-        {
-            if (document.Owner is not IDock owner || owner.VisibleDockables is null)
-            {
-                continue;
-            }
-
-            int index = owner.VisibleDockables.IndexOf(document);
-            if (index < 0)
-            {
-                continue;
-            }
-
-            owner.VisibleDockables.RemoveAt(index);
-            int restoreIndex = index;
-            restore.Add(() =>
-            {
-                if (owner.VisibleDockables is null || owner.VisibleDockables.Contains(document))
-                {
-                    return;
-                }
-
-                int insertIndex = Math.Clamp(restoreIndex, 0, owner.VisibleDockables.Count);
-                owner.VisibleDockables.Insert(insertIndex, document);
-            });
-        }
-
-        return restore;
-    }
-
-    /// <summary>
-    /// Removes the pinned dock from the layout for the duration of a save. The serializer
-    /// has no polymorphic registration for IToolDock, so a persisted pinned dock cannot be
-    /// deserialized; EnsureLayoutDefaults recreates it on load.
-    /// </summary>
-    private static IReadOnlyList<Action> DetachPinnedDock(IRootDock rootDock)
-    {
-        List<Action> restore = new();
-
-        if (rootDock.PinnedDock is { } pinnedDock)
-        {
-            rootDock.PinnedDock = null;
-            restore.Add(() => rootDock.PinnedDock = pinnedDock);
-        }
-
-        return restore;
-    }
-
     private static void PruneTerminalTools(IRootDock rootDock)
     {
         IReadOnlyList<TerminalTool> terminalTools = FindDockables<TerminalTool>(rootDock);
         foreach (TerminalTool tool in terminalTools)
         {
-            if (tool.TerminalViewModel is not null)
-            {
-                continue;
-            }
-
-            if (tool.Owner is IDock dock && dock.VisibleDockables is not null)
+            if (tool.TerminalViewModel is null && tool.Owner is IDock dock && dock.VisibleDockables is not null)
             {
                 dock.VisibleDockables.Remove(tool);
             }
-
-            rootDock.HiddenDockables?.Remove(tool);
-            rootDock.LeftPinnedDockables?.Remove(tool);
-            rootDock.RightPinnedDockables?.Remove(tool);
-            rootDock.TopPinnedDockables?.Remove(tool);
-            rootDock.BottomPinnedDockables?.Remove(tool);
-        }
-    }
-
-    /// <summary>
-    /// Removes tools the user closed from a loaded layout. Layouts saved before
-    /// closing reached the model (or by other means) may still carry them; the
-    /// closed mark is authoritative until the tool is reopened.
-    /// </summary>
-    private void RemoveClosedTools(IRootDock rootDock)
-    {
-        if (ClosedTools.Count == 0)
-        {
-            return;
-        }
-
-        foreach (IDock dock in FindDockables<IDock>(rootDock))
-        {
-            if (dock.VisibleDockables is null)
-            {
-                continue;
-            }
-
-            for (int i = dock.VisibleDockables.Count - 1; i >= 0; i--)
-            {
-                if (dock.VisibleDockables[i] is not Tool tool
-                    || tool is TerminalTool
-                    || !IsToolClosed(tool.Id))
-                {
-                    continue;
-                }
-
-                if (ReferenceEquals(dock.ActiveDockable, tool))
-                {
-                    dock.ActiveDockable = null;
-                }
-
-                if (ReferenceEquals(dock.DefaultDockable, tool))
-                {
-                    dock.DefaultDockable = null;
-                }
-
-                if (ReferenceEquals(dock.FocusedDockable, tool))
-                {
-                    dock.FocusedDockable = null;
-                }
-
-                dock.VisibleDockables.RemoveAt(i);
-            }
-        }
-
-        RemoveClosedTools(rootDock.HiddenDockables);
-        RemoveClosedTools(rootDock.LeftPinnedDockables);
-        RemoveClosedTools(rootDock.RightPinnedDockables);
-        RemoveClosedTools(rootDock.TopPinnedDockables);
-        RemoveClosedTools(rootDock.BottomPinnedDockables);
-    }
-
-    private void RemoveClosedTools(IList<IDockable>? dockables)
-    {
-        if (dockables is null)
-        {
-            return;
-        }
-
-        for (int i = dockables.Count - 1; i >= 0; i--)
-        {
-            if (dockables[i] is Tool tool && tool is not TerminalTool && IsToolClosed(tool.Id))
-            {
-                dockables.RemoveAt(i);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Recreates the default debug tools missing from a loaded layout - except the
-    /// ones the user closed, which stay closed until reopened via the view menu.
-    /// </summary>
-    private void EnsureDebugTools(IRootDock rootDock)
-    {
-        ToolDock? bottomDock = FindDockable<ToolDock>(rootDock, "BottomToolDock");
-        if (bottomDock?.VisibleDockables is null)
-        {
-            return;
-        }
-
-        EnsureDebugTool<BreakpointsTool>(rootDock, bottomDock, "Breakpoints", () => new BreakpointsTool());
-        EnsureDebugTool<CallStackTool>(rootDock, bottomDock, "CallStack", () => new CallStackTool());
-        EnsureDebugTool<LocalsTool>(rootDock, bottomDock, "Locals", () => new LocalsTool());
-        EnsureDebugTool<WatchesTool>(rootDock, bottomDock, "Watches", () => new WatchesTool());
-    }
-
-    private void EnsureDebugTool<T>(IRootDock rootDock, ToolDock bottomDock, string id, Func<T> create)
-        where T : Tool
-    {
-        if (IsToolClosed(id) || FindDockables<T>(rootDock).Count > 0)
-        {
-            return;
-        }
-
-        bottomDock.VisibleDockables!.Add(create());
-    }
-
-    /// <summary>
-    /// Recreates a closed built-in tool on explicit user request (view menu) and
-    /// removes its closed mark.
-    /// </summary>
-    public Tool? ReopenBuiltInTool(IRootDock rootDock, string id)
-    {
-        MarkToolReopened(id);
-
-        if (FindDockable<Tool>(rootDock, id) is { } existing)
-        {
-            return existing;
-        }
-
-        ToolDock? bottomDock = FindDockable<ToolDock>(rootDock, "BottomToolDock");
-        if (bottomDock?.VisibleDockables is null)
-        {
-            return null;
-        }
-
-        Tool? tool = id switch
-        {
-            "Breakpoints" => new BreakpointsTool(),
-            "CallStack" => new CallStackTool(),
-            "Locals" => new LocalsTool(),
-            "Watches" => new WatchesTool(),
-            _ => null
-        };
-
-        if (tool is null)
-        {
-            return null;
-        }
-
-        bottomDock.VisibleDockables.Add(tool);
-        SetOwnerRecursive(tool, bottomDock);
-        bottomDock.IsEmpty = false;
-        return tool;
-    }
-
-    /// <summary>
-    /// Repoints the Active-/Default-/FocusedDockable of every dock in a loaded layout
-    /// to the instance with the same id in its visible dockables. The serializer
-    /// materializes such property references as duplicate subtrees instead of
-    /// references into the visible tree; without repointing, the shell renders the
-    /// unwired duplicate while all runtime wiring happens on the visible tree.
-    /// </summary>
-    private static void ReconnectDockableReferences(IRootDock rootDock)
-    {
-        foreach (IDock dock in FindDockables<IDock>(rootDock))
-        {
-            dock.ActiveDockable = ResolveDockable(dock.ActiveDockable, dock.VisibleDockables);
-            dock.DefaultDockable = ResolveDockable(dock.DefaultDockable, dock.VisibleDockables);
-            dock.FocusedDockable = ResolveDockable(dock.FocusedDockable, dock.VisibleDockables);
-        }
-
-        if (rootDock.ActiveDockable is null && rootDock.VisibleDockables is not null)
-        {
-            rootDock.ActiveDockable = rootDock.VisibleDockables.FirstOrDefault();
-        }
-
-        rootDock.DefaultDockable ??= rootDock.ActiveDockable;
-    }
-
-    private static IDockable? ResolveDockable(IDockable? candidate, IList<IDockable>? visibleDockables)
-    {
-        if (candidate is null || visibleDockables is null)
-        {
-            return null;
-        }
-
-        if (visibleDockables.Contains(candidate))
-        {
-            return candidate;
-        }
-
-        Type candidateType = candidate.GetType();
-        return visibleDockables.FirstOrDefault(dockable =>
-            dockable.GetType() == candidateType
-            && string.Equals(dockable.Id, candidate.Id, StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Removes pinned or hidden dockables that duplicate a dockable of the same type
-    /// and id elsewhere in the loaded layout. Layouts saved before the search helpers
-    /// covered the pinned lists accumulated such duplicates on every start.
-    /// </summary>
-    private static void PruneDuplicatePinnedDockables(IRootDock rootDock)
-    {
-        HashSet<(Type Type, string Id)> seen = new();
-        CollectVisibleKeys(rootDock, seen);
-
-        PruneDuplicateKeys(rootDock.HiddenDockables, seen);
-        PruneDuplicateKeys(rootDock.LeftPinnedDockables, seen);
-        PruneDuplicateKeys(rootDock.RightPinnedDockables, seen);
-        PruneDuplicateKeys(rootDock.TopPinnedDockables, seen);
-        PruneDuplicateKeys(rootDock.BottomPinnedDockables, seen);
-    }
-
-    private static void CollectVisibleKeys(IDockable dockable, HashSet<(Type Type, string Id)> keys)
-    {
-        keys.Add((dockable.GetType(), dockable.Id ?? string.Empty));
-
-        if (dockable is IDock dock && dock.VisibleDockables is not null)
-        {
-            foreach (IDockable child in dock.VisibleDockables)
-            {
-                CollectVisibleKeys(child, keys);
-            }
-        }
-    }
-
-    private static void PruneDuplicateKeys(IList<IDockable>? dockables, HashSet<(Type Type, string Id)> seen)
-    {
-        if (dockables is null)
-        {
-            return;
-        }
-
-        int index = 0;
-        while (index < dockables.Count)
-        {
-            IDockable dockable = dockables[index];
-            if (!seen.Add((dockable.GetType(), dockable.Id ?? string.Empty)))
-            {
-                dockables.RemoveAt(index);
-                continue;
-            }
-
-            index++;
         }
     }
 
@@ -1622,9 +1284,101 @@ public sealed partial class XamlEditorDockFactory : Factory
         restore.Add(() => setter(tool, current));
     }
 
+    private static void NormalizeDockReferences(IRootDock rootDock)
+    {
+        IReadOnlyList<IDockable> dockables = FindDockables<IDockable>(rootDock);
+        Dictionary<string, IDockable> byId = dockables.Where(item => !string.IsNullOrEmpty(item.Id))
+            .GroupBy(item => item.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        foreach (IDock dock in dockables.OfType<IDock>())
+        {
+            dock.ActiveDockable = Resolve(dock.ActiveDockable);
+            dock.DefaultDockable = Resolve(dock.DefaultDockable);
+            dock.FocusedDockable = Resolve(dock.FocusedDockable);
+        }
+
+        IDockable? Resolve(IDockable? reference) => reference?.Id is { } id && byId.TryGetValue(id, out IDockable? canonical)
+            ? canonical : null;
+    }
+
+    private static bool HasDesktopLifetime() =>
+        Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+
+    // The references are read before any collection changes and cleared after all of them: removing the active
+    // document from its dock makes Dock activate the next document, which also moves the root focus onto it, and a
+    // reference cleared before that would be written into the layout again.
+    private static List<Action> DetachRuntimeDocuments(IRootDock rootDock)
+    {
+        List<Action> restoreCollections = new();
+        List<Action> restoreReferences = new();
+        List<(Func<IDockable?> Get, Action<IDockable?> Set)> references = new();
+        IReadOnlyList<IDock> docks = FindDockables<IDock>(rootDock);
+        foreach (IDock dock in docks)
+        {
+            CaptureReference(() => dock.ActiveDockable, value => dock.ActiveDockable = value);
+            CaptureReference(() => dock.DefaultDockable, value => dock.DefaultDockable = value);
+            CaptureReference(() => dock.FocusedDockable, value => dock.FocusedDockable = value);
+        }
+
+        foreach (IDock dock in docks)
+        {
+            DetachCollection(dock.VisibleDockables);
+            if (dock is IRootDock root)
+            {
+                DetachCollection(root.HiddenDockables);
+                DetachCollection(root.LeftPinnedDockables);
+                DetachCollection(root.RightPinnedDockables);
+                DetachCollection(root.TopPinnedDockables);
+                DetachCollection(root.BottomPinnedDockables);
+            }
+        }
+
+        foreach ((Func<IDockable?> get, Action<IDockable?> set) in references)
+        {
+            if (get() is DesignerDocument or TextDocument)
+            {
+                set(null);
+            }
+        }
+
+        restoreCollections.AddRange(restoreReferences);
+        return restoreCollections;
+
+        void CaptureReference(Func<IDockable?> get, Action<IDockable?> set)
+        {
+            IDockable? value = get();
+            references.Add((get, set));
+            if (value is DesignerDocument or TextDocument)
+            {
+                restoreReferences.Add(() => set(value));
+            }
+        }
+
+        void DetachCollection(IList<IDockable>? items)
+        {
+            if (items is null) return;
+            var documents = items.Select((item, index) => (Item: item, Index: index))
+                .Where(entry => entry.Item is DesignerDocument or TextDocument).ToArray();
+            for (int index = documents.Length - 1; index >= 0; index--)
+                items.RemoveAt(documents[index].Index);
+            if (documents.Length == 0) return;
+            restoreCollections.Add(() =>
+            {
+                foreach (var document in documents)
+                    items.Insert(Math.Min(document.Index, items.Count), document.Item);
+            });
+        }
+    }
+
     private static List<Action> DetachDockRuntimeReferences(IRootDock rootDock)
     {
         List<Action> restore = new();
+
+        if (rootDock.PinnedDock is { } pinnedDock)
+        {
+            rootDock.PinnedDock = null;
+            restore.Add(() => rootDock.PinnedDock = pinnedDock);
+        }
 
         if (rootDock.Window is not null)
         {

@@ -12,6 +12,7 @@ public sealed class IdeBridgeRuntimeController : IAsyncDisposable
     private const string SettingsSection = "ideBridge";
     private readonly ISettings _settings;
     private readonly IWorkspace _workspace;
+    private readonly IWorkspaceInfo _workspaceInfo;
     private readonly IdeBridgePermissionService _permissions;
     private readonly IdeBridgeSessionRegistry _registry;
     private readonly IIdeBridgeRequestHandler[] _handlers;
@@ -35,8 +36,12 @@ public sealed class IdeBridgeRuntimeController : IAsyncDisposable
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _workspaceInfo = workspaceInfo ?? throw new ArgumentNullException(nameof(workspaceInfo));
         _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
         _registry = new IdeBridgeSessionRegistry();
+        // Sessions are bound to the consent of the active workspace and end when either changes.
+        _permissions.PermissionsRevoked += _registry.Revoke;
+        _workspaceInfo.WorkspaceChanged += OnWorkspaceChanged;
 
         IdeBridgeSessionService sessions = new(_permissions, workspaceInfo);
         IdeBridgeHandshakeHandler handshake = new(sessions, _registry);
@@ -179,6 +184,8 @@ public sealed class IdeBridgeRuntimeController : IAsyncDisposable
         _ = RestartAsync(CancellationToken.None);
     }
 
+    private void OnWorkspaceChanged(object? sender, WorkspaceChangedEventArgs e) => _registry.Revoke(null);
+
     private void OnConnectionChanged(object? sender, IdeBridgeConnectionChangedEventArgs e)
     {
         _connectionCount = e.ConnectionCount;
@@ -229,6 +236,8 @@ public sealed class IdeBridgeRuntimeController : IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         _workspace.ConfigurationChanged -= OnConfigurationChanged;
+        _workspaceInfo.WorkspaceChanged -= OnWorkspaceChanged;
+        _permissions.PermissionsRevoked -= _registry.Revoke;
         return new ValueTask(StopAsync());
     }
 }

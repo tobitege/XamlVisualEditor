@@ -15,6 +15,11 @@ using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Designer.Core;
 
+public sealed record DesignerLayoutAction(string Title, string Description, ReactiveCommand<RxVoid, RxVoid> Command)
+{
+    public Avalonia.Media.Geometry? Icon { get; init; }
+}
+
 /// <summary>
 /// Concrete implementation of <see cref="IDesignItem"/> that bridges
 /// an AST node to its instantiated Avalonia control.
@@ -51,6 +56,12 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
     [Reactive]
     public partial Control? VisualElement { get; set; }
 
+    /// <summary>Identifies one live instance in an external preview.</summary>
+    public int? HostInstanceId { get; init; }
+
+    /// <summary>Measured bounds in the external host's viewport coordinate space.</summary>
+    public Rect? HostBounds { get; init; }
+
     /// <inheritdoc />
     public IDesignItem? Parent { get; internal set; }
 
@@ -64,12 +75,12 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
     /// Gets the bounds of the visual element relative to its parent.
     /// For surface-relative bounds, use <see cref="GetBoundsRelativeTo"/>.
     /// </summary>
-    public Rect Bounds => VisualElement?.Bounds ?? default;
+    public Rect Bounds => VisualElement?.Bounds ?? HostBounds ?? default;
 
     /// <summary>
-    /// Gets the bounds of the visual element translated to the coordinate space
+    /// Gets the bounds of the visual element transformed to the coordinate space
     /// of the specified ancestor control (typically the design surface root).
-    /// Falls back to <see cref="Bounds"/> if translation is not possible.
+    /// Falls back to <see cref="Bounds"/> if transformation is not possible.
     /// </summary>
     public Rect GetBoundsRelativeTo(Control? ancestor)
     {
@@ -78,13 +89,12 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
             return Bounds;
         }
 
-        Point? translated = VisualElement.TranslatePoint(new Point(0, 0), ancestor);
-        if (translated is null)
+        if (VisualElement.TransformToVisual(ancestor) is not { } transform)
         {
             return Bounds;
         }
 
-        return new Rect(translated.Value, VisualElement.Bounds.Size);
+        return new Rect(VisualElement.Bounds.Size).TransformToAABB(transform);
     }
 
     /// <summary>
@@ -112,6 +122,13 @@ public sealed partial class DesignItem : ReactiveObject, IDesignItem
     {
         child.Parent = this;
         _children.Add(child);
+    }
+
+    /// <summary>Inserts a child at its logical content position.</summary>
+    public void InsertChild(int index, DesignItem child)
+    {
+        child.Parent = this;
+        _children.Insert(index, child);
     }
 
     /// <summary>
@@ -185,6 +202,20 @@ public sealed partial class SelectionManager : ReactiveObject
             }
         }
 
+        PrimarySelection = _selectedItems.Count > 0 ? _selectedItems[0] : null;
+        RaiseSelectionChanged();
+    }
+
+    /// <summary>Replaces the selected items and publishes their complete state once.</summary>
+    public void SetSelection(IEnumerable<IDesignItem> items)
+    {
+        IDesignItem[] selected = items.Distinct().ToArray();
+        ClearSelectionInternal();
+        foreach (IDesignItem item in selected)
+        {
+            _selectedItems.Add(item);
+            if (item is DesignItem designItem) designItem.IsSelected = true;
+        }
         PrimarySelection = _selectedItems.Count > 0 ? _selectedItems[0] : null;
         RaiseSelectionChanged();
     }
@@ -303,10 +334,43 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public bool IsSelectionSyncing => _selectionSyncDepth > 0;
 
     /// <summary>
-    /// Gets or sets the zoom level (1.0 = 100%).
+    /// Gets or sets the zoom level (1.0 = 100%), rounded to a whole percentage.
     /// </summary>
-    [Reactive]
-    public partial double Zoom { get; set; } = 1.0;
+    public double Zoom
+    {
+        get => _zoom;
+        set => this.RaiseAndSetIfChanged(ref _zoom,
+            Math.Clamp(Math.Round((double.IsNaN(value) ? 1 : value) * 100) / 100, MinimumZoom, MaximumZoom));
+    }
+
+    public const double MinimumZoom = 0.25;
+    public const double MaximumZoom = 3.0;
+    public const double ZoomStep = 0.25;
+    private double _zoom = 1.0;
+
+    /// <summary>
+    /// Gets the largest whole-percentage zoom level that does not exceed <paramref name="zoom"/>,
+    /// so that content fitted to a viewport stays inside it.
+    /// </summary>
+    public static double FitZoom(double zoom) =>
+        Math.Clamp(Math.Floor((double.IsNaN(zoom) ? 1 : zoom) * 100 + 1e-9) / 100, MinimumZoom, MaximumZoom);
+
+    /// <summary>Gets the pixel positions shown in the coordinate strip.</summary>
+    public DesignerCoordinateReadout Readout { get; } = new();
+
+    /// <summary>Gets or sets the clipboard that <see cref="CopyReadoutCommand"/> writes to.</summary>
+    public IClipboardService? ClipboardService { get; set; }
+
+    /// <summary>Copies a value of the coordinate strip to the clipboard.</summary>
+    public ReactiveCommand<string?, RxVoid> CopyReadoutCommand { get; }
+
+    public static double StepZoom(double zoom, int direction)
+    {
+        zoom = Math.Clamp(double.IsNaN(zoom) ? 1 : zoom, MinimumZoom, MaximumZoom);
+        double tick = Math.Round(zoom / ZoomStep, 8);
+        double next = direction > 0 ? Math.Floor(tick) + 1 : direction < 0 ? Math.Ceiling(tick) - 1 : tick;
+        return Math.Clamp(next * ZoomStep, MinimumZoom, MaximumZoom);
+    }
 
     /// <summary>
     /// Gets or sets whether snap lines are enabled.
@@ -331,6 +395,10 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// </summary>
     [Reactive]
     public partial bool IsRebuilding { get; set; }
+
+    /// <summary>Shows the progress screen for full rebuilds only.</summary>
+    [Reactive]
+    public partial bool ShowRebuildProgress { get; set; }
 
     /// <summary>
     /// Gets or sets the visible phase text for a design-surface rebuild.
@@ -357,6 +425,18 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public partial bool ShowRulers { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the coordinate strip below the surface is visible.
+    /// </summary>
+    [Reactive]
+    public partial bool ShowCoordinateStrip { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether a drag on the surface measures a distance instead of editing.
+    /// </summary>
+    [Reactive]
+    public partial bool IsMeasuring { get; set; }
+
+    /// <summary>
     /// Gets the available theme variants for preview.
     /// </summary>
     public IReadOnlyList<ThemeVariant> ThemeVariants { get; } = new List<ThemeVariant>
@@ -371,6 +451,9 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// </summary>
     [Reactive]
     public partial ThemeVariant PreviewThemeVariant { get; set; } = ThemeVariant.Default;
+
+    /// <summary>Lets the view separate its preview resources from the editor theme.</summary>
+    public IEditorThemeService? EditorThemeService { get; set; }
 
     /// <summary>
     /// Gets or sets whether guide lines are visible.
@@ -391,16 +474,32 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public partial bool ShowMarginPadding { get; set; }
 
     /// <summary>
+    /// Gets or sets the unscaled editor space around the artboard, in pixels.
+    /// </summary>
+    [Reactive]
+    public partial double CanvasGap { get; set; } = 8.0;
+
+    /// <summary>Assigns unique automation IDs when visual editing creates controls.</summary>
+    [Reactive]
+    public partial bool AutoGenerateAutomationIds { get; set; }
+
+    /// <summary>
     /// Gets or sets whether snap to grid is enabled.
     /// </summary>
     [Reactive]
     public partial bool SnapToGrid { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the grid snap size.
+    /// Gets or sets the grid size in pixels. The visible grid and snapping to the grid both use it.
     /// </summary>
     [Reactive]
     public partial double GridSnapSize { get; set; } = 8.0;
+
+    /// <summary>Smallest grid size the viewport settings offer.</summary>
+    public const double MinimumGridSize = 4;
+
+    /// <summary>Largest grid size the viewport settings offer.</summary>
+    public const double MaximumGridSize = 99;
 
     /// <summary>
     /// Gets the horizontal guide positions (in surface coordinates).
@@ -444,23 +543,58 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     /// Command to reset zoom.
     /// </summary>
     public ReactiveCommand<RxVoid, RxVoid> ResetZoomCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectNextControlCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectPreviousControlCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> SelectParentControlCommand { get; }
 
     /// <summary>
-    /// Command to delete the selected items.
+    /// Document commands supplied by the shell's transactional editing path.
     /// </summary>
-    public ReactiveCommand<RxVoid, RxVoid> DeleteSelectedCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid>? DeleteSelectedCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? CutCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? CopyCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? PasteCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? DuplicateCommand { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid>? SelectAllCommand { get; set; }
+    public ObservableCollection<DesignerLayoutAction> LayoutActions { get; } = new();
+
+    private IReadOnlyList<Guid>? _requestedSelection;
 
     /// <summary>
     /// Fires when the design surface needs to rebuild (e.g., after AST changes).
     /// </summary>
-    public event Action? RebuildRequested;
+    public event Action<bool>? RebuildRequested;
 
     public DesignSurfaceViewModel()
     {
-        ZoomInCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom * 1.1, 0.1, 8.0); });
-        ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom / 1.1, 0.1, 8.0); });
+        ZoomInCommand = ReactiveCommand.Create(() => { Zoom = StepZoom(Zoom, 1); });
+        ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = StepZoom(Zoom, -1); });
         ResetZoomCommand = ReactiveCommand.Create(() => { Zoom = 1.0; });
-        DeleteSelectedCommand = ReactiveCommand.Create(DeleteSelected);
+        SelectNextControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: false));
+        SelectPreviousControlCommand = ReactiveCommand.Create(() => NavigateSelection(backwards: true));
+        SelectParentControlCommand = ReactiveCommand.Create(SelectParentControl);
+        CopyReadoutCommand = ReactiveCommand.CreateFromTask<string?>(CopyReadoutAsync);
+        this.WhenAnyValue(surface => surface.IsMeasuring).Subscribe(measuring =>
+        {
+            if (!measuring) Readout.ClearMeasure();
+        });
+    }
+
+    private async System.Threading.Tasks.Task CopyReadoutAsync(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || ClipboardService is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(value);
+        }
+        catch (InvalidOperationException)
+        {
+            // Without a system clipboard the value stays visible in the strip.
+        }
     }
 
     /// <summary>
@@ -474,6 +608,15 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         RootItem = root;
         _itemMap = itemMap;
         _controlMap = controlMap;
+    }
+
+    /// <summary>Restores concrete instances without publishing a new user selection.</summary>
+    public void SelectDesignItemsFromSync(IEnumerable<IDesignItem> items)
+    {
+        using (BeginSelectionSync())
+        {
+            Selection.SetSelection(items);
+        }
     }
 
     /// <summary>
@@ -502,6 +645,49 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
         }
     }
 
+    /// <summary>Restores a selection without treating it as a new user selection.</summary>
+    public void SelectNodesFromSync(IEnumerable<Guid> nodeIds)
+    {
+        Guid[] requested = nodeIds as Guid[] ?? nodeIds.ToArray();
+        if (Selection.SelectedItems.Count == requested.Length)
+        {
+            bool unchanged = true;
+            for (int index = 0; index < requested.Length; index++)
+            {
+                if (Selection.SelectedItems[index] is not DesignItem selected
+                    || selected.AstNodeId != requested[index]
+                    || !_itemMap.TryGetValue(requested[index], out DesignItem? current)
+                    || !ReferenceEquals(selected, current))
+                {
+                    unchanged = false;
+                    break;
+                }
+            }
+            if (unchanged) return;
+        }
+        using (BeginSelectionSync())
+        {
+            Selection.ClearSelection();
+            foreach (Guid id in requested)
+                if (_itemMap.TryGetValue(id, out DesignItem? item)) Selection.Select(item, addToSelection: true);
+        }
+    }
+
+    /// <summary>Selects newly inserted elements after their controls have been created.</summary>
+    public void RequestSelection(IEnumerable<Guid> nodeIds)
+    {
+        _requestedSelection = nodeIds.Distinct().ToArray();
+        RequestRebuild(allowLayoutUpdate: true);
+    }
+
+    /// <summary>Consumes the pending selection for the next completed surface rebuild.</summary>
+    public IReadOnlyList<Guid>? TakeRequestedSelection()
+    {
+        IReadOnlyList<Guid>? selection = _requestedSelection;
+        _requestedSelection = null;
+        return selection;
+    }
+
     /// <summary>
     /// Clears the selection while marking the change as synced.
     /// </summary>
@@ -520,26 +706,51 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     }
 
     /// <summary>
-    /// Requests a full rebuild of the design surface from the AST.
+    /// Updates the design surface; pure AST changes can reuse the existing layout controls.
     /// </summary>
-    public void RequestRebuild()
+    public void RequestRebuild(bool allowLayoutUpdate = false)
     {
-        RebuildRequested?.Invoke();
+        RebuildRequested?.Invoke(allowLayoutUpdate);
     }
 
-    private void DeleteSelected()
+    private void NavigateSelection(bool backwards)
     {
-        // Delete selected items from the AST
-        IReadOnlyList<IDesignItem> selected = Selection.SelectedItems;
-        foreach (IDesignItem item in selected.ToList())
+        MutableAstObjectNode? root = _itemMap.Values.FirstOrDefault(item => item.AstNode.Parent is null)?.AstNode;
+        if (root is null) return;
+        Dictionary<Guid, DesignItem> visible = new();
+        foreach (var pair in _controlMap)
+            if (pair.Key.IsEffectivelyVisible) visible.TryAdd(pair.Value.AstNodeId, pair.Value);
+        List<DesignItem> ordered = new();
+        Stack<MutableAstNode> pending = new();
+        pending.Push(root);
+        while (pending.TryPop(out MutableAstNode? node))
         {
-            if (item is DesignItem di && di.AstNode.Parent is MutableAstObjectNode parentObj)
+            if (node is MutableAstPropertyNode property && property.Value is { } value) { pending.Push(value); continue; }
+            if (node is not MutableAstObjectNode element) continue;
+            if (visible.TryGetValue(element.Id, out DesignItem? item)) ordered.Add(item);
+            for (int index = element.Children.Count - 1; index >= 0; index--) pending.Push(element.Children[index]);
+            for (int index = element.Properties.Count - 1; index >= 0; index--) pending.Push(element.Properties[index]);
+        }
+        if (ordered.Count == 0) return;
+        Guid? selectedId = (Selection.PrimarySelection as DesignItem)?.AstNodeId;
+        int selected = ordered.FindIndex(item => item.AstNodeId == selectedId);
+        int next = selected < 0 ? (backwards ? ordered.Count - 1 : 0)
+            : (selected + (backwards ? -1 : 1) + ordered.Count) % ordered.Count;
+        Selection.Select(ordered[next]);
+    }
+
+    private void SelectParentControl()
+    {
+        if (Selection.PrimarySelection is DesignItem selected)
+        {
+            for (MutableAstNode? parent = selected.AstNode.Parent; parent is not null; parent = parent.Parent)
             {
-                parentObj.Children.Remove(di.AstNode);
+                if (!_itemMap.TryGetValue(parent.Id, out DesignItem? item)) continue;
+                Selection.Select(item);
+                return;
             }
         }
         Selection.ClearSelection();
-        RequestRebuild();
     }
 
     private sealed partial class SelectionSyncScope : IDisposable

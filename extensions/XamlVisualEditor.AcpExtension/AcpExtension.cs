@@ -1,6 +1,8 @@
 using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using XamlVisualEditor.Acp;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
@@ -12,6 +14,7 @@ namespace XamlVisualEditor.AcpExtension;
 public sealed class AcpExtension : IXveExtension
 {
     private const string ViewId = "acp.panel";
+    private const string ToggleViewCommandId = "acp.toggleView";
     private readonly IAcpService _acpService;
     private readonly IAcpProfileStore _profileStore;
     private readonly ISecretStore _secretStore;
@@ -44,10 +47,20 @@ public sealed class AcpExtension : IXveExtension
 
         ExtensionViewContribution view = new(
             ViewId,
-            "ACP",
+            UiStrings.Acp,
             ExtensionViewType.Custom,
             ExtensionViewLocation.Right,
-            30);
+            30)
+        {
+            AutoHideByDefault = true
+        };
+
+        context.Subscriptions.Add(context.Commands.Register(
+            ToggleViewCommandId,
+            _ => context.ViewHost.ToggleAsync(ViewId, CancellationToken.None)));
+        context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
+            context.ExtensionId,
+            new[] { new ExtensionMenuContribution(ToggleViewCommandId, UiStrings.Acp, ExtensionMenuLocations.ViewServers, "servers", 30) }));
 
         IDisposable viewRegistration = context.Contributions.RegisterViews(
             context.ExtensionId,

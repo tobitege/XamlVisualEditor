@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.DebugSettingsExtension.Views;
 
@@ -18,8 +19,8 @@ public sealed class DebugSettingsExtension : IXveExtension
 
         context.Subscriptions.Add(context.Settings.RegisterSchema(new SettingsSectionSchema(
             DebugSettingsSection,
-            "Debug Settings",
-            "Debugger adapter path and debug tool download behavior.",
+            UiStrings.DebugSettings,
+            UiStrings.DebugSettingsDescription,
             "object",
             ValidateDebugSettings)));
 
@@ -63,8 +64,8 @@ public sealed class DebugSettingsExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             ToggleDebugSettingsCommandId,
             new CommandMetadata(
-                Title: "View: Toggle Debug Settings",
-                Category: "Settings",
+                Title: UiStrings.ToggleDebugSettingsCommand,
+                Category: UiStrings.Settings,
                 Priority: 85)));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(
@@ -73,7 +74,7 @@ public sealed class DebugSettingsExtension : IXveExtension
             {
                 new ExtensionViewContribution(
                     DebugSettingsViewId,
-                    "Debug Settings",
+                    UiStrings.DebugSettings,
                     ExtensionViewType.Custom,
                     ExtensionViewLocation.Bottom,
                     60,
@@ -86,9 +87,9 @@ public sealed class DebugSettingsExtension : IXveExtension
             {
                 new ExtensionMenuContribution(
                     ToggleDebugSettingsCommandId,
-                    "Debug Settings",
+                    UiStrings.DebugSettings,
                     ExtensionMenuLocations.View,
-                    "views.bottom",
+                    "views.debug",
                     80)
             }));
 
@@ -98,8 +99,8 @@ public sealed class DebugSettingsExtension : IXveExtension
             {
                 new ExtensionCommandPaletteContribution(
                     ToggleDebugSettingsCommandId,
-                    "Toggle Debug Settings",
-                    "Settings")
+                    UiStrings.ToggleDebugSettings,
+                    UiStrings.Settings)
             }));
 
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
@@ -135,7 +136,7 @@ public sealed class DebugSettingsExtension : IXveExtension
         {
             return new[]
             {
-                new SettingsValidationIssue("Expected a debug settings document value.")
+                new SettingsValidationIssue(UiStrings.DebugSettingsDocumentExpected)
             };
         }
 

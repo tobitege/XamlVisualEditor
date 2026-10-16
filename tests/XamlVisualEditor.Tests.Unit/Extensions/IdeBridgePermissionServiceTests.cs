@@ -1,52 +1,188 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
+using XamlVisualEditor.Extensions.Hosting.Mcp;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
+[CollectionDefinition(nameof(UiLocalizationCollection), DisableParallelization = true)]
+public sealed class UiLocalizationCollection;
+
+[Collection(nameof(UiLocalizationCollection))]
 public sealed class IdeBridgePermissionServiceTests
 {
+    [Theory]
+    [InlineData("en", 0)]
+    [InlineData("en", 1)]
+    [InlineData("en", 2)]
+    [InlineData("en", -1)]
+    [InlineData("en", 3)]
+    [InlineData("de", 0)]
+    [InlineData("de", 1)]
+    [InlineData("de", 2)]
+    [InlineData("de", -1)]
+    [InlineData("de", 3)]
+    public async Task LocalizedConsentPreservesTheSelectedAccessLevel(string language, int selection)
+    {
+        CultureInfo? previous = UiStrings.Culture;
+        UiStrings.Culture = CultureInfo.GetCultureInfo(language);
+        try
+        {
+            FakeWindow window = new()
+            {
+                Pick = items => selection < 0 ? null : selection < items.Count ? items[selection] : new QuickPickItem("unexpected", null, null)
+            };
+            IdeBridgePermissionService ide = new(new FakeSettings(), window);
+            McpPermissionService mcp = new(new FakeSettings(), window);
+            IdeBridgeWorkspacePermissionState? ideState = await ide.AuthorizeAsync("localized-test", CancellationToken.None);
+            McpWorkspacePermissionState? mcpState = await mcp.AuthorizeAsync("localized-test", CancellationToken.None);
+            if (selection is 0 or 1)
+            {
+                Assert.NotNull(ideState);
+                Assert.NotNull(mcpState);
+                Assert.Equal(selection == 1 ? IdeBridgeAccessLevel.Full : IdeBridgeAccessLevel.ReadOnly, ideState.AccessLevel);
+                Assert.Equal(selection == 1, IdeBridgePermissionService.GetCapabilities(ideState.AccessLevel).Write);
+                Assert.Equal(selection == 1, IdeBridgePermissionService.GetCapabilities(ideState.AccessLevel).Terminal);
+                Assert.Equal(selection == 1 ? McpAccessLevel.Full : McpAccessLevel.ReadOnly, mcpState.AccessLevel);
+            }
+            else
+            {
+                Assert.Null(ideState);
+                Assert.Null(mcpState);
+            }
+        }
+        finally { UiStrings.Culture = previous; }
+    }
+
     [Fact]
     public async Task AuthorizeAsync_AllowsFullAccessWhenApproved()
     {
         FakeSettings settings = new();
         FakeWindow window = new()
         {
-            NextPick = new QuickPickItem("Allow full access", "", null)
+            NextPick = new QuickPickItem(UiStrings.AllowFullAccess, "", null)
         };
 
         IdeBridgePermissionService service = new(settings, window);
-        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws1", null, CancellationToken.None);
+        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws1", CancellationToken.None);
 
         Assert.NotNull(state);
-        Assert.True(state!.Capabilities.Write);
-        Assert.True(state.Capabilities.Terminal);
+        Assert.Equal(IdeBridgeAccessLevel.Full, state!.AccessLevel);
+        IdeBridgeCapabilities capabilities = IdeBridgePermissionService.GetCapabilities(state.AccessLevel);
+        Assert.True(capabilities.Write);
+        Assert.True(capabilities.Terminal);
     }
 
     [Fact]
-    public async Task AuthorizeAsync_DeniesWhenTokenDoesNotMatch()
+    public async Task AuthorizeAsync_ReusesTheStoredAccessLevelAndPersistsNoToken()
     {
         FakeSettings settings = new();
         FakeWindow window = new()
         {
-            NextPick = new QuickPickItem("Allow read-only", "", null)
+            NextPick = new QuickPickItem(UiStrings.AllowReadOnly, "", null)
         };
 
         IdeBridgePermissionService service = new(settings, window);
-        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws2", null, CancellationToken.None);
-        Assert.NotNull(state);
+        Assert.NotNull(await service.AuthorizeAsync("ws2", CancellationToken.None));
+        window.NextPick = null;
 
-        IdeBridgeWorkspacePermissionState? denied = await service.AuthorizeAsync("ws2", "wrong-token", CancellationToken.None);
-        Assert.Null(denied);
+        IdeBridgeWorkspacePermissionState? reused = await service.AuthorizeAsync("ws2", CancellationToken.None);
+
+        Assert.Equal(IdeBridgeAccessLevel.ReadOnly, reused?.AccessLevel);
+        string stored = JsonSerializer.Serialize(settings.Get<object>("ideBridge.permissions"));
+        Assert.Contains("ws2", stored, StringComparison.Ordinal);
+        Assert.DoesNotContain("token", stored, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ClearPermissionRaisesRevocationForTheWorkspace()
+    {
+        IdeBridgePermissionService service = new(new FakeSettings(), new FakeWindow { NextPick = new QuickPickItem(UiStrings.AllowReadOnly, "", null) });
+        await service.AuthorizeAsync("ws3", CancellationToken.None);
+        List<string?> revoked = new();
+        service.PermissionsRevoked += revoked.Add;
+
+        await service.ClearPermissionAsync("ws3", CancellationToken.None);
+        await service.ClearAllAsync(CancellationToken.None);
+
+        Assert.Equal(new string?[] { "ws3", null }, revoked);
+        Assert.Empty(await service.GetPermissionsAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AuthorizeAsyncLeavesTheStoredDictionaryUnchangedAndRunsTheRegistrationBeforeARevocation()
+    {
+        FakeSettings settings = new();
+        IdeBridgePermissionService service = new(settings, new FakeWindow { NextPick = new QuickPickItem(UiStrings.AllowReadOnly, "", null) });
+        await service.AuthorizeAsync("ws4", CancellationToken.None);
+        Dictionary<string, IdeBridgeWorkspacePermissionState> stored = Assert.IsType<Dictionary<string, IdeBridgeWorkspacePermissionState>>(
+            settings.Get<Dictionary<string, IdeBridgeWorkspacePermissionState>>("ideBridge.permissions"));
+
+        await service.AuthorizeAsync("ws5", CancellationToken.None);
+
+        // A reader that enumerates the stored dictionary must not see it change.
+        Assert.Single(stored);
+        Assert.Equal(2, (await service.GetPermissionsAsync(CancellationToken.None)).Count);
+
+        Task? revocation = null;
+        bool revokedDuringRegistration = true;
+        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws5", _ =>
+        {
+            revocation = service.ClearPermissionAsync("ws5", CancellationToken.None);
+            revokedDuringRegistration = revocation.IsCompleted;
+        }, CancellationToken.None);
+
+        Assert.NotNull(state);
+        Assert.False(revokedDuringRegistration);
+        Assert.NotNull(revocation);
+        await revocation;
+        Assert.Equal("ws4", Assert.Single(await service.GetPermissionsAsync(CancellationToken.None)).WorkspaceId);
+    }
+
+    [Fact]
+    public async Task SessionsAreBoundToTheActiveWorkspaceAndGetFreshTokens()
+    {
+        string active = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "xve-bridge-active"));
+        IdeBridgePermissionService permissions = new(new FakeSettings(), new FakeWindow { NextPick = new QuickPickItem(UiStrings.AllowFullAccess, "", null) });
+        IdeBridgeSessionService sessions = new(permissions, new FixedWorkspaceInfo(active));
+
+        BridgeInitializeResult first = await sessions.InitializeAsync(new BridgeInitializeParams(null, "client", "1"), CancellationToken.None);
+        BridgeInitializeResult second = await sessions.InitializeAsync(new BridgeInitializeParams(active, "client", "1"), CancellationToken.None);
+        IdeBridgeJsonRpcException rejected = await Assert.ThrowsAsync<IdeBridgeJsonRpcException>(() => sessions.InitializeAsync(
+            new BridgeInitializeParams(Path.Combine(Path.GetTempPath(), "xve-bridge-other"), "client", "1"), CancellationToken.None));
+
+        Assert.Equal(active, first.WorkspaceId);
+        Assert.Equal(active, second.WorkspaceId);
+        Assert.True(first.Capabilities.Write);
+        Assert.NotEqual(first.SessionToken, second.SessionToken);
+        Assert.Equal(-32602, rejected.Code);
+        Assert.Equal(IdeBridgeAccessLevel.Full, Assert.Single(await permissions.GetPermissionsAsync(CancellationToken.None)).AccessLevel);
+    }
+
+    private sealed class FixedWorkspaceInfo : IWorkspaceInfo
+    {
+        public FixedWorkspaceInfo(string workspacePath) => WorkspacePath = workspacePath;
+
+        public string? WorkspacePath { get; }
+
+        public event EventHandler<WorkspaceChangedEventArgs> WorkspaceChanged
+        {
+            add { }
+            remove { }
+        }
     }
 
     private sealed class FakeWindow : IWindow
     {
         public QuickPickItem? NextPick { get; set; }
+        public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? Pick { get; init; }
 
         public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -57,7 +193,7 @@ public sealed class IdeBridgePermissionServiceTests
         public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
         public Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, QuickPickOptions options, CancellationToken cancellationToken)
-            => Task.FromResult(NextPick);
+            => Task.FromResult(Pick is null ? NextPick : Pick(items));
 
         public IOutputChannel CreateOutputChannel(string name) => new NullOutputChannel(name);
 

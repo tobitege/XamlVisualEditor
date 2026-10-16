@@ -5,7 +5,11 @@ using System.IO;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using XamlVisualEditor.Extensions;
+using XamlVisualEditor.OutputExtension;
 using Xunit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -36,22 +40,62 @@ public sealed class LspUiTests
                     Message = "Test error",
                     Severity = DiagnosticSeverity.Error,
                     Range = new LanguageTextRange(
-                        new LanguageTextPosition(1, 1),
-                        new LanguageTextPosition(1, 4))
+                        new LanguageTextPosition(2, 9),
+                        new LanguageTextPosition(2, 14))
                 }
             }
         };
 
         ILanguageIntellisenseRegistry registry = new LanguageServiceRegistry(new[] { service });
-        using TextDocumentViewModel vm = new(filePath, registry);
+        using MainWindowViewModel main = new(languageRegistry: registry);
+        using EditorServicesAdapter editor = new(main);
+        using DiagnosticsServiceAdapter diagnostics = new(main);
+        using ProblemsPanelViewModel problems = new(diagnostics, editor);
+        XamlVisualEditor.OutputExtension.Views.ProblemsPanelView panel = new() { DataContext = problems };
+        DataGrid grid = panel.FindControl<DataGrid>("DiagnosticsGrid")!;
+        DataGridColumn timeColumn = grid.Columns.Single(column => Equals(column.Header, "Since"));
+        Assert.Equal(5, grid.Columns.Count);
+        Assert.All(grid.Columns.OfType<DataGridTemplateColumn>(), column => Assert.NotNull(column.CellTemplate));
+        Assert.NotNull(grid.Columns.OfType<DataGridHierarchicalColumn>().Single().CellTemplate);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        Assert.False(timeColumn.IsVisible);
+        problems.ShowFirstSeen = true;
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        Assert.True(timeColumn.IsVisible);
+        EventHandler<DiagnosticsChannelsChangedEventArgs> channelsChanged = (_, args) => problems.HandleChannelsChanged(args.Channels);
+        EventHandler<DiagnosticsSnapshotPublishedEventArgs> snapshotsChanged = (_, args) => problems.HandleSnapshotsPublished(args.Snapshots);
+        diagnostics.ChannelsChanged += channelsChanged;
+        diagnostics.DiagnosticsSnapshotPublished += snapshotsChanged;
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "class C {\n    int value;\n}");
+            await main.OpenFileAsync(filePath);
+            TextDocumentViewModel document = Assert.IsType<TextDocumentViewModel>(main.ActiveTextDocument);
+            await WaitForConditionAsync(() => document.Diagnostics.Count > 0 && problems.Model.Flattened.Count > 0, TimeSpan.FromSeconds(3));
 
-        await File.WriteAllTextAsync(filePath, "class C {}");
-        await vm.LoadAsync();
-        await WaitForConditionAsync(() => vm.Diagnostics.Count > 0, TimeSpan.FromSeconds(3));
+            LanguageDiagnostic? diag = document.DiagnosticColorizer.GetDiagnosticAt(2, 10);
+            Assert.NotNull(diag);
+            Assert.Equal(DiagnosticSeverity.Error, diag!.Severity);
+            document.CaretOffset = document.Document.TextLength;
+            Assert.True(await problems.NavigateToRelativeAsync(1, CancellationToken.None));
+            Assert.Equal(filePath, main.ActiveTextDocument!.FilePath);
+            Assert.Equal(document.GetOffsetForLineColumn(2, 9), document.CaretOffset);
+            Assert.Equal("Test error", problems.SelectedDiagnostic!.Message);
+            Assert.Same(problems.SelectedDiagnostic, grid.SelectedItem);
+            Assert.Contains(problems.Model.Flattened.OfType<Avalonia.Controls.DataGridHierarchical.HierarchicalNode>(),
+                row => ReferenceEquals(row.Item, grid.SelectedItem));
 
-        LanguageDiagnostic? diag = vm.DiagnosticColorizer.GetDiagnosticAt(1, 2);
-        Assert.NotNull(diag);
-        Assert.Equal(DiagnosticSeverity.Error, diag!.Severity);
+            service.Diagnostics = Array.Empty<LanguageDiagnostic>();
+            document.Document.Text = "class C { }";
+            await WaitForConditionAsync(() => document.Diagnostics.Count == 0 && problems.Model.Flattened.Count == 0, TimeSpan.FromSeconds(3));
+            Assert.Null(problems.SelectedDiagnostic);
+            Assert.False(await problems.NavigateToRelativeAsync(1, CancellationToken.None));
+        }
+        finally
+        {
+            diagnostics.ChannelsChanged -= channelsChanged;
+            diagnostics.DiagnosticsSnapshotPublished -= snapshotsChanged;
+        }
     }
 
     [AvaloniaFact]

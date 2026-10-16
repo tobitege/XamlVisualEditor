@@ -450,6 +450,35 @@ internal sealed class RecordingWindow : IWindow
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => throw new NotSupportedException();
 }
 
+/// <summary>Records the view ids passed to the view host.</summary>
+internal sealed class RecordingExtensionViewHost : IExtensionViewHost
+{
+    public List<string> Shown { get; } = new();
+
+    public List<string> Toggled { get; } = new();
+
+#pragma warning disable CS0067
+    public event EventHandler<ExtensionViewVisibilityChangedEventArgs>? VisibilityChanged;
+    public event EventHandler<ExtensionViewFocusChangedEventArgs>? FocusChanged;
+#pragma warning restore CS0067
+
+    public Task ShowAsync(string viewId, CancellationToken cancellationToken)
+    {
+        Shown.Add(viewId);
+        return Task.CompletedTask;
+    }
+
+    public Task ToggleAsync(string viewId, CancellationToken cancellationToken)
+    {
+        Toggled.Add(viewId);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> IsVisibleAsync(string viewId, CancellationToken cancellationToken) => Task.FromResult(false);
+
+    public Task ActivateAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
 internal sealed class ScriptedDialogHost : IDialogHost
 {
     private readonly Func<string, object?, object?> _respond;

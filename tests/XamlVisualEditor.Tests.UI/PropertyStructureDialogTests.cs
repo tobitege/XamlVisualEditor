@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -355,6 +356,180 @@ public sealed class PropertyStructureDialogTests
         {
             window?.Close();
             Application.Current.Styles.Remove(theme);
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Structure_Dialog_Stays_Open_While_Applying_And_Closes_When_The_Apply_Succeeds()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        HeldApplyStructureHost host = new();
+        using PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry());
+        FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        Window? owner = null;
+        try
+        {
+            await inspector.InitializeAsync(cancellationToken);
+            owner = await ShowPanelAsync(inspector);
+            Task edit = OpenTemplateEditor(inspector, cancellationToken);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            Window dialog = Assert.Single(owner.OwnedWindows);
+            PropertyStructureEditorViewModel editor = Assert.IsType<PropertyStructureEditorViewModel>(
+                Assert.IsType<PropertyStructureEditorView>(dialog.Content).DataContext);
+            int propertyQueries = host.PropertyQueries;
+
+            Task apply = editor.ApplyCommand.Execute().ToTask(cancellationToken);
+            await host.ApplyStarted.WaitAsync(cancellationToken);
+            Assert.True(editor.IsBusy);
+            dialog.Close();
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            Assert.True(dialog.IsVisible);
+            Assert.False(host.ApplyToken.IsCancellationRequested);
+
+            host.ReleaseApply();
+            await apply.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            await edit.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            Assert.Null(editor.Error);
+            Assert.False(dialog.IsVisible);
+            Assert.Empty(owner.OwnedWindows);
+            // The host notifies document changes; the panel does not reload a second time after the dialog.
+            Assert.Equal(propertyQueries, host.PropertyQueries);
+        }
+        finally
+        {
+            owner?.Close();
+            Application.Current.Styles.Remove(theme);
+        }
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Disposing_The_Panel_Cancels_The_Apply_And_Closes_The_Structure_Dialog()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        HeldApplyStructureHost host = new();
+        PropertyEditorPanelViewModel inspector = new(host, new PropertyEditorRegistry());
+        FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        Window? owner = null;
+        try
+        {
+            await inspector.InitializeAsync(cancellationToken);
+            owner = await ShowPanelAsync(inspector);
+            Task edit = OpenTemplateEditor(inspector, cancellationToken);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            Window dialog = Assert.Single(owner.OwnedWindows);
+            PropertyStructureEditorViewModel editor = Assert.IsType<PropertyStructureEditorViewModel>(
+                Assert.IsType<PropertyStructureEditorView>(dialog.Content).DataContext);
+            int propertyQueries = host.PropertyQueries;
+            Task apply = editor.ApplyCommand.Execute().ToTask(cancellationToken);
+            await host.ApplyStarted.WaitAsync(cancellationToken);
+
+            inspector.Dispose();
+            Assert.True(host.ApplyToken.IsCancellationRequested);
+            await apply.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            await edit.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            Assert.False(editor.IsBusy);
+            Assert.False(dialog.IsVisible);
+            Assert.Empty(owner.OwnedWindows);
+            Assert.Equal(propertyQueries, host.PropertyQueries);
+        }
+        finally
+        {
+            inspector.Dispose();
+            owner?.Close();
+            Application.Current.Styles.Remove(theme);
+        }
+    }
+
+    private static async Task<Window> ShowPanelAsync(PropertyEditorPanelViewModel inspector)
+    {
+        Window owner = new() { Content = new PropertyEditorPanelView { DataContext = inspector }, Width = 520, Height = 660 };
+        owner.Show();
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        return owner;
+    }
+
+    private static Task OpenTemplateEditor(PropertyEditorPanelViewModel inspector, CancellationToken cancellationToken)
+    {
+        PropertyEntryViewModel template = Assert.Single(inspector.PropertiesView.Cast<PropertyEntryViewModel>(),
+            entry => entry.Name == "Template");
+        ReactiveCommand<RxVoid, RxVoid> command = Assert.IsType<ReactiveCommand<RxVoid, RxVoid>>(template.EditStructureCommand);
+        return command.Execute().ToTask(cancellationToken);
+    }
+
+    /// <summary>
+    /// Designer host with one control and its Template property. A structure apply waits for
+    /// <see cref="ReleaseApply" /> or for the cancellation of its token.
+    /// </summary>
+    private sealed class HeldApplyStructureHost : IDesignerHost, IDesignerStructureHost, IDesignerDocumentNotifications
+    {
+        private readonly TaskCompletionSource _applyStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _applyRelease = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task ApplyStarted => _applyStarted.Task;
+        public CancellationToken ApplyToken { get; private set; }
+        public int PropertyQueries { get; private set; }
+        public string? ActiveDocumentPath => "Structure.axaml";
+
+        public event EventHandler<DesignerDocumentChangedEventArgs>? ActiveDocumentChanged { add { } remove { } }
+        public event EventHandler<DesignerSelectionChangedEventArgs>? SelectionChanged { add { } remove { } }
+        public event EventHandler<DesignerDocumentChangedEventArgs>? DocumentChanged { add { } remove { } }
+
+        public void ReleaseApply() => _applyRelease.TrySetResult();
+
+        public Task<IReadOnlyList<DesignerNodeSummary>> GetSelectedNodesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DesignerNodeSummary>>([new DesignerNodeSummary("root", "Button", null, null, 0)]);
+
+        public Task<IReadOnlyList<DesignerNodeSummary>> GetVisualTreeAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DesignerNodeSummary>>([]);
+
+        public Task<IReadOnlyList<DesignerNodeSummary>> GetLogicalTreeAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DesignerNodeSummary>>([]);
+
+        public Task<IReadOnlyList<DesignerPropertyInfo>> GetPropertiesAsync(string nodeId, CancellationToken cancellationToken)
+        {
+            PropertyQueries++;
+            return Task.FromResult<IReadOnlyList<DesignerPropertyInfo>>(
+            [
+                new DesignerPropertyInfo("Template", "Avalonia.Controls.Templates.IControlTemplate", "ControlTemplate", false,
+                    "Appearance", null, null, false, null, null) { IsTemplate = true, HasLocalValue = true }
+            ]);
+        }
+
+        public Task<IReadOnlyList<DesignerEventInfo>> GetEventsAsync(string nodeId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DesignerEventInfo>>([]);
+
+        public Task<bool> SetPropertyAsync(string nodeId, string propertyName, string? value, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<string?> InsertElementAsync(string typeName, string xmlNamespace, string? parentNodeId,
+            CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<bool> DeleteNodeAsync(string nodeId, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<string?> WrapNodeAsync(string nodeId, string wrapperTypeName, string wrapperXmlNamespace,
+            CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<bool> SelectNodeAsync(string nodeId, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<bool> RevealNodeAsync(string nodeId, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public IDesignerTransaction BeginTransaction(string name) => throw new NotSupportedException();
+
+        public Task<DesignerPropertyStructure> OpenPropertyStructureAsync(string nodeId, string propertyName,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new DesignerPropertyStructure("Structure.axaml", nodeId, propertyName,
+                "<Button xmlns=\"https://github.com/avaloniaui\" />",
+                "<Button.Template xmlns=\"https://github.com/avaloniaui\"><ControlTemplate /></Button.Template>",
+                false, false, []));
+
+        public async Task ApplyPropertyStructureAsync(DesignerPropertyStructure original, string propertyElementXaml,
+            CancellationToken cancellationToken)
+        {
+            ApplyToken = cancellationToken;
+            _applyStarted.TrySetResult();
+            await _applyRelease.Task.WaitAsync(cancellationToken);
         }
     }
 

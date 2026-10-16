@@ -107,7 +107,7 @@ public sealed class ToolboxExtensionTests
     }
 
     [Fact]
-    public async Task InsertAvailabilityTracksWorkspaceAndDesignerDocument()
+    public async Task InsertAvailabilityTracksTheDesignerDocumentWithOrWithoutAWorkspace()
     {
         RecordingCommands commands = new();
         InMemorySettingsStore settings = new();
@@ -123,17 +123,15 @@ public sealed class ToolboxExtensionTests
             workspaceInfo: workspace, designer: designer);
         model.SelectedItem = Assert.Single(model.Items);
         Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
-        workspace.SetWorkspace("test.csproj");
-        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
+        // A loose XAML file opened without a project can receive controls as well.
         designer.SetActiveDocument("test.axaml");
         Assert.True(model.HasInsertTarget);
         Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
         await model.InsertSelectedCommand.Execute().ToTask();
         Assert.Equal("toolbox.insertSelected", commands.LastCommandId);
+        workspace.SetWorkspace("test.csproj");
+        Assert.True(await model.InsertSelectedCommand.CanExecute.FirstAsync());
         designer.SetActiveDocument(null);
-        Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
-        designer.SetActiveDocument("test.axaml");
-        workspace.SetWorkspace(null);
         Assert.False(model.HasInsertTarget);
         Assert.False(await model.InsertSelectedCommand.CanExecute.FirstAsync());
     }
@@ -149,11 +147,12 @@ public sealed class ToolboxExtensionTests
         await commands.ExecuteAsync("toolbox.insertButton", null, CancellationToken.None);
         Assert.Empty(window.Messages);
         Assert.Null(designer.LastTypeName);
+        // Without a workspace the active designer document still receives the control.
         designer.SetActiveDocument("test.axaml");
         Assert.IsType<StubWorkspaceInfo>(context.WorkspaceInfo).SetWorkspace(null);
         await commands.ExecuteAsync("toolbox.insertButton", null, CancellationToken.None);
         Assert.Empty(window.Messages);
-        Assert.Null(designer.LastTypeName);
+        Assert.Equal("Button", designer.LastTypeName);
     }
 
     private static ExtensionContext CreateContext(

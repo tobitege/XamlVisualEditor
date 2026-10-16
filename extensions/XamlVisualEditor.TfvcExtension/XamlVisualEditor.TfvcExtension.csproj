@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <IsXveExtension>true</IsXveExtension>
+    <!-- Built into the application; not published as a separate package. -->
+    <IsPackable>false</IsPackable>
     <RootNamespace>XamlVisualEditor.TfvcExtension</RootNamespace>
     <Description>Team Foundation Version Control panels: source control explorer, pending changes and automatic check-out on edit</Description>
     <NeutralLanguage>en</NeutralLanguage>

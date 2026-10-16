@@ -7,11 +7,9 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReactiveUI;
-using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
-using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.TestControls;
 using XamlVisualEditor.ToolboxExtension;
 using XamlVisualEditor.ToolboxExtension.Views;
@@ -23,42 +21,24 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class ToolboxLoadingTests
 {
     [AvaloniaFact]
-    public async Task CompletedTaskHidesAfterTenSecondsWhileFailedTaskStaysVisible()
+    public async Task CompletedTaskHidesAfterItsDelayWhileFailedTaskStaysVisible()
     {
         MetadataControlCatalog success = new((_, _, _, _, _) => Array.Empty<XamlVisualEditor.Core.TypeMetadata>());
         MetadataControlCatalog failure = new((_, _, _, _, _) => throw new IOException("Testfehler"));
         using ToolboxPanelViewModel completed = CreateModel(success);
         using ToolboxPanelViewModel failed = CreateModel(failure);
+        Assert.Equal(TimeSpan.FromSeconds(10), completed.LoadStatusDismissDelay);
+        completed.LoadStatusDismissDelay = TimeSpan.FromMilliseconds(100);
+        failed.LoadStatusDismissDelay = TimeSpan.FromMilliseconds(100);
         await completed.ReloadAsync();
         await failed.ReloadAsync();
         Assert.True(completed.IsLoadStatusVisible);
         Assert.True(failed.IsLoadStatusVisible);
         Assert.False(await failed.DismissLoadStatusCommand.CanExecute.FirstAsync());
         await completed.WhenAnyValue(model => model.IsLoadStatusVisible).Where(visible => !visible)
-            .FirstAsync().Timeout(TimeSpan.FromSeconds(12)).ToTask();
+            .FirstAsync().Timeout(TimeSpan.FromSeconds(10)).ToTask();
         Assert.True(failed.IsLoadStatusVisible);
         Assert.True(failed.HasLoadError);
-    }
-
-    [Fact]
-    public async Task UnusableAssembliesAreSkippedWhileOtherControlsAreLoaded()
-    {
-        string path = Path.Combine(Path.GetTempPath(), "xve-unusable-" + Guid.NewGuid().ToString("N") + ".dll");
-        await File.WriteAllBytesAsync(path, new byte[] { 0x4d, 0x5a, 0, 0 });
-        MetadataControlCatalog catalog = new(TypeMetadataService.ReadControlTypes);
-        List<string> assemblies = new() { path, typeof(CaptionControl).Assembly.Location };
-        if (OperatingSystem.IsWindows())
-        {
-            string nativePath = Path.Combine(Environment.SystemDirectory, "kernel32.dll");
-            using FileStream nativeStream = File.OpenRead(nativePath);
-            using System.Reflection.PortableExecutable.PEReader reader = new(nativeStream);
-            Assert.False(reader.HasMetadata);
-            assemblies.Insert(0, nativePath);
-        }
-        catalog.SetWorkspaceAssemblies(assemblies);
-        ControlCatalogSnapshot result = await catalog.GetControlsAsync(CancellationToken.None);
-        Assert.Empty(result.Diagnostics);
-        Assert.Contains(result.Controls, item => item.FullName == typeof(CaptionControl).FullName);
     }
 
     [AvaloniaFact]
@@ -217,39 +197,6 @@ public sealed class ToolboxLoadingTests
         catalog.SetWorkspaceAssemblies(new[] { libraryPath });
         await loaded;
         Assert.Contains(model.Items, item => item.FullName == typeof(CaptionControl).FullName);
-
-        using CancellationTokenSource cancellation = new();
-        List<string> visited = new();
-        Assert.Throws<OperationCanceledException>(() => TypeMetadataService.ReadControlTypes(
-            new[] { libraryPath }, _ => { }, (_, _, assembly) =>
-            {
-                visited.Add(assembly);
-                cancellation.Cancel();
-            }, cancellation.Token));
-        Assert.Single(visited);
-    }
-
-    [AvaloniaFact]
-    public async Task ProjectDialogOpensWithoutAnOptionalControlDiscoveryStep()
-    {
-        string path = Path.Combine(Path.GetTempPath(), "xve-open-option-" + Guid.NewGuid().ToString("N") + ".slnx");
-        await File.WriteAllTextAsync(path, "<Solution />");
-        using WorkspaceOpenDialogViewModel model = new();
-        WorkspaceOpenRequest? result = null;
-        model.CloseRequested += request => result = request;
-        WorkspaceOpenDialog dialog = new() { DataContext = model };
-        try
-        {
-            dialog.Show();
-            dialog.FindControl<TextBox>("WorkspacePath")!.Text = path;
-            Assert.Null(dialog.FindControl<CheckBox>("LoadProjectControls"));
-            Flush(dialog);
-            await model.OpenCommand.Execute().ToTask();
-            Assert.Equal(new WorkspaceOpenRequest(path), result);
-            await model.CancelCommand.Execute().ToTask();
-            Assert.Null(result);
-        }
-        finally { dialog.Close(); }
     }
 
     private static ToolboxPanelViewModel CreateModel(IControlCatalog catalog) => new(

@@ -16,6 +16,7 @@ public sealed class TfvcAutoCheckOutServiceTests
     [Fact]
     public async Task ActivatingDocument_DeterminesStateBeforeAnyChange()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         (TfvcSession session, FakeTfvcClient client, _, FakeEditorServices editor, TfvcAutoCheckOutService service, _) = await CreateAsync();
         using (session)
         using (service)
@@ -37,6 +38,7 @@ public sealed class TfvcAutoCheckOutServiceTests
     [Fact]
     public async Task DocumentActivatedBeforeConnection_IsEvaluatedAfterConnecting()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
         FakeTfvcServerClient server = new();
         server.ExistingItems.Add(ServerPath);
@@ -102,6 +104,7 @@ public sealed class TfvcAutoCheckOutServiceTests
     [Fact]
     public async Task FirstChange_ChecksOutVersionedFileOnce()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         (TfvcSession session, FakeTfvcClient client, _, FakeEditorServices editor, TfvcAutoCheckOutService service, _) = await CreateAsync();
         using (session)
         using (service)
@@ -118,6 +121,84 @@ public sealed class TfvcAutoCheckOutServiceTests
             Assert.Equal(TfvcFileStateKind.Pending, (await service.GetStateAsync(FilePath, CancellationToken.None)).Kind);
             Assert.True(client.PendingChangeQueries >= 2);
         }
+    }
+
+    [Fact]
+    public async Task OverlappingChanges_CheckOutOnceWhileCheckOutRuns()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        (TfvcSession session, FakeTfvcClient client, _, FakeEditorServices editor, TfvcAutoCheckOutService service, _) = await CreateAsync();
+        using (session)
+        using (service)
+        {
+            FakeEditorDocument document = new(FilePath, "original");
+            editor.Activate(document);
+            TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            client.CheckOutGate = gate;
+
+            document.Text = "changed";
+            Task first = service.HandleDocumentChangedAsync(document, CancellationToken.None);
+            document.Text = "changed again";
+            Task second = service.HandleDocumentChangedAsync(document, CancellationToken.None);
+
+            Assert.False(first.IsCompleted);
+            Assert.True(second.IsCompleted);
+            Assert.Single(client.CheckOuts);
+
+            gate.SetResult();
+            await first;
+            await second;
+
+            Assert.Equal([FilePath], Assert.Single(client.CheckOuts));
+            Assert.Equal(TfvcFileStateKind.Pending, (await service.GetStateAsync(FilePath, CancellationToken.None)).Kind);
+        }
+    }
+
+    [Fact]
+    public async Task ChangeBeforeConnection_ChecksOutOnceStateIsKnown()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        FakeTfvcServerClient server = new();
+        server.ExistingItems.Add(ServerPath);
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+        FakeEditorServices editor = new();
+        FakeEditorDocument document = new(FilePath, "original");
+        editor.Activate(document);
+        using TfvcAutoCheckOutService service = new(session, editor, new RecordingWindow(), new NullExtensionLogger(), _ => "original");
+        service.Start();
+
+        document.Edit("changed");
+        Assert.Empty(client.CheckOuts);
+
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+        for (int attempt = 0; attempt < 100 && client.CheckOuts.Count == 0; attempt++)
+        {
+            await Task.Delay(30);
+        }
+
+        Assert.Equal([FilePath], Assert.Single(client.CheckOuts));
+    }
+
+    [Fact]
+    public async Task UnchangedDocumentBeforeConnection_IsNotCheckedOut()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        FakeTfvcServerClient server = new();
+        server.ExistingItems.Add(ServerPath);
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+        FakeEditorServices editor = new();
+        FakeEditorDocument document = new(FilePath, "original");
+        editor.Activate(document);
+        using TfvcAutoCheckOutService service = new(session, editor, new RecordingWindow(), new NullExtensionLogger(), _ => "original");
+        service.Start();
+
+        document.Edit("original");
+        await session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+
+        Assert.Equal(TfvcFileStateKind.CheckedIn, service.ActiveDocumentState.Kind);
+        Assert.Empty(client.CheckOuts);
     }
 
     [Fact]
@@ -140,6 +221,7 @@ public sealed class TfvcAutoCheckOutServiceTests
     [Fact]
     public async Task PendingOrUnversionedFiles_AreNotCheckedOut()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server, FakeEditorServices editor, TfvcAutoCheckOutService service, _) = await CreateAsync();
         using (session)
         using (service)
@@ -180,6 +262,7 @@ public sealed class TfvcAutoCheckOutServiceTests
     [Fact]
     public async Task FailedCheckOut_ReportsErrorOnceUntilInvalidated()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         (TfvcSession session, FakeTfvcClient client, _, FakeEditorServices editor, TfvcAutoCheckOutService service, RecordingWindow window) = await CreateAsync();
         using (session)
         using (service)

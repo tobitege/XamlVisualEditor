@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -33,27 +35,67 @@ public sealed class TfvcClientTests
     }
 
     [Fact]
-    public async Task CheckInAsync_PassesCommentAndItems()
+    public async Task CheckInAsync_PassesCommentFileAndItems()
     {
         FakeTfCommandRunner runner = new();
+        CommentFileProbe probe = new(runner, argumentIndex: 1);
         TfvcClient client = new(runner);
 
-        await client.CheckInAsync(TfvcTestData.CreateWorkspace(), "Fix build", ["$/Product/a.cs", "$/Product/b.cs"], CancellationToken.None);
+        await client.CheckInAsync(TfvcTestData.CreateWorkspace(), "@Max: layout fixed\r\nÄnderung für Grüße", ["$/Product/a.cs", "$/Product/b.cs"], CancellationToken.None);
 
-        Assert.Equal(["checkin", "/comment:Fix build", "/noprompt", "$/Product/a.cs", "$/Product/b.cs"], runner.Calls[0].Arguments);
+        IReadOnlyList<string> arguments = runner.Calls[0].Arguments;
+        Assert.Equal(["checkin", "/comment:@" + probe.FilePath, "/noprompt", "$/Product/a.cs", "$/Product/b.cs"], arguments);
+        Assert.Equal("@Max: layout fixed\r\nÄnderung für Grüße", probe.Content);
+        Assert.True(probe.HasByteOrderMark);
+        Assert.False(File.Exists(probe.FilePath));
     }
 
     [Fact]
-    public async Task UpdateChangesetCommentAsync_PassesCommentCollectionAndChangeset()
+    public async Task CheckInAsync_DeletesCommentFileWhenTfFails()
     {
         FakeTfCommandRunner runner = new();
+        runner.Enqueue(new TfCommandResult(100, string.Empty, "TF10139: conflict."));
+        CommentFileProbe probe = new(runner, argumentIndex: 1);
         TfvcClient client = new(runner);
 
-        await client.UpdateChangesetCommentAsync(TfvcTestData.CollectionUrl, 4711, "Fix build", CancellationToken.None);
+        await Assert.ThrowsAsync<TfCommandException>(
+            () => client.CheckInAsync(TfvcTestData.CreateWorkspace(), "Fix build", ["$/Product/a.cs"], CancellationToken.None));
+
+        Assert.Equal("Fix build", probe.Content);
+        Assert.False(File.Exists(probe.FilePath));
+    }
+
+    [Fact]
+    public async Task ShelveAsync_PassesCommentFileOnlyWithComment()
+    {
+        FakeTfCommandRunner runner = new();
+        CommentFileProbe probe = new(runner, argumentIndex: 3);
+        TfvcClient client = new(runner);
+
+        await client.ShelveAsync(TfvcTestData.CreateWorkspace(), "Nightly", "@Max: draft", ["$/Product/a.cs"], CancellationToken.None);
+        probe.Stop();
+        await client.ShelveAsync(TfvcTestData.CreateWorkspace(), "Nightly", "  ", ["$/Product/a.cs"], CancellationToken.None);
+
+        Assert.Equal(["shelve", "Nightly", "/noprompt", "/comment:@" + probe.FilePath, "$/Product/a.cs"], runner.Calls[0].Arguments);
+        Assert.Equal("@Max: draft", probe.Content);
+        Assert.False(File.Exists(probe.FilePath));
+        Assert.Equal(["shelve", "Nightly", "/noprompt", "$/Product/a.cs"], runner.Calls[1].Arguments);
+    }
+
+    [Fact]
+    public async Task UpdateChangesetCommentAsync_PassesCommentFileCollectionAndChangeset()
+    {
+        FakeTfCommandRunner runner = new();
+        CommentFileProbe probe = new(runner, argumentIndex: 1);
+        TfvcClient client = new(runner);
+
+        await client.UpdateChangesetCommentAsync(TfvcTestData.CollectionUrl, 4711, "@Max: revised", CancellationToken.None);
 
         Assert.Equal(
-            ["changeset", "/comment:Fix build", "/collection:" + TfvcTestData.CollectionUrl, "/noprompt", "4711"],
+            ["changeset", "/comment:@" + probe.FilePath, "/collection:" + TfvcTestData.CollectionUrl, "/noprompt", "4711"],
             runner.Calls[0].Arguments);
+        Assert.Equal("@Max: revised", probe.Content);
+        Assert.False(File.Exists(probe.FilePath));
     }
 
     [Fact]
@@ -149,5 +191,35 @@ public sealed class TfvcClientTests
 
         Assert.Equal("out" + Environment.NewLine + "err", result.CombinedOutput);
         Assert.False(result.Succeeded);
+    }
+
+    // Reads the comment file while the command runs; the client deletes the file afterwards.
+    private sealed class CommentFileProbe
+    {
+        private const string COMMENT_PREFIX = "/comment:@";
+
+        private readonly FakeTfCommandRunner _runner;
+
+        public CommentFileProbe(FakeTfCommandRunner runner, int argumentIndex)
+        {
+            _runner = runner;
+            runner.OnRun = arguments =>
+            {
+                string argument = arguments[argumentIndex];
+                Assert.StartsWith(COMMENT_PREFIX, argument);
+                FilePath = argument.Substring(COMMENT_PREFIX.Length);
+                byte[] bytes = File.ReadAllBytes(FilePath);
+                HasByteOrderMark = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+                Content = File.ReadAllText(FilePath, Encoding.UTF8);
+            };
+        }
+
+        public string FilePath { get; private set; } = string.Empty;
+
+        public string? Content { get; private set; }
+
+        public bool HasByteOrderMark { get; private set; }
+
+        public void Stop() => _runner.OnRun = null;
     }
 }

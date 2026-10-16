@@ -152,6 +152,13 @@ public sealed class TfvcSession : IDisposable
             IsOffline = false;
             SetBusy(true);
             IReadOnlyList<TfvcWorkspace> workspaces = await Client.GetWorkspacesAsync(collectionUrl, cancellationToken);
+
+            // Going offline during the connection wins: the offline workspaces and status stay as they are.
+            if (IsOffline)
+            {
+                return;
+            }
+
             Workspaces = workspaces;
             ConnectionFailed = false;
             StatusMessage = workspaces.Count == 0 ? TfvcStrings.NoWorkspace : null;
@@ -161,6 +168,11 @@ public sealed class TfvcSession : IDisposable
             }
 
             string? lastWorkspace = await _store.LoadLastWorkspaceAsync(cancellationToken);
+            if (IsOffline)
+            {
+                return;
+            }
+
             TfvcWorkspace? preferred = SelectPreferredWorkspace(workspaces, _workspaceInfo.WorkspacePath, lastWorkspace);
             _logger.Info(string.Format(
                 CultureInfo.CurrentCulture,
@@ -173,6 +185,12 @@ public sealed class TfvcSession : IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.Error(TfvcStrings.LogConnectionFailed, ex);
+            if (IsOffline)
+            {
+                // The user went offline during the connection; the cached mappings stay usable.
+                return;
+            }
+
             ConnectionFailed = true;
             Workspaces = Array.Empty<TfvcWorkspace>();
             CurrentWorkspace = null;

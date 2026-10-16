@@ -12,6 +12,7 @@ namespace XamlVisualEditor.Shell.ViewModels;
 public sealed partial class DesignerDocumentViewModel
 {
     private DesignerThemeRequest? _previewThemeRequest;
+    private DesignerThemeCatalog? _previewThemeCatalog;
     private bool _updatingThemeChoices;
 
     public DesignerThemeRequest? PreviewThemeRequest
@@ -20,10 +21,21 @@ public sealed partial class DesignerDocumentViewModel
         private set => this.RaiseAndSetIfChanged(ref _previewThemeRequest, value);
     }
 
+    /// <summary>
+    /// The last catalog the preview host reported for the current providers, or null before one arrived. It stays
+    /// set when a later request changes only the selection, because the offered themes depend on the providers.
+    /// </summary>
+    public DesignerThemeCatalog? PreviewThemeCatalog
+    {
+        get => _previewThemeCatalog;
+        private set => this.RaiseAndSetIfChanged(ref _previewThemeCatalog, value);
+    }
+
     public void SetPreviewThemeProviders(IReadOnlyList<DesignerThemeProviderRegistration> providers)
     {
         if (IsDisposed || providers.SequenceEqual(PreviewThemeRequest?.Providers ?? Array.Empty<DesignerThemeProviderRegistration>())) return;
         PreviewThemeRequest = new(Guid.NewGuid(), providers.ToArray(), PreviewThemeRequest?.Selection);
+        PreviewThemeCatalog = null;
         DesignSurface.HasPreviewThemeProviders = providers.Count > 0 || PreviewThemeRequest.Selection is not null;
         DesignSurface.HasPreviewThemeCatalog = false;
         DesignSurface.PreviewThemeStatus = UiStrings.PreviewThemeLoadHint;
@@ -102,5 +114,7 @@ public sealed partial class DesignerDocumentViewModel
         finally { _updatingThemeChoices = false; }
         DesignSurface.HasPreviewThemeCatalog = true;
         DesignSurface.PreviewThemeStatus = string.Format(UiStrings.PreviewThemePreviewOnly, selected.DisplayName);
+        // Raised last: a listener may replace a selection the catalog does not offer.
+        PreviewThemeCatalog = catalog;
     }
 }

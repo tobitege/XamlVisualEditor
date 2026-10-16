@@ -44,11 +44,14 @@ public static class TextEditOperations
         LineBlock block = LineBlock.FromSelection(text, selection);
         bool commented = syntax.IsBlock
             ? IsBlockCommented(block.Text, syntax)
-            : block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).All(line => IsLineCommented(line, syntax.LinePrefix!));
+            : block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).All(line => IsLineCommented(line, syntax));
         return commented ? Uncomment(text, selection, syntax) : Comment(text, selection, syntax);
     }
 
-    /// <summary>Comments the selected lines.</summary>
+    /// <summary>
+    /// Comments the selected lines. A block comment encloses the text around the existing comments, which stay as they
+    /// are; a selection that starts or ends inside a comment is left unchanged.
+    /// </summary>
     public static TextEditResult? Comment(string text, TextSelection selection, CommentSyntax syntax)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
@@ -59,9 +62,7 @@ public static class TextEditOperations
 
         if (syntax.IsBlock)
         {
-            int indent = LeadingWhitespace(block.Text);
-            string replaced = block.Text[..indent] + syntax.BlockStart + " " + block.Text[indent..] + " " + syntax.BlockEnd;
-            return block.Replace(replaced, selection);
+            return CommentBlock(block.Text, syntax) is { } commented ? block.Replace(commented, selection) : null;
         }
 
         int column = block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).Min(LeadingWhitespace);
@@ -75,7 +76,7 @@ public static class TextEditOperations
         LineBlock block = LineBlock.FromSelection(text, selection);
         string uncommented = syntax.IsBlock
             ? RemoveBlockComment(block.Text, syntax)
-            : block.MapLines(line => RemoveLineComment(line, syntax.LinePrefix!));
+            : block.MapLines(line => RemoveLineComment(line, syntax));
         return uncommented == block.Text ? null : block.Replace(uncommented, selection);
     }
 
@@ -83,7 +84,7 @@ public static class TextEditOperations
     public static TextEditResult? Indent(string text, TextSelection selection, string indentUnit)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
-        string indented = block.MapLines(line => line.Length == 0 ? line : indentUnit + line);
+        string indented = block.MapLines(line => string.IsNullOrWhiteSpace(line) ? line : indentUnit + line);
         return indented == block.Text ? null : block.Replace(indented, selection);
     }
 
@@ -244,7 +245,7 @@ public static class TextEditOperations
     // Returns the end of the comment or string literal that starts at the index, or the index when none starts there.
     private static int FindRegionEnd(string text, int index, CommentSyntax syntax)
     {
-        if (syntax.LinePrefix is { } prefix && string.CompareOrdinal(text, index, prefix, 0, prefix.Length) == 0)
+        if (syntax.StartsLineComment(text, index))
         {
             return LineEnd(text, index);
         }
@@ -320,54 +321,137 @@ public static class TextEditOperations
 
     private static bool IsBracket(char value) => value is '(' or ')' or '[' or ']' or '{' or '}';
 
-    private static bool IsLineCommented(string line, string prefix)
+    private static bool IsLineCommented(string line, CommentSyntax syntax)
     {
-        return line.AsSpan().TrimStart().StartsWith(prefix, StringComparison.Ordinal);
+        return syntax.StartsLineComment(line, LeadingWhitespace(line));
     }
 
-    private static string RemoveLineComment(string line, string prefix)
+    private static string RemoveLineComment(string line, CommentSyntax syntax)
     {
-        if (!IsLineCommented(line, prefix))
+        int index = LeadingWhitespace(line);
+        if (!syntax.StartsLineComment(line, index))
         {
             return line;
         }
 
-        int index = line.IndexOf(prefix, StringComparison.Ordinal);
-        int length = index + prefix.Length < line.Length && line[index + prefix.Length] == ' ' ? prefix.Length + 1 : prefix.Length;
+        int prefixLength = syntax.LinePrefix!.Length;
+        int length = index + prefixLength < line.Length && line[index + prefixLength] == ' ' ? prefixLength + 1 : prefixLength;
         return line.Remove(index, length);
     }
 
+    // A block is commented when it holds at least one comment and nothing but whitespace outside its comments.
     private static bool IsBlockCommented(string block, CommentSyntax syntax)
     {
-        string trimmed = block.Trim();
-        return trimmed.Length >= syntax.BlockStart!.Length + syntax.BlockEnd!.Length
-            && trimmed.StartsWith(syntax.BlockStart, StringComparison.Ordinal)
-            && trimmed.EndsWith(syntax.BlockEnd, StringComparison.Ordinal);
+        return SplitComments(block, syntax) is { } parts
+            && parts.Any(part => part.IsComment)
+            && parts.All(part => part.IsComment || string.IsNullOrWhiteSpace(block.Substring(part.Start, part.Length)));
     }
 
-    // Removes the outer block markers and the single space the commenting added inside each of them.
+    // A comment cannot contain another one, so every text between the existing comments gets a comment of its own.
+    // The whitespace around that text stays outside the markers.
+    private static string? CommentBlock(string block, CommentSyntax syntax)
+    {
+        if (SplitComments(block, syntax) is not { } parts)
+        {
+            return null;
+        }
+
+        StringBuilder builder = new(block.Length + parts.Count * (syntax.BlockStart!.Length + syntax.BlockEnd!.Length + 2));
+        foreach (BlockPart part in parts)
+        {
+            string value = block.Substring(part.Start, part.Length);
+            if (part.IsComment || string.IsNullOrWhiteSpace(value))
+            {
+                builder.Append(value);
+                continue;
+            }
+
+            int leading = value.Length - value.TrimStart().Length;
+            int trailing = value.Length - value.TrimEnd().Length;
+            builder.Append(value, 0, leading)
+                .Append(syntax.BlockStart).Append(' ')
+                .Append(value, leading, value.Length - leading - trailing)
+                .Append(' ').Append(syntax.BlockEnd)
+                .Append(value, value.Length - trailing, trailing);
+        }
+
+        string commented = builder.ToString();
+        return commented == block ? null : commented;
+    }
+
+    // Removes the markers of every comment and the single space the commenting added inside each of them.
     private static string RemoveBlockComment(string block, CommentSyntax syntax)
     {
-        if (!IsBlockCommented(block, syntax))
+        if (SplitComments(block, syntax) is not { } parts)
         {
             return block;
         }
 
-        int start = block.IndexOf(syntax.BlockStart!, StringComparison.Ordinal);
-        int end = block.LastIndexOf(syntax.BlockEnd!, StringComparison.Ordinal);
-        int innerStart = start + syntax.BlockStart!.Length;
-        int innerEnd = end;
-        if (innerStart < innerEnd && block[innerStart] == ' ')
+        StringBuilder builder = new(block.Length);
+        foreach (BlockPart part in parts)
         {
-            innerStart++;
+            if (!part.IsComment)
+            {
+                builder.Append(block, part.Start, part.Length);
+                continue;
+            }
+
+            int innerStart = part.Start + syntax.BlockStart!.Length;
+            int innerEnd = part.Start + part.Length - syntax.BlockEnd!.Length;
+            if (innerStart < innerEnd && block[innerStart] == ' ')
+            {
+                innerStart++;
+            }
+
+            if (innerEnd > innerStart && block[innerEnd - 1] == ' ')
+            {
+                innerEnd--;
+            }
+
+            builder.Append(block, innerStart, innerEnd - innerStart);
         }
 
-        if (innerEnd > innerStart && block[innerEnd - 1] == ' ')
+        return builder.ToString();
+    }
+
+    // Splits a block into its complete comments and the text between them. Returns null when a marker has no partner
+    // inside the block, as when the selection starts or ends within a comment.
+    private static List<BlockPart>? SplitComments(string block, CommentSyntax syntax)
+    {
+        string start = syntax.BlockStart!;
+        string end = syntax.BlockEnd!;
+        List<BlockPart> parts = new();
+        int position = 0;
+        while (position < block.Length)
         {
-            innerEnd--;
+            int open = block.IndexOf(start, position, StringComparison.Ordinal);
+            int gap = (open < 0 ? block.Length : open) - position;
+            if (block.IndexOf(end, position, gap, StringComparison.Ordinal) >= 0)
+            {
+                return null;
+            }
+
+            if (gap > 0)
+            {
+                parts.Add(new BlockPart(position, gap, IsComment: false));
+            }
+
+            if (open < 0)
+            {
+                break;
+            }
+
+            int close = block.IndexOf(end, open + start.Length, StringComparison.Ordinal);
+            if (close < 0)
+            {
+                return null;
+            }
+
+            parts.Add(new BlockPart(open, close + end.Length - open, IsComment: true));
+            position = close + end.Length;
         }
 
-        return block[..start] + block[innerStart..innerEnd] + block[(end + syntax.BlockEnd!.Length)..];
+        return parts;
     }
 
     private static int LeadingWhitespace(string line)
@@ -380,6 +464,9 @@ public static class TextEditOperations
 
         return count;
     }
+
+    /// <summary>A complete block comment or the text between two of them.</summary>
+    private readonly record struct BlockPart(int Start, int Length, bool IsComment);
 
     /// <summary>The whole lines a selection touches, without the line break after the last one.</summary>
     private sealed class LineBlock

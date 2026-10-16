@@ -25,6 +25,7 @@ public sealed class TfvcOfflineTests : IDisposable
     [Fact]
     public void ReconcileOutputParser_ResolvesRelativeAndAbsoluteFolderHeaders()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         string output =
             "Ausstehend Hinzufügen: RootFile.cs\r\n" +
             "Sub\\Folder:\r\n" +

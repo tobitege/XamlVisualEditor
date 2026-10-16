@@ -51,16 +51,13 @@ extension, XVE resets the interface and releases the provider instances.
 
 ## Flowery.NET
 
-From version 0.2.0 on, `XamlVisualEditor.FloweryThemeExtension` contains both
-`editorThemes` and `designerThemes`. The editor provider reads the registered Flowery
-palettes through `DaisyThemeManager.GetPaletteFactory` without applying a global theme.
-The package also contains the required `Flowery.NET.dll`.
+`XamlVisualEditor.FloweryThemeExtension` contains both `editorThemes` and
+`designerThemes`. The editor provider reads the registered Flowery palettes through
+`DaisyThemeManager.GetPaletteFactory` without applying a global theme and takes every
+color, including the text on accent surfaces, from the palette. The package also
+contains the required `Flowery.NET.dll`.
 
-After the documented Debug build, this call creates the package:
-
-```powershell
-dotnet pack extensions/XamlVisualEditor.FloweryThemeExtension/XamlVisualEditor.FloweryThemeExtension.csproj -c Debug --no-build -o artifacts/packages
-```
-
-The created package can be installed and enabled through the extension manager. Both
-theme selections use the same extension and stay independent.
+The pack command is described in
+[Flowery.NET adapter](DESIGNER-THEME-EXTENSIONS.md#flowerynet-adapter). The created
+package can be installed and enabled through the extension manager. Both theme
+selections use the same extension and stay independent.

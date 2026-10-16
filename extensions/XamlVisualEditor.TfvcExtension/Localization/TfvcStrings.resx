@@ -176,4 +176,5 @@ Work offline? Versioned files stay read-only; when you edit one, XVE asks whethe
   <data name="LogWorkspaceSelectionFailed" xml:space="preserve"><value>Selecting the TFVC workspace of the editor workspace failed.</value></data>
   <data name="LogInitializationFailed" xml:space="preserve"><value>TFVC initialization failed.</value></data>
   <data name="TfCommandTimeoutFormat" xml:space="preserve"><value>tf {0} did not finish within {1} seconds.</value></data>
+  <data name="HistoryOfflineStatus" xml:space="preserve"><value>Working offline. The history is available again after going online.</value></data>
 </root>

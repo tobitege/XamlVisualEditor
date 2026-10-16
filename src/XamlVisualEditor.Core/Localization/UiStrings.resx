@@ -1287,4 +1287,10 @@
   <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' could not be renamed: {1}</value></data>
   <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' could not be deleted: {1}</value></data>
   <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Fix the XAML errors before editing the document here.</value></data>
+  <data name="ToolboxAssembliesEnabled" xml:space="preserve"><value>{0} of {1} assemblies enabled for this workspace</value></data>
+  <data name="ToolboxPreferencesLoadFailed" xml:space="preserve"><value>Cannot load the toolbox preferences: {0}</value></data>
+  <data name="ToolboxPreferencesSaveFailed" xml:space="preserve"><value>Cannot save the toolbox preferences: {0}</value></data>
+  <data name="FlagsDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="GridLengthUnitNeedsValidSize" xml:space="preserve"><value>Enter a valid grid size before changing its unit.</value></data>
+  <data name="ValueSourceMixed" xml:space="preserve"><value>Mixed: the selected controls have different local values. Reset removes them from every selected control.</value></data>
 </root>

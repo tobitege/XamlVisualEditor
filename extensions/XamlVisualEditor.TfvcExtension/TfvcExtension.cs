@@ -44,6 +44,12 @@ public sealed class TfvcExtension : IXveExtension
     /// <inheritdoc />
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
+        // tf.exe exists only on Windows; on other systems the extension contributes no panels, menus or output channel.
+        if (!OperatingSystem.IsWindows())
+        {
+            return Task.CompletedTask;
+        }
+
         IOutputChannel outputChannel = context.Window.CreateOutputChannel("TFVC");
         TfvcOutputLogger logger = new(context.Logger, outputChannel);
         TfvcServerClient serverClient = new();

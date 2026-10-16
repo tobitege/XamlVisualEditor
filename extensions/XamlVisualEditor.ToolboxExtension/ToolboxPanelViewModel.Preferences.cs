@@ -2,6 +2,7 @@ using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System.Collections.ObjectModel;
 using System.Reactive;
 using ReactiveUI;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.ToolboxExtension;
@@ -16,14 +17,21 @@ public sealed partial class ToolboxPanelViewModel
     private readonly HashSet<string> _collapsedAssemblies = new(StringComparer.OrdinalIgnoreCase);
     private string _visibilityKey = "toolbox.assemblyVisibility:no-workspace";
     private string _collapseKey = "toolbox.assemblyCollapsed:no-workspace";
+    // A stored list that cannot be read is not overwritten, so a later edit cannot replace what is still on disk.
+    private readonly HashSet<string> _unreadablePreferenceKeys = new(StringComparer.Ordinal);
     private string? _preferenceError;
     private bool _preferencesReady = true;
     private int _preferenceLoadVersion;
     private int _preferenceSaveVersion;
+    private Task _preferenceWrites = Task.CompletedTask;
+
+    /// <summary>Gets the preference writes that have not finished yet.</summary>
+    internal Task PendingPreferenceWrites => _preferenceWrites;
 
     public ObservableCollection<ToolboxAssemblyGroup> AssemblyChoices { get; } = new();
     public bool CanEditAssemblyPreferences => _preferencesReady && !IsLoading && !_disposed;
-    public string AssemblyFilterSummary => $"{AssemblyChoices.Count(group => group.IsIncluded)} of {AssemblyChoices.Count} assemblies enabled for this workspace";
+    public string AssemblyFilterSummary => string.Format(UiStrings.ToolboxAssembliesEnabled,
+        AssemblyChoices.Count(group => group.IsIncluded), AssemblyChoices.Count);
     public string? PreferenceError
     {
         get => _preferenceError;
@@ -36,20 +44,21 @@ public sealed partial class ToolboxPanelViewModel
     public Task InitializePreferencesAsync(CancellationToken cancellationToken = default) =>
         LoadAssemblyPreferencesAsync(_workspaceInfo?.WorkspacePath, cancellationToken);
 
-    private void OnPreferencesWorkspaceChanged(object? sender, WorkspaceChangedEventArgs args)
-    {
-        _ = UpdateUiAsync(() => this.RaisePropertyChanged(nameof(HasInsertTarget)));
+    private void OnPreferencesWorkspaceChanged(object? sender, WorkspaceChangedEventArgs args) =>
         _ = LoadAssemblyPreferencesAsync(args.WorkspacePath, CancellationToken.None);
-    }
 
     private async Task LoadAssemblyPreferencesAsync(string? workspacePath, CancellationToken cancellationToken)
     {
         if (_disposed) return;
         int version = Interlocked.Increment(ref _preferenceLoadVersion);
         _preferencesReady = false;
-        bool scopeAssigned = false;
+        Task pendingWrites = _preferenceWrites;
         try
         {
+            // Lists written just before a workspace change are read back only after they reached the storage; a failed
+            // write reports its own error.
+            try { await pendingWrites.ConfigureAwait(false); }
+            catch (Exception) { }
             string identity = string.IsNullOrWhiteSpace(workspacePath)
                 ? "no-workspace" : Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspacePath));
             if (OperatingSystem.IsWindows()) identity = identity.ToUpperInvariant();
@@ -75,28 +84,25 @@ public sealed partial class ToolboxPanelViewModel
                     finally { _updatingFilters = false; }
                     ApplyFilter();
                 }
-                scopeAssigned = true;
                 PreferenceError = null;
                 NotifyPreferenceAvailability();
             }).ConfigureAwait(false);
             if (!IsCurrentPreferenceLoad(version)) return;
 
-            string[] hidden = _preferenceStorage is null ? Array.Empty<string>() :
-                await _preferenceStorage.GetAsync<string[]>(visibilityKey, cancellationToken).ConfigureAwait(false) ?? Array.Empty<string>();
-            string[] collapsed = _preferenceStorage is null ? Array.Empty<string>() :
-                await _preferenceStorage.GetAsync<string[]>(collapseKey, cancellationToken).ConfigureAwait(false) ?? Array.Empty<string>();
-            string[] favorites = _preferenceStorage is null ? Array.Empty<string>() :
-                await _preferenceStorage.GetAsync<string[]>(FavoriteAssembliesKey, cancellationToken).ConfigureAwait(false) ?? Array.Empty<string>();
+            List<string> errors = new();
+            string[]? hidden = await TryReadPreferenceAsync(visibilityKey, errors, cancellationToken).ConfigureAwait(false);
+            string[]? collapsed = await TryReadPreferenceAsync(collapseKey, errors, cancellationToken).ConfigureAwait(false);
+            string[]? favorites = await TryReadPreferenceAsync(FavoriteAssembliesKey, errors, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             await UpdateUiAsync(() =>
             {
                 if (!IsCurrentPreferenceLoad(version)) return;
-                _hiddenAssemblies.Clear();
-                _hiddenAssemblies.UnionWith(hidden.Where(name => name is not null));
-                _collapsedAssemblies.Clear();
-                _collapsedAssemblies.UnionWith(collapsed.Where(name => name is not null));
-                _favoriteAssemblies.Clear();
-                _favoriteAssemblies.UnionWith(favorites.Where(name => name is not null));
+                _unreadablePreferenceKeys.Clear();
+                ApplyStoredPreference(_hiddenAssemblies, hidden, visibilityKey);
+                ApplyStoredPreference(_collapsedAssemblies, collapsed, collapseKey);
+                ApplyStoredPreference(_favoriteAssemblies, favorites, FavoriteAssembliesKey);
+                PreferenceError = errors.Count == 0 ? null
+                    : string.Format(UiStrings.ToolboxPreferencesLoadFailed, string.Join(" ", errors));
                 _preferencesReady = true;
                 ApplyFilter();
                 NotifyPreferenceAvailability();
@@ -107,11 +113,38 @@ public sealed partial class ToolboxPanelViewModel
             await UpdateUiAsync(() =>
             {
                 if (!IsCurrentPreferenceLoad(version)) return;
-                _preferencesReady = scopeAssigned;
-                PreferenceError = "Cannot load toolbox preferences: " + error.Message;
+                // Without the stored lists an edit would replace them, so editing stays off until the next load.
+                _preferencesReady = false;
+                PreferenceError = string.Format(UiStrings.ToolboxPreferencesLoadFailed, error.Message);
                 NotifyPreferenceAvailability();
             }).ConfigureAwait(false);
         }
+    }
+
+    private async Task<string[]?> TryReadPreferenceAsync(string key, List<string> errors, CancellationToken cancellationToken)
+    {
+        if (_preferenceStorage is null) return Array.Empty<string>();
+        try
+        {
+            return await _preferenceStorage.GetAsync<string[]>(key, cancellationToken).ConfigureAwait(false) ?? Array.Empty<string>();
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            errors.Add(error.Message);
+            return null;
+        }
+    }
+
+    private void ApplyStoredPreference(HashSet<string> current, string[]? stored, string key)
+    {
+        if (stored is null)
+        {
+            _unreadablePreferenceKeys.Add(key);
+            return;
+        }
+
+        current.Clear();
+        current.UnionWith(stored.Where(name => name is not null));
     }
 
     private bool IsCurrentPreferenceLoad(int version) => !_disposed && version == Volatile.Read(ref _preferenceLoadVersion);
@@ -162,15 +195,19 @@ public sealed partial class ToolboxPanelViewModel
     private async Task SaveAssemblyPreferencesAsync(string key, string[] values)
     {
         int version = Interlocked.Increment(ref _preferenceSaveVersion);
-        PreferenceError = null;
-        if (_preferenceStorage is null) return;
-        try { await _preferenceStorage.SetAsync(key, values, CancellationToken.None).ConfigureAwait(false); }
+        if (_unreadablePreferenceKeys.Count == 0) PreferenceError = null;
+        if (_preferenceStorage is not { } storage || _unreadablePreferenceKeys.Contains(key)) return;
+        // The storage writes and flushes synchronously; the writes run in order away from the UI thread.
+        Task write = _preferenceWrites.ContinueWith(_ => storage.SetAsync(key, values, CancellationToken.None),
+            CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+        _preferenceWrites = write;
+        try { await write.ConfigureAwait(false); }
         catch (Exception error)
         {
             await UpdateUiAsync(() =>
             {
                 if (!_disposed && version == Volatile.Read(ref _preferenceSaveVersion))
-                    PreferenceError = "Cannot save toolbox preferences: " + error.Message;
+                    PreferenceError = string.Format(UiStrings.ToolboxPreferencesSaveFailed, error.Message);
             }).ConfigureAwait(false);
         }
     }

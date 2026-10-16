@@ -450,8 +450,17 @@ public sealed partial class PendingChangesViewModel : ReactiveObject, IDisposabl
         string shelvesetName = name.Trim();
         await RunOperationAsync(async () =>
         {
-            IReadOnlyList<string> items = _session.ExcludedServerPaths.Count == 0 ? Array.Empty<string>() : ToServerPaths(included);
-            await _session.Client.ShelveAsync(workspace, shelvesetName, Comment?.Trim(), items, cancellationToken);
+            string? comment = Comment?.Trim();
+            try
+            {
+                await _session.Client.ShelveAsync(workspace, shelvesetName, comment, ToServerPaths(included), cancellationToken);
+            }
+            catch (TfCommandLineTooLongException) when (_session.ExcludedServerPaths.Count == 0)
+            {
+                // Without exclusions, shelving the whole workspace is the same set of changes.
+                await _session.Client.ShelveAsync(workspace, shelvesetName, comment, Array.Empty<string>(), cancellationToken);
+            }
+
             OperationMessage = string.Format(CultureInfo.CurrentCulture, TfvcStrings.ShelvedFormat, shelvesetName);
         }, cancellationToken);
     }

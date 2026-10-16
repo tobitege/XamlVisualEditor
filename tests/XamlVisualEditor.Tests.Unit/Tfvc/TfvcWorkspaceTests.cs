@@ -10,6 +10,7 @@ public sealed class TfvcWorkspaceTests
     [Fact]
     public void TryGetServerPath_MapsNestedLocalPath()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         TfvcWorkspace workspace = TfvcTestData.CreateWorkspace();
 
         Assert.Equal("$/Product/src/App.cs", workspace.TryGetServerPath(@"C:\src\Product\src\App.cs"));
@@ -29,6 +30,7 @@ public sealed class TfvcWorkspaceTests
     [Fact]
     public void TryGetLocalPath_UsesLongestMapping()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         TfvcWorkspace workspace = new(
             "DEV01",
             null,
@@ -68,6 +70,7 @@ public sealed class TfvcWorkspaceTests
     [Fact]
     public void SelectPreferredWorkspace_PrefersWorkspaceOfEditorPath()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         TfvcWorkspace first = TfvcTestData.CreateWorkspace("FIRST", @"C:\first");
         TfvcWorkspace second = TfvcTestData.CreateWorkspace("SECOND", @"C:\second");
         List<TfvcWorkspace> workspaces = [first, second];
@@ -89,6 +92,7 @@ public sealed class TfvcWorkspaceTests
     [Fact]
     public void TfExeLocator_UsesConfiguredPathOrNewestDetectedInstallation()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         HashSet<string> files = new(System.StringComparer.OrdinalIgnoreCase)
         {
             @"C:\VS\2022\Community\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\TF.exe",

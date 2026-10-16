@@ -287,7 +287,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         Changes.Clear();
         _loadedCount = 0;
         HasMore = false;
-        if (serverPath is null || collectionUrl is null)
+        if (serverPath is null || collectionUrl is null || ReportOffline())
         {
             return;
         }
@@ -319,7 +319,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     {
         string? serverPath = ServerPath;
         string? collectionUrl = _session.Settings.CollectionUrl;
-        if (serverPath is null || collectionUrl is null)
+        if (serverPath is null || collectionUrl is null || ReportOffline())
         {
             return;
         }
@@ -352,7 +352,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
 
         string? serverPath = ServerPath;
         string? collectionUrl = _session.Settings.CollectionUrl;
-        if (serverPath is null || collectionUrl is null)
+        if (serverPath is null || collectionUrl is null || ReportOffline())
         {
             return;
         }
@@ -397,7 +397,7 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
     {
         Changes.Clear();
         string? collectionUrl = _session.Settings.CollectionUrl;
-        if (row is null || collectionUrl is null)
+        if (row is null || collectionUrl is null || ReportOffline())
         {
             return;
         }
@@ -421,6 +421,18 @@ public sealed partial class TfvcHistoryViewModel : ReactiveObject
         {
             Message = TfvcDisplayText.DescribeError(ex);
         }
+    }
+
+    // Offline no server call is made; the panel shows the offline status instead.
+    private bool ReportOffline()
+    {
+        if (!_session.IsOffline)
+        {
+            return false;
+        }
+
+        Message = TfvcStrings.HistoryOfflineStatus;
+        return true;
     }
 
     private void AddChangesets(IReadOnlyList<TfvcChangesetInfo> changesets)

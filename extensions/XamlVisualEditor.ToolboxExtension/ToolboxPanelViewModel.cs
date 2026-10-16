@@ -46,7 +46,7 @@ public sealed class ToolboxPanelItem : IToolboxDragItem
     public IReadOnlyList<string> CommandArguments { get; }
 
     /// <inheritdoc />
-    public bool CanDrag => CommandId == "toolbox.insertSelected" && CommandArguments.Count >= 2;
+    public bool CanDrag => CommandId == ToolboxPanelViewModel.DefaultInsertCommandId && CommandArguments.Count >= 2;
 
     /// <inheritdoc />
     public string TypeName => CanDrag ? CommandArguments[0] : string.Empty;
@@ -229,7 +229,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     private int _reloadVersion;
     private CancellationTokenSource? _loadCancellation;
     private const string CatalogSettingsKey = "toolbox.catalog";
-    private const string DefaultInsertCommandId = "toolbox.insertSelected";
+    internal const string DefaultInsertCommandId = "toolbox.insertSelected";
 
     public ToolboxPanelViewModel(ICommands commands, ISettings settings,
         IControlCatalog? catalog = null, ISequencer? uiScheduler = null,
@@ -287,11 +287,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<ToolboxPanelItem> Items { get; } = new();
 
-    /// <summary>Gets standard controls in alphabetical display order.</summary>
-    public ObservableCollection<ToolboxPanelItem> StandardItems { get; } = new();
-
-    /// <summary>Gets third-party controls in alphabetical display order.</summary>
-    public ObservableCollection<ToolboxPanelItem> ThirdPartyItems { get; } = new();
+    /// <summary>Gets the controls that pass the active filters, in catalog order.</summary>
+    public IReadOnlyList<ToolboxPanelItem> VisibleItems { get; private set; } = Array.Empty<ToolboxPanelItem>();
 
     /// <summary>Gets the visible assemblies, each containing its alphabetically sorted controls.</summary>
     public ObservableCollection<ToolboxAssemblyGroup> AssemblyGroups { get; } = new();
@@ -402,7 +399,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
     }
 
     /// <summary>Gets whether the active filters exclude every available control.</summary>
-    public bool NoMatches => !IsLoading && Items.Count > 0 && StandardItems.Count + ThirdPartyItems.Count == 0;
+    public bool NoMatches => !IsLoading && Items.Count > 0 && VisibleItems.Count == 0;
 
     public ToolboxPanelItem? SelectedItem
     {
@@ -437,8 +434,6 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
 
     public ReactiveCommand<RxVoid, RxVoid> InsertSelectedCommand { get; }
 
-    /// <summary>Reloads controls from the active project.</summary>
-
     /// <summary>Repeats the most recently failed search.</summary>
     public ReactiveCommand<RxVoid, RxVoid> RetryLoadCommand { get; }
 
@@ -467,9 +462,8 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         if (changed) SaveCollapsedAssemblies();
     }
 
-    /// <summary>Inserting and dragging need a workspace and an active designer document.</summary>
-    public bool HasInsertTarget => !string.IsNullOrWhiteSpace(_workspaceInfo?.WorkspacePath)
-        && !string.IsNullOrWhiteSpace(_designer?.ActiveDocumentPath);
+    /// <summary>Inserting and dragging need an active designer document.</summary>
+    public bool HasInsertTarget => !string.IsNullOrWhiteSpace(_designer?.ActiveDocumentPath);
 
     private void OnInsertDocumentChanged(object? sender, DesignerDocumentChangedEventArgs args) =>
         _ = UpdateUiAsync(() => this.RaisePropertyChanged(nameof(HasInsertTarget)));
@@ -599,9 +593,12 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         }
     }
 
+    /// <summary>Gets or sets how long the status of a completed load stays visible.</summary>
+    internal TimeSpan LoadStatusDismissDelay { get; set; } = TimeSpan.FromSeconds(10);
+
     private void ScheduleStatusDismissal()
     {
-        _statusDismissal.Disposable = _uiScheduler.Schedule(TimeSpan.FromSeconds(10), () =>
+        _statusDismissal.Disposable = _uiScheduler.Schedule(LoadStatusDismissDelay, () =>
         {
             if (!_disposed && !HasLoadTask) IsLoadStatusVisible = false;
         });
@@ -692,21 +689,14 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
         _updatingGroups = true;
         try
         {
-            StandardItems.Clear();
-            ThirdPartyItems.Clear();
-            foreach (ToolboxPanelItem item in Items)
-            {
-                if (!IsAssemblyIncluded(item.AssemblyName)) continue;
-                if (SelectedLibrary?.Value is { } library && item.AssemblyName != library) continue;
-                if (SelectedCategory?.Value is { } category && item.Category != category) continue;
-                if (!terms.All(term => item.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
+            ToolboxPanelItem[] visibleItems = Items.Where(item => IsAssemblyIncluded(item.AssemblyName)
+                && (SelectedLibrary?.Value is not { } library || item.AssemblyName == library)
+                && (SelectedCategory?.Value is not { } category || item.Category == category)
+                && terms.All(term => item.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
                     || item.FullName.Contains(term, StringComparison.OrdinalIgnoreCase)
                     || item.AssemblyName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    || item.Category.Contains(term, StringComparison.OrdinalIgnoreCase))) continue;
-                (item.IsStandardControl ? StandardItems : ThirdPartyItems).Add(item);
-            }
-
-            ToolboxPanelItem[] visibleItems = StandardItems.Concat(ThirdPartyItems).ToArray();
+                    || item.Category.Contains(term, StringComparison.OrdinalIgnoreCase))).ToArray();
+            VisibleItems = visibleItems;
             List<ToolboxAssemblyGroup> visibleGroups = new();
             foreach (IGrouping<string, ToolboxPanelItem> assembly in visibleItems.GroupBy(item => item.AssemblyName, StringComparer.Ordinal))
             {
@@ -736,7 +726,7 @@ public sealed partial class ToolboxPanelViewModel : ReactiveObject, IDisposable
                 && item.AssemblyName == selected.AssemblyName && item.FullName == selected.FullName
                 && item.DisplayName == selected.DisplayName && item.CommandId == selected.CommandId
                 && item.CommandArguments.SequenceEqual(selected.CommandArguments))
-                ?? StandardItems.FirstOrDefault() ?? ThirdPartyItems.FirstOrDefault();
+                ?? visibleItems.FirstOrDefault(item => item.IsStandardControl) ?? visibleItems.FirstOrDefault();
             foreach (ToolboxAssemblyGroup group in AssemblyGroups) group.NotifySelectionChanged();
         }
         finally

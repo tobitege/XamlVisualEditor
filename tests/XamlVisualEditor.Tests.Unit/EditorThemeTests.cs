@@ -245,9 +245,9 @@ public sealed class EditorThemeTests
         EditorThemePalette dark = provider.GetPalette("dark");
         EditorThemePalette light = provider.GetPalette("light");
         EditorThemePalette forest = provider.GetPalette("forest");
-        Assert.Equal(Colors.White, Color.Parse(forest.Colors[EditorThemeColor.AccentForeground]));
-        Assert.Equal(Colors.White, Color.Parse(forest.Colors[EditorThemeColor.SelectionForeground]));
         ResourceDictionary originalForest = DaisyThemeManager.GetPaletteFactory("Forest")!.Invoke();
+        Assert.Equal(originalForest["DaisyPrimaryContentColor"], Color.Parse(forest.Colors[EditorThemeColor.AccentForeground]));
+        Assert.Equal(originalForest["DaisyPrimaryContentColor"], Color.Parse(forest.Colors[EditorThemeColor.SelectionForeground]));
         Assert.Equal(originalForest["DaisyPrimaryColor"], Color.Parse(forest.Colors[EditorThemeColor.Accent]));
         Assert.True(dark.IsDark);
         Assert.False(light.IsDark);

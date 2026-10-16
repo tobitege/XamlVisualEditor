@@ -69,6 +69,8 @@ public sealed class TfvcPanelViewModelTests
             Assert.Equal(1, viewModel.IncludedCount);
             Assert.Equal(1, viewModel.ExcludedCount);
 
+            // tf.exe lists the folders and files before the summary; a folder name with a number must not be taken as the changeset.
+            client.CheckInOutput = "C:\\src\\Product\\changeset-viewer\\v2:\r\nChecking in edit: a.cs\r\n\r\nChangeset #4711 checked in.\r\n";
             server.WorkItems[17] = new TfvcWorkItemInfo(17, "Task", "Port the form", "Active");
             viewModel.WorkItemIdText = "#17";
             await viewModel.AddWorkItemCommand.Execute().ToTask();
@@ -99,6 +101,49 @@ public sealed class TfvcPanelViewModelTests
             await viewModel.CheckInCommand.Execute().ToTask();
 
             Assert.Empty(client.CheckIns);
+            Assert.False(string.IsNullOrEmpty(viewModel.OperationMessage));
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ShelvesDisplayedChangesOnly()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        RecordingWindow window = new() { InputBoxResult = " Nightly " };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            viewModel.Comment = " Work in progress ";
+
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            (string name, string? comment, IReadOnlyList<string> items) = Assert.Single(client.Shelves);
+            Assert.Equal("Nightly", name);
+            Assert.Equal("Work in progress", comment);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], items);
+        }
+    }
+
+    [Fact]
+    public async Task PendingChanges_ShelvesWholeWorkspaceOnlyWhenItemListIsTooLongWithoutExclusions()
+    {
+        (TfvcSession session, FakeTfvcClient client, _) = await CreateSessionAsync();
+        client.RejectShelveItemLists = true;
+        RecordingWindow window = new() { InputBoxResult = "Nightly" };
+        using (session)
+        using (PendingChangesViewModel viewModel = CreatePendingChangesViewModel(session, client, window: window))
+        {
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Equal(2, client.Shelves.Count);
+            Assert.Equal(["$/Product/a.cs", "$/Product/b.cs"], client.Shelves[0].Items);
+            Assert.Empty(client.Shelves[1].Items);
+
+            client.Shelves.Clear();
+            await session.SetExcludedAsync(["$/Product/b.cs"], true, CancellationToken.None);
+            await viewModel.ShelveCommand.Execute().ToTask();
+
+            Assert.Equal(["$/Product/a.cs"], Assert.Single(client.Shelves).Items);
             Assert.False(string.IsNullOrEmpty(viewModel.OperationMessage));
         }
     }
@@ -170,6 +215,7 @@ public sealed class TfvcPanelViewModelTests
     [Fact]
     public async Task SourceControlExplorer_NavigatesToServerPathAndShowsWorkspaceState()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
         (TfvcSession session, FakeTfvcClient client, FakeTfvcServerClient server) = await CreateSessionAsync();
         server.Children["$/"] = [new TfvcServerItem("$/Product", true, 30, null)];
         server.Children["$/Product"] = [new TfvcServerItem("$/Product/a.cs", false, 29, null), new TfvcServerItem("$/Product/c.cs", false, 28, null)];
@@ -424,14 +470,18 @@ public sealed class TfvcPanelViewModelTests
             null);
     }
 
-    private static PendingChangesViewModel CreatePendingChangesViewModel(TfvcSession session, FakeTfvcClient client, ConfirmingDialogHost? dialogHost = null)
+    private static PendingChangesViewModel CreatePendingChangesViewModel(
+        TfvcSession session,
+        FakeTfvcClient client,
+        ConfirmingDialogHost? dialogHost = null,
+        RecordingWindow? window = null)
     {
         FakeEditorServices editor = new();
         return new PendingChangesViewModel(
             session,
             new TfvcAutoCheckOutService(session, editor, new RecordingWindow(), new NullExtensionLogger()),
             editor,
-            new RecordingWindow(),
+            window ?? new RecordingWindow(),
             dialogHost ?? new ConfirmingDialogHost(),
             null);
     }

@@ -51,6 +51,40 @@ public sealed record CommentSyntax(string? LinePrefix, string? BlockStart, strin
     /// <summary>Gets whether the language comments whole blocks rather than single lines.</summary>
     public bool IsBlock => LinePrefix is null;
 
+    /// <summary>
+    /// Gets whether a line comment starts at the index. A prefix that ends in a letter, such as REM, is a command word:
+    /// it ignores case, stands first on its line and is followed by whitespace or the end of the line.
+    /// </summary>
+    public bool StartsLineComment(string text, int index)
+    {
+        if (LinePrefix is not { } prefix || index < 0 || index + prefix.Length > text.Length)
+        {
+            return false;
+        }
+
+        if (!char.IsLetter(prefix[^1]))
+        {
+            return string.CompareOrdinal(text, index, prefix, 0, prefix.Length) == 0;
+        }
+
+        int end = index + prefix.Length;
+        if (string.Compare(text, index, prefix, 0, prefix.Length, StringComparison.OrdinalIgnoreCase) != 0
+            || (end < text.Length && !char.IsWhiteSpace(text[end])))
+        {
+            return false;
+        }
+
+        for (int position = index - 1; position >= 0 && text[position] is not ('\r' or '\n'); position--)
+        {
+            if (!char.IsWhiteSpace(text[position]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Resolves the syntax of a document; <see langword="null"/> when the language has no known comments.</summary>
     public static CommentSyntax? Resolve(string? filePath, string? languageId)
     {

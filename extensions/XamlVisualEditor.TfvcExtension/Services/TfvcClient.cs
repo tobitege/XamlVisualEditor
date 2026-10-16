@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.TfvcExtension.Models;
@@ -96,6 +97,9 @@ public sealed class TfvcClient : ITfvcClient
 {
     private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan ChangeTimeout = TimeSpan.FromMinutes(10);
+
+    // The byte order mark states the encoding of non-ASCII comments explicitly.
+    private static readonly Encoding CommentFileEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
 
     private readonly ITfCommandRunner _runner;
 
@@ -223,9 +227,12 @@ public sealed class TfvcClient : ITfvcClient
     /// <inheritdoc />
     public Task<TfCommandResult> CheckInAsync(TfvcWorkspace workspace, string comment, IReadOnlyList<string> itemSpecs, CancellationToken cancellationToken)
     {
-        List<string> arguments = ["checkin", "/comment:" + comment, "/noprompt"];
-        arguments.AddRange(itemSpecs);
-        return RunChangeAsync(workspace, arguments, cancellationToken);
+        return RunWithCommentFileAsync(comment, commentArgument =>
+        {
+            List<string> arguments = ["checkin", commentArgument, "/noprompt"];
+            arguments.AddRange(itemSpecs);
+            return RunChangeAsync(workspace, arguments, cancellationToken);
+        }, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -237,13 +244,18 @@ public sealed class TfvcClient : ITfvcClient
         CancellationToken cancellationToken)
     {
         List<string> arguments = ["shelve", shelvesetName, "/noprompt"];
-        if (!string.IsNullOrWhiteSpace(comment))
+        if (string.IsNullOrWhiteSpace(comment))
         {
-            arguments.Add("/comment:" + comment);
+            arguments.AddRange(itemSpecs);
+            return RunChangeAsync(workspace, arguments, cancellationToken);
         }
 
-        arguments.AddRange(itemSpecs);
-        return RunChangeAsync(workspace, arguments, cancellationToken);
+        return RunWithCommentFileAsync(comment, commentArgument =>
+        {
+            arguments.Add(commentArgument);
+            arguments.AddRange(itemSpecs);
+            return RunChangeAsync(workspace, arguments, cancellationToken);
+        }, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -289,28 +301,59 @@ public sealed class TfvcClient : ITfvcClient
 
     /// <inheritdoc />
     /// <remarks>The server accepts the change only from the author or from users with the permission to revise other users' changes.</remarks>
-    public async Task<TfCommandResult> UpdateChangesetCommentAsync(string collectionUrl, int changesetId, string comment, CancellationToken cancellationToken)
+    public Task<TfCommandResult> UpdateChangesetCommentAsync(string collectionUrl, int changesetId, string comment, CancellationToken cancellationToken)
     {
-        List<string> arguments =
-        [
-            "changeset",
-            "/comment:" + comment,
-            "/collection:" + collectionUrl,
-            "/noprompt",
-            changesetId.ToString(CultureInfo.InvariantCulture)
-        ];
-        if (TfCommandRunner.EstimateCommandLineLength(arguments) > TfCommandRunner.MAX_COMMAND_LINE_LENGTH)
+        return RunWithCommentFileAsync(comment, async commentArgument =>
         {
-            throw new TfCommandLineTooLongException();
-        }
+            List<string> arguments =
+            [
+                "changeset",
+                commentArgument,
+                "/collection:" + collectionUrl,
+                "/noprompt",
+                changesetId.ToString(CultureInfo.InvariantCulture)
+            ];
+            TfCommandResult result = await _runner.RunAsync(GetNeutralDirectory(), arguments, ChangeTimeout, cancellationToken).ConfigureAwait(false);
+            if (!result.Succeeded)
+            {
+                throw new TfCommandException(arguments[0], result);
+            }
 
-        TfCommandResult result = await _runner.RunAsync(GetNeutralDirectory(), arguments, ChangeTimeout, cancellationToken).ConfigureAwait(false);
-        if (!result.Succeeded)
+            return result;
+        }, cancellationToken);
+    }
+
+    // tf.exe reads a "/comment:" value that starts with "@" from the named file, so a comment such as "@Max: ..." cannot
+    // be passed inline. Passing every comment through a file also keeps line breaks and long comments off the command line.
+    private static async Task<TfCommandResult> RunWithCommentFileAsync(
+        string comment,
+        Func<string, Task<TfCommandResult>> run,
+        CancellationToken cancellationToken)
+    {
+        string commentFile = Path.Combine(Path.GetTempPath(), "xve-tf-comment-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
         {
-            throw new TfCommandException(arguments[0], result);
+            await File.WriteAllTextAsync(commentFile, comment, CommentFileEncoding, cancellationToken).ConfigureAwait(false);
+            return await run("/comment:@" + commentFile).ConfigureAwait(false);
         }
+        finally
+        {
+            TryDeleteFile(commentFile);
+        }
+    }
 
-        return result;
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private async Task<TfCommandResult> RunQueryAsync(string workingDirectory, List<string> arguments, CancellationToken cancellationToken)

@@ -23,6 +23,7 @@ public sealed class CaretPositionMemory : IDisposable
     private readonly IExtensionStorage _storage;
     private readonly IExtensionLogger _logger;
     private readonly TimeSpan _saveDelay;
+    private readonly TimeProvider _timeProvider;
     private readonly object _gate = new();
 
     // Keyed by the full path; the first entry is the most recent one.
@@ -36,12 +37,23 @@ public sealed class CaretPositionMemory : IDisposable
     private bool _disposed;
 
     /// <summary>Creates the memory; <see cref="LoadAsync"/> reads the saved positions.</summary>
-    public CaretPositionMemory(IEditorServices editor, IExtensionStorage storage, IExtensionLogger logger, TimeSpan? saveDelay = null)
+    /// <param name="editor">The editor whose active document is followed.</param>
+    /// <param name="storage">Keeps the positions between sessions.</param>
+    /// <param name="logger">Receives failures, which never reach the caller.</param>
+    /// <param name="saveDelay">Collects the changes for this time before they are written.</param>
+    /// <param name="timeProvider">Measures <paramref name="saveDelay"/>; by default the system clock.</param>
+    public CaretPositionMemory(
+        IEditorServices editor,
+        IExtensionStorage storage,
+        IExtensionLogger logger,
+        TimeSpan? saveDelay = null,
+        TimeProvider? timeProvider = null)
     {
         _editor = editor;
         _storage = storage;
         _logger = logger;
         _saveDelay = saveDelay ?? DefaultSaveDelay;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>Gets the remembered positions, the most recent first.</summary>
@@ -103,8 +115,28 @@ public sealed class CaretPositionMemory : IDisposable
         _shutdown.Cancel();
         try
         {
+            // The final save follows the scheduled one, so that an older snapshot never overwrites it.
+            Task previous;
+            lock (_gate)
+            {
+                previous = _pendingSave;
+            }
+
             Task remember = _active is null ? Task.CompletedTask : RememberAsync(_active);
-            Task save = remember.ContinueWith(_ => SaveNowAsync(), TaskScheduler.Default).Unwrap();
+            Task save = Task.WhenAll(previous, remember).ContinueWith(done =>
+            {
+                if (done.Exception is { } error)
+                {
+                    _logger.Error("Remembering the caret position failed.", error.GetBaseException());
+                }
+
+                return SaveNowAsync();
+            }, TaskScheduler.Default).Unwrap();
+            lock (_gate)
+            {
+                _pendingSave = save;
+            }
+
             if (!save.Wait(ShutdownSaveTimeout))
             {
                 _logger.Warn("The caret positions were not saved before shutdown.");
@@ -161,10 +193,18 @@ public sealed class CaretPositionMemory : IDisposable
         IEditorDocument? previous = _active;
         _active = document;
         StopPendingRestore();
+        // A document whose caret cannot be read keeps its old position; the new document is restored all the same.
         if (previous is not null && !ReferenceEquals(previous, document))
         {
-            await RememberAsync(previous).ConfigureAwait(true);
-            ScheduleSave();
+            try
+            {
+                await RememberAsync(previous).ConfigureAwait(true);
+                ScheduleSave();
+            }
+            catch (Exception error)
+            {
+                _logger.Error("Remembering the caret position failed.", error);
+            }
         }
 
         if (document is null || string.IsNullOrWhiteSpace(document.FilePath) || !_restored.Add(GetKey(document.FilePath)))
@@ -258,15 +298,16 @@ public sealed class CaretPositionMemory : IDisposable
                 return;
             }
 
+            // The delay starts now, so that it counts from the change and not from the end of the previous save.
             _saveScheduled = true;
             Task previous = _pendingSave;
-            CancellationToken shutdown = _shutdown.Token;
+            Task delay = Task.Delay(_saveDelay, _timeProvider, _shutdown.Token);
             _pendingSave = Task.Run(async () =>
             {
                 await previous.ConfigureAwait(false);
                 try
                 {
-                    await Task.Delay(_saveDelay, shutdown).ConfigureAwait(false);
+                    await delay.ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

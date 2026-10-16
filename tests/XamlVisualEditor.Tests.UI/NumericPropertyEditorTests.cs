@@ -41,12 +41,12 @@ public sealed class NumericPropertyEditorTests
         Application.Current!.Styles.Add(theme);
         Application.Current.Styles.Add(gridTheme);
         Window? window = null;
+        string path = Path.Combine(Path.GetTempPath(), "xve-numeric-input-" + Guid.NewGuid().ToString("N") + ".axaml");
         try
         {
             string initialBackground = initiallySet ? " Background=\"#FF336699\"" : string.Empty;
             string original = "<Button xmlns=\"https://github.com/avaloniaui\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" Width=\"160\" Height=\"40\""
                 + initialBackground + "><Button.Resources><SolidColorBrush x:Key=\"Accent\" Color=\"SteelBlue\" /></Button.Resources></Button>";
-            string path = Path.Combine(Path.GetTempPath(), "xve-numeric-input-" + Guid.NewGuid().ToString("N") + ".axaml");
             await File.WriteAllTextAsync(path, original);
             TypeMetadataService metadata = new();
             metadata.LoadAssembly(typeof(Control).Assembly.Location);
@@ -144,6 +144,7 @@ public sealed class NumericPropertyEditorTests
             Application.Current.Styles.Remove(gridTheme);
             Application.Current.Styles.Remove(theme);
             CultureInfo.CurrentCulture = previousCulture;
+            File.Delete(path);
         }
     }
 }

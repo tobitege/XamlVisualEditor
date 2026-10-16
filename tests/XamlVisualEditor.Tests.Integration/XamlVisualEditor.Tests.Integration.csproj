@@ -2,6 +2,9 @@
   <PropertyGroup>
     <RootNamespace>XamlVisualEditor.Tests.Integration</RootNamespace>
     <IsPackable>false</IsPackable>
+    <!-- The Flowery theme extension is not part of the solution; it builds in this project's configuration, from whose
+         output the previewer test packs it. -->
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>

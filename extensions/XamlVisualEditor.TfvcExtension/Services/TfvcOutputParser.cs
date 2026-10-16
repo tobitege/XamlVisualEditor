@@ -95,12 +95,23 @@ public static partial class TfvcOutputParser
     }
 
     /// <summary>Extracts the changeset number from <c>tf checkin</c> output.</summary>
+    /// <remarks>
+    /// tf.exe lists every folder and file before the summary line, and their paths may contain the word "changeset"
+    /// followed by digits. Only a line that starts with the changeset message counts, and the last one wins.
+    /// </remarks>
     public static int? TryParseChangesetId(string output)
     {
-        Match match = ChangesetRegex().Match(output ?? string.Empty);
-        return match.Success && int.TryParse(match.Groups["id"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id)
-            ? id
-            : null;
+        string[] lines = (output ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (int i = lines.Length - 1; i >= 0; i--)
+        {
+            Match match = ChangesetLineRegex().Match(lines[i]);
+            if (match.Success && int.TryParse(match.Groups["id"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
+            {
+                return id;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Extracts the first collection URL from <c>tf workfold</c> output.</summary>
@@ -147,9 +158,10 @@ public static partial class TfvcOutputParser
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    // English "Changeset #123", German "Changeset Nr. 123" or "Änderungssatz Nr. 123".
-    [GeneratedRegex(@"(?:changeset|nderungssatz)[^0-9\r\n]*(?<id>\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ChangesetRegex();
+    // English "Changeset #123 checked in.", German "Changeset Nr. 123 wurde eingecheckt." or "Änderungssatz Nr. 123 eingecheckt.",
+    // optionally after one leading word such as "Das". The "Ä" may arrive in another code page, so up to two characters stand for it.
+    [GeneratedRegex(@"^(?:\p{L}+\s+)?(?:changeset|\S{0,2}nderungssatz)\s*(?:#|nr\.?)?\s*(?<id>\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ChangesetLineRegex();
 
     [GeneratedRegex(@"https?://[^\s""<>]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex UrlRegex();

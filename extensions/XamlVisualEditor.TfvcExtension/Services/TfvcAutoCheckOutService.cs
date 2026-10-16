@@ -34,6 +34,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
     private readonly HashSet<string> _checkOutsInProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _failedCheckOuts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _declinedOfflineEdits = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IEditorDocument> _deferredChanges = new(StringComparer.OrdinalIgnoreCase);
     private readonly IDialogHost? _dialogHost;
     private bool _wasOffline;
     private readonly Dictionary<IEditorDocument, EventHandler<EditorDocumentChangedEventArgs>> _documentHandlers = new();
@@ -142,7 +143,25 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             }
         }
 
-        TfvcFileState state = await GetStateAsync(path, cancellationToken);
+        // While the state is unknown or cannot be determined, for example while the session connects, the change is
+        // handled again once the state of the document is known.
+        TfvcFileState state;
+        try
+        {
+            state = await GetStateAsync(path, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            DeferChange(path, document);
+            throw;
+        }
+
+        if (state.Kind == TfvcFileStateKind.Unknown)
+        {
+            DeferChange(path, document);
+            return;
+        }
+
         if (state.Kind != TfvcFileStateKind.CheckedIn || state.Workspace is null)
         {
             return;
@@ -478,17 +497,77 @@ public sealed class TfvcAutoCheckOutService : IDisposable
                 _states.Clear();
                 _failedCheckOuts.Clear();
                 _declinedOfflineEdits.Clear();
+                _deferredChanges.Clear();
             }
 
             _ = UpdateActiveDocumentStateAsync(ActiveDocumentPath);
             return;
         }
 
+        if (!_session.IsConnected)
+        {
+            return;
+        }
+
         // A new connection or workspace list invalidates mapping based states.
-        if (ActiveDocumentState.Kind == TfvcFileStateKind.Unknown && _session.IsConnected && ActiveDocumentPath is not null)
+        if (ActiveDocumentState.Kind == TfvcFileStateKind.Unknown && ActiveDocumentPath is not null)
         {
             Invalidate(ActiveDocumentPath);
             _ = UpdateActiveDocumentStateAsync(ActiveDocumentPath);
+        }
+
+        // The active document is handled when its state is published; the other documents are handled here.
+        List<IEditorDocument> deferred = new();
+        lock (_gate)
+        {
+            foreach (KeyValuePair<string, IEditorDocument> entry in new List<KeyValuePair<string, IEditorDocument>>(_deferredChanges))
+            {
+                if (!string.Equals(entry.Key, ActiveDocumentPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _deferredChanges.Remove(entry.Key);
+                    deferred.Add(entry.Value);
+                }
+            }
+        }
+
+        foreach (IEditorDocument document in deferred)
+        {
+            if (_documentHandlers.ContainsKey(document))
+            {
+                OnDocumentChanged(document);
+            }
+        }
+    }
+
+    private void DeferChange(string path, IEditorDocument document)
+    {
+        lock (_gate)
+        {
+            _deferredChanges[path] = document;
+        }
+    }
+
+    // A change made before the state of the active document was known checks the file out once the state is known
+    // to be checked in; any other known state discards the change.
+    private void HandleDeferredChange(string path, TfvcFileState state)
+    {
+        if (state.Kind == TfvcFileStateKind.Unknown)
+        {
+            return;
+        }
+
+        IEditorDocument? document;
+        lock (_gate)
+        {
+            if (!_deferredChanges.Remove(path, out document))
+            {
+                return;
+            }
+        }
+
+        if (state.Kind == TfvcFileStateKind.CheckedIn && _documentHandlers.ContainsKey(document))
+        {
+            OnDocumentChanged(document);
         }
     }
 
@@ -600,5 +679,9 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             _editor.SetWriteProtectionManaged(path, managed);
         }
         ActiveDocumentStateChanged?.Invoke(this, EventArgs.Empty);
+        if (!isChecking && ActiveDocumentPath is { } activePath)
+        {
+            HandleDeferredChange(activePath, state);
+        }
     }
 }

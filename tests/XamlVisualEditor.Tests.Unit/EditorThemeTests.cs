@@ -1,4 +1,3 @@
-using ReactiveUI.Primitives.Concurrency;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -14,14 +13,13 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Dock.Avalonia.Controls;
 using Dock.Avalonia.Themes.Fluent;
-using Flowery.Controls;
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
-using XamlVisualEditor.FloweryThemeExtension;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
 
@@ -34,21 +32,20 @@ public sealed class EditorThemeTests
     [InlineData("escape")]
     [InlineData("close")]
     [InlineData("save")]
-    public async Task OptionsPreviewFloweryImmediatelyAndOnlySaveKeepsChanges(string completion)
+    public async Task OptionsPreviewThemesImmediatelyAndOnlySaveKeepsChanges(string completion)
     {
         // Window commands need the UI scheduler; the other unit tests use inline scheduling.
-        ReactiveUI.Primitives.Concurrency.ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
+        ISequencer previousScheduler = ReactiveUI.RxSchedulers.MainThreadScheduler;
         using IDisposable scheduler = System.Reactive.Disposables.Disposable.Create(() => ReactiveUI.RxSchedulers.MainThreadScheduler = previousScheduler);
         ReactiveUI.RxSchedulers.MainThreadScheduler = AvaloniaScheduler.For(Avalonia.Threading.Dispatcher.UIThread);
         using ThemeHost host = new();
-        string providerPath = CopyProvider(typeof(FloweryEditorThemeProvider).Assembly.Location);
-        File.Copy(typeof(DaisyThemeManager).Assembly.Location, Path.Combine(Path.GetDirectoryName(providerPath)!, "Flowery.NET.dll"));
-        const string providerId = "example.flowery/palette";
-        using IDisposable registration = host.Registry.RegisterEditorThemeProviders("example.flowery", new[]
+        string providerPath = CopyProvider(typeof(SwatchEditorThemeProvider).Assembly.Location);
+        const string providerId = "example.swatches/palette";
+        using IDisposable registration = host.Registry.RegisterEditorThemeProviders("example.swatches", new[]
         {
-            new EditorThemeProviderRegistration(providerId, "Flowery.NET", providerPath, typeof(FloweryEditorThemeProvider).FullName!)
+            new EditorThemeProviderRegistration(providerId, "Swatches", providerPath, typeof(SwatchEditorThemeProvider).FullName!)
         });
-        EditorThemeSelection original = new(providerId, "forest");
+        EditorThemeSelection original = new(providerId, "harbor");
         host.Options.Save(host.Options.Current with { EditorTheme = original });
         string savedBefore = File.ReadAllText(host.OptionsPath);
         using EditorThemeService themes = new(host.Registry, host.Manager, host.Options);
@@ -62,13 +59,13 @@ public sealed class EditorThemeTests
             OptionsDialog dialog = Assert.Single(window.OwnedWindows.OfType<OptionsDialog>());
             OptionsDialogViewModel options = Assert.IsType<OptionsDialogViewModel>(dialog.DataContext);
             Assert.Equal(original, themes.Selection);
-            Assert.Equal("forest", options.SelectedEditorTheme!.Id);
-            foreach (string themeId in new[] { "business", "cupcake" })
+            Assert.Equal("harbor", options.SelectedEditorTheme!.Id);
+            foreach (string themeId in new[] { "meadow", "dune" })
             {
                 options.SelectedEditorTheme = options.EditorThemes.Single(item => item.Id == themeId);
                 Assert.Equal(new(providerId, themeId), themes.Selection);
                 await Dispatcher.UIThread.InvokeAsync(dialog.UpdateLayout, DispatcherPriority.Background);
-                Color expected = Color.Parse(new FloweryEditorThemeProvider().GetPalette(themeId).Colors[EditorThemeColor.Background]);
+                Color expected = Color.Parse(new SwatchEditorThemeProvider().GetPalette(themeId).Colors[EditorThemeColor.Background]);
                 Assert.Equal(expected, Assert.IsAssignableFrom<ISolidColorBrush>(dialog.Background).Color);
                 Assert.Equal(savedBefore, File.ReadAllText(host.OptionsPath));
             }
@@ -84,7 +81,7 @@ public sealed class EditorThemeTests
             }
             Assert.Null(options.Error);
             await opened.WaitAsync(TimeSpan.FromSeconds(10));
-            EditorThemeSelection expectedSelection = completion == "save" ? new(providerId, "cupcake") : original;
+            EditorThemeSelection expectedSelection = completion == "save" ? new(providerId, "dune") : original;
             Assert.Equal(expectedSelection, themes.Selection);
             Assert.Equal(expectedSelection, new EditorOptionsStore(host.OptionsPath).Current.EditorTheme);
             if (completion != "save") Assert.Equal(savedBefore, File.ReadAllText(host.OptionsPath));
@@ -144,14 +141,14 @@ public sealed class EditorThemeTests
     [AvaloniaTheory]
     [InlineData("dark", "#333333", "#007ACC")]
     [InlineData("light", "#F4F4F4", "#006DB5")]
-    [InlineData("cupcake", null, null)]
+    [InlineData("meadow", null, null)]
     public void DialogButtonsDistinguishPrimaryHoverPressedAndDisabledStates(string theme, string? neutral, string? primary)
     {
         using ThemeHost host = new();
         using EditorThemeService themes = new(host.Registry, host.Manager, host.Options);
-        if (theme == "cupcake")
+        if (theme == "meadow")
         {
-            EditorThemePalette palette = new FloweryEditorThemeProvider().GetPalette(theme);
+            EditorThemePalette palette = new SwatchEditorThemeProvider().GetPalette(theme);
             host.Application.RequestedThemeVariant = ThemeVariant.Light;
             host.Application.Resources = EditorThemeResources.Create(palette);
             neutral = palette.Colors[EditorThemeColor.SurfaceAlt];
@@ -232,41 +229,13 @@ public sealed class EditorThemeTests
         Assert.Equal(Color.FromArgb(208, background.R, background.G, background.B), Assert.IsAssignableFrom<ISolidColorBrush>(busy).Color);
     }
 
-    [AvaloniaFact]
-    public void FloweryEditorPalettesDoNotChangeApplicationOrPreviewThemeState()
-    {
-        Application application = Application.Current!;
-        IResourceDictionary resources = application.Resources;
-        ThemeVariant? variant = application.RequestedThemeVariant;
-        string? selectedTheme = DaisyThemeManager.CurrentThemeName;
-        FloweryEditorThemeProvider provider = new();
-        Assert.Contains(provider.GetThemes(), theme => theme.Id == "light");
-        Assert.Contains(provider.GetThemes(), theme => theme.Id == "dark");
-        EditorThemePalette dark = provider.GetPalette("dark");
-        EditorThemePalette light = provider.GetPalette("light");
-        EditorThemePalette forest = provider.GetPalette("forest");
-        ResourceDictionary originalForest = DaisyThemeManager.GetPaletteFactory("Forest")!.Invoke();
-        Assert.Equal(originalForest["DaisyPrimaryContentColor"], Color.Parse(forest.Colors[EditorThemeColor.AccentForeground]));
-        Assert.Equal(originalForest["DaisyPrimaryContentColor"], Color.Parse(forest.Colors[EditorThemeColor.SelectionForeground]));
-        Assert.Equal(originalForest["DaisyPrimaryColor"], Color.Parse(forest.Colors[EditorThemeColor.Accent]));
-        Assert.True(dark.IsDark);
-        Assert.False(light.IsDark);
-        Assert.Equal(Enum.GetValues<EditorThemeColor>().Length, dark.Colors.Count);
-        Assert.NotEqual(dark.Colors[EditorThemeColor.Background], light.Colors[EditorThemeColor.Background]);
-        Assert.Same(resources, application.Resources);
-        Assert.Equal(variant, application.RequestedThemeVariant);
-        Assert.Equal(selectedTheme, DaisyThemeManager.CurrentThemeName);
-        Assert.Throws<ArgumentException>(() => provider.GetPalette("not-a-theme"));
-        Assert.Same(resources, application.Resources);
-    }
-
     [AvaloniaTheory]
-    [InlineData("forest")]
-    [InlineData("cupcake")]
+    [InlineData("harbor")]
+    [InlineData("meadow")]
     public void SelectedDockTabsUseForegroundForTheirPanelSurface(string themeId)
     {
         using ThemeHost host = new();
-        EditorThemePalette palette = new FloweryEditorThemeProvider().GetPalette(themeId);
+        EditorThemePalette palette = new SwatchEditorThemeProvider().GetPalette(themeId);
         host.Application.RequestedThemeVariant = palette.IsDark ? ThemeVariant.Dark : ThemeVariant.Light;
         host.Application.Resources = EditorThemeResources.Create(palette);
         ToolTabStripItem toolTab = new() { IsSelected = true };
@@ -375,47 +344,6 @@ public sealed class EditorThemeTests
     }
 
     [AvaloniaFact]
-    public void InstalledFloweryProviderLoadsItsPrivatePaletteResourcesWithoutChangingGlobalDaisyState()
-    {
-        using ThemeHost host = new();
-        string directory = Path.Combine(Path.GetTempPath(), "xve-flowery-editor-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        string providerPath = Path.Combine(directory, Path.GetFileName(typeof(FloweryEditorThemeProvider).Assembly.Location));
-        File.Copy(typeof(FloweryEditorThemeProvider).Assembly.Location, providerPath);
-        File.Copy(typeof(DaisyThemeManager).Assembly.Location, Path.Combine(directory, "Flowery.NET.dll"));
-        using IDisposable registration = host.Registry.RegisterEditorThemeProviders("example.flowery", new[]
-        {
-            new EditorThemeProviderRegistration("example.flowery/palette", "Flowery.NET", providerPath, typeof(FloweryEditorThemeProvider).FullName!)
-        });
-        string? previewTheme = DaisyThemeManager.CurrentThemeName;
-        using EditorThemeService themes = new(host.Registry, host.Manager, host.Options);
-        EditorThemeProviderCatalog catalog = Assert.Single(themes.Catalogs, item => item.Id == "example.flowery/palette");
-        Assert.Null(catalog.Error);
-        Assert.Contains(catalog.Themes, theme => theme.Id == "dark");
-        themes.Apply(new(catalog.Id, "dark"));
-        Color dark = BrushColor(host.Application, "DockSurfaceWorkbenchBrush");
-        themes.Apply(new(catalog.Id, "light"));
-        Color light = BrushColor(host.Application, "DockSurfaceWorkbenchBrush");
-        Assert.NotEqual(dark, light);
-        Assert.Equal(previewTheme, DaisyThemeManager.CurrentThemeName);
-        Assert.Equal(ThemeVariant.Light, host.Application.ActualThemeVariant);
-
-        ToggleButton button = new() { Content = "Selected", IsChecked = true };
-        Window window = new() { Content = button, Width = 300, Height = 150 };
-        window.Show();
-        try
-        {
-            themes.Apply(new(catalog.Id, "cupcake"));
-            Flush(window);
-            EditorThemePalette palette = new FloweryEditorThemeProvider().GetPalette("cupcake");
-            Assert.Equal(Color.Parse(palette.Colors[EditorThemeColor.Background]), Assert.IsAssignableFrom<ISolidColorBrush>(window.Background).Color);
-            TextBlock caption = Assert.Single(button.GetVisualDescendants().OfType<TextBlock>(), item => item.Text == "Selected");
-            Assert.Equal(Color.Parse(palette.Colors[EditorThemeColor.AccentForeground]), Assert.IsAssignableFrom<ISolidColorBrush>(caption.Foreground).Color);
-        }
-        finally { window.Close(); }
-    }
-
-    [AvaloniaFact]
     public async Task InvalidatedActiveCatalogFallsBackWithoutLosingTheSavedTheme()
     {
         using ThemeHost host = new();
@@ -443,21 +371,21 @@ public sealed class EditorThemeTests
         return target;
     }
 
-    private static Color BrushColor(IResourceHost host, string key)
+    internal static Color BrushColor(IResourceHost host, string key)
     {
         ThemeVariant? variant = (host as IThemeVariantHost)?.ActualThemeVariant;
         Assert.True(host.TryFindResource(key, variant, out object? value), key);
         return Assert.IsAssignableFrom<ISolidColorBrush>(value).Color;
     }
 
-    private static void Flush(Window window)
+    internal static void Flush(Window window)
     {
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
     }
 
-    private sealed class ThemeHost : IDisposable
+    internal sealed class ThemeHost : IDisposable
     {
         private readonly IResourceDictionary _resources;
         private readonly ThemeVariant? _variant;
@@ -495,7 +423,7 @@ public sealed class EditorThemeTests
         }
     }
 
-    private sealed class LifecycleManager : IExtensionManager, IExtensionThemeProviderLifecycle
+    internal sealed class LifecycleManager : IExtensionManager, IExtensionThemeProviderLifecycle
     {
         public event Func<string, CancellationToken, Task>? ThemeProvidersChanging;
         public event Func<string, CancellationToken, Task>? ThemeProvidersChanged;
@@ -530,6 +458,42 @@ public class SampleEditorThemeProvider : IEditorThemeProvider
         colors[EditorThemeColor.SelectionForeground] = "#FFFFFF";
         if (themeId == "broken") colors[EditorThemeColor.Background] = "invalid-color";
         return new EditorThemePalette(false, colors);
+    }
+}
+
+/// <summary>Synthetic palettes with a distinct color for every role, one dark and two light themes.</summary>
+public sealed class SwatchEditorThemeProvider : IEditorThemeProvider
+{
+    private static readonly IReadOnlyDictionary<string, (bool IsDark, string[] Colors)> Palettes =
+        new Dictionary<string, (bool IsDark, string[] Colors)>
+        {
+            // Colors in the order of EditorThemeColor.
+            ["harbor"] = (true, new[]
+            {
+                "#1B1F24", "#23282E", "#2C3239", "#E6EDF3", "#A0E6EDF3", "#4A5563", "#3FB27F", "#0B1F15",
+                "#2F8F66", "#F2FFF8", "#E5534B", "#1A0606", "#D9A23B", "#1F1504", "#46B964", "#05170A"
+            }),
+            ["meadow"] = (false, new[]
+            {
+                "#FAF7F5", "#EFEAE6", "#E2DCD7", "#291334", "#A0291334", "#B9AEA6", "#2E6F9E", "#FFFFFF",
+                "#3B82B8", "#F7FBFF", "#C03030", "#FFFFFF", "#E0A020", "#202020", "#2E8B57", "#FFFFFF"
+            }),
+            ["dune"] = (false, new[]
+            {
+                "#F5ECD9", "#EADFC6", "#DDCFB2", "#3A2C17", "#A03A2C17", "#B8A47E", "#A0522D", "#FFF8F0",
+                "#B5653B", "#FFFAF5", "#B3261E", "#FFFFFF", "#C98B11", "#1E1400", "#3D7A3A", "#FFFFFF"
+            })
+        };
+
+    public IReadOnlyList<EditorTheme> GetThemes() => Palettes
+        .Select(item => new EditorTheme(item.Key, char.ToUpperInvariant(item.Key[0]) + item.Key[1..], item.Value.IsDark)).ToArray();
+
+    public EditorThemePalette GetPalette(string themeId)
+    {
+        if (!Palettes.TryGetValue(themeId, out var palette))
+            throw new ArgumentException("Unknown swatch theme.", nameof(themeId));
+        EditorThemeColor[] roles = Enum.GetValues<EditorThemeColor>();
+        return new EditorThemePalette(palette.IsDark, roles.Zip(palette.Colors).ToDictionary(item => item.First, item => item.Second));
     }
 }
 

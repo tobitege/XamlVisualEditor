@@ -12,10 +12,20 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="xve.extension.json" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
   </ItemGroup>
+  <!-- The package carries every managed runtime dependency except Avalonia and the packages Avalonia itself depends on.
+       The editor shares Avalonia with the provider's assembly context and supplies the rest of that stack, as the
+       preview host does; a dependency that is missing from the package would fail to load in the editor. -->
+  <PropertyGroup>
+    <AvaloniaStackPackages>HarfBuzzSharp;MicroCom.Runtime;SkiaSharp</AvaloniaStackPackages>
+  </PropertyGroup>
   <Target Name="IncludeFloweryThemeRuntime" DependsOnTargets="ResolvePackageAssets">
     <ItemGroup>
-      <BuildOutputInPackage Include="@(RuntimeCopyLocalItems)" Condition="'%(RuntimeCopyLocalItems.Filename)' == 'Flowery.NET'" />
+      <BuildOutputInPackage Include="@(RuntimeCopyLocalItems)"
+                            Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' != 'Avalonia'
+                                       and !$([System.String]::Copy('%(RuntimeCopyLocalItems.NuGetPackageId)').StartsWith('Avalonia.'))
+                                       and !$([System.String]::Copy(';$(AvaloniaStackPackages);').Contains(';%(RuntimeCopyLocalItems.NuGetPackageId);'))" />
     </ItemGroup>
   </Target>
 </Project>

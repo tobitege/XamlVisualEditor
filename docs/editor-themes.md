@@ -54,7 +54,9 @@ extension, XVE resets the interface and releases the provider instances.
 `XamlVisualEditor.FloweryThemeExtension` contains both `editorThemes` and
 `designerThemes`. The editor provider reads the registered Flowery palettes through
 `DaisyThemeManager.GetPaletteFactory` without applying a global theme and takes every
-color, including the text on accent surfaces, from the palette. The package also
+color, including the text on accent surfaces, from the palette. Secondary text uses the
+base content color with reduced opacity; borders mix a quarter of the base content color
+into the base-300 color, so they remain visible on the base-300 surfaces. The package also
 contains the required `Flowery.NET.dll`.
 
 The pack command is described in

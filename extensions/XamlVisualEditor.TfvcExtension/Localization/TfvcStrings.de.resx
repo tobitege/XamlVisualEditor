@@ -134,6 +134,12 @@ Offline arbeiten? Versionierte Dateien bleiben schreibgeschützt; beim Bearbeite
   <data name="GoOfflineConfirm" xml:space="preserve"><value>Offline arbeiten</value></data>
   <data name="MenuWorkOffline" xml:space="preserve"><value>Offline arbeiten</value></data>
   <data name="MenuGoOnline" xml:space="preserve"><value>Online gehen</value></data>
+  <data name="TogglePendingChangesCommand" xml:space="preserve"><value>Ansicht: TFVC Änderungen ein-/ausblenden</value></data>
+  <data name="TogglePendingChanges" xml:space="preserve"><value>TFVC Änderungen ein-/ausblenden</value></data>
+  <data name="ToggleSourceControlExplorerCommand" xml:space="preserve"><value>Ansicht: TFVC-Explorer ein-/ausblenden</value></data>
+  <data name="ToggleSourceControlExplorer" xml:space="preserve"><value>TFVC-Explorer ein-/ausblenden</value></data>
+  <data name="ToggleHistoryCommand" xml:space="preserve"><value>Ansicht: TFVC-Verlauf ein-/ausblenden</value></data>
+  <data name="ToggleHistory" xml:space="preserve"><value>TFVC-Verlauf ein-/ausblenden</value></data>
   <data name="GoOnlineFailedFormat" xml:space="preserve"><value>Online gehen fehlgeschlagen: {0}</value></data>
   <data name="ReconcileTitle" xml:space="preserve"><value>Lokale Änderungen</value></data>
   <data name="ReconcileMessage" xml:space="preserve"><value>Diese Dateien wurden außerhalb der Versionskontrolle geändert, zum Beispiel beim Offline-Arbeiten. Die ausgewählten Änderungen werden als ausstehende Änderungen vorgemerkt.</value></data>

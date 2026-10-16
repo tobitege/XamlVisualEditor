@@ -134,6 +134,12 @@ Work offline? Versioned files stay read-only; when you edit one, XVE asks whethe
   <data name="GoOfflineConfirm" xml:space="preserve"><value>Work offline</value></data>
   <data name="MenuWorkOffline" xml:space="preserve"><value>Work Offline</value></data>
   <data name="MenuGoOnline" xml:space="preserve"><value>Go Online</value></data>
+  <data name="TogglePendingChangesCommand" xml:space="preserve"><value>View: Toggle TFVC Changes</value></data>
+  <data name="TogglePendingChanges" xml:space="preserve"><value>Toggle TFVC Changes</value></data>
+  <data name="ToggleSourceControlExplorerCommand" xml:space="preserve"><value>View: Toggle TFVC Explorer</value></data>
+  <data name="ToggleSourceControlExplorer" xml:space="preserve"><value>Toggle TFVC Explorer</value></data>
+  <data name="ToggleHistoryCommand" xml:space="preserve"><value>View: Toggle TFVC History</value></data>
+  <data name="ToggleHistory" xml:space="preserve"><value>Toggle TFVC History</value></data>
   <data name="GoOnlineFailedFormat" xml:space="preserve"><value>Going online failed: {0}</value></data>
   <data name="ReconcileTitle" xml:space="preserve"><value>Local changes</value></data>
   <data name="ReconcileMessage" xml:space="preserve"><value>These files were changed outside version control, for example while working offline. The selected changes are pended.</value></data>

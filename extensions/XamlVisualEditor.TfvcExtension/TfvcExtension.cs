@@ -35,6 +35,15 @@ public sealed class TfvcExtension : IXveExtension
     /// <summary>Command that connects again after offline work.</summary>
     public const string GO_ONLINE_COMMAND_ID = "tfvc.goOnline";
 
+    /// <summary>Command that shows or hides the pending changes panel.</summary>
+    public const string TOGGLE_PENDING_CHANGES_COMMAND_ID = "tfvc.pendingChanges.toggleView";
+
+    /// <summary>Command that shows or hides the source control explorer panel.</summary>
+    public const string TOGGLE_SOURCE_CONTROL_EXPLORER_COMMAND_ID = "tfvc.sourceControlExplorer.toggleView";
+
+    /// <summary>Command that shows or hides the history panel.</summary>
+    public const string TOGGLE_HISTORY_COMMAND_ID = "tfvc.history.toggleView";
+
     /// <summary>Context key that is true while TFVC works offline.</summary>
     public const string OFFLINE_CONTEXT_KEY = "tfvc.offline";
 
@@ -123,6 +132,8 @@ public sealed class TfvcExtension : IXveExtension
             showHistory));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(context.ExtensionId, views));
+        RegisterViewCommands(context.Commands, context.CommandMetadata, context.ViewHost, context.Subscriptions);
+        RegisterMenuAndPaletteItems(context.ExtensionId, context.Contributions, context.Subscriptions);
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             PENDING_CHANGES_VIEW_ID,
             new DelegateViewProvider(() => pendingChanges.Value)));
@@ -183,6 +194,77 @@ public sealed class TfvcExtension : IXveExtension
         }
     }
 
+    /// <summary>
+    /// Registers the commands that show or hide the three TFVC panels. The connection settings, including the
+    /// collection URL, are part of the pending changes and source control explorer panels.
+    /// </summary>
+    internal static void RegisterViewCommands(
+        ICommands commands,
+        ICommandMetadataRegistry commandMetadata,
+        IExtensionViewHost viewHost,
+        IList<IDisposable> subscriptions)
+    {
+        subscriptions.Add(commands.Register(
+            TOGGLE_PENDING_CHANGES_COMMAND_ID,
+            _ => viewHost.ToggleAsync(PENDING_CHANGES_VIEW_ID, CancellationToken.None)));
+        subscriptions.Add(commands.Register(
+            TOGGLE_SOURCE_CONTROL_EXPLORER_COMMAND_ID,
+            _ => viewHost.ToggleAsync(SOURCE_CONTROL_EXPLORER_VIEW_ID, CancellationToken.None)));
+        subscriptions.Add(commands.Register(
+            TOGGLE_HISTORY_COMMAND_ID,
+            _ => viewHost.ToggleAsync(HISTORY_VIEW_ID, CancellationToken.None)));
+
+        subscriptions.Add(commandMetadata.Register(
+            TOGGLE_PENDING_CHANGES_COMMAND_ID,
+            new CommandMetadata(TfvcStrings.TogglePendingChangesCommand, "TFVC", Priority: 30)));
+        subscriptions.Add(commandMetadata.Register(
+            TOGGLE_SOURCE_CONTROL_EXPLORER_COMMAND_ID,
+            new CommandMetadata(TfvcStrings.ToggleSourceControlExplorerCommand, "TFVC", Priority: 40)));
+        subscriptions.Add(commandMetadata.Register(
+            TOGGLE_HISTORY_COMMAND_ID,
+            new CommandMetadata(TfvcStrings.ToggleHistoryCommand, "TFVC", Priority: 50)));
+    }
+
+    /// <summary>
+    /// Registers all menu and Command Palette entries of the extension: the panels under View › Panels and the
+    /// offline commands in the Extensions › TFVC submenu.
+    /// </summary>
+    /// <remarks>
+    /// The contribution registry keeps one menu list and one palette list per extension, so each list is
+    /// registered in a single call.
+    /// </remarks>
+    internal static void RegisterMenuAndPaletteItems(
+        string extensionId,
+        IExtensionContributionRegistry contributions,
+        IList<IDisposable> subscriptions)
+    {
+        subscriptions.Add(contributions.RegisterMenuItems(
+            extensionId,
+            [
+                new ExtensionMenuContribution(TOGGLE_PENDING_CHANGES_COMMAND_ID, TfvcStrings.PendingChangesTitle, ExtensionMenuLocations.View, "views.right", 30),
+                new ExtensionMenuContribution(TOGGLE_SOURCE_CONTROL_EXPLORER_COMMAND_ID, TfvcStrings.SourceControlExplorerTitle, ExtensionMenuLocations.View, "views.left", 30),
+                new ExtensionMenuContribution(TOGGLE_HISTORY_COMMAND_ID, TfvcStrings.HistoryTitle, ExtensionMenuLocations.View, "views.bottom", 70),
+                new ExtensionMenuContribution(WORK_OFFLINE_COMMAND_ID, TfvcStrings.MenuWorkOffline, ExtensionMenuLocations.Extensions, "tfvc", 10)
+                {
+                    Submenu = "TFVC",
+                    CheckedWhen = OFFLINE_CONTEXT_KEY
+                },
+                new ExtensionMenuContribution(GO_ONLINE_COMMAND_ID, TfvcStrings.MenuGoOnline, ExtensionMenuLocations.Extensions, "tfvc", 20)
+                {
+                    Submenu = "TFVC"
+                }
+            ]));
+        subscriptions.Add(contributions.RegisterCommandPaletteItems(
+            extensionId,
+            [
+                new ExtensionCommandPaletteContribution(TOGGLE_PENDING_CHANGES_COMMAND_ID, TfvcStrings.TogglePendingChanges, "TFVC"),
+                new ExtensionCommandPaletteContribution(TOGGLE_SOURCE_CONTROL_EXPLORER_COMMAND_ID, TfvcStrings.ToggleSourceControlExplorer, "TFVC"),
+                new ExtensionCommandPaletteContribution(TOGGLE_HISTORY_COMMAND_ID, TfvcStrings.ToggleHistory, "TFVC"),
+                new ExtensionCommandPaletteContribution(WORK_OFFLINE_COMMAND_ID, TfvcStrings.MenuWorkOffline, "TFVC"),
+                new ExtensionCommandPaletteContribution(GO_ONLINE_COMMAND_ID, TfvcStrings.MenuGoOnline, "TFVC")
+            ]));
+    }
+
     private static void RegisterOfflineCommands(ExtensionContext context, TfvcOfflineCoordinator offline)
     {
         context.Subscriptions.Add(context.Commands.Register(WORK_OFFLINE_COMMAND_ID, _ => offline.GoOfflineAsync(CancellationToken.None)));
@@ -194,26 +276,6 @@ public sealed class TfvcExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             GO_ONLINE_COMMAND_ID,
             new CommandMetadata(TfvcStrings.MenuGoOnline, "TFVC", When: OFFLINE_CONTEXT_KEY, Priority: 20)));
-
-        context.Subscriptions.Add(context.Contributions.RegisterMenuItems(
-            context.ExtensionId,
-            [
-                new ExtensionMenuContribution(WORK_OFFLINE_COMMAND_ID, TfvcStrings.MenuWorkOffline, ExtensionMenuLocations.Extensions, "tfvc", 10)
-                {
-                    Submenu = "TFVC",
-                    CheckedWhen = OFFLINE_CONTEXT_KEY
-                },
-                new ExtensionMenuContribution(GO_ONLINE_COMMAND_ID, TfvcStrings.MenuGoOnline, ExtensionMenuLocations.Extensions, "tfvc", 20)
-                {
-                    Submenu = "TFVC"
-                }
-            ]));
-        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
-            context.ExtensionId,
-            [
-                new ExtensionCommandPaletteContribution(WORK_OFFLINE_COMMAND_ID, TfvcStrings.MenuWorkOffline, "TFVC"),
-                new ExtensionCommandPaletteContribution(GO_ONLINE_COMMAND_ID, TfvcStrings.MenuGoOnline, "TFVC")
-            ]));
     }
 
     private static void UpdateContextKeys(IContextKeys? contextKeys, TfvcSession session)

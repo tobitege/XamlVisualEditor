@@ -193,6 +193,12 @@ public sealed class TfvcExtension : IXveExtension
                     Submenu = "TFVC"
                 }
             ]));
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            [
+                new ExtensionCommandPaletteContribution(WORK_OFFLINE_COMMAND_ID, TfvcStrings.MenuWorkOffline, "TFVC"),
+                new ExtensionCommandPaletteContribution(GO_ONLINE_COMMAND_ID, TfvcStrings.MenuGoOnline, "TFVC")
+            ]));
     }
 
     private static void UpdateContextKeys(IContextKeys? contextKeys, TfvcSession session)

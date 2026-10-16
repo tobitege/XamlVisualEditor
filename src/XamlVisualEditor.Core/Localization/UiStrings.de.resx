@@ -1299,4 +1299,33 @@
   <data name="FlagsDefault" xml:space="preserve"><value>Standard</value></data>
   <data name="GridLengthUnitNeedsValidSize" xml:space="preserve"><value>Geben Sie eine gültige Größe ein, bevor Sie die Einheit ändern.</value></data>
   <data name="ValueSourceMixed" xml:space="preserve"><value>Gemischt: Die ausgewählten Controls haben unterschiedliche lokale Werte. Zurücksetzen entfernt sie bei allen ausgewählten Controls.</value></data>
+  <data name="MixedValuesPlaceholder" xml:space="preserve"><value>Unterschiedliche Werte</value></data>
+  <data name="ToggleAcpCommand" xml:space="preserve"><value>Ansicht: ACP ein-/ausblenden</value></data>
+  <data name="ToggleAcp" xml:space="preserve"><value>ACP ein-/ausblenden</value></data>
+  <data name="ToggleMcpCommand" xml:space="preserve"><value>Ansicht: MCP ein-/ausblenden</value></data>
+  <data name="ToggleMcp" xml:space="preserve"><value>MCP ein-/ausblenden</value></data>
+  <data name="ToggleSolutionExplorerCommand" xml:space="preserve"><value>Ansicht: Solution-Explorer ein-/ausblenden</value></data>
+  <data name="ToggleSolutionExplorer" xml:space="preserve"><value>Solution-Explorer ein-/ausblenden</value></data>
+  <data name="ToggleFileExplorerCommand" xml:space="preserve"><value>Ansicht: Datei-Explorer ein-/ausblenden</value></data>
+  <data name="ToggleFileExplorer" xml:space="preserve"><value>Datei-Explorer ein-/ausblenden</value></data>
+  <data name="ToggleOutputCommand" xml:space="preserve"><value>Ansicht: Ausgabe ein-/ausblenden</value></data>
+  <data name="ToggleOutput" xml:space="preserve"><value>Ausgabe ein-/ausblenden</value></data>
+  <data name="ToggleProblemsCommand" xml:space="preserve"><value>Ansicht: Probleme ein-/ausblenden</value></data>
+  <data name="ToggleProblems" xml:space="preserve"><value>Probleme ein-/ausblenden</value></data>
+  <data name="ToggleVisualTreeCommand" xml:space="preserve"><value>Ansicht: Visuellen Baum ein-/ausblenden</value></data>
+  <data name="ToggleVisualTree" xml:space="preserve"><value>Visuellen Baum ein-/ausblenden</value></data>
+  <data name="ToggleLogicalTreeCommand" xml:space="preserve"><value>Ansicht: Logischen Baum ein-/ausblenden</value></data>
+  <data name="ToggleLogicalTree" xml:space="preserve"><value>Logischen Baum ein-/ausblenden</value></data>
+  <data name="ToggleBreakpointsCommand" xml:space="preserve"><value>Ansicht: Haltepunkte ein-/ausblenden</value></data>
+  <data name="ToggleBreakpoints" xml:space="preserve"><value>Haltepunkte ein-/ausblenden</value></data>
+  <data name="ToggleCallStackCommand" xml:space="preserve"><value>Ansicht: Aufrufliste ein-/ausblenden</value></data>
+  <data name="ToggleCallStack" xml:space="preserve"><value>Aufrufliste ein-/ausblenden</value></data>
+  <data name="ToggleLocalsCommand" xml:space="preserve"><value>Ansicht: Lokale Variablen ein-/ausblenden</value></data>
+  <data name="ToggleLocals" xml:space="preserve"><value>Lokale Variablen ein-/ausblenden</value></data>
+  <data name="ToggleWatchesCommand" xml:space="preserve"><value>Ansicht: Überwachung ein-/ausblenden</value></data>
+  <data name="ToggleWatches" xml:space="preserve"><value>Überwachung ein-/ausblenden</value></data>
+  <data name="ToggleReferences" xml:space="preserve"><value>Verweise ein-/ausblenden</value></data>
+  <data name="ToggleCollaboration" xml:space="preserve"><value>Zusammenarbeit ein-/ausblenden</value></data>
+  <data name="WorkspaceHasNoProjects" xml:space="preserve"><value>Der Arbeitsbereich enthält keine Projekte.</value></data>
+  <data name="ToolboxSelectionRequired" xml:space="preserve"><value>Kein Toolbox-Eintrag ausgewählt. Wähle zunächst ein Control in der Toolbox aus.</value></data>
 </root>

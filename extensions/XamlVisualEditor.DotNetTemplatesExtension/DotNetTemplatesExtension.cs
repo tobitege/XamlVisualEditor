@@ -76,6 +76,13 @@ public sealed class DotNetTemplatesExtension : IXveExtension
         };
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(context.ExtensionId, paletteItems));
 
+        context.Subscriptions.Add(context.CommandMetadata.Register(NewProjectCommandId,
+            new CommandMetadata(Title: UiStrings.NewProjectDialog, Category: UiStrings.File, Priority: 10)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(NewSolutionCommandId,
+            new CommandMetadata(Title: UiStrings.NewSolutionDialog, Category: UiStrings.File, Priority: 20)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(NewFileCommandId,
+            new CommandMetadata(Title: UiStrings.NewFileTemplateDialog, Category: UiStrings.File, Priority: 30)));
+
         return Task.CompletedTask;
     }
 

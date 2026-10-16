@@ -174,7 +174,8 @@ public sealed class NavigationExtension : IXveExtension
                 new ExtensionCommandPaletteContribution(FindInFilesCommandId, UiStrings.FindInFiles, UiStrings.Navigation),
                 new ExtensionCommandPaletteContribution(GoToLineCommandId, UiStrings.GoToLine, UiStrings.Navigation),
                 new ExtensionCommandPaletteContribution(GoToDefinitionCommandId, UiStrings.GoToDefinition, UiStrings.Navigation),
-                new ExtensionCommandPaletteContribution(FindReferencesCommandId, UiStrings.FindReferences, UiStrings.Navigation)
+                new ExtensionCommandPaletteContribution(FindReferencesCommandId, UiStrings.FindReferences, UiStrings.Navigation),
+                new ExtensionCommandPaletteContribution(ToggleReferencesCommandId, UiStrings.ToggleReferences, UiStrings.View)
             }));
 
         context.Subscriptions.Add(context.Contributions.RegisterMenuItems(

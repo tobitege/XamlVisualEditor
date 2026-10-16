@@ -416,6 +416,40 @@ public sealed class PropertyEditingWorkflowTests
     }
 
     [AvaloniaFact(Timeout = 30000)]
+    public async Task Inspector_shows_the_mixed_values_placeholder_until_an_edit_makes_the_values_equal()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        const string xaml = """
+            <StackPanel xmlns="https://github.com/avaloniaui">
+              <Button Width="96" Content="Cancel" />
+              <Button Width="120" Content="Save" />
+            </StackPanel>
+            """;
+        using InspectorSession session = await InspectorSession.CreateAsync(xaml, false, cancellationToken,
+            selectedChildren: [0, 1]);
+        PropertyEntryViewModel width = session.Entry("Width");
+        PropertyEntryViewModel content = session.Entry("Content");
+        Assert.True(width.IsMixed);
+        Assert.Null(width.Value);
+        Assert.Equal(UiStrings.MixedValuesPlaceholder, width.ValuePlaceholder);
+        Assert.True(content.IsMixed);
+        Assert.Equal(UiStrings.MixedValuesPlaceholder, content.ValuePlaceholder);
+        List<string?> changed = [];
+        width.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        width.Value = "100";
+        await width.CommitCommand.Execute().ToTask(cancellationToken);
+        Assert.Null(session.Inspector.StatusText);
+        Assert.All(session.ChildNodes, node => Assert.Equal("100", node.GetPropertyValue("Width")));
+        PropertyEntryViewModel committed = session.Entry("Width");
+        Assert.False(committed.IsMixed);
+        Assert.Equal("100", committed.Value);
+        Assert.Equal(committed.DefaultValue, committed.ValuePlaceholder);
+        Assert.NotEqual(UiStrings.MixedValuesPlaceholder, committed.ValuePlaceholder);
+        Assert.Contains(nameof(PropertyEntryViewModel.ValuePlaceholder), changed);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
     public async Task Inspector_rolls_back_every_node_when_the_edit_fails_on_a_later_node()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;

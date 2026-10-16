@@ -1319,7 +1319,10 @@ public enum PreviewerState
     Exited,
 
     /// <summary>The previewer could not be started.</summary>
-    Failed
+    Failed,
+
+    /// <summary>The start was canceled before a previewer ran; no previewer runs until a start is requested again.</summary>
+    Canceled
 }
 
 /// <summary>
@@ -8965,7 +8968,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (!await EnsurePreviewerTrustAsync(document.FilePath))
         {
             if (ReferenceEquals(ActiveDesignerDocument, document)) StatusText = UiStrings.PreviewerStartCanceled;
-            MarkPreviewerStopped(document);
+            document.PreviewerState = PreviewerState.Canceled;
             return;
         }
 

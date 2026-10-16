@@ -171,7 +171,9 @@ public sealed partial class PreviewerSurfaceControl : Control
 
     private void UpdateStatusText() => StatusText = !HasFrame
         ? _document?.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Code == "XVE_PREVIEW_START")?.Message
-            ?? (_hasError ? UiStrings.PreviewStatusUnavailable : UiStrings.PreviewStatusWaiting)
+            ?? (_hasError ? UiStrings.PreviewStatusUnavailable
+                : _document?.PreviewerState == PreviewerState.Canceled ? UiStrings.PreviewerStartCanceled
+                : UiStrings.PreviewStatusWaiting)
         : _hasError ? UiStrings.PreviewStatusOutOfDate
         : !_isConnected ? UiStrings.PreviewStatusDisconnected
         : null;
@@ -285,7 +287,8 @@ public sealed partial class PreviewerSurfaceControl : Control
             _document?.DesignSurface.RequestRebuild();
             ApplyDesignTree(_session?.LastDesignTree);
         }
-        if (args.PropertyName == nameof(DesignerDocumentViewModel.Diagnostics)) UpdateStatusText();
+        if (args.PropertyName is nameof(DesignerDocumentViewModel.Diagnostics) or nameof(DesignerDocumentViewModel.PreviewerState))
+            UpdateStatusText();
         if (!_updatingSelection) InvalidateVisual();
     }
 

@@ -174,6 +174,62 @@ public sealed class CloseConfirmationTests : IDisposable
     }
 
     [AvaloniaFact(Timeout = 30000)]
+    public async Task An_automatic_save_on_shutdown_saves_the_other_documents_when_one_cannot_be_saved()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string conflictedPath = CreateFile("Conflicted.cs");
+        string writablePath = CreateFile("Writable.cs");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        List<IReadOnlyList<string>> prompts = new();
+        using IDisposable saveHandler = main.SaveChangesInteraction.RegisterHandler(interaction =>
+        {
+            prompts.Add(interaction.Input);
+            interaction.SetOutput(SaveChangesChoice.Discard);
+        });
+        using IDisposable conflictHandler = main.SaveConflictInteraction.RegisterHandler(interaction =>
+            interaction.SetOutput(SaveConflictChoice.Cancel));
+
+        await main.OpenFileAsync(conflictedPath).WaitAsync(cancellationToken);
+        await main.OpenFileAsync(writablePath).WaitAsync(cancellationToken);
+        foreach (TextDocumentViewModel document in main.Documents.OfType<TextDocumentViewModel>())
+            document.Document.Text = ChangedText;
+        // The document that cannot be saved comes first, so the other one is only saved when every document is tried.
+        Assert.Equal(["Conflicted.cs", "Writable.cs"], main.Documents.Where(document => document.IsModified).Select(document => document.FileName));
+        await File.WriteAllTextAsync(conflictedPath, OutsideText, cancellationToken);
+        main.SetAutoSaveCommand.Execute().Subscribe();
+
+        Assert.True(await main.ConfirmShutdownAsync().WaitAsync(cancellationToken));
+        Assert.Equal(["Conflicted.cs"], Assert.Single(prompts));
+        Assert.Equal(ChangedText, await File.ReadAllTextAsync(writablePath, cancellationToken));
+        Assert.Equal(OutsideText, await File.ReadAllTextAsync(conflictedPath, cancellationToken));
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
+    public async Task Reloading_a_conflicted_document_on_shutdown_closes_without_asking()
+    {
+        System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string codePath = CreateFile("Code.cs");
+        using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
+        int prompts = 0;
+        using IDisposable saveHandler = main.SaveChangesInteraction.RegisterHandler(interaction =>
+        {
+            prompts++;
+            interaction.SetOutput(SaveChangesChoice.Cancel);
+        });
+        using IDisposable conflictHandler = main.SaveConflictInteraction.RegisterHandler(interaction =>
+            interaction.SetOutput(SaveConflictChoice.Reload));
+
+        TextDocumentViewModel document = await OpenAndChangeAsync(main, codePath).WaitAsync(cancellationToken);
+        await File.WriteAllTextAsync(codePath, OutsideText, cancellationToken);
+        main.SetAutoSaveCommand.Execute().Subscribe();
+
+        Assert.True(await main.ConfirmShutdownAsync().WaitAsync(cancellationToken));
+        Assert.Equal(0, prompts);
+        Assert.False(document.IsModified);
+        Assert.Equal(OutsideText, document.Document.Text);
+    }
+
+    [AvaloniaFact(Timeout = 30000)]
     public async Task Restoring_the_last_workspace_opens_the_most_recent_folder()
     {
         System.Threading.CancellationToken cancellationToken = TestContext.Current.CancellationToken;

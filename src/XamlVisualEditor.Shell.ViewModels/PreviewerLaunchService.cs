@@ -40,6 +40,8 @@ internal sealed class PreviewerLaunchService : IDisposable
         public TaskCompletionSource<bool>? PendingUpdate { get; set; }
         public Guid PendingThemeId { get; set; }
         public TaskCompletionSource<DesignerThemeResult>? PendingTheme { get; set; }
+        /// <summary>The host that took over after a theme change; set before <see cref="Started"/> completes.</summary>
+        public PreviewerInstance? ReplacedBy { get; set; }
     }
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
@@ -52,11 +54,12 @@ internal sealed class PreviewerLaunchService : IDisposable
 
     /// <summary>Registers an already running host process and its session for a file.</summary>
     internal void AddRunningInstance(string xamlFilePath, WorkspaceModel workspace, string? workspacePath,
-        Process? process, PreviewerTcpSession? session, Action<string, string>? log = null)
+        Process? process, PreviewerTcpSession? session, Action<string, string>? log = null, Guid? appliedThemeRequestId = null)
     {
         PreviewerInstance instance = new()
         {
-            Workspace = workspace, WorkspacePath = workspacePath, Log = log, Process = process, Session = session
+            Workspace = workspace, WorkspacePath = workspacePath, Log = log, Process = process, Session = session,
+            LastSentThemeRequestId = appliedThemeRequestId
         };
         instance.Started.TrySetResult(new PreviewerLaunchResult(true, null, process));
         lock (_gate)
@@ -84,7 +87,8 @@ internal sealed class PreviewerLaunchService : IDisposable
         string? workspacePath,
         Func<string, Task>? runWorkspaceCommandAsync,
         Action<string, string>? log,
-        DesignerThemeRequest? themeRequest = null)
+        DesignerThemeRequest? themeRequest = null,
+        bool fullRender = false)
     {
         PreviewerInstance instance;
         PreviewerInstance? replaced = null;
@@ -121,15 +125,25 @@ internal sealed class PreviewerLaunchService : IDisposable
         if (created)
             _ = StartInstanceAsync(xamlFilePath, instance, workspace, workspacePath, runWorkspaceCommandAsync, log);
 
-        PreviewerLaunchResult result = await instance.Started.Task;
+        (instance, PreviewerLaunchResult result) = await WaitForStartAsync(instance);
         if (result.Success && !IsCurrent(xamlFilePath, instance))
             return PreviewerLaunchResult.Fail("The previewer was closed or replaced.");
         if (!created && result.Success && !string.IsNullOrWhiteSpace(xamlText))
-        {
-            if (TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))
-                await SendInstanceUpdateAsync(xamlFilePath, instance, xamlText, launchInfo);
-        }
+            return await UpdateInstanceAsync(xamlFilePath, xamlText, workspace, log, workspacePath, themeRequest,
+                latestTextOnly: true, fullRender);
         return result;
+    }
+
+    // A theme change replaces a host; whoever waits for the replaced host follows its replacement.
+    private static async Task<(PreviewerInstance Instance, PreviewerLaunchResult Result)> WaitForStartAsync(PreviewerInstance instance)
+    {
+        PreviewerLaunchResult result = await instance.Started.Task;
+        while (instance.ReplacedBy is { } replacement)
+        {
+            instance = replacement;
+            result = await instance.Started.Task;
+        }
+        return (instance, result);
     }
 
     private async Task StartInstanceAsync(
@@ -219,19 +233,35 @@ internal sealed class PreviewerLaunchService : IDisposable
         }
     }
 
-    public async Task SendUpdateXamlAsync(
+    /// <summary>Sends a document to the running host of a file; the result reports a host that failed to restart.</summary>
+    public Task<PreviewerLaunchResult> SendUpdateXamlAsync(
         string xamlFilePath,
         string xamlText,
         WorkspaceModel workspace,
         Action<string, string>? log,
         string? workspacePath = null,
-        DesignerThemeRequest? themeRequest = null)
+        DesignerThemeRequest? themeRequest = null) =>
+        UpdateInstanceAsync(xamlFilePath, xamlText, workspace, log, workspacePath, themeRequest,
+            latestTextOnly: false, fullRender: false);
+
+    private async Task<PreviewerLaunchResult> UpdateInstanceAsync(
+        string xamlFilePath,
+        string xamlText,
+        WorkspaceModel workspace,
+        Action<string, string>? log,
+        string? workspacePath,
+        DesignerThemeRequest? themeRequest,
+        bool latestTextOnly,
+        bool fullRender)
     {
         PreviewerInstance? instance;
         PreviewerInstance? replacement = null;
         lock (_gate)
         {
-            if (!_instances.TryGetValue(xamlFilePath, out instance) || !ReferenceEquals(instance.Workspace, workspace)) return;
+            if (!_instances.TryGetValue(xamlFilePath, out instance) || !ReferenceEquals(instance.Workspace, workspace))
+                return PreviewerLaunchResult.Fail("The previewer was closed or replaced.");
+            // A later update overtook this one; the host renders the later document.
+            if (latestTextOnly && instance.XamlText != xamlText) return new PreviewerLaunchResult(true, null, instance.Process);
             // A host keeps the resources and theme variant a provider applied, and a later theme does not reliably
             // reach the controls it creates on every platform; a different theme therefore starts a fresh host,
             // which applies the theme before it loads the document.
@@ -242,13 +272,15 @@ internal sealed class PreviewerLaunchService : IDisposable
                     Workspace = instance.Workspace, WorkspacePath = instance.WorkspacePath, Log = instance.Log,
                     XamlText = xamlText, ThemeRequest = themeRequest
                 };
+                instance.ReplacedBy = replacement;
                 _instances[xamlFilePath] = replacement;
             }
             else
             {
                 instance.XamlText = xamlText;
                 instance.ThemeRequest = themeRequest;
-                if (instance.Session is null) return;
+                // A host that is still starting loads the latest document itself.
+                if (instance.Session is null) return new PreviewerLaunchResult(true, null, instance.Process);
             }
         }
 
@@ -256,19 +288,18 @@ internal sealed class PreviewerLaunchService : IDisposable
         {
             instance.Started.TrySetResult(PreviewerLaunchResult.Fail("The previewer restarted for another theme."));
             DisposeInstance(instance);
-            _ = StartInstanceAsync(xamlFilePath, replacement, workspace, workspacePath ?? replacement.WorkspacePath, null, replacement.Log);
-            await replacement.Started.Task;
-            log?.Invoke("Info", "Previewer restarted for the selected theme");
-            return;
+            _ = StartInstanceAsync(xamlFilePath, replacement, workspace, replacement.WorkspacePath, null, replacement.Log);
+            (_, PreviewerLaunchResult restarted) = await WaitForStartAsync(replacement);
+            if (restarted.Success) log?.Invoke("Info", "Previewer restarted for the selected theme");
+            return restarted;
         }
 
-        if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))
-        {
-            return;
-        }
+        if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out string error))
+            return PreviewerLaunchResult.Fail(error);
 
-        await SendInstanceUpdateAsync(xamlFilePath, instance, xamlText, launchInfo);
+        await SendInstanceUpdateAsync(xamlFilePath, instance, xamlText, launchInfo, fullRender);
         log?.Invoke("Info", "Previewer XAML update sent");
+        return new PreviewerLaunchResult(true, null, instance.Process);
     }
 
     public bool TryGetSession(string xamlFilePath, out PreviewerTcpSession? session)
@@ -280,8 +311,9 @@ internal sealed class PreviewerLaunchService : IDisposable
         }
     }
 
+    // A full render reloads the document even when nothing changed, so the host sends a new frame.
     private async Task SendInstanceUpdateAsync(string xamlFilePath, PreviewerInstance instance,
-        string xamlText, PreviewerLaunchInfo launchInfo)
+        string xamlText, PreviewerLaunchInfo launchInfo, bool fullRender = false)
     {
         await instance.UpdateGate.WaitAsync();
         try
@@ -321,7 +353,7 @@ internal sealed class PreviewerLaunchService : IDisposable
                 }
                 Guid? previousRenderId = instance.LastSentRenderId;
                 await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height, renderId, themeRequestId,
-                    !themeChanged && previousRenderId is { } previous && renderId is { } current
+                    !themeChanged && !fullRender && previousRenderId is { } previous && renderId is { } current
                         ? () => TrySendIncrementalUpdateAsync(instance, previous, current, updatedXaml) : null);
                 instance.LastSentRenderId = renderId;
             }

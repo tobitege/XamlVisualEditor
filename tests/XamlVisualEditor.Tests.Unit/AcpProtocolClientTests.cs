@@ -104,6 +104,29 @@ public sealed class AcpProtocolClientTests
         Assert.True(root.GetProperty("result").GetProperty("pong").GetBoolean());
     }
 
+    [Fact]
+    public async Task NonStringMethodIsAnsweredWithInvalidRequestAndTheClientKeepsReading()
+    {
+        using DuplexPipe pipe = new();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        await using AcpProtocolClient client = pipe.CreateClient();
+
+        client.RegisterRequestHandler("ping", (_, _) => Task.FromResult<JsonElement?>(JsonSerializer.SerializeToElement(new { pong = true })));
+        client.Start(cts.Token);
+
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":3,"method":42}""");
+        await pipe.ServerWriter.WriteLineAsync("""{"jsonrpc":"2.0","id":4,"method":"ping"}""");
+
+        using JsonDocument invalid = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(cts.Token))!);
+        Assert.Equal(3, invalid.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(-32600, invalid.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.False(invalid.RootElement.TryGetProperty("result", out _));
+        using JsonDocument ping = JsonDocument.Parse((await pipe.ServerReader.ReadLineAsync(cts.Token))!);
+        Assert.Equal(4, ping.RootElement.GetProperty("id").GetInt32());
+        Assert.True(ping.RootElement.GetProperty("result").GetProperty("pong").GetBoolean());
+        Assert.True(client.IsRunning);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

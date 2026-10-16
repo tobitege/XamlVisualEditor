@@ -52,8 +52,10 @@ public sealed class DesignerThemeWorkflowTests
             typeof(SampleThemeProvider).FullName!);
         ExtensionContributionRegistry registry = new();
         IDisposable oldRegistration = registry.RegisterDesignerThemeProviders("sample.extension", new[] { provider });
+        // Disposing a registration frees its provider ID, so the same ID can be registered again.
         oldRegistration.Dispose();
         using IDisposable registration = registry.RegisterDesignerThemeProviders("sample.extension", new[] { provider });
+        // Disposing the old handle a second time leaves the newer registration in place.
         oldRegistration.Dispose();
         Assert.Equal(provider, Assert.Single(registry.DesignerThemeProviders));
         using DesignerDocumentViewModel document = new("ThemeChoice.axaml");

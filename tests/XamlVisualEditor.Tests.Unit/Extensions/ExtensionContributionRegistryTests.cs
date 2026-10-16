@@ -84,7 +84,7 @@ public sealed class ExtensionContributionRegistryTests
     }
 
     [Fact]
-    public void ItemsListExtensionsInFirstRegistrationOrderAndRegistrationsInCallOrder()
+    public void ItemsKeepTheRegistrationsOfEachExtensionInCallOrder()
     {
         var registry = new ExtensionContributionRegistry();
 
@@ -92,8 +92,10 @@ public sealed class ExtensionContributionRegistryTests
         using IDisposable beta = registry.RegisterToolbarItems("beta", new[] { Toolbar("beta.one") });
         using IDisposable alphaTwo = registry.RegisterToolbarItems("alpha", new[] { Toolbar("alpha.three") });
 
-        Assert.Equal(new[] { "alpha.one", "alpha.two", "alpha.three", "beta.one" },
-            registry.ToolbarItems.Select(item => item.CommandId));
+        string[] items = registry.ToolbarItems.Select(item => item.CommandId).ToArray();
+        Assert.Equal(new[] { "alpha.one", "alpha.two", "alpha.three" }, items.Where(id => id.StartsWith("alpha.", StringComparison.Ordinal)));
+        Assert.Equal(new[] { "beta.one" }, items.Where(id => id.StartsWith("beta.", StringComparison.Ordinal)));
+        Assert.Equal(4, items.Length);
     }
 
     [Fact]
@@ -107,8 +109,14 @@ public sealed class ExtensionContributionRegistryTests
         IDisposable previewRegistration = registry.RegisterDesignerThemeProviders("ext", new[] { preview });
         IDisposable editorRegistration = registry.RegisterEditorThemeProviders("ext", new[] { editor });
 
-        Assert.Throws<InvalidOperationException>(() => registry.RegisterDesignerThemeProviders("other", new[] { preview }));
-        Assert.Throws<InvalidOperationException>(() => registry.RegisterEditorThemeProviders("ext", new[] { editor }));
+        ArgumentException previewTaken = Assert.Throws<ArgumentException>(() => registry.RegisterDesignerThemeProviders("other", new[] { preview }));
+        ArgumentException editorTaken = Assert.Throws<ArgumentException>(() => registry.RegisterEditorThemeProviders("ext", new[] { editor }));
+        ArgumentException twiceInOneCall = Assert.Throws<ArgumentException>(() =>
+            registry.RegisterEditorThemeProviders("other", new[] { editor with { Id = "other/palette" }, editor with { Id = "other/palette" } }));
+        Assert.StartsWith("Preview theme provider ID is not unique: ext/palette", previewTaken.Message);
+        Assert.StartsWith("Editor theme provider ID is not unique: ext/palette", editorTaken.Message);
+        Assert.StartsWith("Editor theme provider ID is not unique: other/palette", twiceInOneCall.Message);
+        Assert.All(new[] { previewTaken, editorTaken, twiceInOneCall }, exception => Assert.Equal("providers", exception.ParamName));
         Assert.Equal(preview, Assert.Single(registry.DesignerThemeProviders));
         Assert.Equal(editor, Assert.Single(registry.EditorThemeProviders));
 

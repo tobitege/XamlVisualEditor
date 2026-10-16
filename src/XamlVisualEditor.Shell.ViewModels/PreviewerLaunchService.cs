@@ -47,13 +47,19 @@ internal sealed class PreviewerLaunchService : IDisposable
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
 
+    /// <summary>
+    /// Raised on a process thread with the file path when the current host of a file exits without being stopped; its
+    /// instance is already released, so <see cref="TryGetSession"/> no longer returns its session.
+    /// </summary>
+    public event Action<string>? PreviewerExited;
+
     private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>Waits for an ended host process; returns false when it did not exit within the timeout.</summary>
     internal Func<Process, TimeSpan, bool> WaitForProcessExit { get; init; } =
         static (process, timeout) => process.WaitForExit(timeout);
 
-    /// <summary>Registers an already running host process and its session for a file.</summary>
+    /// <summary>Registers an already running host process and its session for a file; the exit of the process is reported like that of a started host.</summary>
     internal void AddRunningInstance(string xamlFilePath, WorkspaceModel workspace, string? workspacePath,
         Process? process, PreviewerTcpSession? session, Action<string, string>? log = null, Guid? appliedThemeRequestId = null)
     {
@@ -68,6 +74,9 @@ internal sealed class PreviewerLaunchService : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             _instances.Add(xamlFilePath, instance);
         }
+        if (process is null) return;
+        process.Exited += (_, _) => OnProcessExited(xamlFilePath, instance, log);
+        process.EnableRaisingEvents = true;
     }
 
     /// <summary>Gets the XAML and theme request that the host of a file renders; both are null without a host.</summary>
@@ -462,19 +471,20 @@ internal sealed class PreviewerLaunchService : IDisposable
             }
             log?.Invoke("Info", $"Previewer exited with code {exitCode}");
         }
-        ReleaseInstance(xamlFilePath, instance, "The previewer process exited.");
+        if (ReleaseInstance(xamlFilePath, instance, "The previewer process exited.")) PreviewerExited?.Invoke(xamlFilePath);
     }
 
-    private void ReleaseInstance(string xamlFilePath, PreviewerInstance instance, string reason)
+    private bool ReleaseInstance(string xamlFilePath, PreviewerInstance instance, string reason)
     {
         lock (_gate)
         {
             if (!_instances.TryGetValue(xamlFilePath, out PreviewerInstance? current)
-                || !ReferenceEquals(current, instance)) return;
+                || !ReferenceEquals(current, instance)) return false;
             _instances.Remove(xamlFilePath);
         }
         instance.Started.TrySetResult(PreviewerLaunchResult.Fail(reason));
         DisposeInstance(instance);
+        return true;
     }
 
     /// <summary>Ends the previewer process of a file and disposes its session.</summary>

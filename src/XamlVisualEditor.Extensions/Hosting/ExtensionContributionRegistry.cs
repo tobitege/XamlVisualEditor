@@ -5,8 +5,8 @@ using XamlVisualEditor.Core;
 namespace XamlVisualEditor.Extensions.Hosting;
 
 /// <summary>
-/// Keeps every registration as its own list per extension. The published lists concatenate the extensions in
-/// the order of their first active registration and, within an extension, its registrations in call order.
+/// Keeps every registration as its own list per extension. The published lists keep the registrations of one
+/// extension in call order; the order of different extensions is unspecified.
 /// </summary>
 public sealed class ExtensionContributionRegistry : IExtensionContributionRegistry
 {
@@ -45,33 +45,34 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     public IDisposable RegisterEditorThemeProviders(string extensionId, IReadOnlyList<EditorThemeProviderRegistration> providers)
     {
         ArgumentNullException.ThrowIfNull(providers);
-        HashSet<string> ids = new(StringComparer.Ordinal);
         foreach (EditorThemeProviderRegistration provider in providers)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Id);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.TypeName);
-            if (!ids.Add(provider.Id) || !System.IO.Path.IsPathFullyQualified(provider.AssemblyPath))
-                throw new ArgumentException("Theme providers require unique IDs and absolute assembly paths.", nameof(providers));
+            ValidateThemeProvider(provider.Id, provider.Name, provider.TypeName, provider.AssemblyPath, nameof(providers));
         }
         return RegisterItems(extensionId, providers, _editorThemesByExtension,
-            () => _editorThemeItems = BuildList(_editorThemesByExtension), provider => provider.Id);
+            () => _editorThemeItems = BuildList(_editorThemesByExtension),
+            new UniqueIds<EditorThemeProviderRegistration>("Editor theme provider", nameof(providers), provider => provider.Id));
     }
 
     public IDisposable RegisterDesignerThemeProviders(string extensionId, IReadOnlyList<DesignerThemeProviderRegistration> providers)
     {
         ArgumentNullException.ThrowIfNull(providers);
-        HashSet<string> ids = new(StringComparer.Ordinal);
         foreach (DesignerThemeProviderRegistration provider in providers)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Id);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
-            ArgumentException.ThrowIfNullOrWhiteSpace(provider.TypeName);
-            if (!ids.Add(provider.Id) || !System.IO.Path.IsPathFullyQualified(provider.AssemblyPath))
-                throw new ArgumentException("Theme providers require unique IDs and absolute assembly paths.", nameof(providers));
+            ValidateThemeProvider(provider.Id, provider.Name, provider.TypeName, provider.AssemblyPath, nameof(providers));
         }
         return RegisterItems(extensionId, providers, _themesByExtension,
-            () => _themeItems = BuildList(_themesByExtension), provider => provider.Id);
+            () => _themeItems = BuildList(_themesByExtension),
+            new UniqueIds<DesignerThemeProviderRegistration>("Preview theme provider", nameof(providers), provider => provider.Id));
+    }
+
+    private static void ValidateThemeProvider(string id, string name, string typeName, string assemblyPath, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(typeName);
+        if (!System.IO.Path.IsPathFullyQualified(assemblyPath))
+            throw new ArgumentException("Theme providers require absolute assembly paths.", parameterName);
     }
 
     public IDisposable RegisterMenuItems(string extensionId, IReadOnlyList<ExtensionMenuContribution> items)
@@ -99,13 +100,16 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         return RegisterItems(extensionId, views, _viewsByExtension, RebuildViews);
     }
 
-    /// <summary>Adds one registration; <paramref name="uniqueId"/> rejects IDs that an active registration already holds.</summary>
+    /// <summary>
+    /// Adds one registration; <paramref name="uniqueIds"/> rejects an ID that appears twice in the registration or
+    /// that an active registration already holds.
+    /// </summary>
     private IDisposable RegisterItems<T>(
         string extensionId,
         IReadOnlyList<T> items,
         Dictionary<string, List<List<T>>> target,
         Action rebuild,
-        Func<T, string>? uniqueId = null)
+        UniqueIds<T>? uniqueIds = null)
     {
         if (string.IsNullOrWhiteSpace(extensionId))
         {
@@ -117,9 +121,9 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         List<T> registration = new(items);
         lock (_gate)
         {
-            if (uniqueId is not null)
+            if (uniqueIds is not null)
             {
-                EnsureIdsAreFree(target, registration, uniqueId);
+                EnsureIdsAreFree(target, registration, uniqueIds);
             }
 
             if (!target.TryGetValue(extensionId, out List<List<T>>? registrations))
@@ -137,12 +141,16 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
         return new Registration(() => Unregister(extensionId, target, rebuild, registration));
     }
 
-    private static void EnsureIdsAreFree<T>(Dictionary<string, List<List<T>>> target, List<T> registration, Func<T, string> uniqueId)
+    private static void EnsureIdsAreFree<T>(Dictionary<string, List<List<T>>> target, List<T> registration, UniqueIds<T> uniqueIds)
     {
         HashSet<string> ids = new(StringComparer.Ordinal);
         foreach (T item in registration)
         {
-            ids.Add(uniqueId(item));
+            string id = uniqueIds.GetId(item);
+            if (!ids.Add(id))
+            {
+                throw uniqueIds.Duplicate(id);
+            }
         }
 
         foreach (List<List<T>> registrations in target.Values)
@@ -151,14 +159,21 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
             {
                 foreach (T item in existing)
                 {
-                    string id = uniqueId(item);
+                    string id = uniqueIds.GetId(item);
                     if (ids.Contains(id))
                     {
-                        throw new InvalidOperationException("Theme provider ID is already registered: " + id);
+                        throw uniqueIds.Duplicate(id);
                     }
                 }
             }
         }
+    }
+
+    /// <summary>Names the items whose IDs must be unique, for the message of a rejected registration.</summary>
+    private sealed record UniqueIds<T>(string Subject, string ParameterName, Func<T, string> GetId)
+    {
+        public ArgumentException Duplicate(string id) =>
+            new(Subject + " ID is not unique: " + id, ParameterName);
     }
 
     private void Unregister<T>(string extensionId, Dictionary<string, List<List<T>>> target, Action rebuild, List<T> registration)

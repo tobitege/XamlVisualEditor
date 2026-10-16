@@ -53,7 +53,6 @@ public sealed class PreviewerTcpSession : IDisposable
     private FrameMessage? _lastFrame;
     private PreviewerErrorInfo? _lastError;
     private bool _errorFromStandardError;
-    private bool _closed;
 
     public PreviewerTcpSession(string xamlFilePath, Action<string, string>? log)
     {
@@ -237,18 +236,11 @@ public sealed class PreviewerTcpSession : IDisposable
         });
     }
 
-    /// <summary>True once the session was disposed, which happens when its previewer process exits or is stopped.</summary>
-    public bool IsClosed
-    {
-        get { lock (_gate) return _closed; }
-    }
-
     public void Dispose()
     {
         _listener.Dispose();
         lock (_gate)
         {
-            _closed = true;
             _connection?.Dispose();
             _connection = null;
             _expectedRenderId = null;

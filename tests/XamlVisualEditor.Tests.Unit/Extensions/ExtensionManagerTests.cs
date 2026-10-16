@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using Xunit;
@@ -50,6 +52,66 @@ public sealed class ExtensionManagerTests
     }
 
     [Fact]
+    public async Task AThemePackageWhoseProviderIdIsTakenIsReportedRegistersNothingAndRegistersOnceTheIdIsFree()
+    {
+        ExtensionPackageInfo package = ThemePackage("sample", new[] { "palette" }, new[] { "editor" });
+        FakeStore store = new() { Packages = new[] { package } };
+        FakeStateStore states = new();
+        await states.SetEnabledAsync(package.Manifest.ExtensionId, true, CancellationToken.None);
+        ExtensionContributionRegistry contributions = new();
+        EditorThemeProviderRegistration taken = new("example.sample/editor", "Other", typeof(ExtensionManagerTests).Assembly.Location,
+            "Other.EditorProvider");
+        // Another extension holds the editor provider ID, so the second of the package's two registrations fails.
+        IDisposable otherExtension = contributions.RegisterEditorThemeProviders("other.extension", new[] { taken });
+        RecordingLogger logger = new();
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        ExtensionManager manager = new(store, states, new FakeUpdateService(), services, contributions, logger);
+
+        IReadOnlyList<ExtensionPackageInfo> installed = await manager.GetInstalledAsync(CancellationToken.None);
+
+        Assert.Same(package, Assert.Single(installed));
+        (string message, Exception? exception) = Assert.Single(logger.Warnings);
+        Assert.Contains("example.sample", message);
+        Assert.Contains("example.sample/editor", Assert.IsAssignableFrom<ArgumentException>(exception).Message);
+        Assert.Empty(contributions.DesignerThemeProviders);
+        Assert.Equal(taken, Assert.Single(contributions.EditorThemeProviders));
+
+        otherExtension.Dispose();
+        await manager.GetInstalledAsync(CancellationToken.None);
+
+        Assert.Equal("example.sample/palette", Assert.Single(contributions.DesignerThemeProviders).Id);
+        Assert.Equal("example.sample/editor", Assert.Single(contributions.EditorThemeProviders).Id);
+        Assert.Single(logger.Warnings);
+    }
+
+    [Fact]
+    public async Task SynchronizationRemovesEveryOutdatedRegistrationBeforeAnyPackageRegisters()
+    {
+        ExtensionPackageInfo beta = ThemePackage("beta", new[] { "palette" }, Array.Empty<string>());
+        ExtensionPackageInfo alpha = ThemePackage("alpha", new[] { "palette" }, Array.Empty<string>());
+        FakeStore store = new() { Packages = new[] { beta, alpha } };
+        FakeStateStore states = new();
+        await states.SetEnabledAsync(beta.Manifest.ExtensionId, true, CancellationToken.None);
+        await states.SetEnabledAsync(alpha.Manifest.ExtensionId, true, CancellationToken.None);
+        ExtensionContributionRegistry contributions = new();
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        ExtensionManager manager = new(store, states, new FakeUpdateService(), services, contributions);
+        await manager.GetInstalledAsync(CancellationToken.None);
+        List<string[]> snapshots = new();
+        contributions.Changed += (_, _) => snapshots.Add(contributions.DesignerThemeProviders.Select(provider => provider.Id).ToArray());
+
+        // One synchronization updates the package that registered first and removes the one that registered second.
+        store.Packages = new[] { ThemePackage("beta", new[] { "palette", "second" }, Array.Empty<string>()), alpha };
+        await states.SetEnabledAsync(alpha.Manifest.ExtensionId, false, CancellationToken.None);
+        await manager.GetInstalledAsync(CancellationToken.None);
+
+        string[] firstWithUpdate = snapshots.First(ids => ids.Contains("example.beta/second"));
+        Assert.DoesNotContain("example.alpha/palette", firstWithUpdate);
+        Assert.Equal(new[] { "example.beta/palette", "example.beta/second" },
+            contributions.DesignerThemeProviders.Select(provider => provider.Id));
+    }
+
+    [Fact]
     public async Task ManagerDelegatesToStores()
     {
         FakeStore store = new();
@@ -77,6 +139,36 @@ public sealed class ExtensionManagerTests
         ExtensionPackageInfo package = Assert.Single(await manager.GetInstalledAsync(CancellationToken.None));
 
         Assert.Equal(new[] { ExtensionHostCapabilities.DocumentOpenInterceptors }, package.Manifest.Capabilities);
+    }
+
+    private static ExtensionPackageInfo ThemePackage(string name, string[] previewIds, string[] editorIds)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "xve-manager-theme-" + name);
+        ExtensionManifest manifest = new()
+        {
+            Name = name, Publisher = "example", Version = "1.0.0",
+            Contributes = System.Text.Json.JsonSerializer.SerializeToElement(new
+            {
+                designerThemes = previewIds.Select(id => new { id, name = id, assembly = "lib/net10.0/Provider.dll", type = "Missing.Provider" }),
+                editorThemes = editorIds.Select(id => new { id, name = id, assembly = "lib/net10.0/Provider.dll", type = "Missing.EditorProvider" })
+            })
+        };
+        return new ExtensionPackageInfo(Path.Combine(directory, "package.nupkg"), manifest, directory);
+    }
+
+    private sealed class RecordingLogger : ILogger<ExtensionManager>
+    {
+        public List<(string Message, Exception? Exception)> Warnings { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning) Warnings.Add((formatter(state, exception), exception));
+        }
     }
 
     [ExtensionCapabilities(ExtensionHostCapabilities.DocumentOpenInterceptors)]

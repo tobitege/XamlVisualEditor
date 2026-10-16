@@ -609,6 +609,7 @@
   <data name="DebuggerDownloadFailed" xml:space="preserve"><value>netcoredbg download failed: {0}</value></data>
   <data name="StartupProjectCleared" xml:space="preserve"><value>Startup project cleared</value></data>
   <data name="StartupProjectStatus" xml:space="preserve"><value>Startup project: {0}</value></data>
+  <data name="CurrentStartupProjectMarker" xml:space="preserve"><value>(startup project)</value></data>
   <data name="DebuggingStopped" xml:space="preserve"><value>Debugging stopped</value></data>
   <data name="DebugStopFailed" xml:space="preserve"><value>Debug stop failed: {0}</value></data>
   <data name="RunNeedsWorkspace" xml:space="preserve"><value>Running requires a loaded workspace.</value></data>
@@ -1282,7 +1283,7 @@
   <data name="PreviewThemeUnavailable" xml:space="preserve"><value>Unavailable: {0}</value></data>
   <data name="PreviewThemePreviewOnly" xml:space="preserve"><value>{0} (preview only)</value></data>
   <data name="PreviewThemePending" xml:space="preserve"><value>{0} (waiting for the preview)</value></data>
-  <data name="PreviewThemeProjectDefault" xml:space="preserve"><value>Theme default</value></data>
+  <data name="PreviewThemeProjectDefault" xml:space="preserve"><value>Project default</value></data>
   <data name="Duplicate" xml:space="preserve"><value>Duplicate</value></data>
   <data name="ZoomOut" xml:space="preserve"><value>Zoom out</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>

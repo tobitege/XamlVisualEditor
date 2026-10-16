@@ -384,9 +384,13 @@ public sealed class WorkspaceExtension : IXveExtension
     /// <summary>Lets the user pick the startup project from the workspace projects; the palette passes no project path.</summary>
     private async Task PickStartupProjectAsync()
     {
-        IReadOnlyList<WorkspaceProjectInfo> projects = _workspaceModel is null
-            ? Array.Empty<WorkspaceProjectInfo>()
-            : await _workspaceModel.GetProjectsAsync(CancellationToken.None);
+        if (_workspaceModel is not { HasWorkspace: true })
+        {
+            await ShowNoWorkspaceAsync();
+            return;
+        }
+
+        IReadOnlyList<WorkspaceProjectInfo> projects = await _workspaceModel.GetProjectsAsync(CancellationToken.None);
         if (_window is null) return;
         if (projects.Count == 0)
         {
@@ -395,16 +399,26 @@ public sealed class WorkspaceExtension : IXveExtension
         }
 
         QuickPickItem[] items = projects
-            .Select(project => new QuickPickItem(project.Name, project.TargetFramework, project.ProjectPath))
+            .Select(project => new QuickPickItem(project.Name, DescribeStartupCandidate(project), project.ProjectPath))
             .ToArray();
         QuickPickItem? choice = await _window.ShowQuickPickAsync(
             items,
             new QuickPickOptions(UiStrings.SetStartupProject, CanPickMany: false),
             CancellationToken.None);
-        int index = choice is null ? -1 : Array.IndexOf(items, choice);
-        if (index < 0) return;
-        WorkspaceProjectInfo picked = projects[index];
+        if (choice is null) return;
+        WorkspaceProjectInfo? picked = projects.FirstOrDefault(project =>
+            string.Equals(project.ProjectPath, choice.Detail, StringComparison.Ordinal));
+        if (picked is null) return;
         await _workspaceCommands.SetStartupProjectAsync(picked.ProjectPath, picked.TargetFramework, CancellationToken.None);
+    }
+
+    /// <summary>Shows the target framework and marks the current startup project.</summary>
+    private static string? DescribeStartupCandidate(WorkspaceProjectInfo project)
+    {
+        if (!project.IsStartupProject) return project.TargetFramework;
+        return string.IsNullOrWhiteSpace(project.TargetFramework)
+            ? UiStrings.CurrentStartupProjectMarker
+            : project.TargetFramework + " " + UiStrings.CurrentStartupProjectMarker;
     }
 
     private Task ShowNoWorkspaceAsync()

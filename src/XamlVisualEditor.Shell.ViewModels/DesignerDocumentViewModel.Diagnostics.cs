@@ -158,7 +158,6 @@ public sealed partial class DesignerDocumentViewModel
         _previewerLaunchDiagnostics = string.IsNullOrWhiteSpace(error) ? Array.Empty<LanguageDiagnostic>()
             : new[] { CreateDesignerDiagnostic(error, DiagnosticSeverity.Error, "Previewer", "XVE_PREVIEW_START", 1, 1, 1) };
         PublishDesignerDiagnostics();
-        UpdatePendingThemeChoice();
     }
 
     public void SetDesignerInteractionError(Exception? error)

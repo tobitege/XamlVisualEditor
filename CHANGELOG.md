@@ -72,6 +72,7 @@ uses Semantic Versioning.
 - The extension manager shows the capabilities an extension declares.
 - The CDP debug diagnostics are enabled with the MSBuild property `EnableCdpDiagnostics=true` instead of the Debug configuration and require the token written to the log at startup.
 - At most four external previewer hosts run at the same time: the active document and the three most recently active ones.
+- Extension SDK: registering menu, toolbar, Command Palette, view or property editor contributions again adds a registration instead of replacing the earlier one of the same extension, and disposing a registration removes only its own items. To replace contributions, dispose the previous registration before registering again. The lists keep the registrations of one extension in call order; the order of different extensions is unspecified. A theme provider ID that is already registered or appears twice in one registration throws `ArgumentException`, so a theme package whose provider ID another extension already registered is reported as a package problem instead of being listed twice.
 
 ### Fixed
 
@@ -105,9 +106,11 @@ uses Semantic Versioning.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
 - Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
 - Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
-- Fixed the preview theme selector showing the raw provider id of a saved theme before the previewer reported its themes: the entry names the theme and says that it waits for the preview, and it shows the theme as unavailable once the previewer exits or fails to start without reporting it.
-- Fixed the untranslated "Theme default" entry of the preview theme selector; it follows the UI language ("Projektstandard" in German).
-- Fixed extensions losing menu, toolbar, Command Palette, view or property editor contributions when they registered the same kind more than once: every registration is kept, and disposing one removes only its own items. Disposing a replaced command handler, command metadata or view provider registration no longer removes its replacement, and a theme provider ID that is already registered is rejected.
+- Fixed the preview theme selector showing the raw provider id of a saved theme before the previewer reported its themes: the entry names the theme and says that it waits for the preview, and it shows the theme as unavailable once the previewer exits or fails to start without reporting it, also after switching document tabs, until a previewer starts again. When several theme providers are registered, or the saved theme belongs to another provider than the registered one, the entry also names the provider. Selecting another entry removes the waiting entry.
+- Fixed the untranslated "Theme default" entry of the preview theme selector; it reads "Project default" and follows the UI language ("Projektstandard" in German).
+- Fixed German messages that addressed the user formally; all German texts use the informal form.
+- Fixed disposing a replaced command handler, command metadata or view provider registration, which removed its replacement.
+- Fixed a theme package with an unreadable manifest or a taken provider ID breaking the extension list: the package is logged as a problem and stays unregistered, and its other provider kind is not registered either.
 
 ## [0.2.0] - 2026-09-01
 

@@ -43,6 +43,8 @@ public sealed partial class DesignerDocumentViewModel
         DesignSurface.PreviewThemeStatus = UiStrings.PreviewThemeLoadHint;
         _previewThemeDiagnostics = Array.Empty<LanguageDiagnostic>();
         PublishDesignerDiagnostics();
+        // The registered providers decide whether the label of a pending selection names its provider.
+        UpdatePendingThemeChoice();
     }
 
     /// <summary>Selects the preview theme; a theme derived from the editor options does not switch to the external previewer.</summary>
@@ -52,30 +54,59 @@ public sealed partial class DesignerDocumentViewModel
         PreviewThemeRequest = new(Guid.NewGuid(), PreviewThemeRequest?.Providers ?? Array.Empty<DesignerThemeProviderRegistration>(), selection);
         DesignSurface.HasPreviewThemeProviders = PreviewThemeRequest.Providers.Count > 0 || selection is not null;
         DesignerThemeChoice? choice = DesignSurface.PreviewThemes.FirstOrDefault(item => item.Selection == selection);
-        DesignerThemeChoice? replaced = null;
+        bool uncataloged = choice is null;
         if (choice is null)
         {
             choice = CreateUncatalogedThemeChoice(selection!, !CanPreviewerReportThemes);
             DesignSurface.PreviewThemes.Add(choice);
-            replaced = _pendingThemeChoice;
-            _pendingThemeChoice = choice;
         }
         DesignSurface.SelectedPreviewTheme = choice;
-        if (replaced is not null) DesignSurface.PreviewThemes.Remove(replaced);
+        RemovePendingThemeChoice(choice);
+        if (uncataloged) _pendingThemeChoice = choice;
         if (selection is not null && activatePreviewer) UseExternalPreviewer = true;
     }
 
     /// <summary>
-    /// False once the previewer process ended or failed to start; until a previewer runs again, no catalog can list
+    /// Removes the entry added for an uncataloged selection once another entry is selected, so that
+    /// <see cref="_pendingThemeChoice"/> only ever refers to the selected entry.
+    /// </summary>
+    private void RemovePendingThemeChoice(DesignerThemeChoice selected)
+    {
+        if (_pendingThemeChoice is not { } pending || ReferenceEquals(pending, selected)) return;
+        _pendingThemeChoice = null;
+        _updatingThemeChoices = true;
+        try { DesignSurface.PreviewThemes.Remove(pending); }
+        finally { _updatingThemeChoices = false; }
+    }
+
+    /// <summary>
+    /// False once the previewer process exited or failed to start; until a previewer starts again, no catalog can list
     /// the pending selection.
     /// </summary>
-    private bool CanPreviewerReportThemes =>
-        PreviewerSession is { } session ? !session.IsClosed : _previewerLaunchDiagnostics.Count == 0;
+    private bool CanPreviewerReportThemes => PreviewerState is not (PreviewerState.Exited or PreviewerState.Failed);
 
-    private static DesignerThemeChoice CreateUncatalogedThemeChoice(DesignerThemeSelection selection, bool unavailable) =>
-        new(selection, string.Format(unavailable ? UiStrings.PreviewThemeUnavailable : UiStrings.PreviewThemePending, selection.ThemeId));
+    private DesignerThemeChoice CreateUncatalogedThemeChoice(DesignerThemeSelection selection, bool unavailable) =>
+        new(selection, string.Format(unavailable ? UiStrings.PreviewThemeUnavailable : UiStrings.PreviewThemePending,
+            GetUncatalogedThemeLabel(selection)));
 
-    /// <summary>Relabels the selection that no catalog has listed yet when the previewer stops or runs again.</summary>
+    /// <summary>
+    /// Names a selection that no catalog lists by its theme ID. The ID alone is ambiguous when more than one provider is
+    /// registered or when the selection names a provider other than the single registered one, because another provider
+    /// may offer the same ID; then the label starts with the provider name from the registration, or with the provider
+    /// ID when no registration names it, in the "Provider: theme" form of the catalog entries. Without any registered
+    /// provider the selection is the only theme in question and keeps the bare ID.
+    /// </summary>
+    private string GetUncatalogedThemeLabel(DesignerThemeSelection selection)
+    {
+        IReadOnlyList<DesignerThemeProviderRegistration> providers =
+            PreviewThemeRequest?.Providers ?? Array.Empty<DesignerThemeProviderRegistration>();
+        if (providers.Count == 0 || providers.Count == 1 && providers[0].Id == selection.ProviderId) return selection.ThemeId;
+        string provider = providers.FirstOrDefault(registration => registration.Id == selection.ProviderId)?.Name
+            ?? selection.ProviderId;
+        return $"{provider}: {selection.ThemeId}";
+    }
+
+    /// <summary>Relabels the selected entry that no catalog has listed yet when the previewer state changes.</summary>
     private void UpdatePendingThemeChoice()
     {
         if (_pendingThemeChoice is not { Selection: { } selection } pending) return;
@@ -87,13 +118,12 @@ public sealed partial class DesignerDocumentViewModel
         }
         DesignerThemeChoice updated = CreateUncatalogedThemeChoice(selection, !CanPreviewerReportThemes);
         if (updated == pending) return;
-        bool selected = DesignSurface.SelectedPreviewTheme == pending;
         _pendingThemeChoice = updated;
         _updatingThemeChoices = true;
         try
         {
             DesignSurface.PreviewThemes[index] = updated;
-            if (selected) DesignSurface.SelectedPreviewTheme = updated;
+            DesignSurface.SelectedPreviewTheme = updated;
         }
         finally { _updatingThemeChoices = false; }
     }
@@ -105,6 +135,7 @@ public sealed partial class DesignerDocumentViewModel
             if (IsDisposed || _updatingThemeChoices || choice is null || PreviewThemeRequest is not { } current
                 || choice.Selection == current.Selection) return;
             PreviewThemeRequest = current with { RequestId = Guid.NewGuid(), Selection = choice.Selection };
+            RemovePendingThemeChoice(choice);
             if (choice.Selection is not null) UseExternalPreviewer = true;
         }));
         _disposables.Add(Observable.Switch(this.WhenAnyValue(document => document.PreviewerSession)
@@ -125,7 +156,6 @@ public sealed partial class DesignerDocumentViewModel
         if (catalog is null)
         {
             if (PreviewerSession is null) DesignSurface.HasPreviewThemeCatalog = false;
-            UpdatePendingThemeChoice();
             return;
         }
         if (catalog.RequestId != PreviewThemeRequest?.RequestId) return;

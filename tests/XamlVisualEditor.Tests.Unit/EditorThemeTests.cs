@@ -141,21 +141,42 @@ public sealed class EditorThemeTests
     [AvaloniaTheory]
     [InlineData("dark", "#333333", "#007ACC")]
     [InlineData("light", "#F4F4F4", "#006DB5")]
-    [InlineData("meadow", null, null)]
-    public void DialogButtonsDistinguishPrimaryHoverPressedAndDisabledStates(string theme, string? neutral, string? primary)
+    public void DialogButtonsDistinguishPrimaryHoverPressedAndDisabledStates(string theme, string neutral, string primary)
     {
         using ThemeHost host = new();
         using EditorThemeService themes = new(host.Registry, host.Manager, host.Options);
-        if (theme == "meadow")
-        {
-            EditorThemePalette palette = new SwatchEditorThemeProvider().GetPalette(theme);
-            host.Application.RequestedThemeVariant = ThemeVariant.Light;
-            host.Application.Resources = EditorThemeResources.Create(palette);
-            neutral = palette.Colors[EditorThemeColor.SurfaceAlt];
-            primary = palette.Colors[EditorThemeColor.Accent];
-        }
-        else themes.Apply(new("builtin", theme));
+        themes.Apply(new("builtin", theme));
 
+        AssertDialogButtonStates(Color.Parse(neutral), Color.Parse(primary));
+    }
+
+    [AvaloniaFact]
+    public void ExtensionPaletteDialogButtonsDistinguishPrimaryHoverPressedAndDisabledStates()
+    {
+        using ThemeHost host = new();
+        using EditorThemeService themes = new(host.Registry, host.Manager, host.Options);
+        EditorThemePalette palette = new SwatchEditorThemeProvider().GetPalette("meadow");
+        host.Application.RequestedThemeVariant = ThemeVariant.Light;
+        host.Application.Resources = EditorThemeResources.Create(palette);
+
+        AssertDialogButtonStates(Color.Parse(palette.Colors[EditorThemeColor.SurfaceAlt]),
+            Color.Parse(palette.Colors[EditorThemeColor.Accent]));
+    }
+
+    [Theory]
+    [InlineData("harbor")]
+    [InlineData("meadow")]
+    [InlineData("dune")]
+    public void SwatchPalettesGiveEveryRoleADistinctColor(string themeId)
+    {
+        EditorThemePalette palette = new SwatchEditorThemeProvider().GetPalette(themeId);
+
+        Assert.Equal(Enum.GetValues<EditorThemeColor>(), palette.Colors.Keys.Order());
+        Assert.Equal(palette.Colors.Count, palette.Colors.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    private static void AssertDialogButtonStates(Color neutral, Color primary)
+    {
         Button save = new() { Content = "Save", IsDefault = true, Width = 100 };
         Button cancel = new() { Content = "Cancel", Width = 100 };
         StackPanel panel = new() { Margin = new Thickness(20), Spacing = 12, Children = { save, cancel } };
@@ -167,8 +188,8 @@ public sealed class EditorThemeTests
             ContentPresenter Presenter(Button button) => button.GetVisualDescendants().OfType<ContentPresenter>().Single(item => item.Name == "PART_ContentPresenter");
             Color Background(Button button) => Assert.IsAssignableFrom<ISolidColorBrush>(Presenter(button).Background).Color;
             Color Foreground(Button button) => Assert.IsAssignableFrom<ISolidColorBrush>(Presenter(button).Foreground).Color;
-            Assert.Equal(Color.Parse(neutral!), Background(cancel));
-            Assert.Equal(Color.Parse(primary!), Background(save));
+            Assert.Equal(neutral, Background(cancel));
+            Assert.Equal(primary, Background(save));
             Color enabledForeground = Foreground(save);
             foreach (Button button in new[] { save, cancel })
             {
@@ -191,7 +212,7 @@ public sealed class EditorThemeTests
             save.IsEnabled = cancel.IsEnabled = false;
             Flush(window);
             Assert.Equal(Background(cancel), Background(save));
-            Assert.NotEqual(Color.Parse(primary!), Background(save));
+            Assert.NotEqual(primary, Background(save));
             Assert.NotEqual(enabledForeground, Foreground(save));
         }
         finally { window.Close(); }
@@ -476,12 +497,12 @@ public sealed class SwatchEditorThemeProvider : IEditorThemeProvider
             ["meadow"] = (false, new[]
             {
                 "#FAF7F5", "#EFEAE6", "#E2DCD7", "#291334", "#A0291334", "#B9AEA6", "#2E6F9E", "#FFFFFF",
-                "#3B82B8", "#F7FBFF", "#C03030", "#FFFFFF", "#E0A020", "#202020", "#2E8B57", "#FFFFFF"
+                "#3B82B8", "#F7FBFF", "#C03030", "#FFF4F4", "#E0A020", "#202020", "#2E8B57", "#F0FFF4"
             }),
             ["dune"] = (false, new[]
             {
                 "#F5ECD9", "#EADFC6", "#DDCFB2", "#3A2C17", "#A03A2C17", "#B8A47E", "#A0522D", "#FFF8F0",
-                "#B5653B", "#FFFAF5", "#B3261E", "#FFFFFF", "#C98B11", "#1E1400", "#3D7A3A", "#FFFFFF"
+                "#B5653B", "#FFFAF5", "#B3261E", "#FFF3F2", "#C98B11", "#1E1400", "#3D7A3A", "#F2FFF1"
             })
         };
 
@@ -493,6 +514,8 @@ public sealed class SwatchEditorThemeProvider : IEditorThemeProvider
         if (!Palettes.TryGetValue(themeId, out var palette))
             throw new ArgumentException("Unknown swatch theme.", nameof(themeId));
         EditorThemeColor[] roles = Enum.GetValues<EditorThemeColor>();
+        if (palette.Colors.Length != roles.Length)
+            throw new InvalidOperationException($"The swatch theme '{themeId}' lists {palette.Colors.Length} colors for {roles.Length} roles.");
         return new EditorThemePalette(palette.IsDark, roles.Zip(palette.Colors).ToDictionary(item => item.First, item => item.Second));
     }
 }

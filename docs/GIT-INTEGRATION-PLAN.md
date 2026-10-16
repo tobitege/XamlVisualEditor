@@ -23,6 +23,26 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
+Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben. Offene Befunde des Reviews von Phase 0/1
+(Stand 511cff6), Behebung nach dem Commit von Phase 2:
+1. Watcher: Zulassungsliste der Zustandsdateien statt Sperrliste (sonst Refresh-Endlosschleife mit `core.fsmonitor`);
+   im verknüpften Worktree zusätzlich das Common-Dir (`rev-parse --git-common-dir`) für `refs/**`, `packed-refs`, `config`.
+2. Stage/Unstage All und Ordner: `git add -A`, `git reset -q`, Ordner als Pathspec, Listen über
+   `--pathspec-from-file=- --pathspec-file-nul` (sonst Abbruch ab etwa 600 Dateien); Mindestversion 2.26.
+3. Fehler von `git status` ist kein „kein Repository“: Repository mit Fehlermeldung behalten, Watcher weiterlaufen lassen.
+4. Output-Kanal: `CommandCompleted` abgesichert, `AppOutputChannel._lines` (nie gelesen, ungesichert) entfernen.
+5. Unstage einer Umbenennung nimmt auch den alten Pfad; Konflikte genau einmal im Panel; Panel nutzt die Prädikate der Kommandos.
+6. Refresh: Sample statt Debounce, injizierbarer Scheduler; Snapshots wertgleich mit `DistinctUntilChanged`; Busy-Flag ohne Race.
+7. `IWindow.OutputChannelShowRequested` als Default-Interface-Member, Konstruktor-Überladung statt optionalem Parameter,
+   `ActivateAsync` auf dem UI-Thread; Palette prüft wie das Menü `IsExtensionCommandEnabled`.
+8. GitProcessRunner: Abbruch nur nach tatsächlichem Kill melden, begrenztes Warten nach Kill, Kill-Registrierung vor Callback,
+   ungenutzte Optionen testen oder entfernen; Commit abbrechbar.
+9. Vereinfachen: zweiter `GitExtension`-Konstruktor und DI des Sets streichen, totes v1-Parsing und eigene Panel-Session entfernen;
+   `WitnessOn` statt `Dispatcher.Post`; doppeltes `--no-optional-locks` entfernen; Pfadvergleich über `FileSystemPathComparison`;
+   `GitExecutableLocator` internal.
+10. Tests: echte Repos für Ordner-Stage, Rename-Unstage, Stage All mit über 1.500 Dateien; Theory für die Watcher-Filter;
+    Watcher-Ausfall, Status-Fehler, Timeout; `GitTestRepository` ohne `init -b` (git 2.23) und mit `GIT_CEILING_DIRECTORIES`.
+
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 
 Entscheidung zu 1.4: Der `.git`-Watcher und das Aktualisieren nach eigenen Kommandos laufen immer; der rekursive

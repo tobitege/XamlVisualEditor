@@ -5,6 +5,8 @@ uses Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
 ### Added
 
 - Added a coordinate strip below the design surface and the external previewer. It shows, in logical pixels relative to the root element, the pixel under the pointer (also outside the root within the viewport), the element under the pointer as `Type#Name`, the position and size of the selection with its change while moving or resizing, a distance measured with the new measure tool, and the zoom level. A click copies a value as `x,y`, `x,y,width,height` or `dx,dy`. The rulers mark the pixel under the pointer.
@@ -176,5 +178,6 @@ uses Semantic Versioning.
 - Linux, Windows, and macOS release archives for x64 and Arm64.
 - Source-linked NuGet packages and symbol packages.
 
-[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v0.1.0

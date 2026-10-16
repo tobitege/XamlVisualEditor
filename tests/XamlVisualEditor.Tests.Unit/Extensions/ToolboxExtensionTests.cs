@@ -74,6 +74,25 @@ public sealed class ToolboxExtensionTests
     }
 
     [Fact]
+    public async Task EveryToolboxCommandAppearsInTheCommandPalette()
+    {
+        ExtensionContext context = CreateContext(new CommandRegistry(), out _, out _);
+
+        await new ToolboxExtensionEntry().ActivateAsync(context, CancellationToken.None);
+
+        ExtensionContributionRegistry contributions = Assert.IsType<ExtensionContributionRegistry>(context.Contributions);
+        foreach (string commandId in new[]
+                 {
+                     "toolbox.insertButton", "toolbox.insertSelected", "toolbox.showLoadTask", "toolbox.toggleView"
+                 })
+        {
+            Assert.True(context.CommandMetadata.TryGet(commandId, out CommandMetadata metadata), commandId);
+            Assert.False(string.IsNullOrWhiteSpace(metadata.Title), commandId);
+            Assert.Contains(contributions.CommandPaletteItems, item => item.CommandId == commandId);
+        }
+    }
+
+    [Fact]
     public async Task InsertSelected_UsesCommandArguments()
     {
         CommandRegistry commands = new();

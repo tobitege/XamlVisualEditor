@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.TextEditingExtension.Services;
@@ -14,9 +13,21 @@ public readonly record struct TextSelection(int Start, int Length, int CaretOffs
 /// <summary>Edits to apply to a document and the selection to show afterwards.</summary>
 public sealed record TextEditResult(IReadOnlyList<TextEdit> Edits, TextSelection Selection);
 
-/// <summary>Computes text editing operations on a document text; the results are applied by the caller.</summary>
+/// <summary>
+/// Computes text editing operations on a document text; the results are applied by the caller. Line operations
+/// insert or remove text on each line instead of replacing the lines, so that marks on the untouched text stay in place.
+/// </summary>
 public static class TextEditOperations
 {
+    /// <summary>Gets the tab width that indentation columns are counted with when the editor gives none.</summary>
+    public const int DEFAULT_TAB_SIZE = 4;
+
+    // Commenting a block inserts ESCAPE_MARK behind the first character of BlockForbidden wherever that character is
+    // followed by the second one or by ESCAPE_MARK; uncommenting removes one ESCAPE_MARK behind every such character.
+    // In XML "a--b" becomes "a-!-b", "-!" becomes "-!!", and an inner "<!-- x -->" becomes "<!-!- x -!->". The
+    // escaped text never contains BlockForbidden, and uncommenting restores every text exactly.
+    private const char ESCAPE_MARK = '!';
+
     /// <summary>Turns the selected text into upper case.</summary>
     public static TextEditResult? ToUpperCase(string text, TextSelection selection)
     {
@@ -38,21 +49,24 @@ public static class TextEditOperations
         return new TextEditResult([edit], new TextSelection(range.Start + 1, inner.Length, range.Start + 1 + inner.Length));
     }
 
-    /// <summary>Comments the selected lines, or uncomments them when every non-blank line is already commented.</summary>
-    public static TextEditResult? ToggleComment(string text, TextSelection selection, CommentSyntax syntax)
+    /// <summary>
+    /// Uncomments the selected lines when they are exactly one block comment or when every non-blank line is a line
+    /// comment; otherwise comments them.
+    /// </summary>
+    public static TextEditResult? ToggleComment(string text, TextSelection selection, CommentSyntax syntax, int tabSize = DEFAULT_TAB_SIZE)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
-        bool commented = syntax.IsBlock
-            ? IsBlockCommented(block.Text, syntax)
-            : block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).All(line => IsLineCommented(line, syntax));
-        return commented ? Uncomment(text, selection, syntax) : Comment(text, selection, syntax);
+        bool commented = IsSingleBlockComment(block.Text, syntax)
+            || (!syntax.IsBlock && block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).All(line => IsLineCommented(line, syntax)));
+        return commented ? Uncomment(text, selection, syntax) : Comment(text, selection, syntax, tabSize);
     }
 
     /// <summary>
-    /// Comments the selected lines. A block comment encloses the text around the existing comments, which stay as they
-    /// are; a selection that starts or ends inside a comment is left unchanged.
+    /// Comments the selected lines. A block comment encloses all of them, comments inside included, whose markers are
+    /// escaped until the enclosing comment is removed; a selection that starts or ends inside a comment is left
+    /// unchanged. A line comment starts at the indentation column of the least indented line.
     /// </summary>
-    public static TextEditResult? Comment(string text, TextSelection selection, CommentSyntax syntax)
+    public static TextEditResult? Comment(string text, TextSelection selection, CommentSyntax syntax, int tabSize = DEFAULT_TAB_SIZE)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
         if (string.IsNullOrWhiteSpace(block.Text))
@@ -62,52 +76,90 @@ public static class TextEditOperations
 
         if (syntax.IsBlock)
         {
-            return CommentBlock(block.Text, syntax) is { } commented ? block.Replace(commented, selection) : null;
+            return CommentBlock(block, syntax) is { } edits ? block.Apply(edits, selection) : null;
         }
 
-        int column = block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).Min(LeadingWhitespace);
+        int size = Math.Max(1, tabSize);
+        int column = block.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).Min(line => IndentColumns(line, size));
         string prefix = syntax.LinePrefix + " ";
-        return block.Replace(block.MapLines(line => string.IsNullOrWhiteSpace(line) ? line : line.Insert(column, prefix)), selection);
+        List<TextEdit> lineEdits = new();
+        for (int index = 0; index < block.Lines.Count; index++)
+        {
+            string line = block.Lines[index];
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                lineEdits.Add(Insert(block.LineStarts[index] + IndexAtColumn(line, column, size), prefix));
+            }
+        }
+
+        return block.Apply(lineEdits, selection);
     }
 
-    /// <summary>Removes the comment markers of the selected lines.</summary>
+    /// <summary>Removes the comment markers of the selected lines or of the block comments they consist of.</summary>
     public static TextEditResult? Uncomment(string text, TextSelection selection, CommentSyntax syntax)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
-        string uncommented = syntax.IsBlock
-            ? RemoveBlockComment(block.Text, syntax)
-            : block.MapLines(line => RemoveLineComment(line, syntax));
-        return uncommented == block.Text ? null : block.Replace(uncommented, selection);
+        if (syntax.IsBlock || IsSingleBlockComment(block.Text, syntax))
+        {
+            return RemoveBlockComments(block, syntax) is { } edits ? block.Apply(edits, selection) : null;
+        }
+
+        List<TextEdit> lineEdits = new();
+        for (int index = 0; index < block.Lines.Count; index++)
+        {
+            string line = block.Lines[index];
+            int markerStart = LeadingWhitespace(line);
+            int marker = syntax.MatchLineComment(line, markerStart);
+            if (marker > 0)
+            {
+                int length = markerStart + marker < line.Length && line[markerStart + marker] == ' ' ? marker + 1 : marker;
+                lineEdits.Add(Remove(block.LineStarts[index] + markerStart, length));
+            }
+        }
+
+        return block.Apply(lineEdits, selection);
     }
 
     /// <summary>Indents every non-blank selected line by one level.</summary>
     public static TextEditResult? Indent(string text, TextSelection selection, string indentUnit)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
-        string indented = block.MapLines(line => string.IsNullOrWhiteSpace(line) ? line : indentUnit + line);
-        return indented == block.Text ? null : block.Replace(indented, selection);
+        List<TextEdit> edits = new();
+        for (int index = 0; index < block.Lines.Count; index++)
+        {
+            if (!string.IsNullOrWhiteSpace(block.Lines[index]) && indentUnit.Length > 0)
+            {
+                edits.Add(Insert(block.LineStarts[index], indentUnit));
+            }
+        }
+
+        return block.Apply(edits, selection);
     }
 
     /// <summary>Removes one indentation level (a tab or up to one level of spaces) from every selected line.</summary>
     public static TextEditResult? Unindent(string text, TextSelection selection, int indentationSize)
     {
         LineBlock block = LineBlock.FromSelection(text, selection);
-        string unindented = block.MapLines(line =>
+        List<TextEdit> edits = new();
+        for (int index = 0; index < block.Lines.Count; index++)
         {
-            if (line.StartsWith('\t'))
+            string line = block.Lines[index];
+            int length = line.StartsWith('\t') ? 1 : 0;
+            if (length == 0)
             {
-                return line[1..];
+                while (length < indentationSize && length < line.Length && line[length] == ' ')
+                {
+                    length++;
+                }
             }
 
-            int spaces = 0;
-            while (spaces < indentationSize && spaces < line.Length && line[spaces] == ' ')
+            if (length > 0)
             {
-                spaces++;
+                edits.Add(Remove(block.LineStarts[index], length));
             }
+        }
 
-            return line[spaces..];
-        });
-        return unindented == block.Text ? null : block.Replace(unindented, selection);
+        return block.Apply(edits, selection);
     }
 
     /// <summary>Sorts the selected lines alphabetically, ignoring case.</summary>
@@ -261,19 +313,27 @@ public static class TextEditOperations
             return index;
         }
 
-        // A string literal ends at its closing quote or, when unterminated, at the end of the line.
+        // A string literal ends at its closing quote or, when unterminated, at the end of the line. The language decides
+        // whether an escape character or a doubled quote keeps a quote inside the literal.
         char quote = text[index];
         for (int position = index + 1; position < text.Length; position++)
         {
-            if (text[position] == '\\')
+            char current = text[position];
+            if (current == syntax.StringEscape)
             {
                 position++;
             }
-            else if (text[position] == quote)
+            else if (current == quote)
             {
+                if (syntax.DoubledQuotes && position + 1 < text.Length && text[position + 1] == quote)
+                {
+                    position++;
+                    continue;
+                }
+
                 return position + 1;
             }
-            else if (text[position] is '\r' or '\n')
+            else if (current is '\r' or '\n')
             {
                 return position;
             }
@@ -319,6 +379,10 @@ public static class TextEditOperations
         return new TextSelection(start, length, Math.Clamp(selection.CaretOffset, 0, text.Length));
     }
 
+    private static TextEdit Insert(int offset, string value) => new() { Offset = offset, Length = 0, NewText = value };
+
+    private static TextEdit Remove(int offset, int length) => new() { Offset = offset, Length = length, NewText = string.Empty };
+
     private static bool IsBracket(char value) => value is '(' or ')' or '[' or ']' or '{' or '}';
 
     private static bool IsLineCommented(string line, CommentSyntax syntax)
@@ -326,92 +390,83 @@ public static class TextEditOperations
         return syntax.StartsLineComment(line, LeadingWhitespace(line));
     }
 
-    private static string RemoveLineComment(string line, CommentSyntax syntax)
+    // A block is commented when it is one block comment with nothing but whitespace around it.
+    private static bool IsSingleBlockComment(string block, CommentSyntax syntax)
     {
-        int index = LeadingWhitespace(line);
-        if (!syntax.StartsLineComment(line, index))
-        {
-            return line;
-        }
-
-        int prefixLength = syntax.LinePrefix!.Length;
-        int length = index + prefixLength < line.Length && line[index + prefixLength] == ' ' ? prefixLength + 1 : prefixLength;
-        return line.Remove(index, length);
-    }
-
-    // A block is commented when it holds at least one comment and nothing but whitespace outside its comments.
-    private static bool IsBlockCommented(string block, CommentSyntax syntax)
-    {
-        return SplitComments(block, syntax) is { } parts
-            && parts.Any(part => part.IsComment)
+        return syntax.BlockStart is not null
+            && SplitComments(block, syntax) is { } parts
+            && parts.Count(part => part.IsComment) == 1
             && parts.All(part => part.IsComment || string.IsNullOrWhiteSpace(block.Substring(part.Start, part.Length)));
     }
 
-    // A comment cannot contain another one, so every text between the existing comments gets a comment of its own.
-    // The whitespace around that text stays outside the markers.
-    private static string? CommentBlock(string block, CommentSyntax syntax)
+    // One comment encloses the block without the whitespace around it, separated from the markers by a space.
+    private static List<TextEdit>? CommentBlock(LineBlock block, CommentSyntax syntax)
     {
-        if (SplitComments(block, syntax) is not { } parts)
+        string value = block.Text;
+        if (SplitComments(value, syntax) is null)
         {
             return null;
         }
 
-        StringBuilder builder = new(block.Length + parts.Count * (syntax.BlockStart!.Length + syntax.BlockEnd!.Length + 2));
-        foreach (BlockPart part in parts)
+        int start = value.Length - value.TrimStart().Length;
+        int end = value.TrimEnd().Length;
+        List<TextEdit> edits = [Insert(block.Start + start, syntax.BlockStart + " ")];
+        if (syntax.BlockForbidden is { } forbidden)
         {
-            string value = block.Substring(part.Start, part.Length);
-            if (part.IsComment || string.IsNullOrWhiteSpace(value))
+            for (int index = start; index < end - 1; index++)
             {
-                builder.Append(value);
-                continue;
+                if (value[index] == forbidden[0] && (value[index + 1] == forbidden[1] || value[index + 1] == ESCAPE_MARK))
+                {
+                    edits.Add(Insert(block.Start + index + 1, ESCAPE_MARK.ToString()));
+                }
             }
-
-            int leading = value.Length - value.TrimStart().Length;
-            int trailing = value.Length - value.TrimEnd().Length;
-            builder.Append(value, 0, leading)
-                .Append(syntax.BlockStart).Append(' ')
-                .Append(value, leading, value.Length - leading - trailing)
-                .Append(' ').Append(syntax.BlockEnd)
-                .Append(value, value.Length - trailing, trailing);
         }
 
-        string commented = builder.ToString();
-        return commented == block ? null : commented;
+        edits.Add(Insert(block.Start + end, " " + syntax.BlockEnd));
+        return edits;
     }
 
-    // Removes the markers of every comment and the single space the commenting added inside each of them.
-    private static string RemoveBlockComment(string block, CommentSyntax syntax)
+    // Removes the markers of every comment, the single space the commenting added inside each of them and the escapes.
+    private static List<TextEdit>? RemoveBlockComments(LineBlock block, CommentSyntax syntax)
     {
-        if (SplitComments(block, syntax) is not { } parts)
+        string value = block.Text;
+        if (SplitComments(value, syntax) is not { } parts)
         {
-            return block;
+            return null;
         }
 
-        StringBuilder builder = new(block.Length);
-        foreach (BlockPart part in parts)
+        List<TextEdit> edits = new();
+        foreach (BlockPart part in parts.Where(part => part.IsComment))
         {
-            if (!part.IsComment)
-            {
-                builder.Append(block, part.Start, part.Length);
-                continue;
-            }
-
             int innerStart = part.Start + syntax.BlockStart!.Length;
             int innerEnd = part.Start + part.Length - syntax.BlockEnd!.Length;
-            if (innerStart < innerEnd && block[innerStart] == ' ')
+            if (innerStart < innerEnd && value[innerStart] == ' ')
             {
                 innerStart++;
             }
 
-            if (innerEnd > innerStart && block[innerEnd - 1] == ' ')
+            if (innerEnd > innerStart && value[innerEnd - 1] == ' ')
             {
                 innerEnd--;
             }
 
-            builder.Append(block, innerStart, innerEnd - innerStart);
+            edits.Add(Remove(block.Start + part.Start, innerStart - part.Start));
+            if (syntax.BlockForbidden is { } forbidden)
+            {
+                for (int index = innerStart; index < innerEnd - 1; index++)
+                {
+                    if (value[index] == forbidden[0] && value[index + 1] == ESCAPE_MARK)
+                    {
+                        edits.Add(Remove(block.Start + index + 1, 1));
+                        index++;
+                    }
+                }
+            }
+
+            edits.Add(Remove(block.Start + innerEnd, part.Start + part.Length - innerEnd));
         }
 
-        return builder.ToString();
+        return edits;
     }
 
     // Splits a block into its complete comments and the text between them. Returns null when a marker has no partner
@@ -465,6 +520,39 @@ public static class TextEditOperations
         return count;
     }
 
+    // A tab advances to the next multiple of the tab size.
+    private static int NextColumn(int column, char value, int tabSize)
+    {
+        return value == '\t' ? (column / tabSize + 1) * tabSize : column + 1;
+    }
+
+    private static int IndentColumns(string line, int tabSize)
+    {
+        int column = 0;
+        for (int index = 0; index < LeadingWhitespace(line); index++)
+        {
+            column = NextColumn(column, line[index], tabSize);
+        }
+
+        return column;
+    }
+
+    // The last index in the indentation whose column does not exceed the given column; a tab that spans the column
+    // stays behind the inserted text.
+    private static int IndexAtColumn(string line, int column, int tabSize)
+    {
+        int indentation = LeadingWhitespace(line);
+        int index = 0;
+        int current = 0;
+        while (index < indentation && NextColumn(current, line[index], tabSize) <= column)
+        {
+            current = NextColumn(current, line[index], tabSize);
+            index++;
+        }
+
+        return index;
+    }
+
     /// <summary>A complete block comment or the text between two of them.</summary>
     private readonly record struct BlockPart(int Start, int Length, bool IsComment);
 
@@ -476,7 +564,29 @@ public static class TextEditOperations
             Start = start;
             Text = text;
             Delimiter = delimiter;
-            Lines = SplitLines(text);
+            List<string> lines = new();
+            List<int> lineStarts = new();
+            int lineStart = 0;
+            int index = 0;
+            while (index < text.Length)
+            {
+                int breakLength = LineBreakLength(text, index);
+                if (breakLength == 0)
+                {
+                    index++;
+                    continue;
+                }
+
+                lines.Add(text[lineStart..index]);
+                lineStarts.Add(start + lineStart);
+                index += breakLength;
+                lineStart = index;
+            }
+
+            lines.Add(text[lineStart..]);
+            lineStarts.Add(start + lineStart);
+            Lines = lines;
+            LineStarts = lineStarts;
         }
 
         public int Start { get; }
@@ -486,6 +596,9 @@ public static class TextEditOperations
         public string Delimiter { get; }
 
         public IReadOnlyList<string> Lines { get; }
+
+        /// <summary>Gets the document offset of each line in <see cref="Lines"/>.</summary>
+        public IReadOnlyList<int> LineStarts { get; }
 
         public static LineBlock FromSelection(string text, TextSelection selection)
         {
@@ -503,57 +616,23 @@ public static class TextEditOperations
             return new LineBlock(blockStart, text[blockStart..blockEnd], DetectDelimiter(text));
         }
 
-        public string MapLines(Func<string, string> map)
+        // A selection selects the changed lines; a caret keeps its position relative to the end of its line.
+        public TextEditResult? Apply(IReadOnlyList<TextEdit> edits, TextSelection original)
         {
-            StringBuilder builder = new(Text.Length + Lines.Count * 4);
-            int position = 0;
-            foreach (string line in Lines)
+            if (edits.Count == 0)
             {
-                builder.Append(map(line));
-                position += line.Length;
-                int breakLength = LineBreakLength(Text, position);
-                builder.Append(Text, position, breakLength);
-                position += breakLength;
+                return null;
             }
 
-            return builder.ToString();
-        }
-
-        public TextEditResult Replace(string replacement, TextSelection original)
-        {
-            TextEdit edit = new() { Offset = Start, Length = Text.Length, NewText = replacement };
+            int length = Text.Length + edits.Sum(edit => edit.NewText.Length - edit.Length);
             if (original.Length > 0)
             {
-                return new TextEditResult([edit], new TextSelection(Start, replacement.Length, Start + replacement.Length));
+                return new TextEditResult(edits, new TextSelection(Start, length, Start + length));
             }
 
-            // A caret keeps its position relative to the end of its line.
             int caretFromEnd = Start + Text.Length - original.CaretOffset;
-            int caret = Math.Clamp(Start + replacement.Length - caretFromEnd, Start, Start + replacement.Length);
-            return new TextEditResult([edit], new TextSelection(caret, 0, caret));
-        }
-
-        private static List<string> SplitLines(string text)
-        {
-            List<string> lines = new();
-            int start = 0;
-            int index = 0;
-            while (index < text.Length)
-            {
-                int breakLength = LineBreakLength(text, index);
-                if (breakLength == 0)
-                {
-                    index++;
-                    continue;
-                }
-
-                lines.Add(text[start..index]);
-                index += breakLength;
-                start = index;
-            }
-
-            lines.Add(text[start..]);
-            return lines;
+            int caret = Math.Clamp(Start + length - caretFromEnd, Start, Start + length);
+            return new TextEditResult(edits, new TextSelection(caret, 0, caret));
         }
 
         private static int LineBreakLength(string text, int index)

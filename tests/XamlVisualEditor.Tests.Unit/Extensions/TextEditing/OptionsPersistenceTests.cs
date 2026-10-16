@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
+using XamlVisualEditor.TextEditingExtension.Localization;
 using XamlVisualEditor.TextEditingExtension.Services;
 using XamlVisualEditor.TextEditingExtension.ViewModels;
 using Xunit;
@@ -81,16 +82,65 @@ public sealed class OptionsPersistenceTests
     }
 
     [Fact]
-    public void DisposeWaitsForTheRunningSave()
+    public async Task DisposeWaitsForTheRunningSave()
     {
         FakeViewHost view = new();
-        CountingStorage storage = new() { WriteDelay = TimeSpan.FromMilliseconds(100) };
+        TaskCompletionSource writeGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        CountingStorage storage = new() { WriteGate = writeGate.Task };
         OptionsPersistence persistence = new(view, new TextEditorOptionsStore(storage), null, new NullLogger());
 
         view.SetOptions(view.Options with { WordWrap = true });
+        await storage.WriteStarted.Task;
+
+        // The save is held until Dispose has started; Dispose returns only after the write.
+        view.Unsubscribed = () => writeGate.SetResult();
         persistence.Dispose();
 
         Assert.Equal(1, storage.Writes);
+    }
+
+    [AvaloniaFact]
+    public async Task OptionsDialogThatFailsRestoresTheOriginalAndNeverSavesThePreview()
+    {
+        FakeViewHost view = new();
+        CountingStorage storage = new();
+        ScriptedDialogHost dialogs = new();
+        ExtensionContext context = CreateContext(view, dialogs, storage);
+        await new TextEditingExtensionEntry().ActivateAsync(context, CancellationToken.None);
+        TextEditorViewOptions original = view.Options;
+        dialogs.Script = _ =>
+        {
+            view.SetOptions(original with { FontSize = 20 });
+            throw new InvalidOperationException("dialog failed");
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            context.Commands.ExecuteAsync(TextEditingExtensionEntry.OPTIONS_COMMAND_ID, null, CancellationToken.None));
+        await context.Subscriptions.OfType<OptionsPersistence>().Single().Saving;
+
+        Assert.Equal(original, view.Options);
+        Assert.Equal(0, storage.Writes);
+    }
+
+    [Fact]
+    public async Task EveryCommandHasMetadataAndAPaletteEntry()
+    {
+        CommandRegistry commands = new();
+        CommandMetadataRegistry metadata = new();
+        ExtensionContributionRegistry contributions = new();
+        ExtensionContext context = CreateContext(new FakeViewHost(), new ScriptedDialogHost(), new CountingStorage(), commands, metadata, contributions);
+        await new TextEditingExtensionEntry().ActivateAsync(context, CancellationToken.None);
+
+        IReadOnlyList<string> registered = await commands.GetCommandsAsync(CancellationToken.None);
+
+        Assert.Contains(TextEditingExtensionEntry.OPTIONS_COMMAND_ID, registered);
+        Assert.All(registered, commandId =>
+        {
+            Assert.True(metadata.TryGet(commandId, out CommandMetadata entry), commandId);
+            Assert.False(string.IsNullOrWhiteSpace(entry.Title), commandId);
+            Assert.Equal(TextEditingStrings.Category, entry.Category);
+            Assert.Contains(contributions.CommandPaletteItems, item => item.CommandId == commandId && item.Category == TextEditingStrings.Category);
+        });
     }
 
     [AvaloniaFact]
@@ -144,14 +194,20 @@ public sealed class OptionsPersistenceTests
         Assert.Null(await new TextEditorOptionsStore(storage).LoadAsync(CancellationToken.None));
     }
 
-    private static ExtensionContext CreateContext(ITextEditorViewHost view, IDialogHost dialogHost, IExtensionStorage storage)
+    private static ExtensionContext CreateContext(
+        ITextEditorViewHost view,
+        IDialogHost dialogHost,
+        IExtensionStorage storage,
+        CommandRegistry? commands = null,
+        CommandMetadataRegistry? metadata = null,
+        ExtensionContributionRegistry? contributions = null)
     {
         return new ExtensionContext(
             "test.text-editing",
             "/tmp",
-            new CommandRegistry(),
-            new CommandMetadataRegistry(),
-            new ExtensionContributionRegistry(),
+            commands ?? new CommandRegistry(),
+            metadata ?? new CommandMetadataRegistry(),
+            contributions ?? new ExtensionContributionRegistry(),
             null!,
             null!,
             null!,
@@ -221,16 +277,29 @@ public sealed class OptionsPersistenceTests
 
     private sealed class FakeViewHost : ITextEditorViewHost
     {
+        private EventHandler? _optionsChanged;
+
         public TextEditorViewOptions Options { get; private set; } = new();
 
         public bool HasActiveEditor => false;
 
-        public event EventHandler? OptionsChanged;
+        /// <summary>Runs when a handler of <see cref="OptionsChanged"/> is removed.</summary>
+        public Action? Unsubscribed { get; set; }
+
+        public event EventHandler? OptionsChanged
+        {
+            add => _optionsChanged += value;
+            remove
+            {
+                _optionsChanged -= value;
+                Unsubscribed?.Invoke();
+            }
+        }
 
         public void SetOptions(TextEditorViewOptions options)
         {
             Options = options.Normalize();
-            OptionsChanged?.Invoke(this, EventArgs.Empty);
+            _optionsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public Task<bool> ExecuteAsync(TextEditorViewAction action, CancellationToken cancellationToken) => Task.FromResult(false);
@@ -244,7 +313,11 @@ public sealed class OptionsPersistenceTests
 
         public bool FailNext { get; set; }
 
-        public TimeSpan WriteDelay { get; init; }
+        /// <summary>Gets a task that each write waits for before it stores the value.</summary>
+        public Task WriteGate { get; init; } = Task.CompletedTask;
+
+        /// <summary>Gets a task that completes when the first write starts.</summary>
+        public TaskCompletionSource WriteStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken) => _inner.GetAsync<T>(key, cancellationToken);
 
@@ -256,7 +329,8 @@ public sealed class OptionsPersistenceTests
                 throw new IOException("disk full");
             }
 
-            await Task.Delay(WriteDelay, cancellationToken).ConfigureAwait(false);
+            WriteStarted.TrySetResult();
+            await WriteGate.ConfigureAwait(false);
             await _inner.SetAsync(key, value, cancellationToken).ConfigureAwait(false);
             Writes++;
         }

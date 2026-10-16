@@ -9,6 +9,8 @@ namespace XamlVisualEditor.Tests.Unit.Extensions.TextEditing;
 
 public sealed class CaretPositionMemoryTests
 {
+    private const string POSITIONS_KEY = "textEditing.caretPositions";
+
     [Fact]
     public async Task CaretReturnsToItsLineAndColumnWhenTheFileOpensAgain()
     {
@@ -119,13 +121,91 @@ public sealed class CaretPositionMemoryTests
         Assert.Equal(6, next.CaretOffset);
     }
 
+    [Fact]
+    public async Task DisposeAfterACanceledLoadKeepsTheSavedPositions()
+    {
+        CountingStorage storage = new();
+        string savedPath = Path.GetFullPath("saved.cs");
+        await storage.SetAsync(POSITIONS_KEY, new List<CaretPosition> { new(savedPath, 3, 2) }, CancellationToken.None);
+        FakeEditor editor = new();
+        FakeDocument document = new(Path.GetFullPath("current.cs"), "a\nb") { CaretOffset = 2 };
+        editor.Activate(document);
+        CaretPositionMemory memory = new(editor, storage, new RecordingLogger());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => memory.LoadAsync(new CancellationToken(canceled: true)));
+        memory.Dispose();
+
+        Assert.Equal(1, storage.Writes);
+        List<CaretPosition>? saved = await storage.GetAsync<List<CaretPosition>>(POSITIONS_KEY, CancellationToken.None);
+        Assert.Equal(new CaretPosition(savedPath, 3, 2), Assert.Single(saved!));
+    }
+
+    [Fact]
+    public async Task FileOpenedAgainInTheSameSessionGetsItsCaretAgain()
+    {
+        FakeEditor editor = new();
+        string path = Path.GetFullPath("reopened.cs");
+        FakeDocument first = new(path, "a\nbcd");
+        FakeDocument other = new(Path.GetFullPath("other.cs"), "x");
+        using CaretPositionMemory memory = new(editor, new InMemoryExtensionStorage(), new RecordingLogger());
+        await memory.LoadAsync(CancellationToken.None);
+        editor.Activate(first);
+        first.CaretOffset = 4;
+
+        // Closing the file activates another one; opening it again creates a new document.
+        editor.Activate(other);
+        FakeDocument reopened = new(path, first.Text);
+        editor.Activate(reopened);
+
+        Assert.Equal(4, reopened.CaretOffset);
+    }
+
+    [Fact]
+    public async Task LoadedPositionsKeepTheirOrderAndTheOldestIsEvictedBeyondTheLimit()
+    {
+        InMemoryExtensionStorage storage = new();
+        List<CaretPosition> stored = Enumerable.Range(0, 200)
+            .Select(index => new CaretPosition(Path.GetFullPath("file" + index + ".cs"), 1, 1))
+            .ToList();
+        await storage.SetAsync(POSITIONS_KEY, stored, CancellationToken.None);
+        FakeEditor editor = new();
+        FakeDocument used = new(stored[150].FilePath, "used");
+        FakeDocument added = new(Path.GetFullPath("added.cs"), "new");
+        FakeDocument last = new(Path.GetFullPath("last.cs"), "last");
+        using CaretPositionMemory memory = new(editor, storage, new RecordingLogger(), TimeSpan.FromSeconds(2), new VirtualClock());
+        await memory.LoadAsync(CancellationToken.None);
+        Assert.Equal(stored.Select(position => position.FilePath), memory.Positions.Select(position => position.FilePath));
+
+        editor.Activate(used);
+        used.CaretOffset = 2;
+        editor.Activate(added);
+        IReadOnlyList<CaretPosition> afterUse = memory.Positions;
+
+        Assert.Equal(200, afterUse.Count);
+        Assert.Equal(new CaretPosition(used.FilePath, 1, 3), afterUse[0]);
+        Assert.Equal(stored[0].FilePath, afterUse[1].FilePath);
+        Assert.Equal(stored[199].FilePath, afterUse[^1].FilePath);
+
+        editor.Activate(last);
+        IReadOnlyList<CaretPosition> afterAdd = memory.Positions;
+
+        Assert.Equal(200, afterAdd.Count);
+        Assert.Equal(new[] { added.FilePath, used.FilePath, stored[0].FilePath }, afterAdd.Take(3).Select(position => position.FilePath));
+        Assert.Equal(stored[198].FilePath, afterAdd[^1].FilePath);
+        Assert.DoesNotContain(afterAdd, position => position.FilePath == stored[199].FilePath);
+    }
+
     private sealed class CountingStorage : IExtensionStorage
     {
         private readonly InMemoryExtensionStorage _inner = new();
 
         public int Writes { get; private set; }
 
-        public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken) => _inner.GetAsync<T>(key, cancellationToken);
+        public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return _inner.GetAsync<T>(key, cancellationToken);
+        }
 
         public Task SetAsync<T>(string key, T value, CancellationToken cancellationToken)
         {

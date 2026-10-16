@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <IsXveExtension>true</IsXveExtension>
-    <!-- Built into the application; not published as a separate package. -->
+    <!-- The extension ships inside the application and is not packed, so the set of release packages stays unchanged. -->
     <IsPackable>false</IsPackable>
     <RootNamespace>XamlVisualEditor.TextEditingExtension</RootNamespace>
     <Description>Text editing commands, editor context menu and editor options for the text and code editors</Description>

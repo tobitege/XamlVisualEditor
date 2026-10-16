@@ -12,6 +12,7 @@ uses Semantic Versioning.
 - The zoom level keeps whole percentages; fitting to the viewport rounds down.
 - The context menu of a file document tab offers "Open in File Explorer", "Open in Solution Explorer", "Copy Path" and "Copy File Name", in the tabbed and the MDI layout. The two "Open in" commands show the File Explorer or Solution Explorer panel, expand its tree to the file and select it; the status bar tells when the file is not part of the tree. Extension trees take part through `IExtensionTreeItemPathProvider`, which the File Explorer entries implement.
 - Added a save prompt for modified files when a tab, the workspace or the application closes; automatic saving saves without asking.
+- Saving a file that changed on disk since the editor read it asks whether to overwrite it with the editor text or to reload it from disk. Declining keeps the editor text, and automatic saves of that document stop asking until it is saved manually.
 - Added the option to reopen the last workspace or folder at startup.
 - Added the option to list folders before files in the File Explorer (Options, File Explorer; on by default). It also holds when the File Explorer sorts by its column header, in both directions; the setting is stored as `FileExplorerFoldersBeforeFiles`.
 - Added the TFVC extension with a source control explorer, a pending changes panel, and automatic check-out of versioned files on their first edit. It uses tf.exe and the TFVC REST API with the current Windows credentials; the only required setting is the collection URL.
@@ -101,6 +102,7 @@ uses Semantic Versioning.
 - Fixed a panel shown again from the View menu staying invisible after its side dock had been emptied: the side dock gets its default width back.
 - Fixed the Problems panel crashing when its last problem disappeared after the panel had been pinned from the auto-hide bar: the panel replaces its root list instead of clearing it in place.
 - Fixed stopping the MCP server failing with "The handle is invalid" when the listener closed during a pending accept.
+- Fixed Git panel commands reading file names with characters such as `*`, `?` or `[` as patterns, which could stage, restore or remove other files: paths are passed to Git as literal pathspecs.
 
 ## [0.2.0] - 2026-09-01
 

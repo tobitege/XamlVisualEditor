@@ -523,6 +523,25 @@ public sealed class GitHistoryViewModelTests
         Assert.Equal(GitStrings.NoCommitsFound, fixture.History.Message);
     }
 
+    [AvaloniaFact]
+    public async Task Showing_a_scope_at_a_commit_selects_that_commit_once()
+    {
+        using Fixture fixture = await Fixture.CreateAsync(commitCount: 6);
+        GitHistoryViewModel history = fixture.History;
+        string sha = fixture.Git.Commits.Single(commit => commit.Subject == "Commit 4").Sha;
+
+        history.Show(new GitHistoryScope(Revision: sha));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(sha, history.SelectedCommit?.Sha);
+        Assert.Equal(sha, history.Details.Commit?.Sha);
+
+        history.SelectedCommit = history.Commits[^1];
+        await history.RefreshCommand.Execute().ToTask();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Commit 1", history.SelectedCommit?.Subject);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private Fixture(ScriptedHistoryGitService git)

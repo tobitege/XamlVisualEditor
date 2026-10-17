@@ -307,7 +307,11 @@ public sealed class App : Application
         {
             MainWindowViewModel mainViewModel = sp.GetRequiredService<MainWindowViewModel>();
             IObservable<object?> activeDocument = mainViewModel.WhenAnyValue(x => x.ActiveTextEditorDocument);
-            return new TextEditorViewHost(mainViewModel.EditorContextMenuItems, activeDocument, sp.GetRequiredService<IContextKeys>());
+            return new TextEditorViewHost(
+                mainViewModel.EditorContextMenuItems,
+                activeDocument,
+                sp.GetRequiredService<IContextKeys>(),
+                (commandId, arguments) => _ = mainViewModel.ExecuteExtensionCommandAsync(commandId, arguments));
         });
         services.AddSingleton<ITextEditorViewHost>(sp => sp.GetRequiredService<TextEditorViewHost>());
         services.AddSingleton<IContextKeys, ContextKeyRegistry>();

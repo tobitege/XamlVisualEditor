@@ -197,10 +197,12 @@ internal sealed class GitProcessRunner
             throw new TimeoutException($"git {FirstArgument(request)} did not finish within {request.Timeout}.");
         }
 
+        byte[] outputBytes = output.ToArray();
         return new GitProcessResult
         {
             ExitCode = process.ExitCode,
-            StandardOutput = Utf8NoBom.GetString(output.ToArray()),
+            StandardOutput = Utf8NoBom.GetString(outputBytes),
+            StandardOutputBytes = outputBytes,
             StandardError = Utf8NoBom.GetString(error.ToArray()),
             IsOutputTruncated = output.IsTruncated
         };
@@ -565,6 +567,9 @@ internal sealed class GitProcessResult
     public int ExitCode { get; init; }
 
     public string StandardOutput { get; init; } = string.Empty;
+
+    /// <summary>Gets the output bytes as git wrote them, for output that is not UTF-8 text, such as file contents.</summary>
+    public byte[] StandardOutputBytes { get; init; } = [];
 
     public string StandardError { get; init; } = string.Empty;
 

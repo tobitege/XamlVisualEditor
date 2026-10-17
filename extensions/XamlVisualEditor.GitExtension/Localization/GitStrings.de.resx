@@ -190,4 +190,26 @@
   <data name="LightweightTag" xml:space="preserve"><value>Einfaches Tag</value></data>
   <data name="TagTargetObjectFormat" xml:space="preserve"><value>{0}-Objekt</value></data>
   <data name="TagNotCommitFormat" xml:space="preserve"><value>Zeigt auf ein {0}-Objekt, nicht auf einen Commit: Es hat keine Historie, und kein Branch kann dort beginnen.</value></data>
+  <data name="ToggleChangeMarkersCommand" xml:space="preserve"><value>Git-Änderungen in Editoren zeigen</value></data>
+  <data name="CompareWithHeadCommand" xml:space="preserve"><value>Mit HEAD vergleichen</value></data>
+  <data name="CompareWithIndexCommand" xml:space="preserve"><value>Mit Stage vergleichen</value></data>
+  <data name="BlameCommand" xml:space="preserve"><value>Blame</value></data>
+  <data name="FileTargetRequired" xml:space="preserve"><value>Wähle eine Datei; Ordner lassen sich nicht vergleichen und nicht per Blame anzeigen.</value></data>
+  <data name="CompareTitleFormat" xml:space="preserve"><value>{0} ({1})</value><comment>{0} ist der Dateiname, {1} HEAD oder der Name des Index.</comment></data>
+  <data name="BlameTitleFormat" xml:space="preserve"><value>{0} (Blame)</value></data>
+  <data name="IndexName" xml:space="preserve"><value>Stage</value></data>
+  <data name="Comparing" xml:space="preserve"><value>Wird verglichen …</value></data>
+  <data name="CompareNoVersionFormat" xml:space="preserve"><value>{0} hat keine Textfassung dieser Datei zum Vergleich: Die Datei ist neu, nicht versioniert, im Konflikt, binär, mit Git LFS gespeichert oder größer als 16 MiB.</value></data>
+  <data name="CompareNoChanges" xml:space="preserve"><value>Die Datei hat keine Änderungen.</value></data>
+  <data name="CompareOnlyIgnoredBytesFormat" xml:space="preserve"><value>Keine Zeile weicht von {0} ab, aber Git meldet eine Änderung der gespeicherten Datei: Nur Zeilenenden, die Byte-Order-Mark oder der Zeilenumbruch am Ende unterscheiden sich; diese berücksichtigt der Vergleich nicht.</value></data>
+  <data name="WholeFile" xml:space="preserve"><value>Ganze Datei</value></data>
+  <data name="CompareAgain" xml:space="preserve"><value>Erneut vergleichen</value></data>
+  <data name="LogCompareFailed" xml:space="preserve"><value>Der Vergleich einer Datei mit ihrer Git-Fassung ist fehlgeschlagen.</value></data>
+  <data name="BlameLoading" xml:space="preserve"><value>Blame wird gelesen …</value></data>
+  <data name="LoadBlameFailedFormat" xml:space="preserve"><value>Blame konnte nicht gelesen werden: {0}</value></data>
+  <data name="BlameTruncated" xml:space="preserve"><value>Die Datei ist größer als 16 MiB; die letzten Zeilen fehlen.</value></data>
+  <data name="BlameUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann kein Blame lesen.</value></data>
+  <data name="Uncommitted" xml:space="preserve"><value>Nicht committet</value></data>
+  <data name="RefreshBlame" xml:space="preserve"><value>Erneut lesen</value></data>
+  <data name="BlameHint" xml:space="preserve"><value>Blame der gespeicherten Datei. Doppelklick oder Eingabetaste auf einer Zeile zeigt ihren Commit in der Git-Historie.</value></data>
 </root>

@@ -53,7 +53,11 @@ public sealed class GitCommandsTests
         { GitCommands.TOGGLE_HISTORY_VIEW, GitStrings.ToggleHistoryViewCommand, null },
         { GitCommands.SHOW_HISTORY, GitStrings.ShowHistoryCommand, REPOSITORY_WHEN },
         { GitCommands.SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, REPOSITORY_WHEN },
-        { GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitStrings.ToggleExplorerDecorationsCommand, null }
+        { GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitStrings.ToggleExplorerDecorationsCommand, null },
+        { GitCommands.TOGGLE_CHANGE_MARKERS, GitStrings.ToggleChangeMarkersCommand, null },
+        { GitCommands.COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, REPOSITORY_WHEN },
+        { GitCommands.COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, REPOSITORY_WHEN },
+        { GitCommands.BLAME, GitStrings.BlameCommand, REPOSITORY_WHEN }
     };
 
     [Theory]
@@ -80,7 +84,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(24, commandIds.Count);
+        Assert.Equal(28, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -113,7 +117,8 @@ public sealed class GitCommandsTests
         string[] extensionsIds =
         [
             GitCommands.SHOW_CHANGES, GitCommands.REFRESH, GitCommands.SHOW_OUTPUT, GitCommands.TOGGLE_AUTO_REFRESH,
-            GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.INIT,
+            GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.TOGGLE_CHANGE_MARKERS,
+            GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY
         ];
@@ -121,11 +126,24 @@ public sealed class GitCommandsTests
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
         Assert.All(extensionsItems, item => Assert.Equal("Git", item.Submenu));
         Assert.Equal(
-            new[] { (GitCommands.TOGGLE_AUTO_REFRESH, "git.autoRefresh"), (GitCommands.TOGGLE_EXPLORER_DECORATIONS, "git.explorerDecorations") },
+            new[]
+            {
+                (GitCommands.TOGGLE_AUTO_REFRESH, "git.autoRefresh"),
+                (GitCommands.TOGGLE_EXPLORER_DECORATIONS, "git.explorerDecorations"),
+                (GitCommands.TOGGLE_CHANGE_MARKERS, "git.changeMarkers")
+            },
             extensionsItems.Where(item => item.CheckedWhen is not null).Select(item => (item.CommandId, item.CheckedWhen!)));
 
-        string[] fileIds = [GitCommands.DISCARD, GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE];
-        string[] tabIds = [GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE];
+        string[] fileIds =
+        [
+            GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD, GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD,
+            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
+        ];
+        string[] tabIds =
+        [
+            GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD, GitCommands.COMPARE_WITH_INDEX,
+            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
+        ];
         ExtensionMenuContribution[] contextItems = items
             .Where(item => item.Location is ExtensionMenuLocations.EditorContext or ExtensionMenuLocations.ExplorerContext
                 or ExtensionMenuLocations.DocumentTabContext)
@@ -140,6 +158,35 @@ public sealed class GitCommandsTests
             .Where(item => item.Location == location)
             .Select(item => item.CommandId)
             .Order(StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task Compare_and_blame_open_one_document_per_file_and_version_and_refuse_folders()
+    {
+        using RepositoryRegistration registration = await RepositoryRegistration.CreateAsync(
+            arrange: repository => repository.CommitFileIn(repository.Path, "src/b.txt", "b\n", "add src"));
+        string file = Path.Combine(registration.Repository.Path, "a.txt");
+
+        await registration.ExecuteAsync(GitCommands.COMPARE_WITH_INDEX, file);
+        await registration.Commands.ExecuteAsync(GitCommands.COMPARE_WITH_INDEX, [file, 1], CancellationToken.None);
+        await registration.ExecuteAsync(GitCommands.COMPARE_WITH_HEAD, file);
+        await registration.ExecuteAsync(GitCommands.BLAME, file);
+        await registration.ExecuteAsync(GitCommands.BLAME, Path.Combine(registration.Repository.Path, "src"));
+
+        Assert.Equal(
+            [
+                ("git.compare.index:" + file, $"a.txt ({GitStrings.IndexName})", file),
+                ("git.compare.index:" + file, $"a.txt ({GitStrings.IndexName})", file),
+                ("git.compare.head:" + file, "a.txt (HEAD)", file),
+                ("git.blame:" + file, string.Format(System.Globalization.CultureInfo.CurrentCulture, GitStrings.BlameTitleFormat, "a.txt"), file)
+            ],
+            registration.ViewHost.ShownDocuments);
+        Assert.Equal(3, registration.ViewHost.DocumentViewModels.Count);
+        Assert.Equal(GitFileRevision.Index, Assert.IsType<GitCompareDocumentViewModel>(
+            registration.ViewHost.DocumentViewModels["git.compare.index:" + file]).Revision);
+        Assert.Equal("a.txt", Assert.IsType<GitBlameDocumentViewModel>(
+            registration.ViewHost.DocumentViewModels["git.blame:" + file]).RepositoryPath);
+        Assert.Equal([GitStrings.FileTargetRequired], registration.Window.Infos);
     }
 
     [Fact]
@@ -1278,9 +1325,11 @@ public sealed class GitCommandsTests
             Git = new GitService(options: repository.ProcessOptions);
             Dialogs = new GitDialogHost(respond);
             Session = new GitSession(GitServiceSet.FromService(Git), new FakeWorkspaceInfo { WorkspacePath = repository.Path });
-            GitCommandHandler handler = new(Session, new RecordingExtensionViewHost(), Window, Dialogs, null, output, () => null, null);
+            GitCommandHandler handler = new(Session, ViewHost, Window, Dialogs, null, output, () => null, null);
             GitCommands.RegisterCommands(Commands, new CommandMetadataRegistry(), handler, new List<IDisposable>());
         }
+
+        public RecordingExtensionViewHost ViewHost { get; } = new();
 
         public GitTestRepository Repository { get; }
 
@@ -1326,6 +1375,11 @@ public sealed class GitCommandsTests
 
         public void Dispose()
         {
+            foreach (IDisposable document in ViewHost.DocumentViewModels.Values.OfType<IDisposable>())
+            {
+                document.Dispose();
+            }
+
             Session.Dispose();
             Repository.Dispose();
         }

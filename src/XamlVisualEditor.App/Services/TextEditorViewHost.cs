@@ -12,10 +12,14 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
+using AvaloniaEdit.Editing;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.Rendering;
+using XamlVisualEditor.App.Views;
+using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Services;
@@ -44,11 +48,16 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
     private static readonly AttachedProperty<ITextEditorDisplayState?> DisplayStateProperty =
         AvaloniaProperty.RegisterAttached<TextEditorViewHost, TextEditor, ITextEditorDisplayState?>("DisplayState");
 
+    private static readonly AttachedProperty<LineMarkMargin?> LineMarkMarginProperty =
+        AvaloniaProperty.RegisterAttached<TextEditorViewHost, TextEditor, LineMarkMargin?>("LineMarkMargin");
+
     private static readonly object ManualFoldingTag = new();
 
     private readonly List<WeakReference<TextEditor>> _editors = new();
     private readonly IContextKeys? _contextKeys;
     private readonly IDisposable _activeDocumentSubscription;
+    private readonly TextEditorLineMarkRegistry _lineMarks = new();
+    private readonly Action<string, IReadOnlyList<object?>>? _executeCommand;
     private object? _activeDocument;
     private TextEditorViewOptions _options = new();
     private bool _applying;
@@ -57,25 +66,33 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
     /// <param name="contextMenuItems">The items of the editor context menu.</param>
     /// <param name="activeDocument">Reports the view model of the active document, which is the data context of its editor.</param>
     /// <param name="contextKeys">Receives <see cref="TextEditorContextKeys.HasActiveEditor"/>.</param>
+    /// <param name="executeCommand">Runs the click command of a line mark with its arguments; null ignores clicks.</param>
     public TextEditorViewHost(
         ObservableCollection<ExtensionMenuItemViewModel> contextMenuItems,
         IObservable<object?> activeDocument,
-        IContextKeys? contextKeys = null)
+        IContextKeys? contextKeys = null,
+        Action<string, IReadOnlyList<object?>>? executeCommand = null)
     {
         ContextMenuItems = contextMenuItems;
         _contextKeys = contextKeys;
+        _executeCommand = executeCommand;
         _activeDocumentSubscription = activeDocument.Subscribe(document =>
         {
             _activeDocument = document;
             RefreshActiveEditorKey();
         });
+        _lineMarks.Changed += OnLineMarksChanged;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
         _activeDocumentSubscription.Dispose();
+        _lineMarks.Changed -= OnLineMarksChanged;
     }
+
+    /// <inheritdoc />
+    public ITextEditorLineMarkLayer? CreateLineMarkLayer(string? clickCommandId = null) => _lineMarks.CreateLayer(clickCommandId);
 
     /// <inheritdoc />
     public TextEditorViewOptions Options => _options;
@@ -129,6 +146,12 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
     {
         _editors.RemoveAll(reference => !reference.TryGetTarget(out TextEditor? existing) || ReferenceEquals(existing, editor));
         Follow(editor, null);
+        if (editor.GetValue(LineMarkMarginProperty) is { } margin)
+        {
+            editor.TextArea.LeftMargins.Remove(margin);
+            editor.ClearValue(LineMarkMarginProperty);
+        }
+
         RefreshActiveEditorKey();
     }
 
@@ -195,10 +218,52 @@ public sealed class TextEditorViewHost : ITextEditorViewHost, IDisposable
             margin.IsVisible = options.ShowFoldingMargin;
         }
 
+        ApplyLineMarkMargin(editor);
+
         Override(editor, BackgroundOverrideProperty, editor, TextEditor.BackgroundProperty, ParseBrush(options.BackgroundColor));
         Override(editor, LineNumbersOverrideProperty, editor, TextEditor.LineNumbersForegroundProperty, ParseBrush(options.LineNumbersColor));
         Override(editor, RulerOverrideProperty, editor.TextArea.TextView, TextView.ColumnRulerPenProperty,
             ParseBrush(options.ColumnRulerColor) is { } ruler ? new Pen(ruler) : null);
+    }
+
+    // The margin follows the line numbers and the dotted line after them. The editor inserts both at the start when
+    // line numbers are switched on, so the margin keeps its place behind them.
+    private void ApplyLineMarkMargin(TextEditor editor)
+    {
+        if (editor.GetValue(LineMarkMarginProperty) is not { } margin)
+        {
+            margin = new LineMarkMargin(_lineMarks, _executeCommand);
+            ObservableCollection<Control> margins = editor.TextArea.LeftMargins;
+            int index = margins.ToList().FindLastIndex(candidate =>
+                candidate is LineNumberMargin || DottedLineMargin.IsDottedLineMargin(candidate)) + 1;
+            margins.Insert(index, margin);
+            editor.SetValue(LineMarkMarginProperty, margin);
+        }
+
+        margin.FilePath = editor.DataContext switch
+        {
+            IEditorDocumentViewModel document => GetFullPath(document.FilePath),
+            CodeEditorViewModel code => GetFullPath(code.FilePath),
+            _ => null
+        };
+    }
+
+    private static string? GetFullPath(string? path) => string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
+
+    private void OnLineMarksChanged(object? sender, string filePath)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            foreach (WeakReference<TextEditor> reference in _editors)
+            {
+                if (reference.TryGetTarget(out TextEditor? editor)
+                    && editor.GetValue(LineMarkMarginProperty) is { } margin
+                    && FileSystemPathComparison.Equals(margin.FilePath, filePath))
+                {
+                    margin.InvalidateVisual();
+                }
+            }
+        });
     }
 
     private void SetOptionsCore(TextEditorViewOptions options)

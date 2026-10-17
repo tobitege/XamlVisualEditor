@@ -217,7 +217,7 @@ public static class GitStatusParser
             return null;
         }
 
-        return CreateV2Change(fields[1], fields[8], oldPath: null);
+        return CreateV2Change(fields[1], fields[8], oldPath: null, fields[7]);
     }
 
     // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>, followed by the original path as its own entry
@@ -229,7 +229,7 @@ public static class GitStatusParser
             return null;
         }
 
-        return CreateV2Change(fields[1], fields[9], string.IsNullOrEmpty(originalPath) ? null : originalPath);
+        return CreateV2Change(fields[1], fields[9], string.IsNullOrEmpty(originalPath) ? null : originalPath, fields[7]);
     }
 
     // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
@@ -261,7 +261,7 @@ public static class GitStatusParser
         };
     }
 
-    private static GitFileChange CreateV2Change(string status, string path, string? oldPath)
+    private static GitFileChange CreateV2Change(string status, string path, string? oldPath, string indexObjectId)
     {
         // Porcelain v2 writes '.' for an unchanged side.
         GitChangeKind indexStatus = MapStatusChar(status[0] == '.' ? ' ' : status[0]);
@@ -270,6 +270,7 @@ public static class GitStatusParser
         {
             Path = path,
             OldPath = oldPath,
+            IndexObjectId = indexObjectId,
             IndexStatus = indexStatus,
             WorkTreeStatus = workTreeStatus,
             IsRenamed = indexStatus == GitChangeKind.Renamed || workTreeStatus == GitChangeKind.Renamed,

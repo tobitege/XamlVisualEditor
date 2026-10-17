@@ -94,6 +94,12 @@ public sealed record GitFileChange
 
     public string? OldPath { get; init; }
 
+    /// <summary>
+    /// Gets the object id of the file in the index, from porcelain v2 status; null for untracked, ignored and
+    /// conflicted files and for statuses read in another format.
+    /// </summary>
+    public string? IndexObjectId { get; init; }
+
     public GitChangeKind IndexStatus { get; init; }
 
     public GitChangeKind WorkTreeStatus { get; init; }

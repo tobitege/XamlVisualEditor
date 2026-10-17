@@ -78,7 +78,7 @@ public sealed class ExplorerDecorationViewTests : IDisposable
         AssertRow(view, "b.txt", null, null);
         AssertRow(view, "top.txt", null, null);
         TextBlock label = Label(Row(view, "a.txt"));
-        Assert.True(window.Window.TryFindResource("ExplorerDecorationModifiedBrush", window.Window.ActualThemeVariant, out object? brush));
+        Assert.True(window.Window.TryFindResource("SourceControlModifiedBrush", window.Window.ActualThemeVariant, out object? brush));
         Assert.Equal(Assert.IsType<SolidColorBrush>(brush).Color, Assert.IsAssignableFrom<ISolidColorBrush>(label.Foreground).Color);
 
         repository.RunGit("add", "-A");

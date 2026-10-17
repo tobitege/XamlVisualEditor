@@ -101,6 +101,21 @@ public static class GitCommands
     /// </summary>
     public const string SHOW_FILE_HISTORY = "git.showFileHistory";
 
+    /// <summary>Switches the Git change marks in the editors on or off.</summary>
+    public const string TOGGLE_CHANGE_MARKERS = "git.toggleChangeMarkers";
+
+    /// <summary>Compares a file, argument 0, otherwise the active document, with its version in HEAD in a document tab.</summary>
+    public const string COMPARE_WITH_HEAD = "git.compareWithHead";
+
+    /// <summary>
+    /// Compares a file, argument 0, otherwise the active document, with its staged version in a document tab, and
+    /// shows the change at the 1-based line in argument 1, if any. A click on a change mark in an editor runs it.
+    /// </summary>
+    public const string COMPARE_WITH_INDEX = "git.compareWithIndex";
+
+    /// <summary>Shows the commit of every line of a saved file, argument 0, otherwise the active document, in a document tab.</summary>
+    public const string BLAME = "git.blame";
+
     /// <summary>Context key: git can be started.</summary>
     public const string AVAILABLE_CONTEXT_KEY = "git.available";
 
@@ -124,6 +139,9 @@ public static class GitCommands
 
     /// <summary>Context key: the explorers show the Git status.</summary>
     public const string EXPLORER_DECORATIONS_CONTEXT_KEY = GitSettingsStore.EXPLORER_DECORATIONS_KEY;
+
+    /// <summary>Context key: the editors show the Git change marks.</summary>
+    public const string CHANGE_MARKERS_CONTEXT_KEY = GitSettingsStore.CHANGE_MARKERS_KEY;
 
     private const string SUBMENU_GROUP = "git";
     private const string VIEW_GROUP = "1_view";
@@ -192,6 +210,14 @@ public static class GitCommands
             new CommandMetadata(GitStrings.ShowFileHistoryCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 230));
         Register(TOGGLE_EXPLORER_DECORATIONS, handler.ToggleExplorerDecorationsAsync,
             new CommandMetadata(GitStrings.ToggleExplorerDecorationsCommand, CATEGORY, Priority: 240));
+        Register(TOGGLE_CHANGE_MARKERS, handler.ToggleChangeMarkersAsync,
+            new CommandMetadata(GitStrings.ToggleChangeMarkersCommand, CATEGORY, Priority: 250));
+        Register(COMPARE_WITH_HEAD, handler.CompareWithHeadAsync,
+            new CommandMetadata(GitStrings.CompareWithHeadCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 260));
+        Register(COMPARE_WITH_INDEX, handler.CompareWithIndexAsync,
+            new CommandMetadata(GitStrings.CompareWithIndexCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 270));
+        Register(BLAME, handler.BlameAsync,
+            new CommandMetadata(GitStrings.BlameCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 280));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -225,6 +251,10 @@ public static class GitCommands
                 {
                     CheckedWhen = EXPLORER_DECORATIONS_CONTEXT_KEY
                 },
+                ExtensionsItem(TOGGLE_CHANGE_MARKERS, GitStrings.ToggleChangeMarkersCommand, VIEW_GROUP, 46) with
+                {
+                    CheckedWhen = CHANGE_MARKERS_CONTEXT_KEY
+                },
                 ExtensionsItem(STAGE_ALL, GitStrings.StageAllCommand, CHANGES_GROUP, 50),
                 ExtensionsItem(UNSTAGE_ALL, GitStrings.UnstageAllCommand, CHANGES_GROUP, 60),
                 ExtensionsItem(COMMIT, GitStrings.CommitCommand, CHANGES_GROUP, 70),
@@ -243,13 +273,16 @@ public static class GitCommands
                 ContextItem(ExtensionMenuLocations.EditorContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
                 ContextItem(ExtensionMenuLocations.EditorContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
+                .. FileDocumentItems(ExtensionMenuLocations.EditorContext),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, DISCARD, GitStrings.DiscardCommand, 30),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
+                .. FileDocumentItems(ExtensionMenuLocations.ExplorerContext),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, UNSTAGE, GitStrings.UnstageCommand, 20),
-                ContextItem(ExtensionMenuLocations.DocumentTabContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40)
+                ContextItem(ExtensionMenuLocations.DocumentTabContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
+                .. FileDocumentItems(ExtensionMenuLocations.DocumentTabContext)
             ]));
         subscriptions.Add(contributions.RegisterCommandPaletteItems(
             extensionId,
@@ -277,8 +310,20 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(SYNC, GitStrings.SyncCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(TOGGLE_HISTORY_VIEW, GitStrings.ToggleHistoryViewCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(SHOW_HISTORY, GitStrings.ShowHistoryCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(TOGGLE_CHANGE_MARKERS, GitStrings.ToggleChangeMarkersCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(BLAME, GitStrings.BlameCommand, CATEGORY)
             ]));
+
+        // The document commands of a file, after its file commands.
+        static ExtensionMenuContribution[] FileDocumentItems(string location) =>
+        [
+            ContextItem(location, COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, 50),
+            ContextItem(location, COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, 60),
+            ContextItem(location, BLAME, GitStrings.BlameCommand, 70)
+        ];
 
         static ExtensionMenuContribution ExtensionsItem(string commandId, string title, string submenuGroup, int priority) =>
             new(commandId, title, ExtensionMenuLocations.Extensions, SUBMENU_GROUP, priority)

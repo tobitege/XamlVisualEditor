@@ -26,10 +26,10 @@
                     <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
                     <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#1E1E1E" />
                     <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D01E1E1E" />
-                    <SolidColorBrush x:Key="ExplorerDecorationModifiedBrush" Color="#E2C08D" />
-                    <SolidColorBrush x:Key="ExplorerDecorationAddedBrush" Color="#81B88B" />
-                    <SolidColorBrush x:Key="ExplorerDecorationDeletedBrush" Color="#F0776D" />
-                    <SolidColorBrush x:Key="ExplorerDecorationConflictedBrush" Color="#D59CF5" />
+                    <SolidColorBrush x:Key="SourceControlModifiedBrush" Color="#E2C08D" />
+                    <SolidColorBrush x:Key="SourceControlAddedBrush" Color="#81B88B" />
+                    <SolidColorBrush x:Key="SourceControlDeletedBrush" Color="#F0776D" />
+                    <SolidColorBrush x:Key="SourceControlConflictedBrush" Color="#D59CF5" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#F4F4F4" />
@@ -48,10 +48,10 @@
                     <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#E8E8E8" />
                     <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D0F3F3F3" />
-                    <SolidColorBrush x:Key="ExplorerDecorationModifiedBrush" Color="#6B4500" />
-                    <SolidColorBrush x:Key="ExplorerDecorationAddedBrush" Color="#145A24" />
-                    <SolidColorBrush x:Key="ExplorerDecorationDeletedBrush" Color="#96141F" />
-                    <SolidColorBrush x:Key="ExplorerDecorationConflictedBrush" Color="#6A1FA3" />
+                    <SolidColorBrush x:Key="SourceControlModifiedBrush" Color="#6B4500" />
+                    <SolidColorBrush x:Key="SourceControlAddedBrush" Color="#145A24" />
+                    <SolidColorBrush x:Key="SourceControlDeletedBrush" Color="#96141F" />
+                    <SolidColorBrush x:Key="SourceControlConflictedBrush" Color="#6A1FA3" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <!-- The DataGrid theme brightens the accent of a selected row under the mouse; with a light accent the
@@ -90,16 +90,16 @@
 
     <!-- Explorer rows colour their label and badge by the kind of their decoration. -->
     <Style Selector="StackPanel.decoration-modified > TextBlock.decorated">
-        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationModifiedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SourceControlModifiedBrush}" />
     </Style>
     <Style Selector="StackPanel.decoration-added > TextBlock.decorated">
-        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationAddedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SourceControlAddedBrush}" />
     </Style>
     <Style Selector="StackPanel.decoration-deleted > TextBlock.decorated">
-        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationDeletedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SourceControlDeletedBrush}" />
     </Style>
     <Style Selector="StackPanel.decoration-conflicted > TextBlock.decorated">
-        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationConflictedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SourceControlConflictedBrush}" />
     </Style>
 
     <!-- Owned windows get the class from DialogAppearance; the frame stays visible without focus. -->

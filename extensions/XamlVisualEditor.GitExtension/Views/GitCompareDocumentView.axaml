@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:gloc="using:XamlVisualEditor.GitExtension.Localization"
+             xmlns:controls="using:XamlVisualEditor.SourceControl.UI.Controls"
+             x:Class="XamlVisualEditor.GitExtension.Views.GitCompareDocumentView"
+             x:DataType="vm:GitCompareDocumentViewModel">
+
+    <UserControl.Styles>
+        <Style Selector=":is(Button).git-action">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+        </Style>
+        <Style Selector=":is(Button).git-action PathIcon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+        </Style>
+        <Style Selector=":is(Button).git-action StackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="4" />
+        </Style>
+        <Style Selector=":is(Button).git-action TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel Margin="4">
+        <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal">
+            <Button Name="PreviousChangeButton" Classes="git-action" Command="{CompiledBinding PreviousChangeCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.PreviousChange}" ToolTip.ShowOnDisabled="True"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.PreviousChange}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.PreviousHunk}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.PreviousChange}" />
+                </StackPanel>
+            </Button>
+            <Button Name="NextChangeButton" Classes="git-action" Command="{CompiledBinding NextChangeCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.NextChange}" ToolTip.ShowOnDisabled="True"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.NextChange}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.NextHunk}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.NextChange}" />
+                </StackPanel>
+            </Button>
+            <ToggleButton Name="WholeFileButton" Classes="git-action" IsChecked="{CompiledBinding IsWholeFile, Mode=TwoWay}"
+                          ToolTip.Tip="{x:Static gloc:GitStrings.WholeFile}"
+                          AutomationProperties.Name="{x:Static gloc:GitStrings.WholeFile}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.WholeFile}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.WholeFile}" />
+                </StackPanel>
+            </ToggleButton>
+            <Button Name="RefreshButton" Classes="git-action" Command="{CompiledBinding RefreshCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.CompareAgain}"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.CompareAgain}">
+                <PathIcon Data="{x:Static vm:GitIcons.Refresh}" />
+            </Button>
+        </WrapPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{CompiledBinding Message}" TextWrapping="Wrap" Margin="0,0,0,4"
+                   IsVisible="{CompiledBinding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" Padding="4">
+            <controls:UnifiedDiffEditor Name="DiffEditor"
+                                        DiffLines="{CompiledBinding DiffLines}"
+                                        CurrentHunkIndex="{CompiledBinding CurrentHunkIndex, Mode=TwoWay}"
+                                        FontFamily="Cascadia Code, Consolas, Menlo, monospace"
+                                        FontSize="13"
+                                        HorizontalScrollBarVisibility="Auto"
+                                        VerticalScrollBarVisibility="Auto" />
+        </Border>
+    </DockPanel>
+</UserControl>

@@ -32,6 +32,9 @@ public sealed class GitServiceSet
     /// <summary>Gets the log, commit details and tag service, or null.</summary>
     public IGitHistoryService? History { get; init; }
 
+    /// <summary>Gets the file content and blame service, or null.</summary>
+    public IGitContentService? Content { get; init; }
+
     /// <summary>
     /// Creates a set whose optional capabilities are the interfaces <paramref name="service"/> implements.
     /// </summary>
@@ -43,7 +46,8 @@ public sealed class GitServiceSet
             CommandLog = service as IGitCommandLog,
             Branches = service as IGitBranchService,
             Remotes = service as IGitRemoteService,
-            History = service as IGitHistoryService
+            History = service as IGitHistoryService,
+            Content = service as IGitContentService
         };
     }
 }

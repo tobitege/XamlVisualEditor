@@ -81,6 +81,41 @@ public sealed class DiffLineBuilderTests
     }
 
     [Fact]
+    public void FromLineDiff_makes_one_hunk_per_block_with_the_context_between_blocks_in_the_earlier_hunk()
+    {
+        string[] oldLines = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+        string[] newLines = ["1", "two", "3", "4", "5", "6", "7", "9", "10", "11"];
+        IReadOnlyList<LineDiffBlock> blocks = LineDiff.Compute(oldLines, newLines, 2000, CancellationToken.None);
+
+        IReadOnlyList<DiffLine> lines = DiffLineBuilder.FromLineDiff(oldLines, newLines, blocks, 3);
+
+        Assert.Equal(
+            [
+                "@@ -1,5 +1,5 @@", " 1", "-2", "+two", " 3", " 4", " 5",
+                "@@ -6,5 +6,4 @@", " 6", " 7", "-8", " 9", " 10",
+                "@@ -10,0 +10,1 @@", "+11"
+            ],
+            lines.Select(line => line.Text));
+        // The headers count the lines of their hunks exactly as git's do.
+        Assert.Equal(DiffLineBuilder.Parse(string.Join("\n", lines.Select(line => line.Text))), lines);
+    }
+
+    [Fact]
+    public void FromLineDiff_of_the_whole_file_shows_every_line_once_and_keeps_the_hunk_count()
+    {
+        string[] oldLines = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+        string[] newLines = ["a", "B", "c", "d", "e", "f", "g", "h", "I", "j"];
+        IReadOnlyList<LineDiffBlock> blocks = LineDiff.Compute(oldLines, newLines, 2000, CancellationToken.None);
+
+        IReadOnlyList<DiffLine> lines = DiffLineBuilder.FromLineDiff(oldLines, newLines, blocks, int.MaxValue);
+
+        Assert.Equal(2, lines.Count(line => line.Kind == DiffLineKind.HunkHeader));
+        Assert.Equal(newLines, lines.Where(line => line.NewLineNumber is not null).Select(line => line.Text[1..]));
+        Assert.Equal(oldLines, lines.Where(line => line.OldLineNumber is not null).Select(line => line.Text[1..]));
+        Assert.Empty(DiffLineBuilder.FromLineDiff(oldLines, oldLines, [], int.MaxValue));
+    }
+
+    [Fact]
     public void FromGitDiff_without_files_reads_the_raw_text()
     {
         GitDiff diff = new() { Files = [], RawText = "@@ -1 +1 @@\n-a\n+b\n" };

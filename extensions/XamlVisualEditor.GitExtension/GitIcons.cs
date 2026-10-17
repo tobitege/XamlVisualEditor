@@ -2,7 +2,8 @@ namespace XamlVisualEditor.GitExtension;
 
 /// <summary>
 /// Fluent System Icons (20, regular) of the Git panel buttons. Path data is copied verbatim from @fluentui/svg-icons;
-/// refresh, add and undo are the same geometries as in the animation editor toolbar.
+/// refresh, add and undo are the same geometries as in the animation editor toolbar. <see cref="WholeFile"/> is a
+/// Material icon.
 /// </summary>
 public static class GitIcons
 {
@@ -80,6 +81,12 @@ public static class GitIcons
 
     /// <summary>chevron_down_20_regular, path data of the Fluent UI System Icons asset SVG; goes to the next hunk.</summary>
     public const string NextHunk = "M15.8537 7.64582C16.0493 7.84073 16.0499 8.15731 15.855 8.35292L10.39 13.8374C10.1751 14.0531 9.82574 14.0531 9.6108 13.8374L4.14582 8.35292C3.9509 8.15731 3.95147 7.84073 4.14708 7.64582C4.34269 7.4509 4.65927 7.45147 4.85418 7.64708L10.0004 12.8117L15.1466 7.64708C15.3415 7.45147 15.6581 7.4509 15.8537 7.64582Z";
+
+    /// <summary>
+    /// unfold_more of Google Material Icons (Apache 2.0, see THIRD-PARTY-NOTICES.md); shows the whole file instead of
+    /// the changes.
+    /// </summary>
+    public const string WholeFile = "M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z";
 
     /// <summary>copy_20_regular, the same geometry as the copy button of the animation editor.</summary>
     public const string Copy = "M7 7H5.5C4.67 7 4 7.67 4 8.5v6c0 .83.67 1.5 1.5 1.5h4c.65 0 1.2-.42 1.41-1h1.04a2.5 2.5 0 0 1-2.45 2h-4A2.5 2.5 0 0 1 3 14.5v-6A2.5 2.5 0 0 1 5.5 6H7zm7.5-4A2.5 2.5 0 0 1 17 5.5v6a2.5 2.5 0 0 1-2.5 2.5h-4A2.5 2.5 0 0 1 8 11.5v-6A2.5 2.5 0 0 1 10.5 3zm-4 1C9.67 4 9 4.67 9 5.5v6c0 .83.67 1.5 1.5 1.5h4c.83 0 1.5-.67 1.5-1.5v-6c0-.83-.67-1.5-1.5-1.5z";

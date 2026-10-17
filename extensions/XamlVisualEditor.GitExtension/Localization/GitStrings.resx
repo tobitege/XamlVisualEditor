@@ -190,4 +190,26 @@
   <data name="LightweightTag" xml:space="preserve"><value>Lightweight tag</value></data>
   <data name="TagTargetObjectFormat" xml:space="preserve"><value>{0} object</value></data>
   <data name="TagNotCommitFormat" xml:space="preserve"><value>Points to a {0} object, not to a commit: it has no history, and no branch can start at it.</value></data>
+  <data name="ToggleChangeMarkersCommand" xml:space="preserve"><value>Show Git Changes in Editors</value></data>
+  <data name="CompareWithHeadCommand" xml:space="preserve"><value>Compare with HEAD</value></data>
+  <data name="CompareWithIndexCommand" xml:space="preserve"><value>Compare with Staged</value></data>
+  <data name="BlameCommand" xml:space="preserve"><value>Blame</value></data>
+  <data name="FileTargetRequired" xml:space="preserve"><value>Select a file; folders cannot be compared or blamed.</value></data>
+  <data name="CompareTitleFormat" xml:space="preserve"><value>{0} ({1})</value><comment>{0} is the file name, {1} HEAD or the name of the index.</comment></data>
+  <data name="BlameTitleFormat" xml:space="preserve"><value>{0} (Blame)</value></data>
+  <data name="IndexName" xml:space="preserve"><value>Stage</value></data>
+  <data name="Comparing" xml:space="preserve"><value>Comparing…</value></data>
+  <data name="CompareNoVersionFormat" xml:space="preserve"><value>{0} has no text version of this file to compare with: the file is new, untracked, in conflict, binary, stored with Git LFS or larger than 16 MiB.</value></data>
+  <data name="CompareNoChanges" xml:space="preserve"><value>The file has no changes.</value></data>
+  <data name="CompareOnlyIgnoredBytesFormat" xml:space="preserve"><value>No line differs from {0}, but Git reports a change of the saved file: only line endings, the byte order mark or the newline at the end differ, which this comparison ignores.</value></data>
+  <data name="WholeFile" xml:space="preserve"><value>Whole File</value></data>
+  <data name="CompareAgain" xml:space="preserve"><value>Compare Again</value></data>
+  <data name="LogCompareFailed" xml:space="preserve"><value>Comparing a file with its Git version failed.</value></data>
+  <data name="BlameLoading" xml:space="preserve"><value>Reading the blame…</value></data>
+  <data name="LoadBlameFailedFormat" xml:space="preserve"><value>Reading the blame failed: {0}</value></data>
+  <data name="BlameTruncated" xml:space="preserve"><value>The file is longer than 16 MiB; the last lines are missing.</value></data>
+  <data name="BlameUnavailable" xml:space="preserve"><value>The git service of this application cannot blame files.</value></data>
+  <data name="Uncommitted" xml:space="preserve"><value>Not committed</value></data>
+  <data name="RefreshBlame" xml:space="preserve"><value>Read Again</value></data>
+  <data name="BlameHint" xml:space="preserve"><value>Blame of the saved file. Double-click a line or press Enter to show its commit in the Git History.</value></data>
 </root>

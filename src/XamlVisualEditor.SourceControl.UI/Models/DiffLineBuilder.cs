@@ -48,6 +48,67 @@ public static class DiffLineBuilder
     }
 
     /// <summary>
+    /// Returns the lines of a line diff with one hunk per change block, so hunk i shows <paramref name="blocks"/>[i].
+    /// A hunk has up to <paramref name="contextLines"/> unchanged lines before and after its block; unchanged lines
+    /// between two blocks go to the earlier hunk first. <see cref="int.MaxValue"/> shows the whole file.
+    /// </summary>
+    public static IReadOnlyList<DiffLine> FromLineDiff(
+        IReadOnlyList<string> oldLines,
+        IReadOnlyList<string> newLines,
+        IReadOnlyList<LineDiffBlock> blocks,
+        int contextLines)
+    {
+        ArgumentNullException.ThrowIfNull(oldLines);
+        ArgumentNullException.ThrowIfNull(newLines);
+        ArgumentNullException.ThrowIfNull(blocks);
+        ArgumentOutOfRangeException.ThrowIfNegative(contextLines);
+
+        List<DiffLine> lines = new();
+        int shownOld = 0;
+        for (int index = 0; index < blocks.Count; index++)
+        {
+            LineDiffBlock block = blocks[index];
+            int leading = Math.Min(block.OldStart - shownOld, contextLines);
+            int oldEnd = block.OldStart + block.OldCount;
+            int nextOld = index + 1 < blocks.Count ? blocks[index + 1].OldStart : oldLines.Count;
+            int trailing = Math.Min(nextOld - oldEnd, contextLines);
+            int oldStart = block.OldStart - leading;
+            int newStart = block.NewStart - leading;
+            int oldCount = leading + block.OldCount + trailing;
+            int newCount = leading + block.NewCount + trailing;
+            lines.Add(new DiffLine(DiffLineKind.HunkHeader, string.Create(CultureInfo.InvariantCulture,
+                $"@@ -{HeaderStart(oldStart, oldCount)},{oldCount} +{HeaderStart(newStart, newCount)},{newCount} @@")));
+
+            AddContext(oldStart, newStart, leading);
+            for (int line = block.OldStart; line < oldEnd; line++)
+            {
+                lines.Add(new DiffLine(DiffLineKind.Removed, "-" + oldLines[line], line + 1, null));
+            }
+
+            for (int line = block.NewStart; line < block.NewStart + block.NewCount; line++)
+            {
+                lines.Add(new DiffLine(DiffLineKind.Added, "+" + newLines[line], null, line + 1));
+            }
+
+            AddContext(oldEnd, block.NewStart + block.NewCount, trailing);
+            shownOld = oldEnd + trailing;
+        }
+
+        return lines;
+
+        void AddContext(int oldStart, int newStart, int count)
+        {
+            for (int offset = 0; offset < count; offset++)
+            {
+                lines.Add(new DiffLine(DiffLineKind.Context, " " + oldLines[oldStart + offset], oldStart + offset + 1, newStart + offset + 1));
+            }
+        }
+
+        // Like git, an empty range names the line before it.
+        static int HeaderStart(int start, int count) => count == 0 ? start : start + 1;
+    }
+
+    /// <summary>
     /// Splits the text of a unified diff into classified lines with their old and new line numbers. Hunk lines are
     /// counted against the line counts of their hunk header, so header lines of a following file are never taken
     /// for removed or added lines.

@@ -10,7 +10,7 @@ namespace XamlVisualEditor.GitExtension;
 
 /// <summary>
 /// Git integration: the Git Changes, Git Repository and Git History panels, a status bar item with branch and changes, the "Git" output channel,
-/// context keys and the Git commands. All commands are registered on activation, also without git or repository;
+/// the Git status in the explorers, change marks in the editors, compare and blame documents, context keys and the Git commands. All commands are registered on activation, also without git or repository;
 /// their <see cref="CommandMetadata.When"/> conditions disable them.
 /// </summary>
 public sealed class GitExtension : IXveExtension
@@ -45,6 +45,8 @@ public sealed class GitExtension : IXveExtension
         GitSession session = new(_services, _workspaceInfo, settings, logger);
         GitExplorerDecorations explorerDecorations = new(session, context.ExplorerDecorations, settings,
             context.ContextKeys, logger);
+        GitChangeMarkers changeMarkers = new(session, context.Editor, context.TextEditorView, settings,
+            context.ContextKeys, logger);
 
         ICommands commands = context.Commands;
         Func<string, IReadOnlyList<object?>?, Task> executeCommand =
@@ -63,7 +65,9 @@ public sealed class GitExtension : IXveExtension
             () => panel.IsValueCreated ? panel.Value : null,
             logger,
             () => historyPanel.Value,
-            explorerDecorations);
+            explorerDecorations,
+            changeMarkers,
+            executeCommand);
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, GitStatusBar.PRIORITY);
         statusBarItem.CommandId = GitCommands.SHOW_CHANGES;
@@ -123,12 +127,14 @@ public sealed class GitExtension : IXveExtension
             }
 
             explorerDecorations.Dispose();
+            changeMarkers.Dispose();
             session.Dispose();
             statusBarItem.Dispose();
             outputChannel.Dispose();
         }));
 
         _ = explorerDecorations.LoadAsync();
+        _ = changeMarkers.LoadAsync();
         _ = session.StartAsync(CancellationToken.None);
         return Task.CompletedTask;
     }

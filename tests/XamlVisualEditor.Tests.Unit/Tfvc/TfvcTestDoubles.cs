@@ -489,6 +489,29 @@ internal sealed class RecordingExtensionViewHost : IExtensionViewHost
     public Task<bool> IsVisibleAsync(string viewId, CancellationToken cancellationToken) => Task.FromResult(false);
 
     public Task ActivateAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Gets the shown documents in order, also those that were open already.</summary>
+    public List<(string Id, string Title, string? ToolTip)> ShownDocuments { get; } = new();
+
+    /// <summary>Gets the view models of the open documents by id.</summary>
+    public Dictionary<string, object> DocumentViewModels { get; } = new();
+
+    public Task<object?> ShowDocumentAsync(
+        string documentId,
+        string title,
+        string? toolTip,
+        Func<object> createViewModel,
+        CancellationToken cancellationToken)
+    {
+        ShownDocuments.Add((documentId, title, toolTip));
+        if (!DocumentViewModels.TryGetValue(documentId, out object? viewModel))
+        {
+            viewModel = createViewModel();
+            DocumentViewModels.Add(documentId, viewModel);
+        }
+
+        return Task.FromResult<object?>(viewModel);
+    }
 }
 
 internal sealed class ScriptedDialogHost : IDialogHost
@@ -526,6 +549,8 @@ internal sealed class ConfirmingDialogHost : IDialogHost
 
 internal sealed class FakeEditorDocument : IEditorDocument
 {
+    private int _textReads;
+
     public FakeEditorDocument(string filePath, string text)
     {
         FilePath = filePath;
@@ -550,7 +575,14 @@ internal sealed class FakeEditorDocument : IEditorDocument
     public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
 #pragma warning restore CS0067
 
-    public Task<string> GetTextAsync(CancellationToken ct) => Task.FromResult(Text);
+    /// <summary>Gets how often the text was read.</summary>
+    public int TextReads => Volatile.Read(ref _textReads);
+
+    public Task<string> GetTextAsync(CancellationToken ct)
+    {
+        Interlocked.Increment(ref _textReads);
+        return Task.FromResult(Text);
+    }
 
     public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct) => Task.CompletedTask;
 

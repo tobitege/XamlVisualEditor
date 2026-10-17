@@ -14,11 +14,8 @@ public sealed class GitExplorerDecorations : IDisposable
     private readonly object _gate = new();
     private readonly GitSession _session;
     private readonly IExplorerDecorationLayer? _layer;
-    private readonly GitSettingsStore? _settings;
-    private readonly IContextKeys? _contextKeys;
-    private readonly IExtensionLogger? _logger;
+    private readonly GitSettingSwitch _switch;
     private readonly IDisposable _subscription;
-    private bool _enabled = true;
     private bool _disposed;
 
     /// <summary>Creates the decorations, switched on until <see cref="LoadAsync"/> reads the saved switch.</summary>
@@ -31,62 +28,19 @@ public sealed class GitExplorerDecorations : IDisposable
     {
         _session = session;
         _layer = decorations?.CreateLayer();
-        _settings = settings;
-        _contextKeys = contextKeys;
-        _logger = logger;
-        _contextKeys?.Set(GitSettingsStore.EXPLORER_DECORATIONS_KEY, true);
+        _switch = new GitSettingSwitch(GitSettingsStore.EXPLORER_DECORATIONS_KEY, true, settings, contextKeys, logger);
+        _switch.Changed += (_, _) => Apply(_session.Current);
         _subscription = session.Snapshots.Subscribe(Apply);
     }
 
     /// <summary>Gets whether the explorers show the Git status.</summary>
-    public bool IsEnabled
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _enabled;
-            }
-        }
-    }
+    public bool IsEnabled => _switch.IsEnabled;
 
     /// <summary>Reads the saved switch.</summary>
-    public async Task LoadAsync(CancellationToken cancellationToken = default)
-    {
-        if (_settings is null)
-        {
-            return;
-        }
-
-        try
-        {
-            SetEnabled(await _settings.LoadExplorerDecorationsAsync(cancellationToken).ConfigureAwait(false));
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            _logger?.Error(GitStrings.LogSettingsFailed, exception);
-        }
-    }
+    public Task LoadAsync(CancellationToken cancellationToken = default) => _switch.LoadAsync(cancellationToken);
 
     /// <summary>Switches the Git status in the explorers on or off and saves the switch.</summary>
-    public async Task ToggleAsync()
-    {
-        bool enabled = !IsEnabled;
-        SetEnabled(enabled);
-        if (_settings is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _settings.SaveExplorerDecorationsAsync(enabled, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            _logger?.Error(GitStrings.LogSettingsFailed, exception);
-        }
-    }
+    public Task ToggleAsync() => _switch.ToggleAsync();
 
     /// <summary>
     /// Builds the decorations of a status: one entry per change and one entry without badge per folder from the
@@ -156,19 +110,8 @@ public sealed class GitExplorerDecorations : IDisposable
         _ => new(ExplorerDecorationKind.Modified, "M", GitStrings.ChangeModified)
     };
 
-    private void SetEnabled(bool enabled)
-    {
-        lock (_gate)
-        {
-            _enabled = enabled;
-        }
-
-        _contextKeys?.Set(GitSettingsStore.EXPLORER_DECORATIONS_KEY, enabled);
-        Apply(_session.Current);
-    }
-
-    // Snapshots arrive on the thread pool and the switch on the UI thread; the lock keeps the last Set in step with
-    // the switch.
+    // Snapshots arrive on the thread pool and the switch on the UI thread; every change of the switch applies the
+    // current snapshot again, so the last Set under the lock follows the switch.
     private void Apply(GitSnapshot snapshot)
     {
         lock (_gate)
@@ -178,7 +121,7 @@ public sealed class GitExplorerDecorations : IDisposable
                 return;
             }
 
-            _layer.Set(_enabled && snapshot.State == GitSessionState.Repository && snapshot.RepositoryRoot is { } root
+            _layer.Set(_switch.IsEnabled && snapshot.State == GitSessionState.Repository && snapshot.RepositoryRoot is { } root
                 ? Build(root, snapshot.Changes)
                 : []);
         }

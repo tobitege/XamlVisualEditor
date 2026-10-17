@@ -45,12 +45,13 @@ SOFTWARE.
 
 ## Google Material Icons
 
-The text editor toolbars use SVG path data of 24px icons from Material Icons (filled style).
+The text editor toolbars and the Git compare document use SVG path data of 24px icons from Material Icons (filled style).
 
 Source: <https://github.com/google/material-design-icons>
 
 - `src/XamlVisualEditor.App/Views/XamlCodeEditorView.axaml`: `format_align_justify`, `wrap_text` (adapted), and `format_list_numbered`.
 - `src/XamlVisualEditor.App/Views/TextFileView.axaml`: `wrap_text` (adapted) and `format_list_numbered`.
+- `extensions/XamlVisualEditor.GitExtension/GitIcons.cs`: `unfold_more`.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

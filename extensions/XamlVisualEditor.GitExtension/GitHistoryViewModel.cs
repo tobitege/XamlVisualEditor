@@ -122,6 +122,7 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
     private HistoryRequest? _listedRequest;
     private string? _listedRoot;
     private string? _authorsRoot;
+    private string? _revisionToSelect;
     private bool _isApplyingLoad;
 
     /// <summary>Creates the panel for a shared session.</summary>
@@ -256,10 +257,14 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at the selected commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> CreateBranchFromCommitCommand { get; }
 
-    /// <summary>Lists the commits of <paramref name="scope"/>; the message filter is cleared, the author filter stays.</summary>
+    /// <summary>
+    /// Lists the commits of <paramref name="scope"/>; the message filter is cleared, the author filter stays. The
+    /// first list of the scope selects the commit its revision names, when the revision is a listed full commit id.
+    /// </summary>
     public void Show(GitHistoryScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
+        _revisionToSelect = scope.Revision;
         Scope = scope;
         ScopeText = FormatScope(scope);
         SearchText = null;
@@ -432,6 +437,12 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
         // A read from the first commit replaces the listed commits; a further page is appended.
         bool replaces = page.Skip == 0;
         string? selectedSha = SelectedCommit?.Sha;
+        if (replaces && page.Request.Scope == Scope && _revisionToSelect is { } revision)
+        {
+            selectedSha = revision;
+            _revisionToSelect = null;
+        }
+
         _isApplyingLoad = true;
         try
         {

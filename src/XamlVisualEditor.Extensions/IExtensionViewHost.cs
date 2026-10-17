@@ -24,6 +24,22 @@ public interface IExtensionViewHost
 
     /// <summary>Activates a view by id without changing visibility.</summary>
     Task ActivateAsync(string viewId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens a document tab with the content from <paramref name="createViewModel"/>, or activates the open tab with
+    /// the same <paramref name="documentId"/> without calling <paramref name="createViewModel"/>. The content is shown
+    /// as the content of a content control: an Avalonia control as it is, any other object through the data templates
+    /// of the host, which know only the view models of the built-in extensions, so other objects show as text.
+    /// Returns the shown content, new or existing, or null when the host has no document tabs. The tab is not saved in
+    /// the layout; closing it disposes content that implements <see cref="IDisposable"/>. Callers prefix their ids,
+    /// for example with their extension id.
+    /// </summary>
+    Task<object?> ShowDocumentAsync(
+        string documentId,
+        string title,
+        string? toolTip,
+        Func<object> createViewModel,
+        CancellationToken cancellationToken) => Task.FromResult<object?>(null);
 }
 
 /// <summary>Describes extension view visibility state.</summary>

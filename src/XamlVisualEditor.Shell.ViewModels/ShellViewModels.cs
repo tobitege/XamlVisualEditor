@@ -4923,7 +4923,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         await ExecuteExtensionCommandAsync(selected.CommandId);
     }
 
-    private async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId,
+    /// <summary>Runs an extension command and reports a missing or failed command in the status bar.</summary>
+    internal async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId,
         IReadOnlyList<object?>? arguments = null)
     {
         bool executed = await TryExecuteExtensionCommandAsync(commandId, arguments);
@@ -7519,6 +7520,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
+        if (e.Dockable is ExtensionDocument extensionDocument)
+        {
+            (extensionDocument.ViewModel as IDisposable)?.Dispose();
+            return;
+        }
+
         if (e.Dockable is TerminalTool terminalTool && terminalTool.TerminalViewModel is TerminalViewModel terminalVm)
         {
             RemoveTerminalSession(terminalVm);
@@ -7793,6 +7800,33 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         return dock.VisibleDockables.Contains(tool);
+    }
+
+    /// <summary>
+    /// Activates the extension document with the id, or adds one with the view model of
+    /// <paramref name="createViewModel"/>. Returns the view model of the shown document, or null without a document dock.
+    /// </summary>
+    public object? ShowExtensionDocument(string documentId, string title, string? toolTip, Func<object> createViewModel)
+    {
+        if (DockLayout is null)
+        {
+            return null;
+        }
+
+        if (XamlEditorDockFactory.FindDockable<ExtensionDocument>(DockLayout, ExtensionDocument.ID_PREFIX + documentId) is { } existing)
+        {
+            DockFactory.SetActiveDockable(existing);
+            return existing.ViewModel;
+        }
+
+        object viewModel = createViewModel();
+        if (DockFactory.AddDocument(DockLayout, new ExtensionDocument(documentId, title, toolTip, viewModel)) is null)
+        {
+            (viewModel as IDisposable)?.Dispose();
+            return null;
+        }
+
+        return viewModel;
     }
 
     public void ActivateExtensionView(string viewId)

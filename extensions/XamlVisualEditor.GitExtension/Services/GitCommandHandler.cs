@@ -21,6 +21,8 @@ internal sealed partial class GitCommandHandler
     private readonly IExtensionLogger? _logger;
     private readonly Func<GitHistoryViewModel>? _history;
     private readonly GitExplorerDecorations? _explorerDecorations;
+    private readonly GitChangeMarkers? _changeMarkers;
+    private readonly Func<string, IReadOnlyList<object?>?, Task>? _executeCommand;
 
     /// <summary>Creates the handler.</summary>
     /// <param name="session">The Git session.</param>
@@ -33,6 +35,8 @@ internal sealed partial class GitCommandHandler
     /// <param name="logger">Receives failed commands.</param>
     /// <param name="history">Returns the Git History panel view model, creating it when needed; null only shows the panel.</param>
     /// <param name="explorerDecorations">The Git status in the explorers, switched by its toggle command.</param>
+    /// <param name="changeMarkers">The change marks in the editors, switched by their toggle command.</param>
+    /// <param name="executeCommand">Runs a Git command by id with arguments, for the blame documents.</param>
     public GitCommandHandler(
         GitSession session,
         IExtensionViewHost viewHost,
@@ -43,10 +47,14 @@ internal sealed partial class GitCommandHandler
         Func<GitPanelViewModel?> panel,
         IExtensionLogger? logger,
         Func<GitHistoryViewModel>? history = null,
-        GitExplorerDecorations? explorerDecorations = null)
+        GitExplorerDecorations? explorerDecorations = null,
+        GitChangeMarkers? changeMarkers = null,
+        Func<string, IReadOnlyList<object?>?, Task>? executeCommand = null)
     {
         _history = history;
         _explorerDecorations = explorerDecorations;
+        _changeMarkers = changeMarkers;
+        _executeCommand = executeCommand;
         _session = session;
         _viewHost = viewHost;
         _window = window;

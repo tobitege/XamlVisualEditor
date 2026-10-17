@@ -57,7 +57,7 @@ internal sealed class GitTestRepository : IDisposable
     public static GitTestRepository Create(params string[] committedFiles)
     {
         GitTestRepository repository = new(System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
+            ResolveLinks(System.IO.Path.GetTempPath()),
             "xve-git-" + Guid.NewGuid().ToString("N")));
         try
         {
@@ -271,5 +271,28 @@ internal sealed class GitTestRepository : IDisposable
             output = string.Empty;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Replaces every symbolic link or junction in <paramref name="path"/> by its target, as git reports paths. The
+    /// temporary folder of macOS, /var/folders, is a link to /private/var/folders.
+    /// </summary>
+    private static string ResolveLinks(string path)
+    {
+        string full = System.IO.Path.GetFullPath(path);
+        string current = System.IO.Path.GetPathRoot(full)!;
+        foreach (string segment in full.Substring(current.Length).Split(
+            new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = System.IO.Path.Combine(current, segment);
+            // A relative link target is relative to the folder that holds the link.
+            if (new DirectoryInfo(current).LinkTarget is { } target)
+            {
+                current = System.IO.Path.GetFullPath(target, System.IO.Path.GetDirectoryName(current)!);
+            }
+        }
+
+        return current;
     }
 }

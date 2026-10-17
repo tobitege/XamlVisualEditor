@@ -66,7 +66,9 @@ public sealed class GitCommandsTests
         { GitCommands.STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, REPOSITORY_WHEN },
         { GitCommands.STASH_APPLY, GitStrings.StashApplyCommand, REPOSITORY_WHEN },
         { GitCommands.STASH_POP, GitStrings.StashPopCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_DROP, GitStrings.StashDropCommand, REPOSITORY_WHEN }
+        { GitCommands.STASH_DROP, GitStrings.StashDropCommand, REPOSITORY_WHEN },
+        { GitCommands.MERGE, GitStrings.MergeCommand, REPOSITORY_WHEN },
+        { GitCommands.ABORT_MERGE, GitStrings.AbortMergeCommand, "git.isRepository && git.isMerging" }
     };
 
     [Theory]
@@ -93,7 +95,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(37, commandIds.Count);
+        Assert.Equal(39, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -131,7 +133,7 @@ public sealed class GitCommandsTests
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
             GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_APPLY, GitCommands.STASH_POP,
-            GitCommands.STASH_DROP
+            GitCommands.STASH_DROP, GitCommands.MERGE, GitCommands.ABORT_MERGE
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));

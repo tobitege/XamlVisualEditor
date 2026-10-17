@@ -252,4 +252,16 @@
   <data name="StashConflicts" xml:space="preserve"><value>The stash was applied with conflicts and is kept. Resolve the conflicts in the files marked as conflicted.</value></data>
   <data name="StashDropPromptFormat" xml:space="preserve"><value>Drop {0} ({1})? Its changes are lost.</value></data>
   <data name="StashDropConfirm" xml:space="preserve"><value>Drop</value></data>
+  <data name="MergeCommand" xml:space="preserve"><value>Merge Branch…</value></data>
+  <data name="AbortMergeCommand" xml:space="preserve"><value>Abort Merge…</value></data>
+  <data name="MergePickTitle" xml:space="preserve"><value>Merge into the current branch</value></data>
+  <data name="NoBranchToMerge" xml:space="preserve"><value>There is no other branch to merge.</value></data>
+  <data name="MergedFormat" xml:space="preserve"><value>Merged {0} into {1}.</value></data>
+  <data name="MergeUpToDateFormat" xml:space="preserve"><value>{0} is already merged into {1}.</value></data>
+  <data name="MergeConflictsFormat" xml:space="preserve"><value>The merge of {0} stopped with conflicts. Resolve them in the files, stage the files and commit, or abort the merge.</value></data>
+  <data name="AbortMergeTitle" xml:space="preserve"><value>Abort Merge</value></data>
+  <data name="AbortMergePrompt" xml:space="preserve"><value>Abort the merge? The conflicted files return to their state before the merge; other changes stay.</value></data>
+  <data name="AbortMergeConfirm" xml:space="preserve"><value>Abort</value></data>
+  <data name="MergeAborted" xml:space="preserve"><value>The merge was aborted.</value></data>
+  <data name="StatusBarMerging" xml:space="preserve"><value>Merging</value></data>
 </root>

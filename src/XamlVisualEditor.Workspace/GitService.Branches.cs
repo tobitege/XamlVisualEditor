@@ -185,6 +185,38 @@ public sealed partial class GitService
         return GitBranchDeleteResult.Deleted;
     }
 
+    /// <inheritdoc />
+    public async Task<GitMergeResult> MergeAsync(string repoPath, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        GitProcessResult result = await RunGitAsync(
+            repoPath,
+            new[] { "merge", "--no-edit", "--", name },
+            GitCommandAccess.Write,
+            ct,
+            allowNonZeroExitCode: true,
+            environment: UntranslatedOutput);
+        if (result.ExitCode == 0)
+        {
+            return result.StandardOutput.Contains("Already up to date", StringComparison.Ordinal)
+                ? GitMergeResult.AlreadyUpToDate
+                : GitMergeResult.Merged;
+        }
+
+        // Exit code 1 also means a refused merge; only a MERGE_HEAD tells that the merge stopped with conflicts.
+        if (await GetOperationAsync(repoPath, ct) == GitRepositoryOperation.Merging)
+        {
+            return GitMergeResult.Conflicts;
+        }
+
+        ThrowIfFailed(result, "merge");
+        return GitMergeResult.Merged;
+    }
+
+    /// <inheritdoc />
+    public Task AbortMergeAsync(string repoPath, CancellationToken ct = default) =>
+        RunGitCheckedAsync(repoPath, new[] { "merge", "--abort" }, standardInput: null, ct);
+
     private async Task<bool> ReferenceExistsAsync(string repoPath, string reference, CancellationToken ct)
     {
         GitProcessResult result = await RunGitAsync(

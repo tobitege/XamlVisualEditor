@@ -53,6 +53,17 @@ public sealed class GitStatusBarTests
     }
 
     [Fact]
+    public void Merge_in_progress_is_shown_after_the_changes()
+    {
+        RecordingStatusBarItem item = new();
+        GitSnapshot snapshot = Snapshot("main", "origin/main", ahead: 0, behind: 0, changes: 2);
+
+        GitStatusBar.Update(item, snapshot with { Status = snapshot.Status! with { Operation = GitRepositoryOperation.Merging } });
+
+        Assert.Equal("main · 2 · " + GitStrings.StatusBarMerging, item.Text);
+    }
+
+    [Fact]
     public void Clean_branch_without_upstream_shows_only_the_branch()
     {
         RecordingStatusBarItem item = new();

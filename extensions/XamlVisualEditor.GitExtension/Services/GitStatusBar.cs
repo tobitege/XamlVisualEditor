@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.GitExtension.Localization;
 
@@ -55,6 +56,11 @@ internal static class GitStatusBar
         if (snapshot.ChangeCount > 0)
         {
             text.Append(" · ").Append(snapshot.ChangeCount.ToString(CultureInfo.CurrentCulture));
+        }
+
+        if (snapshot.Operation == GitRepositoryOperation.Merging)
+        {
+            text.Append(" · ").Append(GitStrings.StatusBarMerging);
         }
 
         return text.ToString();

@@ -90,6 +90,21 @@ public enum GitBranchDeleteResult
 }
 
 /// <summary>
+/// Result of <see cref="Interfaces.IGitBranchService.MergeAsync"/>.
+/// </summary>
+public enum GitMergeResult
+{
+    /// <summary>The branch was merged, by a merge commit or a fast-forward.</summary>
+    Merged,
+
+    /// <summary>The branch was already merged into the current branch; nothing changed.</summary>
+    AlreadyUpToDate,
+
+    /// <summary>The merge stopped with conflicts; the repository is in a merge until it is committed or aborted.</summary>
+    Conflicts
+}
+
+/// <summary>
 /// Why a fetch, pull or push failed.
 /// </summary>
 public enum GitRemoteFailureKind

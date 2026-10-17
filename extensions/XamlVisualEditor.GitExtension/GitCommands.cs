@@ -106,6 +106,12 @@ public static class GitCommands
     /// <summary>Deletes the local branch in argument 0, otherwise one picked from a list, after a confirmation.</summary>
     public const string DELETE_BRANCH = "git.deleteBranch";
 
+    /// <summary>Merges the branch in argument 0 (full or short name), otherwise one picked from a list, into the current branch.</summary>
+    public const string MERGE = "git.merge";
+
+    /// <summary>Aborts the merge in progress after a confirmation.</summary>
+    public const string ABORT_MERGE = "git.abortMerge";
+
     /// <summary>Fetches the branches of all remotes.</summary>
     public const string FETCH = "git.fetch";
 
@@ -190,6 +196,7 @@ public static class GitCommands
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
     private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
     private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
+    private const string MERGING_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + IS_MERGING_CONTEXT_KEY;
 
     /// <summary>Registers the command handlers and their metadata.</summary>
     internal static void RegisterCommands(
@@ -273,6 +280,10 @@ public static class GitCommands
             new CommandMetadata(GitStrings.StashPopCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 360));
         Register(STASH_DROP, handler.StashDropAsync,
             new CommandMetadata(GitStrings.StashDropCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 370));
+        Register(MERGE, handler.MergeAsync,
+            new CommandMetadata(GitStrings.MergeCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 380));
+        Register(ABORT_MERGE, handler.AbortMergeAsync,
+            new CommandMetadata(GitStrings.AbortMergeCommand, CATEGORY, When: MERGING_WHEN, Priority: 390));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -319,6 +330,8 @@ public static class GitCommands
                 ExtensionsItem(CHECKOUT, GitStrings.CheckoutCommand, BRANCHES_GROUP, 90),
                 ExtensionsItem(CREATE_BRANCH, GitStrings.CreateBranchCommand, BRANCHES_GROUP, 100),
                 ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
+                ExtensionsItem(MERGE, GitStrings.MergeCommand, BRANCHES_GROUP, 112),
+                ExtensionsItem(ABORT_MERGE, GitStrings.AbortMergeCommand, BRANCHES_GROUP, 114),
                 ExtensionsItem(FETCH, GitStrings.FetchCommand, SYNC_GROUP, 120),
                 ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
                 ExtensionsItem(PUSH, GitStrings.PushCommand, SYNC_GROUP, 140),
@@ -384,7 +397,9 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STASH_APPLY, GitStrings.StashApplyCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STASH_POP, GitStrings.StashPopCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(STASH_DROP, GitStrings.StashDropCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(STASH_DROP, GitStrings.StashDropCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(MERGE, GitStrings.MergeCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ABORT_MERGE, GitStrings.AbortMergeCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

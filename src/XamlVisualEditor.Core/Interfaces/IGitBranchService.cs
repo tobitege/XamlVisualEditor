@@ -46,4 +46,13 @@ public interface IGitBranchService
     /// fully merged is kept and <see cref="GitBranchDeleteResult.NotFullyMerged"/> is returned.
     /// </summary>
     Task<GitBranchDeleteResult> DeleteAsync(string repoPath, string name, bool force, CancellationToken ct = default);
+
+    /// <summary>
+    /// Merges the branch <paramref name="name"/> into the current branch with the default merge message. A merge that
+    /// stops with conflicts returns <see cref="GitMergeResult.Conflicts"/> and leaves the repository in the merge.
+    /// </summary>
+    Task<GitMergeResult> MergeAsync(string repoPath, string name, CancellationToken ct = default);
+
+    /// <summary>Aborts the merge in progress and restores the state before the merge.</summary>
+    Task AbortMergeAsync(string repoPath, CancellationToken ct = default);
 }

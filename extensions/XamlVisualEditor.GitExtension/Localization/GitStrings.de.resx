@@ -252,4 +252,16 @@
   <data name="StashConflicts" xml:space="preserve"><value>Der Stash wurde mit Konflikten angewendet und bleibt erhalten. Löse die Konflikte in den als Konflikt markierten Dateien.</value></data>
   <data name="StashDropPromptFormat" xml:space="preserve"><value>{0} ({1}) löschen? Seine Änderungen gehen verloren.</value></data>
   <data name="StashDropConfirm" xml:space="preserve"><value>Löschen</value></data>
+  <data name="MergeCommand" xml:space="preserve"><value>Branch mergen…</value></data>
+  <data name="AbortMergeCommand" xml:space="preserve"><value>Merge abbrechen…</value></data>
+  <data name="MergePickTitle" xml:space="preserve"><value>In den aktuellen Branch mergen</value></data>
+  <data name="NoBranchToMerge" xml:space="preserve"><value>Es gibt keinen anderen Branch zum Mergen.</value></data>
+  <data name="MergedFormat" xml:space="preserve"><value>{0} wurde in {1} gemergt.</value></data>
+  <data name="MergeUpToDateFormat" xml:space="preserve"><value>{0} ist bereits in {1} gemergt.</value></data>
+  <data name="MergeConflictsFormat" xml:space="preserve"><value>Der Merge von {0} hat mit Konflikten angehalten. Konflikte in den Dateien lösen, die Dateien stagen und committen, oder den Merge abbrechen.</value></data>
+  <data name="AbortMergeTitle" xml:space="preserve"><value>Merge abbrechen</value></data>
+  <data name="AbortMergePrompt" xml:space="preserve"><value>Merge abbrechen? Die Konfliktdateien kehren auf den Stand vor dem Merge zurück; andere Änderungen bleiben.</value></data>
+  <data name="AbortMergeConfirm" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="MergeAborted" xml:space="preserve"><value>Der Merge wurde abgebrochen.</value></data>
+  <data name="StatusBarMerging" xml:space="preserve"><value>Merge läuft</value></data>
 </root>

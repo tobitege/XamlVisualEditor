@@ -5,6 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using ReactiveUI;
+using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -15,8 +19,8 @@ using Xunit;
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
 /// <summary>
-/// Explorer decorations stay cheap for large trees: the test assembly schedules main-thread work inline, so a
-/// <see cref="IExplorerDecorationLayer.Set"/> includes the pass over the loaded nodes.
+/// Explorer decorations stay cheap for large trees: on the UI thread, a <see cref="IExplorerDecorationLayer.Set"/>
+/// includes the pass over the loaded nodes.
 /// </summary>
 public sealed class ExplorerDecorationPerformanceTests
 {
@@ -24,27 +28,32 @@ public sealed class ExplorerDecorationPerformanceTests
     private const int FILES_PER_FOLDER = 100;
     private static readonly string Root = Path.Combine(Path.GetTempPath(), "xve-decoration-performance");
 
-    [Fact]
+    [AvaloniaFact]
     public async Task Set_and_the_pass_over_10000_loaded_nodes_take_less_than_200_ms()
+    {
+        // The tree applies its empty filter 150 ms after it is created through the main-thread scheduler, which
+        // refreshes the model. Delivered through the UI dispatcher, as in the application, that refresh cannot run
+        // beside the refreshes of the loading below; delivered inline, it ran on a timer thread and cancelled them.
+        ISequencer previousScheduler = RxSchedulers.MainThreadScheduler;
+        RxSchedulers.MainThreadScheduler = AvaloniaScheduler.For(Dispatcher.UIThread);
+        try
+        {
+            await MeasureSetAndPassAsync();
+        }
+        finally
+        {
+            RxSchedulers.MainThreadScheduler = previousScheduler;
+        }
+    }
+
+    private static async Task MeasureSetAndPassAsync()
     {
         ExplorerDecorationRegistry registry = new();
         using ExtensionTreeViewModel tree = new(
             new ExtensionViewContribution("probe.large", "Large", ExtensionViewType.Tree, ExtensionViewLocation.Left, 0),
             new LargeTreeProvider(),
             decorations: registry);
-        // The tree applies its empty filter 150 ms after it is created and refreshes the model then, here on a timer
-        // thread. The folders load only after that second load of the root, so the refreshes cannot cancel each other.
-        TaskCompletionSource filterApplied = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        int rootLoads = 0;
-        tree.Model.NodeLoaded += (_, e) =>
-        {
-            if (e.Node == tree.Model.Root && Interlocked.Increment(ref rootLoads) == 2)
-            {
-                filterApplied.TrySetResult();
-            }
-        };
         await tree.LoadAsync(CancellationToken.None);
-        await filterApplied.Task.WaitAsync(TimeSpan.FromSeconds(10));
         foreach (ExtensionTreeNodeViewModel folder in tree.RootItems)
         {
             await folder.EnsureChildrenAsync(CancellationToken.None);
@@ -55,10 +64,13 @@ public sealed class ExplorerDecorationPerformanceTests
         using IExplorerDecorationLayer layer = registry.CreateLayer();
         KeyValuePair<string, ExplorerDecoration>[] added = Decorate(files, new ExplorerDecoration(ExplorerDecorationKind.Added, "A"));
         KeyValuePair<string, ExplorerDecoration>[] modified = Decorate(files, new ExplorerDecoration(ExplorerDecorationKind.Modified, "M"));
+        // The pass over the nodes is a dispatcher job; running the jobs is part of the measured set.
         layer.Set(added);
+        Dispatcher.UIThread.RunJobs();
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         layer.Set(modified);
+        Dispatcher.UIThread.RunJobs();
         stopwatch.Stop();
 
         Assert.All(files, file => Assert.Equal(ExplorerDecorationKind.Modified, file.Decoration?.Kind));

@@ -17,7 +17,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
 | 2 Branches und Sync | erledigt, live geprüft, gepusht (985d441) |
 | 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
-| 4 Explorer-API | offen |
+| 4 Explorer-API | Entwurf freigegeben (siehe „Phase-4-Entwurf“), Umsetzung läuft |
 | 5 Editor-API, Vergleich, Blame | offen |
 | 6 Feinere Commits, Stash | offen |
 | 7 Merge und Konflikte | offen |
@@ -47,6 +47,21 @@ Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befund
 Arbeitsregel ab Phase 4: Jeder Agent lädt `codereview-roasted` vor dem Codieren und prüft seinen Diff vor dem Commit
 selbst; nur die einfachste Lösung, keine Workaround-Maschinerie. Vor dem Push werden Befunde behoben, die Nutzer merken
 oder Ergebnisse verfälschen; Stil-Kleinkram kommt auf die Sammelliste und wird einmal vor dem Upstream-PR abgearbeitet.
+
+Phase-4-Entwurf (ersetzt 4.1 und 4.2, freigegeben):
+- Menüs: nur zwei neue Orte `ExtensionMenuLocations.ExplorerContext` und `DocumentTabContext`, Argumente immer
+  `[fullPath]`; vorhandene `ExtensionMenuContribution`/`When` wiederverwenden; `ExtensionAsyncCommand` reicht den
+  `CommandParameter` durch; `MenuItemsBehavior` auf `ItemsControl` verallgemeinert; keine Wrapper-ViewModels, kein
+  `isDirectory`. Knoten ohne Pfad (Solution, Referenzen) blenden die Einträge aus; Projektknoten wirken auf den
+  Projektordner.
+- Dekorationen als Push-Layer (gleiches Muster wie die Zeilenmarker aus 4.3): `IExplorerDecorations.CreateLayer()`,
+  `IExplorerDecorationLayer.Set(Pfad → ExplorerDecoration)`, `Dispose` entfernt; `ExplorerDecoration(Kind, Badge,
+  ToolTip)` mit `Kind` nur als Farbklasse (Modified, Added, Deleted, Conflicted). Kein Pull-Provider, keine Priorität,
+  keine eigene Drossel, keine Vererbung im Host: ein ungetrackter Ordner zeigt „U“, Dateien darin bleiben ohne Markierung.
+- Git füttert aus `GitSession.Snapshots` ohne Git-Prozess je Element; jeder Vorfahrenordner einer Änderung bekommt einen
+  Eintrag ohne Badge (Conflicted, wenn darunter ein Konflikt liegt, sonst Modified). Schalter `git.toggleExplorerDecorations`.
+- Host: Dictionary mit `FileSystemPathComparison.Comparer`, atomar getauscht, ein Durchgang über die geladenen Knoten;
+  vier Theme-Pinsel hell/dunkel, kein Opacity.
 
 Sammelliste für den Schliff vor dem PR:
 - `HEAD@{n}` jenseits des Reflogs meldet nur „git rev-parse exited with code 128.“ statt gits Meldung.

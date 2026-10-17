@@ -2,6 +2,30 @@
 
 ## Stand
 
+### Bootstrap nach Kontextverlust (zuerst lesen)
+
+- **Auftrag des Nutzers (17.10.2026):** Es wird NICHT weiter Git nachgebaut. Phase 7 (Merge und Konflikte) und 8 sind
+  gestrichen. Gebaut wird nur noch „Merge in der kleinsten Form“: `git.merge` (Branch aus Liste, `git merge --no-edit`),
+  `git.abortMerge` (mit Rückfrage, `git merge --abort`), Statusleiste zeigt „Merging“, solange `MERGE_HEAD` existiert.
+  Konflikte löst der Nutzer im Editor, stagt die Dateien (markiert sie als gelöst) und committet; Commit schließt den
+  Merge ab. Keine Konfliktblöcke im Gutter, kein Ours/Theirs, kein Rebase. Danach: PR fertig machen, nichts Neues.
+- **Stand der Umsetzung:** Worktree `github\XamlVisualEditor-git`, Branch `git-integration`, gepusht bis 19a3662
+  (Phasen 0–6). Die halbe Phase-7-Arbeit liegt dort als `git stash` „phase 7 partial work“ und wird NICHT verwendet.
+  Uncommittet für den Mini-Merge geändert: `GitHistoryModels.cs` (enum `GitMergeResult`), `IGitBranchService.cs`
+  (`MergeAsync`, `AbortMergeAsync`), `GitService.Branches.cs` (Implementierung; Konflikt erkannt über `MERGE_HEAD`,
+  nicht über den Exitcode), neu `Services/GitCommandHandler.Merge.cs`, `GitCommands.cs` (Konstanten `MERGE`,
+  `ABORT_MERGE`, `MERGING_WHEN`, Registrierung, Menü, Palette), `GitStrings.resx`/`.de.resx` (15 Texte),
+  `GitStatusBar.cs` („· Merging“), `CHANGELOG.md`.
+- **Noch zu tun:** Tests (`GitBranchServiceTests`: Fast-Forward-Merge, Merge mit Konflikt → `Conflicts` und
+  `MERGE_HEAD`, Abort; `GitStatusBarTests`: „Merging“ im Text), Build + alle vier Testprojekte über
+  `scratchpad\pr_build.sh /d/github/XamlVisualEditor-git tests` im Hintergrund (0 Warnungen), CDP-App-Build, Livetest per
+  CDP am Repo `xve-demo\GitShowcase` (Branch `feature/settings-page` ist bereits gemergt; für einen Konflikt vorher
+  einen Branch mit kollidierender Änderung anlegen), ein Commit, Push. Dann: Fix-Commits je Phase zusammenfassen
+  (ein Commit je Phase), Sammelliste nur bei sichtbaren Fehlern abarbeiten, Screenshots neu aufnehmen
+  (`xve-demo\shots\git\`), PR-Beschreibung aus den PR-Notizen unten, PR nur mit Go des Nutzers.
+- **Arbeitsweise:** Ohne Agenten direkt arbeiten, kleinste Lösung, keine neuen Mechanismen, keine weiteren Phasen.
+  Roasted Review vor dem Push nur für den Mini-Merge-Diff selbst durchführen. Kein Force-Push mehr.
+
 Planungsdokument des Forks; geht nicht upstream und liegt nur auf `xve-form-editing`. Ziel ist ein Upstream-PR mit
 einem Commit je Phase.
 

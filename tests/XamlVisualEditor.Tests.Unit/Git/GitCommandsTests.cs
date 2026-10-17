@@ -52,7 +52,8 @@ public sealed class GitCommandsTests
         { GitCommands.SYNC, GitStrings.SyncCommand, UPSTREAM_WHEN },
         { GitCommands.TOGGLE_HISTORY_VIEW, GitStrings.ToggleHistoryViewCommand, null },
         { GitCommands.SHOW_HISTORY, GitStrings.ShowHistoryCommand, REPOSITORY_WHEN },
-        { GitCommands.SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, REPOSITORY_WHEN }
+        { GitCommands.SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, REPOSITORY_WHEN },
+        { GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitStrings.ToggleExplorerDecorationsCommand, null }
     };
 
     [Theory]
@@ -79,7 +80,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(23, commandIds.Count);
+        Assert.Equal(24, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -89,7 +90,7 @@ public sealed class GitCommandsTests
     }
 
     [Fact]
-    public async Task Menu_entries_are_in_view_panels_the_extensions_git_submenu_and_the_editor_context_menu()
+    public async Task Menu_entries_are_in_view_panels_the_extensions_git_submenu_and_the_context_menus()
     {
         using Registration registration = await Registration.CreateAsync();
         IReadOnlyList<ExtensionMenuContribution> items = registration.Contributions.MenuItems;
@@ -112,22 +113,33 @@ public sealed class GitCommandsTests
         string[] extensionsIds =
         [
             GitCommands.SHOW_CHANGES, GitCommands.REFRESH, GitCommands.SHOW_OUTPUT, GitCommands.TOGGLE_AUTO_REFRESH,
-            GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.INIT,
+            GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
         Assert.All(extensionsItems, item => Assert.Equal("Git", item.Submenu));
-        Assert.Equal("git.autoRefresh", Assert.Single(extensionsItems, item => item.CheckedWhen is not null).CheckedWhen);
-        Assert.Equal(GitCommands.TOGGLE_AUTO_REFRESH, Assert.Single(extensionsItems, item => item.CheckedWhen is not null).CommandId);
-
-        ExtensionMenuContribution[] editorItems = items.Where(item => item.Location == ExtensionMenuLocations.EditorContext).ToArray();
         Assert.Equal(
-            new[] { GitCommands.DISCARD, GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE },
-            editorItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
-        Assert.All(editorItems, item => Assert.Equal("Git", item.Submenu));
-        Assert.Equal(items.Count, viewItems.Length + extensionsItems.Length + editorItems.Length);
+            new[] { (GitCommands.TOGGLE_AUTO_REFRESH, "git.autoRefresh"), (GitCommands.TOGGLE_EXPLORER_DECORATIONS, "git.explorerDecorations") },
+            extensionsItems.Where(item => item.CheckedWhen is not null).Select(item => (item.CommandId, item.CheckedWhen!)));
+
+        string[] fileIds = [GitCommands.DISCARD, GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE];
+        string[] tabIds = [GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE];
+        ExtensionMenuContribution[] contextItems = items
+            .Where(item => item.Location is ExtensionMenuLocations.EditorContext or ExtensionMenuLocations.ExplorerContext
+                or ExtensionMenuLocations.DocumentTabContext)
+            .ToArray();
+        Assert.Equal(fileIds, ContextIds(ExtensionMenuLocations.EditorContext));
+        Assert.Equal(fileIds, ContextIds(ExtensionMenuLocations.ExplorerContext));
+        Assert.Equal(tabIds, ContextIds(ExtensionMenuLocations.DocumentTabContext));
+        Assert.All(contextItems, item => Assert.Equal("Git", item.Submenu));
+        Assert.Equal(items.Count, viewItems.Length + extensionsItems.Length + contextItems.Length);
+
+        IEnumerable<string> ContextIds(string location) => contextItems
+            .Where(item => item.Location == location)
+            .Select(item => item.CommandId)
+            .Order(StringComparer.Ordinal);
     }
 
     [Fact]

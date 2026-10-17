@@ -1,13 +1,15 @@
+using System;
 using System.Collections;
 using System.Collections.Specialized;
+using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Xaml.Interactivity;
 
 namespace XamlVisualEditor.App.Views;
 
-/// <summary>Inserts dynamic entries through the XAML template next to fixed menu actions.</summary>
-public sealed class MenuItemsBehavior : Behavior<MenuItem>
+/// <summary>Inserts dynamic entries through the item template next to the fixed items of a menu or context menu.</summary>
+public sealed class MenuItemsBehavior : Behavior<ItemsControl>
 {
     public static readonly StyledProperty<IEnumerable?> ItemsProperty =
         AvaloniaProperty.Register<MenuItemsBehavior, IEnumerable?>(nameof(Items));
@@ -15,6 +17,7 @@ public sealed class MenuItemsBehavior : Behavior<MenuItem>
         AvaloniaProperty.Register<MenuItemsBehavior, int>(nameof(InsertIndex));
     private readonly List<Control> _items = new();
     private INotifyCollectionChanged? _source;
+    private IDisposable? _templateSubscription;
 
     public IEnumerable? Items { get => GetValue(ItemsProperty); set => SetValue(ItemsProperty, value); }
     public int InsertIndex { get => GetValue(InsertIndexProperty); set => SetValue(InsertIndexProperty, value); }
@@ -23,13 +26,19 @@ public sealed class MenuItemsBehavior : Behavior<MenuItem>
     {
         base.OnAttached();
         RefreshSource();
+        // A template from a dynamic resource arrives after the items; the items are built again with it.
+        _templateSubscription = AssociatedObject?.GetObservable(ItemsControl.ItemTemplateProperty).Skip(1)
+            .Subscribe(_ => Rebuild());
     }
 
+    // The behavior is detached whenever its menu leaves the visual tree, for a context menu or submenu on every close;
+    // removing the items there would change the menu while it closes. They stay and are replaced on the next attach.
     protected override void OnDetaching()
     {
+        _templateSubscription?.Dispose();
+        _templateSubscription = null;
         if (_source is not null) _source.CollectionChanged -= OnCollectionChanged;
         _source = null;
-        RemoveItems();
         base.OnDetaching();
     }
 

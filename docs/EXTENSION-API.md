@@ -38,6 +38,7 @@ This is the current native .NET extension API surface. All types live in the
 - `Storage` (`IExtensionStorage`)
 - `Logger` (`IExtensionLogger`)
 - `PropertyEditors` (`IPropertyEditorRegistry`)
+- `ExplorerDecorations` (`IExplorerDecorations`, optional)
 
 ## Core Services
 
@@ -267,6 +268,24 @@ This is the current native .NET extension API surface. All types live in the
   - `menu.tools`
   - `menu.tools.workspace`
   - `menu.extensions`
+  - `menu.editor.context`: context menu of the text and code editors
+  - `menu.explorer.context`: context menu of the File Explorer, the Solution Explorer and the extension trees whose
+    items implement `IExtensionTreeItemPathProvider`; the command receives `[fullPath]` of the clicked file or folder,
+    a project node the project folder, and the items are hidden on nodes without a path
+  - `menu.documentTab.context`: context menu of a document tab; the command receives `[fullPath]` of the file, and
+    the items are hidden on tabs without a file
+  - The items of the context menus follow the fixed items after a separator; `Submenu`, `SubmenuGroup`,
+    `CheckedWhen` and the `When` clause of the command apply as in the other menus.
+
+- `IExplorerDecorations` (`ExtensionContext.ExplorerDecorations`, null when the host shows no decorations)
+  - `CreateLayer()` returns an `IExplorerDecorationLayer`; layers are consulted in creation order and the first one
+    with an entry for a path wins
+  - `IExplorerDecorationLayer.Set(IEnumerable<KeyValuePair<string, ExplorerDecoration>> decorations)` replaces all
+    entries of the layer; keys are full paths of files and folders, a trailing separator is ignored, and it may be
+    called from any thread. `Dispose()` removes the entries.
+  - `ExplorerDecoration(ExplorerDecorationKind Kind, string? Badge = null, string? ToolTip = null)`: the label of the
+    node takes the theme colour of `Kind` (`Modified`, `Added`, `Deleted`, `Conflicted`), followed by the badge
+    with its tooltip. A node shows only its own entry; folders above a change need entries of their own.
 
 - `IExtensionViewHost`
   - `VisibilityChanged` event (`ExtensionViewVisibilityChangedEventArgs`)

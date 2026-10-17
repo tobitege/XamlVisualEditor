@@ -311,6 +311,8 @@ public sealed class App : Application
         });
         services.AddSingleton<ITextEditorViewHost>(sp => sp.GetRequiredService<TextEditorViewHost>());
         services.AddSingleton<IContextKeys, ContextKeyRegistry>();
+        services.AddSingleton<ExplorerDecorationRegistry>();
+        services.AddSingleton<IExplorerDecorations>(sp => sp.GetRequiredService<ExplorerDecorationRegistry>());
         services.AddSingleton<IDesignerHost, ShellDesignerHost>();
         services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();

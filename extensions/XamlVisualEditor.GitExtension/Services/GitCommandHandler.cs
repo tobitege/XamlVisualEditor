@@ -20,6 +20,7 @@ internal sealed partial class GitCommandHandler
     private readonly Func<GitPanelViewModel?> _panel;
     private readonly IExtensionLogger? _logger;
     private readonly Func<GitHistoryViewModel>? _history;
+    private readonly GitExplorerDecorations? _explorerDecorations;
 
     /// <summary>Creates the handler.</summary>
     /// <param name="session">The Git session.</param>
@@ -31,6 +32,7 @@ internal sealed partial class GitCommandHandler
     /// <param name="panel">Returns the Git Changes panel view model once it exists, otherwise null.</param>
     /// <param name="logger">Receives failed commands.</param>
     /// <param name="history">Returns the Git History panel view model, creating it when needed; null only shows the panel.</param>
+    /// <param name="explorerDecorations">The Git status in the explorers, switched by its toggle command.</param>
     public GitCommandHandler(
         GitSession session,
         IExtensionViewHost viewHost,
@@ -40,9 +42,11 @@ internal sealed partial class GitCommandHandler
         IOutputChannel? outputChannel,
         Func<GitPanelViewModel?> panel,
         IExtensionLogger? logger,
-        Func<GitHistoryViewModel>? history = null)
+        Func<GitHistoryViewModel>? history = null,
+        GitExplorerDecorations? explorerDecorations = null)
     {
         _history = history;
+        _explorerDecorations = explorerDecorations;
         _session = session;
         _viewHost = viewHost;
         _window = window;
@@ -119,6 +123,9 @@ internal sealed partial class GitCommandHandler
 
     public Task ToggleAutoRefreshAsync(CommandContext context) =>
         _session.SetWorkingTreeWatcherEnabledAsync(!_session.Current.IsWorkingTreeWatcherEnabled);
+
+    public Task ToggleExplorerDecorationsAsync(CommandContext context) =>
+        _explorerDecorations?.ToggleAsync() ?? Task.CompletedTask;
 
     public async Task InitAsync(CommandContext context)
     {

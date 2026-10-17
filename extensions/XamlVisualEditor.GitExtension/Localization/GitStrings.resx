@@ -11,6 +11,7 @@
   <data name="ShowOutputCommand" xml:space="preserve"><value>Show Git Output</value></data>
   <data name="InitCommand" xml:space="preserve"><value>Initialize Repository</value></data>
   <data name="ToggleAutoRefreshCommand" xml:space="preserve"><value>Watch Working Folder</value></data>
+  <data name="ToggleExplorerDecorationsCommand" xml:space="preserve"><value>Show Git Status in Explorers</value></data>
   <data name="StageCommand" xml:space="preserve"><value>Stage</value></data>
   <data name="UnstageCommand" xml:space="preserve"><value>Unstage</value></data>
   <data name="DiscardCommand" xml:space="preserve"><value>Discard Changes…</value></data>
@@ -177,6 +178,8 @@
   <data name="ChangeTypeChanged" xml:space="preserve"><value>Type changed</value></data>
   <data name="ChangeUnmerged" xml:space="preserve"><value>Unmerged</value></data>
   <data name="ChangeOther" xml:space="preserve"><value>Changed</value></data>
+  <data name="ChangeUntracked" xml:space="preserve"><value>Untracked</value></data>
+  <data name="ChangeConflicted" xml:space="preserve"><value>Merge conflict</value></data>
   <data name="RenamedFromFormat" xml:space="preserve"><value>{0} (from {1})</value></data>
   <data name="TagsTab" xml:space="preserve"><value>Tags</value></data>
   <data name="ColumnTag" xml:space="preserve"><value>Tag</value></data>

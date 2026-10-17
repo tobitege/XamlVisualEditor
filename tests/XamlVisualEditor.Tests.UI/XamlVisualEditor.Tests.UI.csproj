@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\Shared\TestTempDirectory.cs" Link="Shared\TestTempDirectory.cs" />
+    <Compile Include="..\Shared\GitTestRepository.cs" Link="Shared\GitTestRepository.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.App\XamlVisualEditor.App.csproj" />

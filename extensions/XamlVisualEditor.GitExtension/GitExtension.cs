@@ -41,7 +41,10 @@ public sealed class GitExtension : IXveExtension
             commandLog.CommandCompleted += commandLogHandler;
         }
 
-        GitSession session = new(_services, _workspaceInfo, new GitSettingsStore(context.Storage), logger);
+        GitSettingsStore settings = new(context.Storage);
+        GitSession session = new(_services, _workspaceInfo, settings, logger);
+        GitExplorerDecorations explorerDecorations = new(session, context.ExplorerDecorations, settings,
+            context.ContextKeys, logger);
 
         ICommands commands = context.Commands;
         Func<string, IReadOnlyList<object?>?, Task> executeCommand =
@@ -59,7 +62,8 @@ public sealed class GitExtension : IXveExtension
             outputChannel,
             () => panel.IsValueCreated ? panel.Value : null,
             logger,
-            () => historyPanel.Value);
+            () => historyPanel.Value,
+            explorerDecorations);
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, GitStatusBar.PRIORITY);
         statusBarItem.CommandId = GitCommands.SHOW_CHANGES;
@@ -118,11 +122,13 @@ public sealed class GitExtension : IXveExtension
                 historyPanel.Value.Dispose();
             }
 
+            explorerDecorations.Dispose();
             session.Dispose();
             statusBarItem.Dispose();
             outputChannel.Dispose();
         }));
 
+        _ = explorerDecorations.LoadAsync();
         _ = session.StartAsync(CancellationToken.None);
         return Task.CompletedTask;
     }

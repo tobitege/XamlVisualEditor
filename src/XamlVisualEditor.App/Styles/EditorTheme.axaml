@@ -26,6 +26,10 @@
                     <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorDark2}" />
                     <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#1E1E1E" />
                     <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D01E1E1E" />
+                    <SolidColorBrush x:Key="ExplorerDecorationModifiedBrush" Color="#E2C08D" />
+                    <SolidColorBrush x:Key="ExplorerDecorationAddedBrush" Color="#81B88B" />
+                    <SolidColorBrush x:Key="ExplorerDecorationDeletedBrush" Color="#F0776D" />
+                    <SolidColorBrush x:Key="ExplorerDecorationConflictedBrush" Color="#D59CF5" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="EditorDialogButtonBackgroundBrush" Color="#F4F4F4" />
@@ -44,6 +48,10 @@
                     <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="{DynamicResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="EditorCanvasBackdropBrush" Color="#E8E8E8" />
                     <SolidColorBrush x:Key="EditorBusyBackdropBrush" Color="#D0F3F3F3" />
+                    <SolidColorBrush x:Key="ExplorerDecorationModifiedBrush" Color="#6B4500" />
+                    <SolidColorBrush x:Key="ExplorerDecorationAddedBrush" Color="#145A24" />
+                    <SolidColorBrush x:Key="ExplorerDecorationDeletedBrush" Color="#96141F" />
+                    <SolidColorBrush x:Key="ExplorerDecorationConflictedBrush" Color="#6A1FA3" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <!-- The DataGrid theme brightens the accent of a selected row under the mouse; with a light accent the
@@ -78,6 +86,20 @@
     <Style Selector="Window">
         <Setter Property="Background" Value="{DynamicResource EditorWindowBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EditorWindowForegroundBrush}" />
+    </Style>
+
+    <!-- Explorer rows colour their label and badge by the kind of their decoration. -->
+    <Style Selector="StackPanel.decoration-modified > TextBlock.decorated">
+        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationModifiedBrush}" />
+    </Style>
+    <Style Selector="StackPanel.decoration-added > TextBlock.decorated">
+        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationAddedBrush}" />
+    </Style>
+    <Style Selector="StackPanel.decoration-deleted > TextBlock.decorated">
+        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationDeletedBrush}" />
+    </Style>
+    <Style Selector="StackPanel.decoration-conflicted > TextBlock.decorated">
+        <Setter Property="Foreground" Value="{DynamicResource ExplorerDecorationConflictedBrush}" />
     </Style>
 
     <!-- Owned windows get the class from DialogAppearance; the frame stays visible without focus. -->

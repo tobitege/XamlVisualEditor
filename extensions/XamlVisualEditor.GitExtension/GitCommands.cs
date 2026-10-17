@@ -34,6 +34,9 @@ public static class GitCommands
     /// <summary>Switches the working folder watcher on or off.</summary>
     public const string TOGGLE_AUTO_REFRESH = "git.toggleAutoRefresh";
 
+    /// <summary>Switches the Git status in the explorers on or off.</summary>
+    public const string TOGGLE_EXPLORER_DECORATIONS = "git.toggleExplorerDecorations";
+
     /// <summary>Stages a file or folder: argument 0, otherwise the active document.</summary>
     public const string STAGE = "git.stage";
 
@@ -119,6 +122,9 @@ public static class GitCommands
     /// <summary>Context key: the working folder watcher is switched on.</summary>
     public const string AUTO_REFRESH_CONTEXT_KEY = GitSettingsStore.AUTO_REFRESH_KEY;
 
+    /// <summary>Context key: the explorers show the Git status.</summary>
+    public const string EXPLORER_DECORATIONS_CONTEXT_KEY = GitSettingsStore.EXPLORER_DECORATIONS_KEY;
+
     private const string SUBMENU_GROUP = "git";
     private const string VIEW_GROUP = "1_view";
     private const string CHANGES_GROUP = "2_changes";
@@ -184,6 +190,8 @@ public static class GitCommands
             new CommandMetadata(GitStrings.ShowHistoryCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 220));
         Register(SHOW_FILE_HISTORY, handler.ShowFileHistoryAsync,
             new CommandMetadata(GitStrings.ShowFileHistoryCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 230));
+        Register(TOGGLE_EXPLORER_DECORATIONS, handler.ToggleExplorerDecorationsAsync,
+            new CommandMetadata(GitStrings.ToggleExplorerDecorationsCommand, CATEGORY, Priority: 240));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -194,7 +202,8 @@ public static class GitCommands
 
     /// <summary>
     /// Registers the menu and Command Palette entries: the panels under View › Panels, the repository commands in
-    /// the Extensions › Git submenu and the file commands in the Git submenu of the editor context menu.
+    /// the Extensions › Git submenu and the file commands in the Git submenu of the editor, explorer and document tab
+    /// context menus.
     /// </summary>
     internal static void RegisterMenuAndPaletteItems(
         string extensionId,
@@ -212,6 +221,10 @@ public static class GitCommands
                 {
                     CheckedWhen = AUTO_REFRESH_CONTEXT_KEY
                 },
+                ExtensionsItem(TOGGLE_EXPLORER_DECORATIONS, GitStrings.ToggleExplorerDecorationsCommand, VIEW_GROUP, 45) with
+                {
+                    CheckedWhen = EXPLORER_DECORATIONS_CONTEXT_KEY
+                },
                 ExtensionsItem(STAGE_ALL, GitStrings.StageAllCommand, CHANGES_GROUP, 50),
                 ExtensionsItem(UNSTAGE_ALL, GitStrings.UnstageAllCommand, CHANGES_GROUP, 60),
                 ExtensionsItem(COMMIT, GitStrings.CommitCommand, CHANGES_GROUP, 70),
@@ -226,10 +239,17 @@ public static class GitCommands
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
                 ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
-                EditorContextItem(STAGE, GitStrings.StageCommand, 10),
-                EditorContextItem(UNSTAGE, GitStrings.UnstageCommand, 20),
-                EditorContextItem(DISCARD, GitStrings.DiscardCommand, 30),
-                EditorContextItem(SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40)
+                ContextItem(ExtensionMenuLocations.EditorContext, STAGE, GitStrings.StageCommand, 10),
+                ContextItem(ExtensionMenuLocations.EditorContext, UNSTAGE, GitStrings.UnstageCommand, 20),
+                ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
+                ContextItem(ExtensionMenuLocations.EditorContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
+                ContextItem(ExtensionMenuLocations.ExplorerContext, STAGE, GitStrings.StageCommand, 10),
+                ContextItem(ExtensionMenuLocations.ExplorerContext, UNSTAGE, GitStrings.UnstageCommand, 20),
+                ContextItem(ExtensionMenuLocations.ExplorerContext, DISCARD, GitStrings.DiscardCommand, 30),
+                ContextItem(ExtensionMenuLocations.ExplorerContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
+                ContextItem(ExtensionMenuLocations.DocumentTabContext, STAGE, GitStrings.StageCommand, 10),
+                ContextItem(ExtensionMenuLocations.DocumentTabContext, UNSTAGE, GitStrings.UnstageCommand, 20),
+                ContextItem(ExtensionMenuLocations.DocumentTabContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40)
             ]));
         subscriptions.Add(contributions.RegisterCommandPaletteItems(
             extensionId,
@@ -239,6 +259,7 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(REFRESH, GitStrings.RefreshCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(SHOW_OUTPUT, GitStrings.ShowOutputCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(TOGGLE_AUTO_REFRESH, GitStrings.ToggleAutoRefreshCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(TOGGLE_EXPLORER_DECORATIONS, GitStrings.ToggleExplorerDecorationsCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(INIT, GitStrings.InitCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STAGE, GitStrings.StageCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(UNSTAGE, GitStrings.UnstageCommand, CATEGORY),
@@ -266,8 +287,8 @@ public static class GitCommands
                 SubmenuGroup = submenuGroup
             };
 
-        static ExtensionMenuContribution EditorContextItem(string commandId, string title, int priority) =>
-            new(commandId, title, ExtensionMenuLocations.EditorContext, SUBMENU_GROUP, priority)
+        static ExtensionMenuContribution ContextItem(string location, string commandId, string title, int priority) =>
+            new(commandId, title, location, SUBMENU_GROUP, priority)
             {
                 Submenu = CATEGORY
             };

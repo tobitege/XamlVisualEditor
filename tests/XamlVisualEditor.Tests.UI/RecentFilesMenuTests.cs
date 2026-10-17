@@ -209,11 +209,12 @@ public sealed class RecentFilesMenuTests
             await vm.ClearRecentFilesCommand.Execute().FirstAsync();
             await Idle();
             Assert.Empty(vm.RecentFiles);
-            Assert.Empty(recentFiles.Items);
             Assert.False(recentFiles.IsVisible);
             file.IsSubMenuOpen = true;
             recent.IsSubMenuOpen = true;
             await Idle();
+            // A closed submenu keeps its entries until it opens again.
+            Assert.Empty(recentFiles.Items);
             Assert.False(clear.IsEffectivelyEnabled);
             using MainWindowViewModel reopened = new(recentFilesPath: store);
             Assert.Empty(reopened.RecentFiles);

@@ -17,7 +17,7 @@ Tests und einem Livetest per CDP. Testrepository: `D:\xve-demo\GitDemo` mit loka
 | 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
 | 2 Branches und Sync | erledigt, live geprüft, gepusht (985d441) |
 | 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
-| 4 Explorer-API | Entwurf freigegeben (siehe „Phase-4-Entwurf“), Umsetzung läuft |
+| 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
 | 5 Editor-API, Vergleich, Blame | offen |
 | 6 Feinere Commits, Stash | offen |
 | 7 Merge und Konflikte | offen |
@@ -49,6 +49,7 @@ selbst; nur die einfachste Lösung, keine Workaround-Maschinerie. Vor dem Push w
 oder Ergebnisse verfälschen; Stil-Kleinkram kommt auf die Sammelliste und wird einmal vor dem Upstream-PR abgearbeitet.
 
 Phase-4-Entwurf (ersetzt 4.1 und 4.2, freigegeben):
+
 - Menüs: nur zwei neue Orte `ExtensionMenuLocations.ExplorerContext` und `DocumentTabContext`, Argumente immer
   `[fullPath]`; vorhandene `ExtensionMenuContribution`/`When` wiederverwenden; `ExtensionAsyncCommand` reicht den
   `CommandParameter` durch; `MenuItemsBehavior` auf `ItemsControl` verallgemeinert; keine Wrapper-ViewModels, kein
@@ -70,11 +71,15 @@ Sammelliste für den Schliff vor dem PR:
 - Commit-Details: Die Kopfzeile ist eine Star-Zeile mit `MaxHeight=160`; bei kurzer Nachricht bleibt Leerraum.
 - Commit-Details: Das Zurücksetzen des Kopfs hängt am Text der Zusammenfassung statt am Commit.
 - Testlücken zu den beiden Layout-Befunden aus Review 0063f77.
+- Phase 4 (Review `review_phase4`): Dekorations-Lookup normalisiert den Pfad nicht (nur beim Setzen); dunkles Theme mit
+  orangem Akzent auf markierter Zeile unter der Maus: Deleted 2,6:1, Added 3,2:1; plus fünf weitere Kleinigkeiten.
 
 Für die PR-Beschreibung: Die Git-Views überschreiben die Vordergrundfarbe gesperrter Buttons nicht mehr (der Stil stammt
 aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Weitere Änderungen an
 Upstream-Dateien (`GitPanelView.axaml`, `GitPanelViewModel.cs`, `GitDiffTextEditor.cs`): Statusspalte nach breitestem
-Text bemessen und per Strg+C kopierbar, Diff-Farben per Ressourcenschlüssel überschreibbar. Demo-Screenshots als Rohbilder unter
+Text bemessen und per Strg+C kopierbar, Diff-Farben per Ressourcenschlüssel überschreibbar. `MenuItemsBehavior` arbeitet
+auf jedem `ItemsControl` und behält seine Einträge beim Schließen (Xaml.Behaviors löst bei jedem Menü-Schließen ab).
+Bekannte Grenze: Ein über eine Junction geöffneter Workspace bekommt keine Git-Funktionen, weil git den Zielpfad meldet. Demo-Screenshots als Rohbilder unter
 `D:\xve-demo\shots\git\` (Showcase-Repo `D:\xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.

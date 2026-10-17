@@ -15,7 +15,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 |---|---|
 | 0 CLI-Fundament | erledigt, live geprüft |
 | 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
-| 2 Branches und Sync | umgesetzt, live geprüft bis 051ada0; Korrekturen aus dem letzten Review in Arbeit |
+| 2 Branches und Sync | erledigt, live geprüft, gepusht (3e0d4f2) |
 | 3 Verlauf, Commit-Details, Tags | offen |
 | 4 Explorer-API | offen |
 | 5 Editor-API, Vergleich, Blame | offen |
@@ -24,7 +24,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
 Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.
-Die Reviews bis 051ada0 sind abgearbeitet. Daraus festgehaltene Entscheidungen:
+Alle Reviews bis Phase 2 (Stand 3e0d4f2) sind abgearbeitet, keine offenen Befunde. Festgehaltene Entscheidungen:
 - Unstage nutzt die Liste der gestagten Änderungen statt `git reset`, weil `reset` einen laufenden Merge abbricht;
   Ordner-Discard verwirft nur die bestätigte Liste.
 - Fetch ist schlicht `git fetch <remote>` je Remote: keine erzwungene Prune, keine eigenen Refspecs (sonst fehlen
@@ -35,15 +35,13 @@ Die Reviews bis 051ada0 sind abgearbeitet. Daraus festgehaltene Entscheidungen:
 - Unter Windows wird der Git-for-Windows-Launcher `cmd\git.exe` zum echten Binary aufgelöst, damit das Job-Object
   auch Hook-Kindprozesse beim Abbruch beendet.
 
-Offene Punkte aus dem Review von 051ada0 (Behebung läuft):
-1. Pull mit auf dem Server gelöschtem Upstream meldet bei Standardkonfiguration Erfolg, Sync pusht den Branch wieder
-   hoch. Fix: Pull holt gezielt `git fetch <branch.X.remote> <branch.X.merge>`; „couldn't find remote ref“ ist
-   „Upstream gelöscht“. Integrationstest mit Bare-Remote.
-2. Launcher-Auflösung: `MSYSTEM` setzen, wenn es fehlt, und `%HOME%\bin` hinter `usr\bin` einreihen (sonst überdeckt
-   ein `~/bin/ssh` das ssh von Git); auch `GitProcessOptions.ExecutablePath` auflösen, Scoop-Shims beachten.
-3. Commit-Zählung beim Pull über HEAD vor dem Merge und `rev-list --count`.
-4. Kleinigkeiten: McpServer-Catch-Klauseln zusammenfassen, `MaxContinuationLines` internal, `Branches!`, Doku-Zeilenlänge.
-5. Test: Hook mit `#!/bin/sh` und ssh aus `usr\bin` über das aufgelöste Binary (Windows).
+- Pull wie `git pull`: Upstream aus `branch.<b>.remote` und dem ersten `branch.<b>.merge`-Wert, Fetch des ganzen
+  Remotes, dann muss `FETCH_HEAD` den Merge-Eintrag genau dieses Werts enthalten (sonst „Upstream gelöscht“, auch ohne
+  Prune; Sync pusht nach einem fehlgeschlagenen Pull nie). Danach `rev-parse @{upstream}` zur SHA,
+  `merge --ff-only <sha>` mit Reflog „pull“, Zählung `ORIG_HEAD..<sha>` (null bei ungeborenem Branch).
+- Der aufgelöste Git-Prozess bekommt die Umgebung des Launchers: `MSYSTEM`, `HOME`, PATH-Reihenfolge
+  `<env>\bin`, `usr\bin`, `%HOME%\bin` (Record `GitForWindowsLayout`); `ExecutablePath` und Scoop-Shims werden
+  ebenso aufgelöst.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 

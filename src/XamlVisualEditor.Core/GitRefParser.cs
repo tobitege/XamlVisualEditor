@@ -5,8 +5,8 @@ using System.Globalization;
 namespace XamlVisualEditor.Core;
 
 /// <summary>
-/// Parses the branch list of <c>git for-each-ref</c> in <see cref="BRANCH_FORMAT"/> and the remote list of
-/// <c>git remote -v</c>.
+/// Parses the branch list of <c>git for-each-ref</c> in <see cref="BRANCH_FORMAT"/>, the tag list in
+/// <see cref="TAG_FORMAT"/> and the remote list of <c>git remote -v</c>.
 /// </summary>
 public static class GitRefParser
 {
@@ -18,10 +18,23 @@ public static class GitRefParser
     public const string BRANCH_FORMAT =
         "%(HEAD)%00%(refname)%00%(upstream)%00%(upstream:track,nobracket)%00%(symref)%00%(contents:subject)%1e";
 
+    /// <summary>
+    /// The <c>--format</c> of <c>git for-each-ref refs/tags</c> that <see cref="ParseTags"/> reads, with the same
+    /// separators as <see cref="BRANCH_FORMAT"/>: name, type, full and abbreviated id of the referenced object, then
+    /// type, full and abbreviated id of the object an annotated tag points to, date, tagger and subject. For a
+    /// lightweight tag, date and subject are those of its commit.
+    /// </summary>
+    public const string TAG_FORMAT =
+        "%(refname)%00%(objecttype)%00%(objectname)%00%(objectname:short)%00%(*objecttype)%00%(*objectname)%00%(*objectname:short)"
+        + "%00%(creatordate:iso-strict)%00%(taggername)%00%(contents:subject)%1e";
+
     private const string LOCAL_PREFIX = "refs/heads/";
     private const string REMOTE_PREFIX = "refs/remotes/";
+    private const string TAG_PREFIX = "refs/tags/";
     private const int FIELD_COUNT = 6;
     private const int SUBJECT_FIELD = 5;
+    private const int TAG_FIELD_COUNT = 10;
+    private const int TAG_SUBJECT_FIELD = 9;
 
     /// <summary>
     /// Parses the output of <c>git for-each-ref --format=BRANCH_FORMAT refs/heads refs/remotes</c>. Returns the
@@ -154,6 +167,50 @@ public static class GitRefParser
         }
 
         return remotes;
+    }
+
+    /// <summary>
+    /// Parses the output of <c>git for-each-ref --format=TAG_FORMAT refs/tags</c> in the order of the output;
+    /// malformed records are skipped.
+    /// </summary>
+    public static IReadOnlyList<GitTag> ParseTags(string output)
+    {
+        List<GitTag> tags = new();
+        if (string.IsNullOrEmpty(output))
+        {
+            return tags;
+        }
+
+        foreach (string rawRecord in output.Split('\u001e'))
+        {
+            // for-each-ref ends every record with a line feed, which then starts the next record.
+            string record = rawRecord.TrimStart('\r', '\n');
+            string[] fields = record.Split('\0');
+            if (fields.Length < TAG_FIELD_COUNT || !fields[0].StartsWith(TAG_PREFIX, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // An annotated tag names the object its tag object points to in the fields with '*'.
+            bool isAnnotated = fields[1] == "tag";
+            bool isPeeled = isAnnotated && fields[4].Length > 0;
+            tags.Add(new GitTag
+            {
+                Name = fields[0][TAG_PREFIX.Length..],
+                FullName = fields[0],
+                IsAnnotated = isAnnotated,
+                TargetType = isPeeled ? fields[4] : fields[1],
+                TargetSha = isPeeled ? fields[5] : fields[2],
+                TargetShortSha = isPeeled ? fields[6] : fields[3],
+                Date = DateTimeOffset.TryParse(fields[7], CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset date)
+                    ? date
+                    : null,
+                TaggerName = fields[8],
+                Subject = string.Join('\0', fields, TAG_SUBJECT_FIELD, fields.Length - TAG_SUBJECT_FIELD)
+            });
+        }
+
+        return tags;
     }
 
     /// <summary>Returns the name of a branch reference without <c>refs/heads/</c> or <c>refs/remotes/</c>.</summary>

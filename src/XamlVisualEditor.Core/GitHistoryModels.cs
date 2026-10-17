@@ -171,3 +171,168 @@ public sealed class GitRemoteResult
         return new GitRemoteResult { FailureKind = kind, Message = message };
     }
 }
+
+/// <summary>
+/// A commit as <c>git log</c> lists it.
+/// </summary>
+public sealed record GitCommitInfo
+{
+    /// <summary>Gets the full commit id.</summary>
+    public required string Sha { get; init; }
+
+    /// <summary>Gets the abbreviated commit id as git abbreviates it in this repository.</summary>
+    public string ShortSha { get; init; } = string.Empty;
+
+    /// <summary>Gets the full ids of the parents; empty for a root commit, two or more for a merge commit.</summary>
+    public IReadOnlyList<string> ParentShas { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Gets the abbreviated ids of the parents as git abbreviates them in this repository, in the order of
+    /// <see cref="ParentShas"/>.
+    /// </summary>
+    public IReadOnlyList<string> ParentShortShas { get; init; } = Array.Empty<string>();
+
+    /// <summary>Gets the author name.</summary>
+    public string AuthorName { get; init; } = string.Empty;
+
+    /// <summary>Gets the author email address.</summary>
+    public string AuthorEmail { get; init; } = string.Empty;
+
+    /// <summary>Gets the author date.</summary>
+    public DateTimeOffset AuthorDate { get; init; }
+
+    /// <summary>Gets the committer name.</summary>
+    public string CommitterName { get; init; } = string.Empty;
+
+    /// <summary>Gets the committer date.</summary>
+    public DateTimeOffset CommitterDate { get; init; }
+
+    /// <summary>Gets the subject: the first paragraph of the message in one line, as git's <c>%s</c> writes it.</summary>
+    public string Subject { get; init; } = string.Empty;
+
+    /// <summary>Gets the complete message without trailing line breaks.</summary>
+    public string Message { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the references that point to the commit as git decorates it, for example <c>HEAD -&gt; main</c>,
+    /// <c>tag: v1.0</c> or <c>origin/main</c>.
+    /// </summary>
+    public IReadOnlyList<string> Refs { get; init; } = Array.Empty<string>();
+
+    /// <summary>Gets whether the commit has no parent.</summary>
+    public bool IsRoot => ParentShas.Count == 0;
+
+    /// <summary>Gets whether the commit has more than one parent.</summary>
+    public bool IsMerge => ParentShas.Count > 1;
+}
+
+/// <summary>
+/// A file a commit changed, compared with its first parent.
+/// </summary>
+public sealed record GitCommitFileChange
+{
+    /// <summary>Gets the repository-relative path after the commit, with <c>/</c> as separator.</summary>
+    public required string Path { get; init; }
+
+    /// <summary>Gets the path before the commit of a renamed or copied file, otherwise null.</summary>
+    public string? OldPath { get; init; }
+
+    /// <summary>Gets the kind of the change.</summary>
+    public GitChangeKind Kind { get; init; }
+
+    /// <summary>Gets the similarity in percent of a renamed or copied file, otherwise null.</summary>
+    public int? Similarity { get; init; }
+}
+
+/// <summary>
+/// A commit with the files it changed.
+/// </summary>
+public sealed record GitCommitDetails
+{
+    /// <summary>Gets the commit.</summary>
+    public required GitCommitInfo Commit { get; init; }
+
+    /// <summary>
+    /// Gets the files the commit changed compared with its first parent; for a root commit, all its files. A merge
+    /// commit therefore lists what the merge brought into the branch it was merged into.
+    /// </summary>
+    public required IReadOnlyList<GitCommitFileChange> Files { get; init; }
+}
+
+/// <summary>
+/// What <see cref="Interfaces.IGitHistoryService.GetLogAsync"/> lists.
+/// </summary>
+public sealed record GitLogQuery
+{
+    /// <summary>Gets the number of commits <see cref="MaxCount"/> has unless set.</summary>
+    public const int DEFAULT_MAX_COUNT = 100;
+
+    /// <summary>
+    /// Gets the repository-relative file or folder whose commits are listed, with <c>/</c> as separator; null or
+    /// empty lists the commits of the whole repository.
+    /// </summary>
+    public string? Path { get; init; }
+
+    /// <summary>Gets whether the history of the file <see cref="Path"/> continues beyond renames; ignored without a path.</summary>
+    public bool Follow { get; init; }
+
+    /// <summary>Gets the commit, branch or tag the history starts at; null starts at HEAD.</summary>
+    public string? Revision { get; init; }
+
+    /// <summary>Gets the text the author name or email address must contain, ignoring case; null for every author.</summary>
+    public string? Author { get; init; }
+
+    /// <summary>Gets the text the commit message must contain, ignoring case; null for every message.</summary>
+    public string? MessageText { get; init; }
+
+    /// <summary>Gets the number of commits that are skipped before the first listed one.</summary>
+    public int Skip { get; init; }
+
+    /// <summary>Gets the maximum number of listed commits.</summary>
+    public int MaxCount { get; init; } = DEFAULT_MAX_COUNT;
+}
+
+/// <summary>
+/// A tag of a repository.
+/// </summary>
+public sealed record GitTag
+{
+    /// <summary>The <see cref="TargetType"/> of a tag that points to a commit.</summary>
+    public const string COMMIT_TYPE = "commit";
+
+    /// <summary>Gets the short name, for example <c>v1.0</c>.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the full reference name, for example <c>refs/tags/v1.0</c>.</summary>
+    public required string FullName { get; init; }
+
+    /// <summary>
+    /// Gets the id of the object the tag points to: for an annotated tag, the object its tag object points to, not
+    /// the tag object itself.
+    /// </summary>
+    public string TargetSha { get; init; } = string.Empty;
+
+    /// <summary>Gets <see cref="TargetSha"/> as git abbreviates it in this repository.</summary>
+    public string TargetShortSha { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the type of the object the tag points to as git names it: <c>commit</c>, <c>tree</c>, <c>blob</c>, or
+    /// <c>tag</c> for an annotated tag of a tag that git did not peel.
+    /// </summary>
+    public string TargetType { get; init; } = COMMIT_TYPE;
+
+    /// <summary>Gets whether the tag points to a commit, so it has a history and a branch can start at it.</summary>
+    public bool IsCommit => string.Equals(TargetType, COMMIT_TYPE, StringComparison.Ordinal);
+
+    /// <summary>Gets whether the tag is an annotated tag object with tagger, date and message.</summary>
+    public bool IsAnnotated { get; init; }
+
+    /// <summary>Gets the date of an annotated tag, or the committer date of the commit a lightweight tag points to.</summary>
+    public DateTimeOffset? Date { get; init; }
+
+    /// <summary>Gets the tagger of an annotated tag; empty for a lightweight tag.</summary>
+    public string TaggerName { get; init; } = string.Empty;
+
+    /// <summary>Gets the subject of the tag message of an annotated tag, or of the commit a lightweight tag points to.</summary>
+    public string Subject { get; init; } = string.Empty;
+}

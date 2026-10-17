@@ -29,6 +29,9 @@ public sealed class GitServiceSet
     /// <summary>Gets the remote list, fetch, pull and push service, or null.</summary>
     public IGitRemoteService? Remotes { get; init; }
 
+    /// <summary>Gets the log, commit details and tag service, or null.</summary>
+    public IGitHistoryService? History { get; init; }
+
     /// <summary>
     /// Creates a set whose optional capabilities are the interfaces <paramref name="service"/> implements.
     /// </summary>
@@ -39,7 +42,8 @@ public sealed class GitServiceSet
             Repository = service as IGitRepositoryService,
             CommandLog = service as IGitCommandLog,
             Branches = service as IGitBranchService,
-            Remotes = service as IGitRemoteService
+            Remotes = service as IGitRemoteService,
+            History = service as IGitHistoryService
         };
     }
 }

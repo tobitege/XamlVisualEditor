@@ -104,6 +104,7 @@ public sealed class ViewLocator : IDataTemplate
             TerminalViewModel => new TerminalView(),
             GitPanelViewModel => new GitPanelView(),
             GitRepositoryPanelViewModel => new GitRepositoryPanelView(),
+            GitHistoryViewModel => new GitHistoryView(),
             PendingChangesViewModel => new PendingChangesView(),
             SourceControlExplorerViewModel => new SourceControlExplorerView(),
             TfvcHistoryViewModel => new TfvcHistoryView(),
@@ -165,6 +166,7 @@ public sealed class ViewLocator : IDataTemplate
             or TerminalViewModel
             or GitPanelViewModel
             or GitRepositoryPanelViewModel
+            or GitHistoryViewModel
             or PendingChangesViewModel
             or SourceControlExplorerViewModel
             or TfvcHistoryViewModel

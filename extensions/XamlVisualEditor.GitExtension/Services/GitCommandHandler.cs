@@ -19,6 +19,7 @@ internal sealed partial class GitCommandHandler
     private readonly IOutputChannel? _outputChannel;
     private readonly Func<GitPanelViewModel?> _panel;
     private readonly IExtensionLogger? _logger;
+    private readonly Func<GitHistoryViewModel>? _history;
 
     /// <summary>Creates the handler.</summary>
     /// <param name="session">The Git session.</param>
@@ -29,6 +30,7 @@ internal sealed partial class GitCommandHandler
     /// <param name="outputChannel">The "Git" output channel.</param>
     /// <param name="panel">Returns the Git Changes panel view model once it exists, otherwise null.</param>
     /// <param name="logger">Receives failed commands.</param>
+    /// <param name="history">Returns the Git History panel view model, creating it when needed; null only shows the panel.</param>
     public GitCommandHandler(
         GitSession session,
         IExtensionViewHost viewHost,
@@ -37,8 +39,10 @@ internal sealed partial class GitCommandHandler
         IEditorServices? editor,
         IOutputChannel? outputChannel,
         Func<GitPanelViewModel?> panel,
-        IExtensionLogger? logger)
+        IExtensionLogger? logger,
+        Func<GitHistoryViewModel>? history = null)
     {
+        _history = history;
         _session = session;
         _viewHost = viewHost;
         _window = window;
@@ -56,6 +60,56 @@ internal sealed partial class GitCommandHandler
         _viewHost.ShowAsync(GitCommands.CHANGES_VIEW_ID, CancellationToken.None);
 
     public Task RefreshAsync(CommandContext context) => _session.RefreshAllAsync();
+
+    public Task ToggleHistoryViewAsync(CommandContext context) =>
+        _viewHost.ToggleAsync(GitCommands.HISTORY_VIEW_ID, CancellationToken.None);
+
+    public async Task ShowHistoryAsync(CommandContext context)
+    {
+        GitSnapshot snapshot = _session.Current;
+        if (!snapshot.IsRepository)
+        {
+            await ShowInformationAsync(snapshot.ErrorMessage ?? UiStrings.WorkspaceNotGitRepository);
+            return;
+        }
+
+        await ShowHistoryScopeAsync(new GitHistoryScope(Revision: ReadRevision(context, 0)));
+    }
+
+    // A path that no longer exists, such as a deleted file, is a file; the history of a file follows its renames.
+    public async Task ShowFileHistoryAsync(CommandContext context)
+    {
+        if (await ResolveTargetAsync(context) is not { } target || _session.Current.RepositoryRoot is not { } root)
+        {
+            return;
+        }
+
+        string? revision = ReadRevision(context, 1);
+        if (target.RepositoryPath.Length == 0)
+        {
+            await ShowHistoryScopeAsync(new GitHistoryScope(Revision: revision));
+            return;
+        }
+
+        bool isDirectory = Directory.Exists(Path.Combine(root, target.RepositoryPath));
+        await ShowHistoryScopeAsync(new GitHistoryScope(target.RepositoryPath, isDirectory, revision));
+    }
+
+    /// <summary>Returns the commit, branch or tag in argument <paramref name="index"/>, or null.</summary>
+    private static string? ReadRevision(CommandContext context, int index) =>
+        context.Arguments is { } arguments
+        && arguments.Count > index
+        && arguments[index] is string argument
+        && !string.IsNullOrWhiteSpace(argument)
+            ? argument.Trim()
+            : null;
+
+    // The scope is set first: a view that the host attaches while it shows the panel reads that scope at once.
+    private async Task ShowHistoryScopeAsync(GitHistoryScope scope)
+    {
+        _history?.Invoke().Show(scope);
+        await _viewHost.ShowAsync(GitCommands.HISTORY_VIEW_ID, CancellationToken.None);
+    }
 
     public Task ShowOutputAsync(CommandContext context)
     {

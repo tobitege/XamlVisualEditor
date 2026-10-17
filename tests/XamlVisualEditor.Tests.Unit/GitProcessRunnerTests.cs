@@ -204,6 +204,45 @@ public sealed class GitProcessRunnerTests
     }
 
     [Fact]
+    public async Task The_byte_limit_keeps_only_the_complete_lines_before_it()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create();
+        // 100,000 two-byte characters on one line, then two short lines.
+        string longLine = new('ä', 100_000);
+        repository.CommitFileIn(repository.Path, "long.txt", longLine + "\nabc\ndef\n", "long first line");
+        repository.CommitFileIn(repository.Path, "short.txt", "abc\n" + longLine + "\n", "long second line");
+        GitProcessRunner runner = new(repository.ProcessOptions);
+
+        GitProcessResult firstCut = await ReadAsync("HEAD~1:long.txt", 1001);
+        GitProcessResult secondCut = await ReadAsync("HEAD:short.txt", 1001);
+        GitProcessResult secondCutAfterChunks = await ReadAsync("HEAD:short.txt", 100_001);
+        GitProcessResult exact = await ReadAsync("HEAD:short.txt", 4 + 200_001);
+        GitProcessResult lineAndBytes = await ReadAsync("HEAD~1:long.txt", 200_008, maxLines: 2);
+
+        // No newline within the limit: no complete line, so nothing is kept.
+        Assert.Equal((true, string.Empty), (firstCut.IsOutputTruncated, firstCut.StandardOutput));
+        // The limit ends inside the second line: only the first is kept.
+        Assert.Equal((true, "abc\n"), (secondCut.IsOutputTruncated, secondCut.StandardOutput));
+        // Also when the cut line was read over several chunks of the output.
+        Assert.Equal((true, "abc\n"), (secondCutAfterChunks.IsOutputTruncated, secondCutAfterChunks.StandardOutput));
+        // Output of exactly the limit is complete.
+        Assert.Equal((false, "abc\n" + longLine + "\n"), (exact.IsOutputTruncated, exact.StandardOutput));
+        // The line limit ends the output first.
+        Assert.Equal((true, longLine + "\nabc\n"), (lineAndBytes.IsOutputTruncated, lineAndBytes.StandardOutput));
+
+        Task<GitProcessResult> ReadAsync(string blob, int maxBytes, int? maxLines = null) => runner.RunAsync(
+            new GitProcessRequest
+            {
+                WorkingDirectory = repository.Path,
+                Arguments = new[] { "cat-file", "-p", blob },
+                MaxOutputBytes = maxBytes,
+                MaxOutputLines = maxLines
+            },
+            ct);
+    }
+
+    [Fact]
     public async Task A_process_that_ended_keeps_its_result_when_the_token_is_cancelled_afterwards()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");

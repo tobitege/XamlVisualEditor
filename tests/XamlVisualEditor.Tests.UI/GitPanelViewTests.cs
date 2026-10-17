@@ -10,6 +10,8 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReactiveUI;
@@ -18,6 +20,8 @@ using XamlVisualEditor.GitExtension;
 using XamlVisualEditor.GitExtension.Controls;
 using XamlVisualEditor.GitExtension.Services;
 using XamlVisualEditor.GitExtension.Views;
+using XamlVisualEditor.SourceControl.UI.Behaviors;
+using XamlVisualEditor.SourceControl.UI.Themes;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
@@ -347,6 +351,86 @@ public sealed class GitPanelViewTests
         {
             await Dispatcher.UIThread.InvokeAsync(() => window.Close());
         }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(600)]
+    [InlineData(900)]
+    public async Task The_status_column_shows_every_status_text_whole(double height)
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelView view = new() { DataContext = panel.ViewModel };
+        using ThemedWindow window = ThemedWindow.Show(view, 1136, height);
+
+        TabItem[] tabs = view.GetVisualDescendants().OfType<TabControl>().Single().Items.OfType<TabItem>().ToArray();
+        Assert.Equal(2, tabs.Length);
+        int checkedCells = 0;
+        foreach (TabItem tab in tabs)
+        {
+            tab.IsSelected = true;
+            window.Pump();
+            DataGrid grid = Assert.IsType<DataGrid>(tab.Content);
+            foreach (DataGridRow row in grid.GetVisualDescendants().OfType<DataGridRow>().Where(row => row.IsVisible))
+            {
+                GitChangeEntryViewModel entry = (GitChangeEntryViewModel)row.DataContext!;
+                GitHistoryViewTests.AssertNotClipped(Assert.Single(row.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == entry.StatusLabel));
+                checkedCells++;
+            }
+
+            // Every possible status fits, not only the listed ones; the path column is the one that takes the rest.
+            TextBlock sample = grid.GetVisualDescendants().OfType<TextBlock>().First(text => GitChangeEntryViewModel.StatusLabels.Contains(text.Text));
+            double needed = Math.Ceiling(ColumnWidthSamples.MeasureWidest(sample, GitChangeEntryViewModel.StatusLabels) + sample.Margin.Left + sample.Margin.Right);
+            Assert.True(
+                grid.Columns[1].MinWidth >= needed,
+                $"{tab.Header}: the status column has the minimum {grid.Columns[1].MinWidth} and is {grid.Columns[1].ActualWidth} wide; every status needs {needed}.");
+            Assert.True(grid.Columns[0].Width.IsStar);
+
+            // A copied row holds the status of the template column.
+            GitChangeEntryViewModel copied = (GitChangeEntryViewModel)grid.GetVisualDescendants().OfType<DataGridRow>().First(row => row.IsVisible).DataContext!;
+            Assert.Equal(new[] { copied.DisplayPath, copied.StatusLabel }, await GitHistoryViewTests.CopyRowAsync(window, grid, copied));
+        }
+
+        Assert.Equal(panel.ViewModel.StagedItems.Count + panel.ViewModel.UnstagedItems.Count, checkedCells);
+    }
+
+    [AvaloniaFact]
+    public void Changes_diff_colors_follow_the_theme_and_an_application_resource_overrides_them()
+    {
+        GitDiffTextEditor editor = new()
+        {
+            DiffLines = new List<GitDiffLineViewModel> { new(GitDiffLineKind.Added, "added", "+", null, 1) }
+        };
+        using ThemedWindow window = ThemedWindow.Show(editor, 600, 300);
+        Assert.Empty(editor.Resources.MergedDictionaries);
+
+        window.Window.RequestedThemeVariant = ThemeVariant.Light;
+        window.Pump();
+        IBrush? light = FirstLineForeground(editor);
+        window.Window.RequestedThemeVariant = ThemeVariant.Dark;
+        window.Pump();
+        IBrush? dark = FirstLineForeground(editor);
+
+        Assert.Equal(Color.Parse("#116329"), Assert.IsAssignableFrom<ISolidColorBrush>(light).Color);
+        Assert.Equal(Color.Parse("#6CCB7E"), Assert.IsAssignableFrom<ISolidColorBrush>(dark).Color);
+
+        // The editor redraws on its own when a resource changes, also without a change of the theme variant.
+        Avalonia.Application.Current!.Resources[DiffColors.ADDED_FOREGROUND_KEY] = Brushes.Orange;
+        try
+        {
+            window.Pump();
+            Assert.Same(Brushes.Orange, FirstLineForeground(editor));
+        }
+        finally
+        {
+            Avalonia.Application.Current!.Resources.Remove(DiffColors.ADDED_FOREGROUND_KEY);
+        }
+
+        window.Pump();
+        Assert.Equal(Color.Parse("#6CCB7E"), Assert.IsAssignableFrom<ISolidColorBrush>(FirstLineForeground(editor)).Color);
+
+        static IBrush? FirstLineForeground(GitDiffTextEditor editor) =>
+            editor.TextArea.TextView.GetOrConstructVisualLine(editor.Document.GetLineByNumber(1)).Elements.First().TextRunProperties.ForegroundBrush;
     }
 
     private static async Task<Window> ShowInWindowAsync(Control control, double width = 900, double height = 600)

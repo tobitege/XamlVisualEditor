@@ -79,6 +79,25 @@ public static class GitCommands
     /// <summary>Pulls and then pushes the current branch.</summary>
     public const string SYNC = "git.sync";
 
+    /// <summary>View id of the Git History panel.</summary>
+    public const string HISTORY_VIEW_ID = "git.history";
+
+    /// <summary>Shows or hides the Git History panel.</summary>
+    public const string TOGGLE_HISTORY_VIEW = "git.history.toggleView";
+
+    /// <summary>
+    /// Shows the history of the whole repository in the Git History panel, starting at the commit, branch or tag in
+    /// argument 0, otherwise at HEAD.
+    /// </summary>
+    public const string SHOW_HISTORY = "git.showHistory";
+
+    /// <summary>
+    /// Shows the history of a file or folder in the Git History panel: argument 0, otherwise the active document,
+    /// starting at the commit, branch or tag in argument 1, otherwise at HEAD. The history of a file follows its
+    /// renames.
+    /// </summary>
+    public const string SHOW_FILE_HISTORY = "git.showFileHistory";
+
     /// <summary>Context key: git can be started.</summary>
     public const string AVAILABLE_CONTEXT_KEY = "git.available";
 
@@ -106,6 +125,7 @@ public static class GitCommands
     private const string REPOSITORY_GROUP = "3_repository";
     private const string BRANCHES_GROUP = "4_branches";
     private const string SYNC_GROUP = "5_sync";
+    private const string HISTORY_GROUP = "6_history";
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
     private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
     private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
@@ -158,6 +178,12 @@ public static class GitCommands
             new CommandMetadata(GitStrings.PushCommand, CATEGORY, When: REMOTE_WHEN, Priority: 190));
         Register(SYNC, handler.SyncAsync,
             new CommandMetadata(GitStrings.SyncCommand, CATEGORY, When: UPSTREAM_WHEN, Priority: 200));
+        Register(TOGGLE_HISTORY_VIEW, handler.ToggleHistoryViewAsync,
+            new CommandMetadata(GitStrings.ToggleHistoryViewCommand, CATEGORY, Priority: 210));
+        Register(SHOW_HISTORY, handler.ShowHistoryAsync,
+            new CommandMetadata(GitStrings.ShowHistoryCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 220));
+        Register(SHOW_FILE_HISTORY, handler.ShowFileHistoryAsync,
+            new CommandMetadata(GitStrings.ShowFileHistoryCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 230));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -198,9 +224,12 @@ public static class GitCommands
                 ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
                 ExtensionsItem(PUSH, GitStrings.PushCommand, SYNC_GROUP, 140),
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
+                new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
+                ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
                 EditorContextItem(STAGE, GitStrings.StageCommand, 10),
                 EditorContextItem(UNSTAGE, GitStrings.UnstageCommand, 20),
-                EditorContextItem(DISCARD, GitStrings.DiscardCommand, 30)
+                EditorContextItem(DISCARD, GitStrings.DiscardCommand, 30),
+                EditorContextItem(SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40)
             ]));
         subscriptions.Add(contributions.RegisterCommandPaletteItems(
             extensionId,
@@ -224,7 +253,10 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(FETCH, GitStrings.FetchCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(PULL, GitStrings.PullCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(PUSH, GitStrings.PushCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(SYNC, GitStrings.SyncCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(SYNC, GitStrings.SyncCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(TOGGLE_HISTORY_VIEW, GitStrings.ToggleHistoryViewCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SHOW_HISTORY, GitStrings.ShowHistoryCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, CATEGORY)
             ]));
 
         static ExtensionMenuContribution ExtensionsItem(string commandId, string title, string submenuGroup, int priority) =>

@@ -127,4 +127,64 @@
   <data name="UpstreamGoneHint" xml:space="preserve"><value>The upstream branch no longer exists on the remote, for example because it was deleted after a merge. Push the branch to create it again, or switch to another branch.</value></data>
   <data name="InvalidBranchNameFormat" xml:space="preserve"><value>"{0}" is not a valid branch name. Branch names must not start with "-" and must not contain spaces, "..", "~", "^", ":", "?", "*", "[" or "\".</value></data>
   <data name="SeeGitOutput" xml:space="preserve"><value>The complete Git output is in the Git output channel.</value></data>
+  <data name="HistoryViewTitle" xml:space="preserve"><value>Git History</value></data>
+  <data name="ToggleHistoryViewCommand" xml:space="preserve"><value>Show or Hide Git History</value></data>
+  <data name="ShowHistoryCommand" xml:space="preserve"><value>Show Repository History</value></data>
+  <data name="ShowFileHistoryCommand" xml:space="preserve"><value>Show History</value></data>
+  <data name="HistoryUnavailable" xml:space="preserve"><value>The git service of this application cannot read the history.</value></data>
+  <data name="HistoryScopeLabel" xml:space="preserve"><value>History of</value></data>
+  <data name="HistoryScopeRepository" xml:space="preserve"><value>Whole repository</value></data>
+  <data name="HistoryScopeFileFormat" xml:space="preserve"><value>File {0}</value></data>
+  <data name="HistoryScopeFolderFormat" xml:space="preserve"><value>Folder {0}</value></data>
+  <data name="HistoryScopeRevisionFormat" xml:space="preserve"><value>{0}, starting at {1}</value></data>
+  <data name="ShowWholeRepository" xml:space="preserve"><value>Whole Repository</value></data>
+  <data name="ShowWholeRepositoryToolTip" xml:space="preserve"><value>Show the history of the whole repository, starting at HEAD</value></data>
+  <data name="SearchMessages" xml:space="preserve"><value>Search commit messages</value></data>
+  <data name="FilterAuthor" xml:space="preserve"><value>Author name or email</value></data>
+  <data name="SearchButton" xml:space="preserve"><value>Search</value></data>
+  <data name="ShowAll" xml:space="preserve"><value>Show All</value></data>
+  <data name="RefreshHistory" xml:space="preserve"><value>Refresh</value></data>
+  <data name="LoadMore" xml:space="preserve"><value>Load More</value></data>
+  <data name="ColumnCommit" xml:space="preserve"><value>Commit</value></data>
+  <data name="ColumnMessage" xml:space="preserve"><value>Message</value></data>
+  <data name="ColumnAuthor" xml:space="preserve"><value>Author</value></data>
+  <data name="ColumnDate" xml:space="preserve"><value>Date</value></data>
+  <data name="NoCommits" xml:space="preserve"><value>There are no commits yet.</value></data>
+  <data name="NoMatchingCommits" xml:space="preserve"><value>No commit matches the filter.</value></data>
+  <data name="NoCommitsFound" xml:space="preserve"><value>No commits found.</value></data>
+  <data name="LoadHistoryFailedFormat" xml:space="preserve"><value>Reading the history failed: {0}</value></data>
+  <data name="CopyCommitId" xml:space="preserve"><value>Copy Commit ID</value></data>
+  <data name="SelectCommitHint" xml:space="preserve"><value>Select a commit to see its details.</value></data>
+  <data name="CommitSummaryFormat" xml:space="preserve"><value>{0} · {1} &lt;{2}&gt; · {3}</value></data>
+  <data name="CommitterFormat" xml:space="preserve"><value>Committed by {0} on {1}</value></data>
+  <data name="ParentsFormat" xml:space="preserve"><value>Parents: {0}</value></data>
+  <data name="MergeComparisonFormat" xml:space="preserve"><value>Merge commit: the files are compared with the first parent {0}.</value></data>
+  <data name="CommitFilesFormat" xml:space="preserve"><value>Changed files ({0})</value></data>
+  <data name="ColumnChange" xml:space="preserve"><value>Change</value></data>
+  <data name="ColumnPath" xml:space="preserve"><value>Path</value></data>
+  <data name="LoadCommitFailedFormat" xml:space="preserve"><value>Reading the commit failed: {0}</value></data>
+  <data name="LoadDiffFailedFormat" xml:space="preserve"><value>Reading the diff failed: {0}</value></data>
+  <data name="DiffTooLargeFormat" xml:space="preserve"><value>The diff has more than {1} lines or {2} MiB; the first {0} lines are shown.</value><comment>{0} is the number of shown lines, {1} the line limit and {2} the size limit in MiB.</comment></data>
+  <data name="PreviousChange" xml:space="preserve"><value>Previous Change</value></data>
+  <data name="NextChange" xml:space="preserve"><value>Next Change</value></data>
+  <data name="ToggleDiffPane" xml:space="preserve"><value>Show or Hide the Diff</value></data>
+  <data name="CopyPath" xml:space="preserve"><value>Copy Path</value></data>
+  <data name="ChangeAdded" xml:space="preserve"><value>Added</value></data>
+  <data name="ChangeModified" xml:space="preserve"><value>Modified</value></data>
+  <data name="ChangeDeleted" xml:space="preserve"><value>Deleted</value></data>
+  <data name="ChangeRenamed" xml:space="preserve"><value>Renamed</value></data>
+  <data name="ChangeCopied" xml:space="preserve"><value>Copied</value></data>
+  <data name="ChangeTypeChanged" xml:space="preserve"><value>Type changed</value></data>
+  <data name="ChangeUnmerged" xml:space="preserve"><value>Unmerged</value></data>
+  <data name="ChangeOther" xml:space="preserve"><value>Changed</value></data>
+  <data name="RenamedFromFormat" xml:space="preserve"><value>{0} (from {1})</value></data>
+  <data name="TagsTab" xml:space="preserve"><value>Tags</value></data>
+  <data name="ColumnTag" xml:space="preserve"><value>Tag</value></data>
+  <data name="NoTags" xml:space="preserve"><value>The repository has no tags.</value></data>
+  <data name="TagsUnavailable" xml:space="preserve"><value>The git service of this application cannot list tags.</value></data>
+  <data name="LoadTagsFailedFormat" xml:space="preserve"><value>Reading the tags failed: {0}</value></data>
+  <data name="AnnotatedTagFormat" xml:space="preserve"><value>Annotated tag by {0}</value></data>
+  <data name="LightweightTag" xml:space="preserve"><value>Lightweight tag</value></data>
+  <data name="TagTargetObjectFormat" xml:space="preserve"><value>{0} object</value></data>
+  <data name="TagNotCommitFormat" xml:space="preserve"><value>Points to a {0} object, not to a commit: it has no history, and no branch can start at it.</value></data>
 </root>

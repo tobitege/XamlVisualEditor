@@ -465,6 +465,9 @@ internal sealed class RecordingExtensionViewHost : IExtensionViewHost
 
     public List<string> Toggled { get; } = new();
 
+    /// <summary>Gets or sets what runs when a view is shown, as a host that attaches the view at that moment.</summary>
+    public Action<string>? Showing { get; set; }
+
 #pragma warning disable CS0067
     public event EventHandler<ExtensionViewVisibilityChangedEventArgs>? VisibilityChanged;
     public event EventHandler<ExtensionViewFocusChangedEventArgs>? FocusChanged;
@@ -473,6 +476,7 @@ internal sealed class RecordingExtensionViewHost : IExtensionViewHost
     public Task ShowAsync(string viewId, CancellationToken cancellationToken)
     {
         Shown.Add(viewId);
+        Showing?.Invoke(viewId);
         return Task.CompletedTask;
     }
 

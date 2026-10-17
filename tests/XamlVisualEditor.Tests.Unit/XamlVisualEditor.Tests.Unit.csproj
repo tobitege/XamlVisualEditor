@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.FileExplorerExtension\XamlVisualEditor.FileExplorerExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.TfvcExtension\XamlVisualEditor.TfvcExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.GitExtension\XamlVisualEditor.GitExtension.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.SourceControl.UI\XamlVisualEditor.SourceControl.UI.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.TextEditingExtension\XamlVisualEditor.TextEditingExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.WorkspaceExtension\XamlVisualEditor.WorkspaceExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.ToolboxExtension\XamlVisualEditor.ToolboxExtension.csproj" />

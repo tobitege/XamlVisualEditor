@@ -1146,6 +1146,7 @@
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
   <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
   <data name="GitCommandFailed" xml:space="preserve"><value>Git command failed: {0}</value></data>
+  <data name="GitRevisionNotOneCommitFormat" xml:space="preserve"><value>"{0}" does not name one commit.</value><comment>{0} is the revision as given, such as a branch, a tag or a range.</comment></data>
   <data name="SaveConflictTitle" xml:space="preserve"><value>File changed on disk</value></data>
   <data name="SaveConflictPrompt" xml:space="preserve"><value>"{0}" was changed outside the editor. Overwrite it with the text from the editor, or reload it from disk and discard the changes in the editor?</value></data>
   <data name="Overwrite" xml:space="preserve"><value>Overwrite</value></data>

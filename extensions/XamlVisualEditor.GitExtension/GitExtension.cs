@@ -9,7 +9,7 @@ using XamlVisualEditor.GitExtension.Services;
 namespace XamlVisualEditor.GitExtension;
 
 /// <summary>
-/// Git integration: the Git Changes and Git Repository panels, a status bar item with branch and changes, the "Git" output channel,
+/// Git integration: the Git Changes, Git Repository and Git History panels, a status bar item with branch and changes, the "Git" output channel,
 /// context keys and the Git commands. All commands are registered on activation, also without git or repository;
 /// their <see cref="CommandMetadata.When"/> conditions disable them.
 /// </summary>
@@ -47,8 +47,9 @@ public sealed class GitExtension : IXveExtension
         Func<string, IReadOnlyList<object?>?, Task> executeCommand =
             (commandId, arguments) => commands.ExecuteAsync(commandId, arguments, CancellationToken.None);
 
-        // The panel has one view model, created when it is first shown and disposed with the extension.
+        // Every panel has one view model, created when it is first shown and disposed with the extension.
         Lazy<GitPanelViewModel> panel = new(() => new GitPanelViewModel(session, executeCommand));
+        Lazy<GitHistoryViewModel> historyPanel = new(() => new GitHistoryViewModel(session, executeCommand));
         GitCommandHandler handler = new(
             session,
             context.ViewHost,
@@ -57,7 +58,8 @@ public sealed class GitExtension : IXveExtension
             context.Editor,
             outputChannel,
             () => panel.IsValueCreated ? panel.Value : null,
-            logger);
+            logger,
+            () => historyPanel.Value);
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, GitStatusBar.PRIORITY);
         statusBarItem.CommandId = GitCommands.SHOW_CHANGES;
@@ -68,7 +70,8 @@ public sealed class GitExtension : IXveExtension
         ExtensionViewContribution[] views =
         [
             new(GitCommands.CHANGES_VIEW_ID, GitStrings.ChangesViewTitle, ExtensionViewType.Custom, ExtensionViewLocation.Bottom, 40),
-            new(GitCommands.REPOSITORY_VIEW_ID, GitStrings.RepositoryViewTitle, ExtensionViewType.Custom, ExtensionViewLocation.Left, 50)
+            new(GitCommands.REPOSITORY_VIEW_ID, GitStrings.RepositoryViewTitle, ExtensionViewType.Custom, ExtensionViewLocation.Left, 50),
+            new(GitCommands.HISTORY_VIEW_ID, GitStrings.HistoryViewTitle, ExtensionViewType.Custom, ExtensionViewLocation.Bottom, 45)
         ];
         context.Subscriptions.Add(context.Contributions.RegisterViews(context.ExtensionId, views));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
@@ -77,6 +80,9 @@ public sealed class GitExtension : IXveExtension
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             GitCommands.REPOSITORY_VIEW_ID,
             new DelegateViewProvider(() => repositoryPanel.Value)));
+        context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
+            GitCommands.HISTORY_VIEW_ID,
+            new DelegateViewProvider(() => historyPanel.Value)));
         GitCommands.RegisterCommands(context.Commands, context.CommandMetadata, handler, context.Subscriptions);
         GitCommands.RegisterMenuAndPaletteItems(context.ExtensionId, context.Contributions, context.Subscriptions);
 
@@ -105,6 +111,11 @@ public sealed class GitExtension : IXveExtension
             if (repositoryPanel.IsValueCreated)
             {
                 repositoryPanel.Value.Dispose();
+            }
+
+            if (historyPanel.IsValueCreated)
+            {
+                historyPanel.Value.Dispose();
             }
 
             session.Dispose();

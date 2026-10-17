@@ -67,6 +67,14 @@ public sealed partial class GitChangeEntryViewModel : ReactiveObject
 
     public string StatusLabel { get; }
 
+    /// <summary>Gets every text <see cref="StatusLabel"/> can have, which sizes the status column.</summary>
+    public static IReadOnlyList<string> StatusLabels =>
+        Enum.GetValues<GitChangeKind>()
+            .SelectMany(kind => new[] { FormatChangeKind(kind, true, false), FormatChangeKind(kind, false, false) })
+            .Append(UiStrings.GitUntracked)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
     /// <summary>Gets the status entry the item shows, or null for an item created from its values.</summary>
     internal GitFileChange? Change { get; }
 

@@ -5,10 +5,12 @@ using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReactiveUI;
@@ -287,6 +289,258 @@ public sealed class GitRepositoryPanelViewTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Tags_tab_lists_the_tags_with_icons_and_its_context_menu_and_double_click_pass_the_full_name()
+    {
+        ScriptedHistoryGitService tags = new();
+        tags.Tags.Add(new GitTag
+        {
+            Name = "v2.0",
+            FullName = "refs/tags/v2.0",
+            TargetSha = "0123456789abcdef0123456789abcdef01234567",
+            TargetShortSha = "01234567",
+            IsAnnotated = true,
+            TaggerName = "Anna",
+            Subject = "Release zwei",
+            Date = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero)
+        });
+        tags.Tags.Add(new GitTag { Name = "v1.0", FullName = "refs/tags/v1.0", TargetSha = "fedcba9876543210fedcba9876543210fedcba98", Subject = "first" });
+        using Fixture fixture = await Fixture.CreateAsync(history: tags);
+        GitRepositoryPanelViewModel panel = fixture.Panel;
+        GitRepositoryPanelView view = new() { DataContext = panel };
+        using ThemedWindow window = ThemedWindow.Show(view, 900, 600);
+        view.FindControl<TabItem>("TagsTab")!.IsSelected = true;
+        window.Pump();
+
+        Assert.Null(panel.TagsMessage);
+        Assert.Equal(new[] { "v2.0", "v1.0" }, panel.Tags.Select(tag => tag.Name));
+        // The commit is abbreviated as git abbreviates it.
+        Assert.Equal(("01234567", string.Format(GitStrings.AnnotatedTagFormat, "Anna")), (panel.Tags[0].TargetText, panel.Tags[0].ToolTip));
+        Assert.Equal(GitStrings.LightweightTag, panel.Tags[1].ToolTip);
+        DataGrid grid = view.FindControl<DataGrid>("TagGrid")!;
+        DataGridRow[] rows = grid.GetVisualDescendants().OfType<DataGridRow>().Where(row => row.IsVisible).ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.All(rows, row => Assert.NotNull(Assert.Single(row.GetVisualDescendants().OfType<PathIcon>()).Data));
+        Assert.False(((ICommand)panel.ShowTagHistoryCommand).CanExecute(null));
+
+        grid.SelectedItem = panel.Tags[1];
+        window.Pump();
+        ContextMenu menu = grid.ContextMenu!;
+        menu.Open(grid);
+        window.Pump();
+        MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.All(items, item => Assert.IsType<PathIcon>(item.Icon));
+        Assert.All(items, item => Assert.True(item.IsEnabled));
+        menu.Close();
+        await panel.ShowTagHistoryCommand.Execute().ToTask();
+        await panel.CreateBranchFromTagCommand.Execute().ToTask();
+
+        Assert.Equal(
+            new (string, string?)[] { (GitCommands.SHOW_HISTORY, "refs/tags/v1.0"), (GitCommands.CREATE_BRANCH, "refs/tags/v1.0") },
+            fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
+    }
+
+    [AvaloniaFact]
+    public async Task Tags_of_a_tree_or_a_blob_show_their_object_type_and_offer_neither_history_nor_a_branch()
+    {
+        ScriptedHistoryGitService tags = new();
+        tags.Tags.Add(new GitTag { Name = "treetag", FullName = "refs/tags/treetag", TargetSha = new string('a', 40), TargetShortSha = "aaaaaaa", TargetType = "tree" });
+        tags.Tags.Add(new GitTag
+        {
+            Name = "anntree",
+            FullName = "refs/tags/anntree",
+            TargetSha = new string('a', 40),
+            TargetShortSha = "aaaaaaa",
+            TargetType = "tree",
+            IsAnnotated = true,
+            TaggerName = "Anna"
+        });
+        tags.Tags.Add(new GitTag { Name = "blobtag", FullName = "refs/tags/blobtag", TargetSha = new string('b', 40), TargetShortSha = "bbbbbbb", TargetType = "blob" });
+        tags.Tags.Add(new GitTag { Name = "v1", FullName = "refs/tags/v1", TargetSha = new string('c', 40), TargetShortSha = "ccccccc" });
+        using Fixture fixture = await Fixture.CreateAsync(history: tags);
+        GitRepositoryPanelViewModel panel = fixture.Panel;
+
+        Assert.Equal(
+            new[]
+            {
+                string.Format(GitStrings.TagTargetObjectFormat, "tree"),
+                string.Format(GitStrings.TagTargetObjectFormat, "tree"),
+                string.Format(GitStrings.TagTargetObjectFormat, "blob"),
+                "ccccccc"
+            },
+            panel.Tags.Select(tag => tag.TargetText));
+        Assert.Equal(
+            GitStrings.LightweightTag + Environment.NewLine + string.Format(GitStrings.TagNotCommitFormat, "tree"),
+            panel.Tags[0].ToolTip);
+        Assert.Equal(
+            string.Format(GitStrings.AnnotatedTagFormat, "Anna") + Environment.NewLine + string.Format(GitStrings.TagNotCommitFormat, "tree"),
+            panel.Tags[1].ToolTip);
+        for (int index = 0; index < 3; index++)
+        {
+            panel.SelectedTag = panel.Tags[index];
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(((ICommand)panel.ShowTagHistoryCommand).CanExecute(null));
+            Assert.False(((ICommand)panel.CreateBranchFromTagCommand).CanExecute(null));
+        }
+
+        panel.SelectedTag = panel.Tags[3];
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(((ICommand)panel.ShowTagHistoryCommand).CanExecute(null));
+        Assert.True(((ICommand)panel.CreateBranchFromTagCommand).CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task Tags_tab_shows_the_tag_and_its_commit_in_the_narrow_side_panel_and_scrolls_to_the_other_columns()
+    {
+        ScriptedHistoryGitService tags = new();
+        tags.Tags.Add(new GitTag
+        {
+            Name = "v2.0",
+            FullName = "refs/tags/v2.0",
+            TargetSha = "1b12990" + new string('0', 33),
+            TargetShortSha = "1b12990",
+            IsAnnotated = true,
+            TaggerName = "Anna",
+            Subject = "Merge feature/merge-demo",
+            Date = new DateTimeOffset(2026, 10, 17, 5, 37, 50, TimeSpan.Zero)
+        });
+        tags.Tags.Add(new GitTag
+        {
+            Name = "v1.0-light",
+            FullName = "refs/tags/v1.0-light",
+            TargetSha = "070df50" + new string('0', 33),
+            TargetShortSha = "070df50",
+            Subject = "Change 120: Größe angepasst",
+            Date = new DateTimeOffset(2026, 10, 17, 5, 37, 49, TimeSpan.Zero)
+        });
+        using Fixture fixture = await Fixture.CreateAsync(history: tags);
+        GitRepositoryPanelView view = new() { DataContext = fixture.Panel };
+        using ThemedWindow window = ThemedWindow.Show(view, 340, 600);
+        view.FindControl<TabItem>("TagsTab")!.IsSelected = true;
+        window.Pump();
+
+        DataGrid grid = view.FindControl<DataGrid>("TagGrid")!;
+        DataGridRow row = grid.GetVisualDescendants().OfType<DataGridRow>().First(candidate => candidate.IsVisible && candidate.DataContext == fixture.Panel.Tags[1]);
+        TextBlock[] texts = row.GetVisualDescendants().OfType<TextBlock>().ToArray();
+        TextBlock name = Assert.Single(texts, text => text.Text == "v1.0-light");
+        TextBlock commit = Assert.Single(texts, text => text.Text == "070df50");
+        double nameRight = name.TranslatePoint(new Avalonia.Point(name.Bounds.Width, 0), grid)!.Value.X;
+        double commitRight = commit.TranslatePoint(new Avalonia.Point(commit.Bounds.Width, 0), grid)!.Value.X;
+
+        Assert.True(MeasureWidth(name) <= name.Bounds.Width + 0.5, $"The tag name is {name.Bounds.Width} wide.");
+        Assert.True(MeasureWidth(commit) <= commit.Bounds.Width + 0.5, $"The commit is {commit.Bounds.Width} wide.");
+        Assert.True(nameRight <= grid.Bounds.Width && commitRight <= grid.Bounds.Width, $"Tag and commit end at {nameRight} and {commitRight} of {grid.Bounds.Width}.");
+        Assert.True(grid.Columns.Sum(column => column.ActualWidth) > grid.Bounds.Width);
+        Assert.Contains(
+            grid.GetVisualDescendants().OfType<ScrollBar>(),
+            scrollBar => scrollBar.Orientation == Avalonia.Layout.Orientation.Horizontal && scrollBar.IsEffectivelyVisible);
+
+        static double MeasureWidth(TextBlock text)
+        {
+            TextBlock probe = new() { Text = text.Text, FontFamily = text.FontFamily, FontSize = text.FontSize, FontWeight = text.FontWeight };
+            probe.Measure(Avalonia.Size.Infinity);
+            return probe.DesiredSize.Width;
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]
+    public async Task Tags_tab_shows_the_whole_date_when_the_tags_arrive_after_the_layout(string cultureName)
+    {
+        using CultureScope culture = new(cultureName);
+        ScriptedHistoryGitService tags = new();
+        using Fixture fixture = await Fixture.CreateAsync(history: tags);
+        GitRepositoryPanelView view = new() { DataContext = fixture.Panel };
+        using ThemedWindow window = ThemedWindow.Show(view, 340, 600, appDensity: true);
+        view.FindControl<TabItem>("TagsTab")!.IsSelected = true;
+        window.Pump();
+
+        // The tags arrive after the grid was laid out, as from git in the running application.
+        DateTime morning = new(2034, 10, 30, 10, 44, 44);
+        tags.Tags.Add(CreateTag("v1.2", new DateTimeOffset(morning, TimeZoneInfo.Local.GetUtcOffset(morning))));
+        tags.Tags.Add(CreateTag("v1.1", new DateTimeOffset(2026, 12, 28, 22, 58, 58, TimeSpan.Zero)));
+        tags.Tags.Add(CreateTag("v1.0", new DateTimeOffset(2026, 10, 17, 23, 37, 51, TimeSpan.Zero)));
+        await fixture.Panel.RefreshCommand.Execute().ToTask();
+        window.Pump();
+
+        DataGrid grid = view.FindControl<DataGrid>("TagGrid")!;
+        DataGridRow[] rows = grid.GetVisualDescendants().OfType<DataGridRow>().Where(row => row.IsVisible).ToArray();
+        Assert.Equal(3, rows.Length);
+        foreach (DataGridRow row in rows)
+        {
+            GitTagItemViewModel tag = (GitTagItemViewModel)row.DataContext!;
+            Assert.Equal(tag.Tag.Date!.Value.ToLocalTime().ToString("G", System.Globalization.CultureInfo.GetCultureInfo(cultureName)), tag.DateText);
+            GitHistoryViewTests.AssertNotClipped(Assert.Single(row.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == tag.DateText));
+        }
+
+        // A copied row holds the tag name and the date of the template columns.
+        GitTagItemViewModel copied = (GitTagItemViewModel)rows[0].DataContext!;
+        Assert.Equal(
+            new[] { copied.Name, copied.TargetText, copied.DateText, copied.Subject },
+            await GitHistoryViewTests.CopyRowAsync(window, grid, copied));
+
+        static GitTag CreateTag(string name, DateTimeOffset date) => new()
+        {
+            Name = name,
+            FullName = "refs/tags/" + name,
+            TargetSha = "1b12990" + new string('0', 33),
+            TargetShortSha = "1b12990",
+            Subject = "Release " + name,
+            Date = date
+        };
+    }
+
+    [AvaloniaFact]
+    public async Task Branches_tab_keeps_ahead_and_behind_whole_and_ends_a_long_name_with_an_ellipsis_in_the_narrow_side_panel()
+    {
+        const string LONG_NAME = "origin/feature/settings-page-with-a-much-longer-name";
+        using Fixture fixture = await Fixture.CreateAsync();
+        fixture.Git.Branches.Add(new GitBranch { Name = LONG_NAME, FullName = "refs/remotes/" + LONG_NAME, IsRemote = true, RemoteName = "origin" });
+        await fixture.Panel.RefreshCommand.Execute().ToTask();
+        Dispatcher.UIThread.RunJobs();
+        GitRepositoryPanelView view = new() { DataContext = fixture.Panel };
+        using ThemedWindow window = ThemedWindow.Show(view, 340, 600);
+
+        Avalonia.Controls.TreeView tree = view.FindControl<Avalonia.Controls.TreeView>("BranchTree")!;
+        TreeViewItem[] rows = tree.GetVisualDescendants().OfType<TreeViewItem>()
+            .Where(item => item.DataContext is GitBranchItemViewModel)
+            .ToArray();
+        TreeViewItem mainRow = Assert.Single(rows, row => ((GitBranchItemViewModel)row.DataContext!).Name == "main");
+        TextBlock tracking = Assert.Single(mainRow.GetVisualDescendants().OfType<TextBlock>(), text => text.Name == "TrackingText");
+        Assert.Equal("↑1 ↓2", tracking.Text);
+        GitHistoryViewTests.AssertNotClipped(tracking);
+        Assert.True(RightEdge(tracking) <= tree.Bounds.Width + 0.5, $"The ahead and behind text ends at {RightEdge(tracking)} of {tree.Bounds.Width}.");
+
+        TreeViewItem longRow = Assert.Single(rows, row => ((GitBranchItemViewModel)row.DataContext!).Name == LONG_NAME);
+        GitBranchItemViewModel longItem = (GitBranchItemViewModel)longRow.DataContext!;
+        TextBlock name = Assert.Single(longRow.GetVisualDescendants().OfType<TextBlock>(), text => text.Name == "BranchName");
+        TextBlock probe = new() { Text = name.Text, FontFamily = name.FontFamily, FontSize = name.FontSize, FontWeight = name.FontWeight };
+        probe.Measure(Size.Infinity);
+        Assert.Equal(TextTrimming.CharacterEllipsis, name.TextTrimming);
+        Assert.True(probe.DesiredSize.Width > name.Bounds.Width, "The long name fits; the test needs a name that is cut.");
+        Assert.True(RightEdge(name) <= tree.Bounds.Width + 0.5, $"The name ends at {RightEdge(name)} of {tree.Bounds.Width}.");
+        Assert.StartsWith(LONG_NAME, longItem.ToolTip, StringComparison.Ordinal);
+        Assert.Equal(longItem.ToolTip, ToolTip.GetTip(Assert.IsType<Grid>(name.Parent)));
+        Assert.DoesNotContain(
+            tree.GetVisualDescendants().OfType<ScrollBar>(),
+            scrollBar => scrollBar.Orientation == Avalonia.Layout.Orientation.Horizontal && scrollBar.IsEffectivelyVisible);
+
+        double RightEdge(Visual visual) => visual.TranslatePoint(new Point(visual.Bounds.Width, 0), tree)!.Value.X;
+    }
+
+    [AvaloniaFact]
+    public async Task Tags_tab_says_when_there_are_no_tags_or_the_service_cannot_list_them()
+    {
+        using Fixture withoutService = await Fixture.CreateAsync();
+        using Fixture withoutTags = await Fixture.CreateAsync(history: new ScriptedHistoryGitService());
+
+        Assert.Equal(GitStrings.TagsUnavailable, withoutService.Panel.TagsMessage);
+        Assert.Equal(GitStrings.NoTags, withoutTags.Panel.TagsMessage);
+        Assert.Empty(withoutTags.Panel.Tags);
+    }
+
     /// <summary>Shows the content with the Fluent theme, which templates the tab control and the tree.</summary>
     private static Window Show(Control content, double width = 500, double height = 600)
     {
@@ -313,10 +567,10 @@ public sealed class GitRepositoryPanelViewTests
 
     private sealed class Fixture : IDisposable
     {
-        private Fixture(BranchGitService git)
+        private Fixture(BranchGitService git, IGitHistoryService? history)
         {
             Git = git;
-            Session = new GitSession(new GitServiceSet(git) { Branches = git }, new WorkspaceInfo());
+            Session = new GitSession(new GitServiceSet(git) { Branches = git, History = history }, new WorkspaceInfo());
             Panel = new GitRepositoryPanelViewModel(Session, (commandId, arguments) =>
             {
                 Executed.Add((commandId, arguments));
@@ -341,10 +595,11 @@ public sealed class GitRepositoryPanelViewTests
             string? upstream = "origin/main",
             string? branchError = null,
             bool shown = true,
-            bool detached = false)
+            bool detached = false,
+            IGitHistoryService? history = null)
         {
             BranchGitService git = new(upstream, branchError) { IsDetached = detached };
-            Fixture fixture = new(git);
+            Fixture fixture = new(git, history);
             fixture.Panel.IsShown = shown;
             await fixture.Session.RefreshAsync();
             Dispatcher.UIThread.RunJobs();

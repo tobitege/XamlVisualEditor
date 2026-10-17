@@ -4,14 +4,12 @@
              xmlns:controls="using:XamlVisualEditor.GitExtension.Controls"
              xmlns:views="using:XamlVisualEditor.GitExtension.Views"
              xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:behaviors="using:XamlVisualEditor.SourceControl.UI.Behaviors"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.GitExtension.Views.GitPanelView"
              x:DataType="vm:GitPanelViewModel">
 
     <UserControl.Styles>
-        <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-        </Style>
         <Style Selector="TabItem">
             <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
         </Style>
@@ -179,10 +177,20 @@
                                                    Width="*"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding DisplayPath}" />
-                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Status}"
-                                                   Width="120"
-                                                   x:DataType="vm:GitChangeEntryViewModel"
-                                                   Binding="{CompiledBinding StatusLabel}" />
+                            <!-- Fits every status text, so the path column is the only one that shrinks; a copied row
+                                 holds the status text. -->
+                            <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Status}"
+                                                       Width="Auto"
+                                                       SortMemberPath="StatusLabel"
+                                                       x:DataType="vm:GitChangeEntryViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding StatusLabel}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitChangeEntryViewModel">
+                                        <TextBlock Text="{CompiledBinding StatusLabel}" Margin="12,0" VerticalAlignment="Center"
+                                                   behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitChangeEntryViewModel.StatusLabels}" />
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
                         </dg:DataGrid.Columns>
                     </dg:DataGrid>
                 </TabItem>
@@ -199,10 +207,20 @@
                                                    Width="*"
                                                    x:DataType="vm:GitChangeEntryViewModel"
                                                    Binding="{CompiledBinding DisplayPath}" />
-                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Status}"
-                                                   Width="120"
-                                                   x:DataType="vm:GitChangeEntryViewModel"
-                                                   Binding="{CompiledBinding StatusLabel}" />
+                            <!-- Fits every status text, so the path column is the only one that shrinks; a copied row
+                                 holds the status text. -->
+                            <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Status}"
+                                                       Width="Auto"
+                                                       SortMemberPath="StatusLabel"
+                                                       x:DataType="vm:GitChangeEntryViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding StatusLabel}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitChangeEntryViewModel">
+                                        <TextBlock Text="{CompiledBinding StatusLabel}" Margin="12,0" VerticalAlignment="Center"
+                                                   behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitChangeEntryViewModel.StatusLabels}" />
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
                         </dg:DataGrid.Columns>
                     </dg:DataGrid>
                 </TabItem>

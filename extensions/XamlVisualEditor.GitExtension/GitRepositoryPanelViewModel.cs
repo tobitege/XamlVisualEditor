@@ -75,7 +75,7 @@ public sealed class GitBranchItemViewModel
     /// </summary>
     public string TrackingText { get; }
 
-    /// <summary>Gets the tooltip: the current marker, the upstream and the subject of the last commit.</summary>
+    /// <summary>Gets the tooltip: the full name, the current marker, the upstream and the subject of the last commit.</summary>
     public string ToolTip { get; }
 
     /// <summary>Gets the command that switches to the branch; its parameter is this item.</summary>
@@ -115,7 +115,8 @@ public sealed class GitBranchItemViewModel
 
     private static string FormatToolTip(GitBranch branch)
     {
-        List<string> lines = new();
+        // The name first: the row cuts a long name with an ellipsis.
+        List<string> lines = new() { branch.Name };
         if (branch.IsCurrent)
         {
             lines.Add(GitStrings.CurrentBranch);
@@ -133,25 +134,76 @@ public sealed class GitBranchItemViewModel
             lines.Add(branch.Subject);
         }
 
-        return lines.Count == 0 ? branch.Name : string.Join(Environment.NewLine, lines);
+        return string.Join(Environment.NewLine, lines);
     }
 }
 
 /// <summary>
-/// ViewModel of the Git Repository panel: the local and remote-tracking branches of the session's repository and
-/// buttons for fetch, pull, push, sync and a new branch. The actions run the Git commands, which ask, show progress
-/// and report results.
+/// A tag in the Tags tab of the Git Repository panel.
+/// </summary>
+public sealed class GitTagItemViewModel
+{
+    /// <summary>Creates the item for <paramref name="tag"/>.</summary>
+    public GitTagItemViewModel(GitTag tag)
+    {
+        Tag = tag;
+        DateText = tag.Date?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture) ?? string.Empty;
+        TargetText = tag.IsCommit
+            ? tag.TargetShortSha
+            : string.Format(CultureInfo.CurrentCulture, GitStrings.TagTargetObjectFormat, tag.TargetType);
+        string kind = tag.IsAnnotated
+            ? string.Format(CultureInfo.CurrentCulture, GitStrings.AnnotatedTagFormat, tag.TaggerName)
+            : GitStrings.LightweightTag;
+        ToolTip = tag.IsCommit
+            ? kind
+            : kind + Environment.NewLine + string.Format(CultureInfo.CurrentCulture, GitStrings.TagNotCommitFormat, tag.TargetType);
+    }
+
+    /// <summary>Gets the tag.</summary>
+    public GitTag Tag { get; }
+
+    /// <summary>Gets the short tag name.</summary>
+    public string Name => Tag.Name;
+
+    /// <summary>
+    /// Gets the abbreviated id of the commit the tag points to, or the type of the object for a tag of a tree, a blob
+    /// or a tag object.
+    /// </summary>
+    public string TargetText { get; }
+
+    /// <summary>Gets whether the tag points to a commit, so its history can be shown and a branch can start at it.</summary>
+    public bool IsCommit => Tag.IsCommit;
+
+    /// <summary>Gets the date of the tag; the sort key of the date column.</summary>
+    public DateTimeOffset? Date => Tag.Date;
+
+    /// <summary>Gets the formatted date of the tag.</summary>
+    public string DateText { get; }
+
+    /// <summary>Gets the subject of the tag message, or of the commit of a lightweight tag.</summary>
+    public string Subject => Tag.Subject;
+
+    /// <summary>Gets the tooltip: whether the tag is annotated and by whom.</summary>
+    public string ToolTip { get; }
+}
+
+/// <summary>
+/// ViewModel of the Git Repository panel: the local and remote-tracking branches and the tags of the session's
+/// repository and buttons for fetch, pull, push, sync and a new branch. The actions run the Git commands, which ask,
+/// show progress and report results.
 /// </summary>
 /// <remarks>
-/// The branches are read only while <see cref="IsShown"/> is true, and again only when a snapshot changes HEAD, the
-/// branch, its upstream state or <see cref="GitSnapshot.RefsVersion"/>; a newer read cancels an older one. Items of
-/// unchanged branches are kept.
+/// The branches and tags are read only while <see cref="IsShown"/> is true, and again only when a snapshot changes
+/// HEAD, the branch, its upstream state or <see cref="GitSnapshot.RefsVersion"/>; a newer read cancels an older one.
+/// Items of unchanged branches are kept.
 /// </remarks>
 public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly GitSession _session;
     private readonly Func<string, IReadOnlyList<object?>?, Task> _executeCommand;
     private readonly CompositeDisposable _disposables = new();
+    private bool _branchesLoading;
+    private bool _tagsLoading;
 
     /// <summary>Creates the panel for a shared session.</summary>
     /// <param name="session">The Git session whose repository is shown.</param>
@@ -180,6 +232,14 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             item => _executeCommand(GitCommands.DELETE_BRANCH, [item.Branch.FullName])));
         CreateBranchFromCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
             item => _executeCommand(GitCommands.CREATE_BRANCH, [item.Branch.FullName])));
+        // A tag of a tree or a blob has no history, and no branch can start at it.
+        IObservable<bool> hasCommitTag = this.WhenAnyValue(x => x.SelectedTag).Select(tag => tag is { IsCommit: true });
+        ShowTagHistoryCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => SelectedTag is { IsCommit: true } tag ? _executeCommand(GitCommands.SHOW_HISTORY, [tag.Tag.FullName]) : Task.CompletedTask,
+            hasCommitTag));
+        CreateBranchFromTagCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => SelectedTag is { IsCommit: true } tag ? _executeCommand(GitCommands.CREATE_BRANCH, [tag.Tag.FullName]) : Task.CompletedTask,
+            hasCommitTag));
 
         _disposables.Add(_session.Snapshots.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(OnSnapshot));
 
@@ -190,6 +250,14 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
                 .Select(isShown => isShown ? loads : Observable.Return(BranchLoad.Idle)))
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyLoad));
+
+        IObservable<TagLoad> tagLoads = Observable.Switch(_session.Snapshots
+            .DistinctUntilChanged(RefsKey.Of)
+            .Select(LoadTags));
+        _disposables.Add(Observable.Switch(this.WhenAnyValue(x => x.IsShown)
+                .Select(isShown => isShown ? tagLoads : Observable.Return(TagLoad.Idle)))
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(ApplyTagLoad));
     }
 
     /// <summary>
@@ -219,9 +287,26 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     [Reactive]
     public partial string? StatusMessage { get; private set; }
 
-    /// <summary>Gets whether the branches are being read.</summary>
+    /// <summary>Gets whether the branches or the tags are being read.</summary>
     [Reactive]
     public partial bool IsLoading { get; private set; }
+
+    /// <summary>Gets the tags, newest first.</summary>
+    public ObservableCollection<GitTagItemViewModel> Tags { get; } = new();
+
+    /// <summary>Gets or sets the selected tag.</summary>
+    [Reactive]
+    public partial GitTagItemViewModel? SelectedTag { get; set; }
+
+    /// <summary>Gets why no tags are listed, or a reading error; null while tags are listed.</summary>
+    [Reactive]
+    public partial string? TagsMessage { get; private set; }
+
+    /// <summary>Runs <see cref="GitCommands.SHOW_HISTORY"/> starting at the selected tag, when it points to a commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> ShowTagHistoryCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at the selected tag, when it points to a commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CreateBranchFromTagCommand { get; }
 
     /// <summary>Gets or sets the selected tree item: a group or a branch.</summary>
     [Reactive]
@@ -322,9 +407,62 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             .StartWith(BranchLoad.Loading);
     }
 
+    /// <summary>Returns the tag list of <paramref name="snapshot"/>, read in the background after a loading state.</summary>
+    private IObservable<TagLoad> LoadTags(GitSnapshot snapshot)
+    {
+        if (!snapshot.IsRepository || snapshot.RepositoryRoot is null)
+        {
+            return Observable.Return(TagLoad.Loaded(Array.Empty<GitTag>(), null));
+        }
+
+        IGitHistoryService? history = _session.Services.History;
+        if (history is null)
+        {
+            return Observable.Return(TagLoad.Loaded(Array.Empty<GitTag>(), GitStrings.TagsUnavailable));
+        }
+
+        string repositoryRoot = snapshot.RepositoryRoot;
+        return Observable.FromAsync(async ct =>
+            {
+                try
+                {
+                    IReadOnlyList<GitTag> tags = await history.GetTagsAsync(repositoryRoot, ct).ConfigureAwait(false);
+                    return TagLoad.Loaded(tags, tags.Count == 0 ? GitStrings.NoTags : null);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    return TagLoad.Loaded(
+                        Array.Empty<GitTag>(),
+                        string.Format(CultureInfo.CurrentCulture, GitStrings.LoadTagsFailedFormat, exception.Message));
+                }
+            })
+            .StartWith(TagLoad.Loading);
+    }
+
+    private void ApplyTagLoad(TagLoad load)
+    {
+        _tagsLoading = load.IsLoading;
+        IsLoading = _branchesLoading || _tagsLoading;
+        if (load.Tags is null)
+        {
+            return;
+        }
+
+        string? selected = SelectedTag?.Tag.FullName;
+        Tags.Clear();
+        foreach (GitTag tag in load.Tags)
+        {
+            Tags.Add(new GitTagItemViewModel(tag));
+        }
+
+        SelectedTag = Tags.FirstOrDefault(item => string.Equals(item.Tag.FullName, selected, StringComparison.Ordinal));
+        TagsMessage = load.Message;
+    }
+
     private void ApplyLoad(BranchLoad load)
     {
-        IsLoading = load.IsLoading;
+        _branchesLoading = load.IsLoading;
+        IsLoading = _branchesLoading || _tagsLoading;
         if (load.Branches is null)
         {
             return;
@@ -426,5 +564,15 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         public static BranchLoad Idle { get; } = new(false, null, null);
 
         public static BranchLoad Loaded(IReadOnlyList<GitBranch> branches, string? message) => new(false, branches, message);
+    }
+
+    /// <summary>A state of the tag list: loading, idle, or loaded with tags and the message shown instead of them.</summary>
+    private sealed record TagLoad(bool IsLoading, IReadOnlyList<GitTag>? Tags, string? Message)
+    {
+        public static TagLoad Loading { get; } = new(true, null, null);
+
+        public static TagLoad Idle { get; } = new(false, null, null);
+
+        public static TagLoad Loaded(IReadOnlyList<GitTag> tags, string? message) => new(false, tags, message);
     }
 }

@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="XamlVisualEditor.SourceControl.UI.Themes.DiffColors">
+    <!-- Line colors of the diff editors for the light and the dark theme; the backgrounds are translucent, so the
+         editor background and the selection stay visible below them. -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="DiffAddedForegroundBrush" Color="#116329" />
+            <SolidColorBrush x:Key="DiffAddedBackgroundBrush" Color="#332DA44E" />
+            <SolidColorBrush x:Key="DiffRemovedForegroundBrush" Color="#A40E26" />
+            <SolidColorBrush x:Key="DiffRemovedBackgroundBrush" Color="#33CF222E" />
+            <SolidColorBrush x:Key="DiffHunkHeaderForegroundBrush" Color="#0550AE" />
+            <SolidColorBrush x:Key="DiffHunkHeaderBackgroundBrush" Color="#260969DA" />
+            <SolidColorBrush x:Key="DiffFileHeaderForegroundBrush" Color="#57606A" />
+            <SolidColorBrush x:Key="DiffNoNewlineForegroundBrush" Color="#9A6700" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="DiffAddedForegroundBrush" Color="#6CCB7E" />
+            <SolidColorBrush x:Key="DiffAddedBackgroundBrush" Color="#2E2EA043" />
+            <SolidColorBrush x:Key="DiffRemovedForegroundBrush" Color="#F1707B" />
+            <SolidColorBrush x:Key="DiffRemovedBackgroundBrush" Color="#2EF85149" />
+            <SolidColorBrush x:Key="DiffHunkHeaderForegroundBrush" Color="#6CB6FF" />
+            <SolidColorBrush x:Key="DiffHunkHeaderBackgroundBrush" Color="#33388BFD" />
+            <SolidColorBrush x:Key="DiffFileHeaderForegroundBrush" Color="#9DA5B4" />
+            <SolidColorBrush x:Key="DiffNoNewlineForegroundBrush" Color="#E3B341" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

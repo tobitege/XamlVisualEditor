@@ -13,9 +13,9 @@ using XamlVisualEditor.Core.Interfaces;
 namespace XamlVisualEditor.Workspace;
 
 /// <summary>
-/// Git CLI-backed service for repository status, diff, branch and remote operations.
+/// Git CLI-backed service for repository status, diff, branch, remote and history operations.
 /// </summary>
-public sealed partial class GitService : IGitService, IGitRepositoryService, IGitCommandLog, IGitBranchService, IGitRemoteService
+public sealed partial class GitService : IGitService, IGitRepositoryService, IGitCommandLog, IGitBranchService, IGitRemoteService, IGitHistoryService
 {
     private readonly ILogger<GitService> _logger;
     private readonly GitProcessOptions _options;
@@ -315,7 +315,9 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         Stream? standardInput = null,
         IReadOnlyDictionary<string, string?>? environment = null,
         TimeSpan? timeout = null,
-        CancellationToken? waitCancellation = null)
+        CancellationToken? waitCancellation = null,
+        int? maxOutputLines = null,
+        int? maxOutputBytes = null)
     {
         if (Interlocked.Exchange(ref _versionChecked, 1) == 0)
         {
@@ -333,6 +335,8 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
                 StandardInput = standardInput,
                 Environment = environment,
                 Timeout = timeout,
+                MaxOutputLines = maxOutputLines,
+                MaxOutputBytes = maxOutputBytes,
                 ProcessStarted = processStarted is null ? null : id => processStarted(args, id)
             },
             ct,

@@ -137,8 +137,38 @@ internal sealed class GitTestRepository : IDisposable
     /// <summary>Runs git in the working tree, asserts exit code 0 and returns the output.</summary>
     public string RunGit(params string[] args) => RunGitIn(Path, args);
 
+    /// <summary>
+    /// Runs git in the working tree with <paramref name="date"/> as author and committer date, asserts exit code 0 and
+    /// returns the output.
+    /// </summary>
+    public string RunGitAt(DateTimeOffset date, params string[] args)
+    {
+        string gitDate = date.ToString("yyyy-MM-ddTHH:mm:sszzz", System.Globalization.CultureInfo.InvariantCulture);
+        Dictionary<string, string?> environment = new()
+        {
+            ["GIT_AUTHOR_DATE"] = gitDate,
+            ["GIT_COMMITTER_DATE"] = gitDate
+        };
+        Assert.True(
+            TryRunGitIn(Path, environment, out string output, args),
+            "git " + string.Join(' ', args) + " failed: " + output);
+        return output;
+    }
+
     /// <summary>Runs git in the working tree and returns whether it exited with code 0.</summary>
     public bool TryRunGit(out string output, params string[] args) => TryRunGitIn(Path, out output, args);
+
+    /// <summary>
+    /// Runs git in the working tree with <paramref name="input"/> as standard input, for example
+    /// <c>git fast-import</c>, asserts exit code 0 and returns the output.
+    /// </summary>
+    public string RunGitWithInput(string input, params string[] args)
+    {
+        Assert.True(
+            TryRunGitIn(Path, null, out string output, args, input),
+            "git " + string.Join(' ', args) + " failed: " + output);
+        return output;
+    }
 
     public void Dispose()
     {
@@ -169,7 +199,16 @@ internal sealed class GitTestRepository : IDisposable
         return output;
     }
 
-    private bool TryRunGitIn(string workingDirectory, out string output, params string[] args)
+    /// <summary>Runs git in <paramref name="workingDirectory"/> and returns whether it exited with code 0.</summary>
+    public bool TryRunGitIn(string workingDirectory, out string output, params string[] args) =>
+        TryRunGitIn(workingDirectory, null, out output, args);
+
+    private bool TryRunGitIn(
+        string workingDirectory,
+        IReadOnlyDictionary<string, string?>? extraEnvironment,
+        out string output,
+        string[] args,
+        string? input = null)
     {
         ProcessStartInfo startInfo = new()
         {
@@ -183,7 +222,13 @@ internal sealed class GitTestRepository : IDisposable
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        foreach (KeyValuePair<string, string?> variable in Environment)
+        List<KeyValuePair<string, string?>> variables = new(Environment);
+        if (extraEnvironment is not null)
+        {
+            variables.AddRange(extraEnvironment);
+        }
+
+        foreach (KeyValuePair<string, string?> variable in variables)
         {
             if (variable.Value is null)
             {
@@ -203,9 +248,16 @@ internal sealed class GitTestRepository : IDisposable
         try
         {
             using Process process = Process.Start(startInfo)!;
-            process.StandardInput.Close();
             System.Threading.Tasks.Task<string> error = process.StandardError.ReadToEndAsync();
-            output = process.StandardOutput.ReadToEnd();
+            System.Threading.Tasks.Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
+            if (input is not null)
+            {
+                byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+                process.StandardInput.BaseStream.Write(bytes, 0, bytes.Length);
+            }
+
+            process.StandardInput.Close();
+            output = standardOutput.Result;
             process.WaitForExit();
             if (process.ExitCode != 0)
             {

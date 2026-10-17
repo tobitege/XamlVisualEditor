@@ -2,13 +2,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:XamlVisualEditor.GitExtension"
              xmlns:gloc="using:XamlVisualEditor.GitExtension.Localization"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:behaviors="using:XamlVisualEditor.SourceControl.UI.Behaviors"
              x:Class="XamlVisualEditor.GitExtension.Views.GitRepositoryPanelView"
              x:DataType="vm:GitRepositoryPanelViewModel">
 
     <UserControl.Styles>
-        <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-        </Style>
         <Style Selector="TabItem">
             <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
         </Style>
@@ -109,7 +108,10 @@
 
         <TabControl>
             <TabItem Header="{x:Static gloc:GitStrings.BranchesTab}">
+                <!-- No horizontal scrolling: the rows get the width of the panel, so a long branch name ends with an
+                     ellipsis and the commits ahead and behind always stay visible at the right edge. -->
                 <TreeView Name="BranchTree"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           ItemsSource="{CompiledBinding Groups}"
                           SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
                           IsEnabled="{CompiledBinding IsRepository}"
@@ -153,14 +155,89 @@
                                           Data="{x:Static vm:GitIcons.CurrentBranch}"
                                           IsVisible="{CompiledBinding IsCurrent}"
                                           ToolTip.Tip="{x:Static gloc:GitStrings.CurrentBranch}" />
-                                <TextBlock Grid.Column="1" Text="{CompiledBinding Name}" VerticalAlignment="Center"
+                                <TextBlock Grid.Column="1" Name="BranchName" Text="{CompiledBinding Name}" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="2" Text="{CompiledBinding TrackingText}" VerticalAlignment="Center"
+                                <TextBlock Grid.Column="2" Name="TrackingText" Text="{CompiledBinding TrackingText}" VerticalAlignment="Center"
                                            Margin="8,0,0,0" />
                             </Grid>
                         </DataTemplate>
                     </TreeView.DataTemplates>
                 </TreeView>
+            </TabItem>
+            <TabItem Name="TagsTab" Header="{x:Static gloc:GitStrings.TagsTab}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="{CompiledBinding TagsMessage}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,6"
+                               IsVisible="{CompiledBinding TagsMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <dg:DataGrid Name="TagGrid"
+                                 Classes="explorer-compact"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 ItemsSource="{CompiledBinding Tags}"
+                                 SelectedItem="{CompiledBinding SelectedTag, Mode=TwoWay}"
+                                 IsEnabled="{CompiledBinding IsRepository}"
+                                 AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
+                                 CanUserSortColumns="True"
+                                 GridLinesVisibility="None"
+                                 IsReadOnly="True"
+                                 AutomationProperties.Name="{x:Static gloc:GitStrings.TagsTab}"
+                                 behaviors:RightClickSelectBehavior.IsEnabled="True"
+                                 behaviors:DoubleTapCommandBehavior.Command="{CompiledBinding ShowTagHistoryCommand}">
+                        <dg:DataGrid.ContextMenu>
+                            <ContextMenu x:DataType="vm:GitRepositoryPanelViewModel">
+                                <MenuItem Header="{x:Static gloc:GitStrings.ShowFileHistoryCommand}"
+                                          Command="{CompiledBinding ShowTagHistoryCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.History}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.NewBranchFromHere}"
+                                          Command="{CompiledBinding CreateBranchFromTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.CreateBranch}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </dg:DataGrid.ContextMenu>
+                        <!-- No star column: in the narrow side panel the tag and its commit stay visible, and the date and
+                             the message are reached by scrolling to the side instead of being squeezed. -->
+                        <dg:DataGrid.Columns>
+                            <dg:DataGridTemplateColumn Header="{x:Static gloc:GitStrings.ColumnTag}" Width="Auto" MaxWidth="200" SortMemberPath="Name"
+                                                       x:DataType="vm:GitTagItemViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding Name}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitTagItemViewModel">
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Background="Transparent"
+                                                    ToolTip.Tip="{CompiledBinding ToolTip}">
+                                            <PathIcon Width="12" Height="12" Data="{x:Static vm:GitIcons.Tag}" />
+                                            <TextBlock Text="{CompiledBinding Name}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
+                            <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnCommit}" Width="Auto"
+                                                   x:DataType="vm:GitTagItemViewModel"
+                                                   Binding="{CompiledBinding TargetText}" SortMemberPath="TargetText" />
+                            <!-- Fits any date and time in English, German and the current culture, whatever tags are loaded. -->
+                            <dg:DataGridTemplateColumn Header="{x:Static gloc:GitStrings.ColumnDate}" Width="Auto" SortMemberPath="Date"
+                                                       x:DataType="vm:GitTagItemViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding DateText}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitTagItemViewModel">
+                                        <TextBlock Text="{CompiledBinding DateText}" Margin="12,0" VerticalAlignment="Center"
+                                                   behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitDateSamples.Texts}"
+                                                   behaviors:ColumnWidthSamples.WidestDigits="True" />
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
+                            <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnMessage}" Width="Auto"
+                                                   x:DataType="vm:GitTagItemViewModel"
+                                                   Binding="{CompiledBinding Subject}" SortMemberPath="Subject" />
+                        </dg:DataGrid.Columns>
+                    </dg:DataGrid>
+                </DockPanel>
             </TabItem>
         </TabControl>
     </DockPanel>

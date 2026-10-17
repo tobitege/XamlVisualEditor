@@ -49,7 +49,10 @@ public sealed class GitCommandsTests
         { GitCommands.FETCH, GitStrings.FetchCommand, REMOTE_WHEN },
         { GitCommands.PULL, GitStrings.PullCommand, UPSTREAM_WHEN },
         { GitCommands.PUSH, GitStrings.PushCommand, REMOTE_WHEN },
-        { GitCommands.SYNC, GitStrings.SyncCommand, UPSTREAM_WHEN }
+        { GitCommands.SYNC, GitStrings.SyncCommand, UPSTREAM_WHEN },
+        { GitCommands.TOGGLE_HISTORY_VIEW, GitStrings.ToggleHistoryViewCommand, null },
+        { GitCommands.SHOW_HISTORY, GitStrings.ShowHistoryCommand, REPOSITORY_WHEN },
+        { GitCommands.SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, REPOSITORY_WHEN }
     };
 
     [Theory]
@@ -76,7 +79,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(20, commandIds.Count);
+        Assert.Equal(23, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -92,7 +95,7 @@ public sealed class GitCommandsTests
         IReadOnlyList<ExtensionMenuContribution> items = registration.Contributions.MenuItems;
 
         ExtensionMenuContribution[] viewItems = items.Where(item => item.Location == ExtensionMenuLocations.View).ToArray();
-        Assert.Equal(2, viewItems.Length);
+        Assert.Equal(3, viewItems.Length);
         ExtensionMenuContribution view = Assert.Single(viewItems, item => item.CommandId == GitCommands.TOGGLE_CHANGES_VIEW);
         Assert.Equal("views.bottom", view.Group);
         Assert.Equal(GitStrings.ChangesViewTitle, view.Title);
@@ -101,13 +104,17 @@ public sealed class GitCommandsTests
         Assert.Equal("views.left", repositoryView.Group);
         Assert.Equal(GitStrings.RepositoryViewTitle, repositoryView.Title);
         Assert.Null(repositoryView.Submenu);
+        ExtensionMenuContribution historyView = Assert.Single(viewItems, item => item.CommandId == GitCommands.TOGGLE_HISTORY_VIEW);
+        Assert.Equal("views.bottom", historyView.Group);
+        Assert.Equal(GitStrings.HistoryViewTitle, historyView.Title);
+        Assert.Null(historyView.Submenu);
 
         string[] extensionsIds =
         [
             GitCommands.SHOW_CHANGES, GitCommands.REFRESH, GitCommands.SHOW_OUTPUT, GitCommands.TOGGLE_AUTO_REFRESH,
             GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
-            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC
+            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -117,7 +124,7 @@ public sealed class GitCommandsTests
 
         ExtensionMenuContribution[] editorItems = items.Where(item => item.Location == ExtensionMenuLocations.EditorContext).ToArray();
         Assert.Equal(
-            new[] { GitCommands.DISCARD, GitCommands.STAGE, GitCommands.UNSTAGE },
+            new[] { GitCommands.DISCARD, GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE },
             editorItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
         Assert.All(editorItems, item => Assert.Equal("Git", item.Submenu));
         Assert.Equal(items.Count, viewItems.Length + extensionsItems.Length + editorItems.Length);
@@ -433,6 +440,94 @@ public sealed class GitCommandsTests
         Assert.Empty(registration.Metadata.GetAll());
         Assert.Empty(registration.Contributions.MenuItems);
         Assert.Empty(registration.Contributions.CommandPaletteItems);
+    }
+
+    [Fact]
+    public async Task History_view_command_toggles_the_history_panel()
+    {
+        using Registration registration = await Registration.CreateAsync();
+
+        await registration.Commands.ExecuteAsync(GitCommands.TOGGLE_HISTORY_VIEW, null, CancellationToken.None);
+
+        Assert.Equal([GitCommands.HISTORY_VIEW_ID], registration.ViewHost.Toggled);
+    }
+
+    [Fact]
+    public async Task Show_history_shows_the_whole_repository_starting_at_head_or_at_the_revision_argument()
+    {
+        using Registration registration = await Registration.CreateAsync();
+        registration.History.Show(new GitHistoryScope("src/a.cs"));
+
+        await registration.Commands.ExecuteAsync(GitCommands.SHOW_HISTORY, null, CancellationToken.None);
+        GitHistoryScope fromHead = registration.History.Scope;
+        await registration.Commands.ExecuteAsync(GitCommands.SHOW_HISTORY, ["refs/tags/v1.0"], CancellationToken.None);
+
+        Assert.Equal(GitHistoryScope.Repository, fromHead);
+        Assert.Equal(new GitHistoryScope(Revision: "refs/tags/v1.0"), registration.History.Scope);
+        Assert.Equal(string.Format(GitStrings.HistoryScopeRevisionFormat, GitStrings.HistoryScopeRepository, "v1.0"), registration.History.ScopeText);
+        Assert.Equal([GitCommands.HISTORY_VIEW_ID, GitCommands.HISTORY_VIEW_ID], registration.ViewHost.Shown);
+    }
+
+    [Fact]
+    public async Task Show_file_history_uses_the_path_argument_or_the_active_document_and_tells_folders_from_files()
+    {
+        using Registration registration = await Registration.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(registration.RepositoryRoot, "src"));
+        try
+        {
+            await registration.Commands.ExecuteAsync(
+                GitCommands.SHOW_FILE_HISTORY,
+                [Path.Combine(registration.RepositoryRoot, "src")],
+                CancellationToken.None);
+            GitHistoryScope folder = registration.History.Scope;
+            string folderText = registration.History.ScopeText;
+            registration.Editor.Activate(new FakeEditorDocument(Path.Combine(registration.RepositoryRoot, "src", "deleted.cs"), string.Empty));
+            await registration.Commands.ExecuteAsync(GitCommands.SHOW_FILE_HISTORY, null, CancellationToken.None);
+            GitHistoryScope file = registration.History.Scope;
+            await registration.Commands.ExecuteAsync(GitCommands.SHOW_FILE_HISTORY, [registration.RepositoryRoot], CancellationToken.None);
+
+            Assert.Equal(new GitHistoryScope("src", IsDirectory: true), folder);
+            Assert.Equal(string.Format(GitStrings.HistoryScopeFolderFormat, "src"), folderText);
+            Assert.Equal(new GitHistoryScope("src/deleted.cs"), file);
+            Assert.Equal(GitHistoryScope.Repository, registration.History.Scope);
+            Assert.Equal(3, registration.ViewHost.Shown.Count);
+        }
+        finally
+        {
+            Directory.Delete(registration.RepositoryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Show_file_history_starts_at_the_revision_argument_and_sets_the_scope_before_the_panel_shows()
+    {
+        using Registration registration = await Registration.CreateAsync();
+        List<GitHistoryScope> scopesWhenShown = new();
+        registration.ViewHost.Showing = _ => scopesWhenShown.Add(registration.History.Scope);
+        string sha = new('a', 40);
+
+        await registration.Commands.ExecuteAsync(
+            GitCommands.SHOW_FILE_HISTORY,
+            [Path.Combine(registration.RepositoryRoot, "src", "a.cs"), sha],
+            CancellationToken.None);
+        await registration.Commands.ExecuteAsync(GitCommands.SHOW_HISTORY, ["refs/tags/v1.0"], CancellationToken.None);
+
+        Assert.Equal(
+            new[] { new GitHistoryScope("src/a.cs", Revision: sha), new GitHistoryScope(Revision: "refs/tags/v1.0") },
+            scopesWhenShown);
+    }
+
+    [Fact]
+    public async Task Show_file_history_outside_the_repository_reports_it_and_shows_no_panel()
+    {
+        using Registration registration = await Registration.CreateAsync();
+        string outside = Path.Combine(Path.GetTempPath(), "xve-outside-" + Guid.NewGuid().ToString("N"), "x.cs");
+
+        await registration.Commands.ExecuteAsync(GitCommands.SHOW_FILE_HISTORY, [outside], CancellationToken.None);
+
+        Assert.Empty(registration.ViewHost.Shown);
+        Assert.Equal(GitHistoryScope.Repository, registration.History.Scope);
+        Assert.Single(registration.Window.Infos);
     }
 
     [Fact]
@@ -1253,7 +1348,8 @@ public sealed class GitCommandsTests
             Session = new GitSession(
                 new GitServiceSet(Git) { Remotes = remotes },
                 new FakeWorkspaceInfo { WorkspacePath = repositoryRoot });
-            GitCommandHandler handler = new(Session, ViewHost, Window, Dialogs, Editor, output, () => null, null);
+            History = new GitHistoryViewModel(Session, (_, _) => Task.CompletedTask);
+            GitCommandHandler handler = new(Session, ViewHost, Window, Dialogs, Editor, output, () => null, null, () => History);
             GitCommands.RegisterCommands(Commands, Metadata, handler, Subscriptions);
             GitCommands.RegisterMenuAndPaletteItems(EXTENSION_ID, Contributions, Subscriptions);
         }
@@ -1263,6 +1359,8 @@ public sealed class GitCommandsTests
         public FakeGitService Git { get; }
 
         public GitSession Session { get; }
+
+        public GitHistoryViewModel History { get; }
 
         public GitDialogHost Dialogs { get; }
 
@@ -1307,6 +1405,7 @@ public sealed class GitCommandsTests
 
         public void Dispose()
         {
+            History.Dispose();
             Session.Dispose();
         }
     }

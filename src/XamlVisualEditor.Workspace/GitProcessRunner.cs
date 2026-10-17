@@ -138,7 +138,12 @@ internal sealed class GitProcessRunner
 
         OutputBuffer output = new();
         OutputBuffer error = new();
-        Task outputTask = output.ReadAllAsync(process.StandardOutput.BaseStream);
+        // Output beyond the line or byte limit is not read; git, which would block on the full pipe, is stopped instead.
+        Task outputTask = output.ReadAllAsync(
+            process.StandardOutput.BaseStream,
+            request.MaxOutputLines,
+            request.MaxOutputBytes,
+            () => Kill(process, job));
         Task errorTask = error.ReadAllAsync(process.StandardError.BaseStream);
         Task inputTask = WriteInputAsync(process.StandardInput, request.StandardInput, inputCancellation.Token);
 
@@ -196,7 +201,8 @@ internal sealed class GitProcessRunner
         {
             ExitCode = process.ExitCode,
             StandardOutput = Utf8NoBom.GetString(output.ToArray()),
-            StandardError = Utf8NoBom.GetString(error.ToArray())
+            StandardError = Utf8NoBom.GetString(error.ToArray()),
+            IsOutputTruncated = output.IsTruncated
         };
     }
 
@@ -401,16 +407,49 @@ internal sealed class GitProcessRunner
     private sealed class OutputBuffer
     {
         private readonly MemoryStream _buffer = new();
+        private volatile bool _isTruncated;
 
-        public async Task ReadAllAsync(Stream stream)
+        /// <summary>Gets whether the stream had more lines or bytes than the limits and reading stopped there.</summary>
+        public bool IsTruncated => _isTruncated;
+
+        /// <summary>
+        /// Reads the stream to its end, or up to the end of line <paramref name="maxLines"/> or of the last complete
+        /// line within <paramref name="maxBytes"/> when more bytes follow; then <paramref name="truncated"/> runs and
+        /// the rest is not read. Cut output keeps only complete lines.
+        /// </summary>
+        public async Task ReadAllAsync(Stream stream, int? maxLines = null, int? maxBytes = null, Action? truncated = null)
         {
             byte[] chunk = new byte[16 * 1024];
+            int lines = 0;
+            long written = 0;
             int read;
             while ((read = await stream.ReadAsync(chunk).ConfigureAwait(false)) > 0)
             {
+                int keep = maxBytes is { } byteLimit ? (int)Math.Min(read, byteLimit - written) : read;
+                if (maxLines is { } lineLimit)
+                {
+                    keep = EndOfLines(chunk, keep, lineLimit, ref lines);
+                }
+
+                bool isTruncated = keep < read;
                 lock (_buffer)
                 {
-                    _buffer.Write(chunk, 0, read);
+                    _buffer.Write(chunk, 0, keep);
+                    if (isTruncated)
+                    {
+                        // A byte limit can end inside a line, which may have started in an earlier chunk.
+                        byte[] data = _buffer.GetBuffer();
+                        int length = (int)_buffer.Length;
+                        _buffer.SetLength(length == 0 ? 0 : Array.LastIndexOf(data, (byte)'\n', length - 1, length) + 1);
+                    }
+                }
+
+                written += keep;
+                if (isTruncated)
+                {
+                    _isTruncated = true;
+                    truncated?.Invoke();
+                    return;
                 }
             }
         }
@@ -421,6 +460,28 @@ internal sealed class GitProcessRunner
             {
                 return _buffer.ToArray();
             }
+        }
+
+        /// <summary>
+        /// Returns the number of the first <paramref name="count"/> bytes of <paramref name="chunk"/> that belong to
+        /// the first <paramref name="maxLines"/> lines, counting the lines of earlier chunks in <paramref name="lines"/>.
+        /// </summary>
+        private static int EndOfLines(byte[] chunk, int count, int maxLines, ref int lines)
+        {
+            int end = 0;
+            while (lines < maxLines)
+            {
+                int newline = Array.IndexOf(chunk, (byte)'\n', end, count - end);
+                if (newline < 0)
+                {
+                    return count;
+                }
+
+                lines++;
+                end = newline + 1;
+            }
+
+            return end;
         }
     }
 
@@ -478,6 +539,20 @@ internal sealed class GitProcessRequest
     /// <summary>Gets a callback that receives the process id right after the process started.</summary>
     public Action<int>? ProcessStarted { get; init; }
 
+    /// <summary>
+    /// Gets the number of output lines that are read; when git writes more, the rest is not read, git is stopped and
+    /// the result has <see cref="GitProcessResult.IsOutputTruncated"/>. Null reads all output.
+    /// </summary>
+    public int? MaxOutputLines { get; init; }
+
+    /// <summary>
+    /// Gets the number of output bytes that are read; when git writes more, the output ends with the last complete
+    /// line within the limit, git is stopped and the result has <see cref="GitProcessResult.IsOutputTruncated"/>.
+    /// The output keeps only complete lines, so it is empty when the first line is longer than the limit. Null reads
+    /// all output.
+    /// </summary>
+    public int? MaxOutputBytes { get; init; }
+
     /// <summary>Creates a standard input stream with the UTF-8 bytes of <paramref name="text"/>, without byte order mark.</summary>
     public static Stream Utf8Input(string text) => new MemoryStream(Encoding.UTF8.GetBytes(text), writable: false);
 }
@@ -492,4 +567,11 @@ internal sealed class GitProcessResult
     public string StandardOutput { get; init; } = string.Empty;
 
     public string StandardError { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets whether the output had more lines than <see cref="GitProcessRequest.MaxOutputLines"/> or more bytes than
+    /// <see cref="GitProcessRequest.MaxOutputBytes"/>; git was stopped then, so <see cref="ExitCode"/> does not tell
+    /// whether it would have succeeded.
+    /// </summary>
+    public bool IsOutputTruncated { get; init; }
 }

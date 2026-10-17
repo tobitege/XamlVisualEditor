@@ -182,6 +182,12 @@ public sealed class GitDiff
     public required IReadOnlyList<GitDiffFile> Files { get; init; }
 
     public string? RawText { get; init; }
+
+    /// <summary>
+    /// Gets whether git wrote more lines or bytes than were read, so the diff ends early and its last hunk can be
+    /// incomplete.
+    /// </summary>
+    public bool IsTruncated { get; init; }
 }
 
 /// <summary>

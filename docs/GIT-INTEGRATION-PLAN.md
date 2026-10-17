@@ -18,7 +18,7 @@ Tests und einem Livetest per CDP. Testrepository: `D:\xve-demo\GitDemo` mit loka
 | 2 Branches und Sync | erledigt, live geprüft, gepusht (985d441) |
 | 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
-| 5 Editor-API, Vergleich, Blame | offen |
+| 5 Editor-API, Vergleich, Blame | Entwurf freigegeben (siehe „Phase-5-Entwurf“), Umsetzung läuft |
 | 6 Feinere Commits, Stash | offen |
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
@@ -64,7 +64,23 @@ Phase-4-Entwurf (ersetzt 4.1 und 4.2, freigegeben):
 - Host: Dictionary mit `FileSystemPathComparison.Comparer`, atomar getauscht, ein Durchgang über die geladenen Knoten;
   vier Theme-Pinsel hell/dunkel, kein Opacity.
 
+Phase-5-Entwurf (ersetzt 4.3 und 4.4, freigegeben):
+
+- API nur als Default-Member auf vorhandenen Hosts: `ITextEditorViewHost.CreateLineMarkLayer(clickCommandId)` mit
+  `ITextEditorLineMarkLayer.Set(Pfad, Marker)` (Push-Layer wie Phase 4; `LineCount 0` = entfernte Zeilen) und
+  `IExtensionViewHost.ShowDocumentAsync(id, title, toolTip, createViewModel)` (vorhandener Tab wird aktiviert).
+- Ein Diff-Weg für Gutter und Vergleich: eigener `LineDiff` (Präfix/Suffix abschneiden, Myers mit Obergrenze), Rx
+  `Throttle(300 ms)` + `Switch`, Rechnen außerhalb des UI-Threads. Gutter-Basis nur der Stage-Stand; Cache-Schlüssel ist
+  die Index-Blob-ID `hI` aus porcelain v2 (`GitFileChange.IndexObjectId`), also kein zusätzlicher git-Prozess.
+- „Keine Basis, keine Marker“ für außerhalb des Repos, untracked, Konflikt, binär, LFS-Pointer, zu groß; Dekodierung
+  beider Seiten über `SharedFileReader.Decode`, damit CRLF/BOM keine Scheinänderungen ergeben.
+- Vergleichsdokument (HEAD/Stage) mit `UnifiedDiffEditor`, ein Hunk pro Änderungsblock, „ganze Datei“ ohne neuen Diff;
+  Klick im Gutter springt zum Block. Blame mit `git blame --porcelain` auf der gespeicherten Datei als virtualisierte
+  Liste; Doppelklick öffnet den Verlauf mit vorgewähltem Commit.
+- Pinsel neutral benannt (`SourceControl…Brush`) und von Explorer-Dekorationen und Gutter gemeinsam genutzt.
+
 Sammelliste für den Schliff vor dem PR:
+
 - `HEAD@{n}` jenseits des Reflogs meldet nur „git rev-parse exited with code 128.“ statt gits Meldung.
 - Die Warnung bei mehrdeutigen Namen bleibt durch `rev-parse --quiet` unterdrückt (nötig für die Exitcode-Trennung).
 - Beim Wechsel von einem gekürzten zu einem vollständigen Diff wird der alte Text zweimal neu aufgebaut.

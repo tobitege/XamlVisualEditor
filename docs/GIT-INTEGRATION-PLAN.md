@@ -16,7 +16,7 @@ Tests und einem Livetest per CDP. Testrepository: `D:\xve-demo\GitDemo` mit loka
 | 0 CLI-Fundament | erledigt, live geprüft |
 | 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
 | 2 Branches und Sync | erledigt, live geprüft, gepusht (985d441) |
-| 3 Verlauf, Commit-Details, Tags | umgesetzt (lokal 0ed8286), Review und Livetest offen |
+| 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
 | 4 Explorer-API | offen |
 | 5 Editor-API, Vergleich, Blame | offen |
 | 6 Feinere Commits, Stash | offen |
@@ -43,6 +43,18 @@ Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befund
 - Der aufgelöste Git-Prozess bekommt die Umgebung des Launchers: `MSYSTEM`, `HOME`, PATH-Reihenfolge
   `<env>\bin`, `usr\bin`, `%HOME%\bin` (Record `GitForWindowsLayout`); `ExecutablePath` und Scoop-Shims werden
   ebenso aufgelöst.
+
+Arbeitsregel ab Phase 4: Jeder Agent lädt `codereview-roasted` vor dem Codieren und prüft seinen Diff vor dem Commit
+selbst; nur die einfachste Lösung, keine Workaround-Maschinerie. Vor dem Push werden Befunde behoben, die Nutzer merken
+oder Ergebnisse verfälschen; Stil-Kleinkram kommt auf die Sammelliste und wird einmal vor dem Upstream-PR abgearbeitet.
+
+Sammelliste für den Schliff vor dem PR:
+- `HEAD@{n}` jenseits des Reflogs meldet nur „git rev-parse exited with code 128.“ statt gits Meldung.
+- Die Warnung bei mehrdeutigen Namen bleibt durch `rev-parse --quiet` unterdrückt (nötig für die Exitcode-Trennung).
+- Beim Wechsel von einem gekürzten zu einem vollständigen Diff wird der alte Text zweimal neu aufgebaut.
+- Commit-Details: Die Kopfzeile ist eine Star-Zeile mit `MaxHeight=160`; bei kurzer Nachricht bleibt Leerraum.
+- Commit-Details: Das Zurücksetzen des Kopfs hängt am Text der Zusammenfassung statt am Commit.
+- Testlücken zu den beiden Layout-Befunden aus Review 0063f77.
 
 Für die PR-Beschreibung: Die Git-Views überschreiben die Vordergrundfarbe gesperrter Buttons nicht mehr (der Stil stammt
 aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Weitere Änderungen an

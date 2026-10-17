@@ -25,6 +25,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 
 Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.
 Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befunde. Festgehaltene Entscheidungen:
+
 - Unstage nutzt die Liste der gestagten Änderungen statt `git reset`, weil `reset` einen laufenden Merge abbricht;
   Ordner-Discard verwirft nur die bestätigte Liste.
 - Fetch ist schlicht `git fetch <remote>` je Remote: keine erzwungene Prune, keine eigenen Refspecs (sonst fehlen
@@ -42,6 +43,10 @@ Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befund
 - Der aufgelöste Git-Prozess bekommt die Umgebung des Launchers: `MSYSTEM`, `HOME`, PATH-Reihenfolge
   `<env>\bin`, `usr\bin`, `%HOME%\bin` (Record `GitForWindowsLayout`); `ExecutablePath` und Scoop-Shims werden
   ebenso aufgelöst.
+
+Für die PR-Beschreibung: Die Git-Views überschreiben die Vordergrundfarbe gesperrter Buttons nicht mehr (der Stil stammt
+aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Demo-Screenshots als Rohbilder unter
+`xve-demo\shots\git\` (Showcase-Repo `xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 

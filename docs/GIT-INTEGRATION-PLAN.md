@@ -10,19 +10,13 @@
   Konflikte löst der Nutzer im Editor, stagt die Dateien (markiert sie als gelöst) und committet; Commit schließt den
   Merge ab. Keine Konfliktblöcke im Gutter, kein Ours/Theirs, kein Rebase. Danach: PR fertig machen, nichts Neues.
 - **Stand der Umsetzung:** Worktree `github\XamlVisualEditor-git`, Branch `git-integration`, gepusht bis 19a3662
-  (Phasen 0–6). Die halbe Phase-7-Arbeit liegt dort als `git stash` „phase 7 partial work“ und wird NICHT verwendet.
-  Uncommittet für den Mini-Merge geändert: `GitHistoryModels.cs` (enum `GitMergeResult`), `IGitBranchService.cs`
-  (`MergeAsync`, `AbortMergeAsync`), `GitService.Branches.cs` (Implementierung; Konflikt erkannt über `MERGE_HEAD`,
-  nicht über den Exitcode), neu `Services/GitCommandHandler.Merge.cs`, `GitCommands.cs` (Konstanten `MERGE`,
-  `ABORT_MERGE`, `MERGING_WHEN`, Registrierung, Menü, Palette), `GitStrings.resx`/`.de.resx` (15 Texte),
-  `GitStatusBar.cs` („· Merging“), `CHANGELOG.md`.
-- **Noch zu tun:** Tests (`GitBranchServiceTests`: Fast-Forward-Merge, Merge mit Konflikt → `Conflicts` und
-  `MERGE_HEAD`, Abort; `GitStatusBarTests`: „Merging“ im Text), Build + alle vier Testprojekte über
-  `scratchpad\pr_build.sh /d/github/XamlVisualEditor-git tests` im Hintergrund (0 Warnungen), CDP-App-Build, Livetest per
-  CDP am Repo `xve-demo\GitShowcase` (Branch `feature/settings-page` ist bereits gemergt; für einen Konflikt vorher
-  einen Branch mit kollidierender Änderung anlegen), ein Commit, Push. Dann: Fix-Commits je Phase zusammenfassen
-  (ein Commit je Phase), Sammelliste nur bei sichtbaren Fehlern abarbeiten, Screenshots neu aufnehmen
-  (`xve-demo\shots\git\`), PR-Beschreibung aus den PR-Notizen unten, PR nur mit Go des Nutzers.
+  (Phasen 0–6). Mini-Merge fertig, live geprüft (Fast-Forward, „already merged“, Konflikt mit „· Merging“ in der
+  Statusleiste, Abbruch mit Rückfrage) und als ein Commit obendrauf (Hash in der Phasentabelle). Die halbe
+  Phase-7-Arbeit liegt dort als `git stash` „phase 7 partial work“ und wird NICHT verwendet.
+- **Noch zu tun (nur PR-Abschluss):** Fix-Commits je Phase zusammenfassen (ein Commit je Phase), Sammelliste nur bei
+  sichtbaren Fehlern abarbeiten, Test-Breakpoint in `xve-demo\GitShowcase\App.axaml.cs` Zeile 12 entfernen,
+  Screenshots neu aufnehmen (`xve-demo\shots\git\`), PR-Beschreibung aus den PR-Notizen unten, PR nur mit Go des
+  Nutzers. Die gestrichenen Phasen 7 und 8 stehen unter „Folge-PR“.
 - **Arbeitsweise:** Ohne Agenten direkt arbeiten, kleinste Lösung, keine neuen Mechanismen, keine weiteren Phasen.
   Roasted Review vor dem Push nur für den Mini-Merge-Diff selbst durchführen. Kein Force-Push mehr.
 
@@ -44,8 +38,8 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
 | 5 Editor-API, Vergleich, Blame | erledigt, live geprüft, gepusht (0ae2ec7), eine Review-Runde |
 | 6 Feinere Commits, Stash | erledigt, live geprüft, gepusht (19a3662), Review + Datenverlust-Nachprüfung |
-| 7 Merge und Konflikte | Entwurf freigegeben (siehe „Phase-7-Entwurf“), Umsetzung läuft |
-| 8 TFVC nutzt die gemeinsamen Teile | offen |
+| 7 Merge (kleinste Form) | erledigt, live geprüft, gepusht (268d772); Konfliktbedienung → Folge-PR |
+| 8 TFVC nutzt die gemeinsamen Teile | gestrichen → Folge-PR |
 
 Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.
 Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befunde. Festgehaltene Entscheidungen:
@@ -118,7 +112,12 @@ Phase-6-Entwurf (freigegeben):
 - Stash-Reiter im Repository-Panel: Stash (optional mit unversionierten Dateien), Apply über Commit-ID, Pop/Drop mit
   Prüfung der Stash-ID, Drop fragt nach; kein „Show“ in Phase 6. Konflikte über den Snapshot erkannt.
 
-Phase-7-Entwurf (freigegeben):
+Phase 7 umgesetzt (kleinste Form): `git.merge` („Merge Branch…“, Auswahlliste der Branches, `git merge --no-edit`,
+Ergebnis `GitMergeResult` Merged/AlreadyUpToDate/Conflicts über `MERGE_HEAD` statt Exitcode), `git.abortMerge` („Abort
+Merge…“, Rückfrage, `git merge --abort`, nur bei `git.isMerging`), Statusleiste „· Merging“. Beides in
+`IGitBranchService`, kein eigener Merge-Service. Konflikte löst der Nutzer im Editor, stagt und committet.
+
+Folge-PR (ursprünglicher Phase-7-Entwurf, nicht in diesem PR):
 
 - `IGitMergeService`: Merge (`merge --no-edit`, Ergebnis über `MERGE_HEAD` statt Exitcode), Abort/Continue je nach
   laufendem Vorgang (merge, rebase, cherry-pick, revert, am), Seite übernehmen über `ls-files -u`-Prüfung,
@@ -160,9 +159,9 @@ Mitbehobener Upstream-Fehler: Ein Klick auf eine Zeilennummer setzte keinen Brea
 schaltete doppelt); `EditorServicesAdapter.GetTextAsync` marshallt jetzt auf den UI-Thread (AvaloniaEdit `VerifyAccess`).
 Material-Icon `unfold_more` mit Eintrag in THIRD-PARTY-NOTICES. Phase 6: `GitPanelViewModel.DiffLines` ändert den Typ
 auf `IReadOnlyList<DiffLine>`; der Panel-Diff ignoriert `diff.external` und textconv (behebt Exit 128 mit `diff.external`).
-Phase 7: Konfliktdateien stehen im Abschnitt „Konflikte“ statt in „Änderungen“; Stage löst keinen Konflikt mehr, „Als
-gelöst markieren“ tut es mit Markerprüfung; Stash ist während Merge/Rebase/Cherry-pick/Revert gesperrt; Ours/Theirs nutzt
-`git restore`, Löschungen werden wie mit `git rm` gelöst. Demo-Screenshots als Rohbilder unter
+Phase 7: Merge nur in der kleinsten Form („Merge Branch…“, „Abort Merge…“, „Merging“ in der Statusleiste); ein
+Konflikt bleibt ein `UU`-Eintrag in „Änderungen“, der wie bisher gestagt und committet wird. Konfliktabschnitt,
+Ours/Theirs und Konfliktmarker im Gutter folgen in einem eigenen PR. Demo-Screenshots als Rohbilder unter
 `xve-demo\shots\git\` (Showcase-Repo `xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
@@ -407,10 +406,13 @@ Tests: `LineDiffTests`; `TextEditorLineMarkHostTests` (headless: Margin zeichnet
 **Phase 6: feinere Commits** (M bis L, ca. 1.200 / 1.000). Hunk stagen (`apply --cached -`), aus dem Stage nehmen (`--cached --reverse`), verwerfen (`--reverse` auf dem Arbeitsverzeichnis, mit Bestätigung); Zeilenauswahl über `GitPatchBuilder`, für untracked Dateien vorher `add -N`; Amend mit Warnung, wenn HEAD schon im Upstream ist (`merge-base --is-ancestor HEAD @{u}`); Stash-Reiter mit Liste, Apply, Pop, Drop und Diff.
 Tests: `GitPatchBuilderTests` (CRLF, „No newline at end of file“, Latin-1-Bytes, Teilauswahl); `GitPatchServiceTests` (echtes Repo, Prüfung über `git diff --cached`); `GitStashServiceTests`; Amend-Test; Hunk-Kommandos in `GitPanelViewModel`.
 
-**Phase 7: Merge und Konflikte** (M, ca. 800 / 700). `git.merge`, `git.mergeAbort`; Konfliktabschnitt im Änderungen-Panel; eigene/fremde Version übernehmen, als gelöst markieren (bei Lösch-Konflikten `git rm`); Konfliktmarker als Zeilenmarker der Art `Conflict`; Merge über einen Commit abschließen.
+**Phase 7: Merge in der kleinsten Form** (S, umgesetzt). `git.merge`, `git.abortMerge`, „Merging“ in der Statusleiste.
+Tests: `GitBranchServiceTests` (Fast-Forward, bereits gemergt, Konflikt mit `MERGE_HEAD` und Abort, unbekannter Branch), `GitStatusBarTests`.
+
+**Folge-PR A: Konflikte** (M, ca. 800 / 700). Konfliktabschnitt im Änderungen-Panel; eigene/fremde Version übernehmen, als gelöst markieren (bei Lösch-Konflikten `git rm`); Konfliktmarker als Zeilenmarker der Art `Conflict`; Abort/Continue auch für Rebase, Cherry-pick und Revert; Entwurf unter „Folge-PR (ursprünglicher Phase-7-Entwurf)“.
 Tests: `GitMergeServiceTests` (echter Konflikt aus zwei Branches), `GitConflictsViewTests` (headless).
 
-**Phase 8 (optional im PR, sonst direkt danach): TFVC übernimmt die gemeinsamen Teile** (S bis M, ca. 400 / 300). `TfvcExplorerDecorationProvider`, TFVC-Vergleich im Dokument-Tab, Views auf `UnifiedDiffEditor` und die gemeinsamen Behaviors umgestellt; die alten öffentlichen Typen bleiben.
+**Folge-PR B: TFVC übernimmt die gemeinsamen Teile** (S bis M, ca. 400 / 300). `TfvcExplorerDecorationProvider`, TFVC-Vergleich im Dokument-Tab, Views auf `UnifiedDiffEditor` und die gemeinsamen Behaviors umgestellt; die alten öffentlichen Typen bleiben.
 Tests: `TfvcExplorerDecorationProviderTests`; bestehende TFVC-Tests bleiben grün.
 
 Summe: etwa 10.000 Zeilen Produktivcode und 7.000 Zeilen Tests. Sehr groß für einen PR; mindestens ein Commit pro Phase. Phasen 4 und 5 enthalten den riskanteren Host-Anteil und könnten vorab als eigener PR „Extension API: decorations, line marks, documents, context menus“ gehen. `docs/EXTENSION-API.md` und `CHANGELOG.md` werden pro Phase nachgetragen.

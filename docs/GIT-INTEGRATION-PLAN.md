@@ -45,7 +45,9 @@ Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befund
   ebenso aufgelöst.
 
 Für die PR-Beschreibung: Die Git-Views überschreiben die Vordergrundfarbe gesperrter Buttons nicht mehr (der Stil stammt
-aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Demo-Screenshots als Rohbilder unter
+aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Weitere Änderungen an
+Upstream-Dateien (`GitPanelView.axaml`, `GitPanelViewModel.cs`, `GitDiffTextEditor.cs`): Statusspalte nach breitestem
+Text bemessen und per Strg+C kopierbar, Diff-Farben per Ressourcenschlüssel überschreibbar. Demo-Screenshots als Rohbilder unter
 `xve-demo\shots\git\` (Showcase-Repo `xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.

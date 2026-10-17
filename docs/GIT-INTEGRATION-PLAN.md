@@ -15,7 +15,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 |---|---|
 | 0 CLI-Fundament | erledigt, live geprüft |
 | 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
-| 2 Branches und Sync | in Arbeit |
+| 2 Branches und Sync | umgesetzt, live geprüft bis 051ada0; Korrekturen aus dem letzten Review in Arbeit |
 | 3 Verlauf, Commit-Details, Tags | offen |
 | 4 Explorer-API | offen |
 | 5 Editor-API, Vergleich, Blame | offen |
@@ -23,52 +23,27 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
-Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben. Befunde des Reviews von Phase 0/1
-(Stand 511cff6) sind mit 0903d73 behoben (Abweichungen: Unstage nutzt die Liste der gestagten Änderungen statt `git reset`,
-weil `reset` einen laufenden Merge abbricht; Ordner-Discard verwirft nur die bestätigte Liste):
-1. Watcher: Zulassungsliste der Zustandsdateien statt Sperrliste (sonst Refresh-Endlosschleife mit `core.fsmonitor`);
-   im verknüpften Worktree zusätzlich das Common-Dir (`rev-parse --git-common-dir`) für `refs/**`, `packed-refs`, `config`.
-2. Stage/Unstage All und Ordner: `git add -A`, `git reset -q`, Ordner als Pathspec, Listen über
-   `--pathspec-from-file=- --pathspec-file-nul` (sonst Abbruch ab etwa 600 Dateien); Mindestversion 2.26.
-3. Fehler von `git status` ist kein „kein Repository“: Repository mit Fehlermeldung behalten, Watcher weiterlaufen lassen.
-4. Output-Kanal: `CommandCompleted` abgesichert, `AppOutputChannel._lines` (nie gelesen, ungesichert) entfernen.
-5. Unstage einer Umbenennung nimmt auch den alten Pfad; Konflikte genau einmal im Panel; Panel nutzt die Prädikate der Kommandos.
-6. Refresh: Sample statt Debounce, injizierbarer Scheduler; Snapshots wertgleich mit `DistinctUntilChanged`; Busy-Flag ohne Race.
-7. `IWindow.OutputChannelShowRequested` als Default-Interface-Member, Konstruktor-Überladung statt optionalem Parameter,
-   `ActivateAsync` auf dem UI-Thread; Palette prüft wie das Menü `IsExtensionCommandEnabled`.
-8. GitProcessRunner: Abbruch nur nach tatsächlichem Kill melden, begrenztes Warten nach Kill, Kill-Registrierung vor Callback,
-   ungenutzte Optionen testen oder entfernen; Commit abbrechbar.
-9. Vereinfachen: zweiter `GitExtension`-Konstruktor und DI des Sets streichen, totes v1-Parsing und eigene Panel-Session entfernen;
-   `WitnessOn` statt `Dispatcher.Post`; doppeltes `--no-optional-locks` entfernen; Pfadvergleich über `FileSystemPathComparison`;
-   `GitExecutableLocator` internal.
-10. Tests: echte Repos für Ordner-Stage, Rename-Unstage, Stage All mit über 1.500 Dateien; Theory für die Watcher-Filter;
-    Watcher-Ausfall, Status-Fehler, Timeout; `GitTestRepository` ohne `init -b` (git 2.23) und mit `GIT_CEILING_DIRECTORIES`.
+Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.
+Die Reviews bis 051ada0 sind abgearbeitet. Daraus festgehaltene Entscheidungen:
+- Unstage nutzt die Liste der gestagten Änderungen statt `git reset`, weil `reset` einen laufenden Merge abbricht;
+  Ordner-Discard verwirft nur die bestätigte Liste.
+- Fetch ist schlicht `git fetch <remote>` je Remote: keine erzwungene Prune, keine eigenen Refspecs (sonst fehlen
+  konfigurierte Notes-/Tag-Refspecs oder lokale Tags gehen verloren); `skipFetchAll` und die Prune-Einstellung des
+  Benutzers gelten.
+- Fetch und Push laufen ohne Schreibsperre; Pull = abbrechbarer Fetch plus kurzes `merge --ff-only` unter der Sperre.
+- `--track` nur ohne Flag bei gleichem Namen (respektiert `branch.autoSetupMerge`), sonst `--no-track`.
+- Unter Windows wird der Git-for-Windows-Launcher `cmd\git.exe` zum echten Binary aufgelöst, damit das Job-Object
+  auch Hook-Kindprozesse beim Abbruch beendet.
 
-Offene Befunde des Reviews von Phase 2 (Stand 862dd40), Behebung nach den Korrekturen zu Phase 0/1:
-1. Branch-Namen nie als Option: `git branch -- <name>`, Eingabe vorher prüfen (`check-ref-format --branch`).
-2. Wechsel auf Remote-Branch über den Upstream zuordnen, nicht über den Namen; bei Namensgleichheit mit fremdem Upstream nachfragen.
-3. „Neu von hier“ von einem Remote-Branch mit anderem Namen mit `--no-track`, damit der erste Push `-u` anbietet.
-4. Fehlerklassen: Hook/geschützter Branch, 403 (keine Rechte), Netzwerk; Push-Ergebnis über `--porcelain`.
-5. Sync meldet Teilerfolg (Pull ok, Push fehlgeschlagen).
-6. Schreibsperre: Fetch und Push ohne Sperre; Pull = abbrechbarer Fetch plus kurzes `merge --ff-only @{u}` unter der Sperre.
-7. Repository-Panel lädt Branches nur bei Ref-Änderung, nur sichtbar, mit Rx-Switch und Abgleich statt Neuaufbau.
-8. Fortschrittsdialog: nur ausdrücklicher Abbruch zählt; fertige Operation nach Abbruch als Erfolg melden.
-9. Remote-Namen mit Schrägstrich über längstes Präfix der Remote-Liste auflösen.
-10. Fetch: Teilerfolg bei einem kaputten Remote melden; `--prune`, damit „gone“ und gelöschte Remote-Branches stimmen.
-11. Vereinfachen: Remote-Vorgabe einmal, ein Ergebnisfeld statt vier, doppelte Suche, ungenutzte Felder, Test-Hook im Produktivtyp.
-12. Anzeige: Detached HEAD im Panel, „gone“ sichtbar, Fetch- und Pull-Icon unterscheidbar.
-13. Tests: echte Repos für 1-3, „gone“ mit `fetch --prune`, Sync-Teilfehler, Hook-Klassifizierung, `GIT_ALLOW_PROTOCOL` neutralisieren, Enkelprozess beim Abbruch prüfen.
-
-Phase-2-Befunde sind mit e9dfd0c behoben. Offene Punkte aus dem Review dieser Korrekturen und dem Livetest (in Arbeit):
-1. Stage mit anders geschriebenem Pfad (Windows) tut nichts: git-eigene Pfade der Treffer übergeben.
-2. Diff der ausgewählten Datei veraltet, weil gleiche Snapshots unterdrückt werden: eigenes Refresh-Signal fürs Diff.
-3. Gelöschtes Repository bleibt `StatusFailed`: bei Statusfehler Root-Cache leeren und `rev-parse` neu fragen.
-4. `--no-track` nur bei abweichendem Namen, sonst Tracking behalten.
-5. `--prune` mit expliziter Refspec (sonst gehen lokale Tags verloren), `skipFetchAll` respektieren.
-6. Runner: nach normalem Ende begrenzt auf Ausgabe warten; Windows-Job-Object, damit Abbruch auch Hook-Kindprozesse beendet.
-7. Gelöschter Upstream erkennen und Pull/Sync sperren oder erklären; getrennte Tokens für Sperre und Prozess.
-8. Livetest: Pull-Meldung unterscheidet Fast-Forward und „schon aktuell“; Fehlerdialoge ohne `hint:`-Zeilen, voller Text im Git-Kanal;
-   Meldungstext im Host-Dialog markierbar und kopierbar; Branch-Name vor git prüfen, übersetzte Meldung.
+Offene Punkte aus dem Review von 051ada0 (Behebung läuft):
+1. Pull mit auf dem Server gelöschtem Upstream meldet bei Standardkonfiguration Erfolg, Sync pusht den Branch wieder
+   hoch. Fix: Pull holt gezielt `git fetch <branch.X.remote> <branch.X.merge>`; „couldn't find remote ref“ ist
+   „Upstream gelöscht“. Integrationstest mit Bare-Remote.
+2. Launcher-Auflösung: `MSYSTEM` setzen, wenn es fehlt, und `%HOME%\bin` hinter `usr\bin` einreihen (sonst überdeckt
+   ein `~/bin/ssh` das ssh von Git); auch `GitProcessOptions.ExecutablePath` auflösen, Scoop-Shims beachten.
+3. Commit-Zählung beim Pull über HEAD vor dem Merge und `rev-list --count`.
+4. Kleinigkeiten: McpServer-Catch-Klauseln zusammenfassen, `MaxContinuationLines` internal, `Branches!`, Doku-Zeilenlänge.
+5. Test: Hook mit `#!/bin/sh` und ssh aus `usr\bin` über das aufgelöste Binary (Windows).
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.
 

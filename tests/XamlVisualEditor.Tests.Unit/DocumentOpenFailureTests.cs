@@ -62,7 +62,7 @@ public sealed class DocumentOpenFailureTests : IDisposable
         await File.WriteAllTextAsync(otherPath, "class Other { }", cancellationToken);
         using MainWindowViewModel main = new(recentFilesPath: Path.Combine(_root, "recent.json"));
 
-        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows file names ignore case.");
+        Assert.SkipUnless(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS(), "Only Windows and macOS file names ignore case.");
         await main.OpenFileAsync(path).WaitAsync(cancellationToken);
         IEditorDocumentViewModel document = Assert.Single(main.Documents);
         await main.OpenFileAsync(otherPath).WaitAsync(cancellationToken);

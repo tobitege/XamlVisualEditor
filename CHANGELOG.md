@@ -22,6 +22,7 @@ uses Semantic Versioning.
 
 ### Changed
 
+- `FileSystemPathComparison` ignores the case of paths on macOS as on Windows, because the file systems of both ignore it; before, a path whose case differed from the one git or the workspace knew was another path there.
 - `GitPanelViewModel.DiffLines` is an `IReadOnlyList<DiffLine>` that is replaced for every shown diff instead of an `ObservableCollection<GitDiffLineViewModel>`, and the diff of the Git Changes panel is a `UnifiedDiffEditor` with the colours of the theme. The diff of the panel ignores `diff.external` and textconv attributes and always uses the `a/` and `b/` prefixes, whatever `diff.noprefix` or `diff.mnemonicPrefix` say.
 
 - The text of message dialogs, the information, warning and error messages of the editor and of extensions, can be selected; Ctrl+C copies the selection, and Copy in its context menu copies the selection or, without one, the whole message.

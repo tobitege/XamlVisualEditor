@@ -6,13 +6,16 @@ namespace XamlVisualEditor.Core;
 /// <summary>Provides path comparison rules for the current operating system.</summary>
 public static class FileSystemPathComparison
 {
+    // The file systems of Windows and macOS ignore case, as the runtime assumes for its own path handling.
+    private static readonly bool IgnoreCase = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
     /// <summary>Gets the comparer for filesystem path keys and collections.</summary>
-    public static StringComparer Comparer { get; } = OperatingSystem.IsWindows()
+    public static StringComparer Comparer { get; } = IgnoreCase
         ? StringComparer.OrdinalIgnoreCase
         : StringComparer.Ordinal;
 
     /// <summary>Gets the comparison mode for filesystem path values.</summary>
-    public static StringComparison Comparison { get; } = OperatingSystem.IsWindows()
+    public static StringComparison Comparison { get; } = IgnoreCase
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
 

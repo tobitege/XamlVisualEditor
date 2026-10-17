@@ -19,7 +19,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
 | 5 Editor-API, Vergleich, Blame | erledigt, live geprüft, gepusht (0ae2ec7), eine Review-Runde |
-| 6 Feinere Commits, Stash | Entwurf freigegeben (siehe „Phase-6-Entwurf“), Umsetzung läuft |
+| 6 Feinere Commits, Stash | erledigt, live geprüft, gepusht (19a3662), Review + Datenverlust-Nachprüfung |
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
@@ -107,6 +107,9 @@ Sammelliste für den Schliff vor dem PR:
 - Phase 5 (Review `review_phase5`): elf Kleinigkeiten; tote Rückkehrbedingung in `BreakpointMarginBehavior`
   (`e.Handled && Source == this`) seit dem Tunnel-only-Fix. Test-Breakpoint in `xve-demo\GitShowcase\App.axaml.cs`
   Zeile 12 vor neuen Screenshots entfernen.
+- Phase 6 (Reviews `review_phase6`, `review_19a3662`): zehn Kleinigkeiten, u. a. Verwerfen eines Submodul-Hunks meldet
+  Erfolg ohne Wirkung; aus dem Diff kopierter Text enthält `␍` statt CR; ein fehlgeschlagener Status-Lauf hebt den
+  Amend-Haken auf; Dialogtitel von „Stash … Including Untracked“ gleich dem normalen Stash.
 
 Für die PR-Beschreibung: Die Git-Views überschreiben die Vordergrundfarbe gesperrter Buttons nicht mehr (der Stil stammt
 aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Weitere Änderungen an

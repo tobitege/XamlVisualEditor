@@ -9,14 +9,14 @@
   `git.abortMerge` (mit Rückfrage, `git merge --abort`), Statusleiste zeigt „Merging“, solange `MERGE_HEAD` existiert.
   Konflikte löst der Nutzer im Editor, stagt die Dateien (markiert sie als gelöst) und committet; Commit schließt den
   Merge ab. Keine Konfliktblöcke im Gutter, kein Ours/Theirs, kein Rebase. Danach: PR fertig machen, nichts Neues.
-- **Stand der Umsetzung:** Worktree `github\XamlVisualEditor-git`, Branch `git-integration`, gepusht bis 19a3662
-  (Phasen 0–6). Mini-Merge fertig, live geprüft (Fast-Forward, „already merged“, Konflikt mit „· Merging“ in der
-  Statusleiste, Abbruch mit Rückfrage) und als ein Commit obendrauf (Hash in der Phasentabelle). Die halbe
-  Phase-7-Arbeit liegt dort als `git stash` „phase 7 partial work“ und wird NICHT verwendet.
-- **Noch zu tun (nur PR-Abschluss):** Fix-Commits je Phase zusammenfassen (ein Commit je Phase), Sammelliste nur bei
-  sichtbaren Fehlern abarbeiten, Test-Breakpoint in `xve-demo\GitShowcase\App.axaml.cs` Zeile 12 entfernen,
-  Screenshots neu aufnehmen (`xve-demo\shots\git\`), PR-Beschreibung aus den PR-Notizen unten, PR nur mit Go des
-  Nutzers. Die gestrichenen Phasen 7 und 8 stehen unter „Folge-PR“.
+- **Stand der Umsetzung:** Worktree `github\XamlVisualEditor-git`, Branch `git-integration`, gepusht bis 995211e:
+  acht Commits, einer je Phase (0–6 plus Mini-Merge), Fix-Commits eingefaltet; Sicherung des Stands davor im lokalen
+  Branch `backup/git-integration-before-squash`. Die halbe Phase-7-Arbeit liegt dort als `git stash` „phase 7 partial
+  work“ und wird NICHT verwendet. Von der Sammelliste ist nur der Stash-Dialogtitel behoben; der Rest bleibt offen.
+- **PR-Unterlagen:** Beschreibung in `xve-demo\PR-git-integration.md` (englisch, ohne Attribution), Rohbilder
+  `01`–`05` unter `xve-demo\shots\git\` (05 = Merge-Auswahlliste). Offen: Bilder hosten (etwa im Branch
+  `roadmap-assets`) und in die Beschreibung einbinden, dann PR nur mit Go des Nutzers.
+  Die gestrichenen Phasen 7 und 8 stehen unter „Folge-PR“.
 - **Arbeitsweise:** Ohne Agenten direkt arbeiten, kleinste Lösung, keine neuen Mechanismen, keine weiteren Phasen.
   Roasted Review vor dem Push nur für den Mini-Merge-Diff selbst durchführen. Kein Force-Push mehr.
 
@@ -38,7 +38,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
 | 5 Editor-API, Vergleich, Blame | erledigt, live geprüft, gepusht (0ae2ec7), eine Review-Runde |
 | 6 Feinere Commits, Stash | erledigt, live geprüft, gepusht (19a3662), Review + Datenverlust-Nachprüfung |
-| 7 Merge (kleinste Form) | erledigt, live geprüft, gepusht (268d772); Konfliktbedienung → Folge-PR |
+| 7 Merge (kleinste Form) | erledigt, live geprüft, gepusht (995211e); Konfliktbedienung → Folge-PR |
 | 8 TFVC nutzt die gemeinsamen Teile | gestrichen → Folge-PR |
 
 Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.

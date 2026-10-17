@@ -18,7 +18,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 2 Branches und Sync | erledigt, live geprüft, gepusht (985d441) |
 | 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
-| 5 Editor-API, Vergleich, Blame | Entwurf freigegeben (siehe „Phase-5-Entwurf“), Umsetzung läuft |
+| 5 Editor-API, Vergleich, Blame | erledigt, live geprüft, gepusht (0ae2ec7), eine Review-Runde |
 | 6 Feinere Commits, Stash | offen |
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
@@ -89,13 +89,19 @@ Sammelliste für den Schliff vor dem PR:
 - Testlücken zu den beiden Layout-Befunden aus Review 0063f77.
 - Phase 4 (Review `review_phase4`): Dekorations-Lookup normalisiert den Pfad nicht (nur beim Setzen); dunkles Theme mit
   orangem Akzent auf markierter Zeile unter der Maus: Deleted 2,6:1, Added 3,2:1; plus fünf weitere Kleinigkeiten.
+- Phase 5 (Review `review_phase5`): elf Kleinigkeiten; tote Rückkehrbedingung in `BreakpointMarginBehavior`
+  (`e.Handled && Source == this`) seit dem Tunnel-only-Fix. Test-Breakpoint in `xve-demo\GitShowcase\App.axaml.cs`
+  Zeile 12 vor neuen Screenshots entfernen.
 
 Für die PR-Beschreibung: Die Git-Views überschreiben die Vordergrundfarbe gesperrter Buttons nicht mehr (der Stil stammt
 aus Upstream-`GitPanelView`), gesperrte Buttons sehen deshalb jetzt gesperrt aus. Weitere Änderungen an
 Upstream-Dateien (`GitPanelView.axaml`, `GitPanelViewModel.cs`, `GitDiffTextEditor.cs`): Statusspalte nach breitestem
 Text bemessen und per Strg+C kopierbar, Diff-Farben per Ressourcenschlüssel überschreibbar. `MenuItemsBehavior` arbeitet
 auf jedem `ItemsControl` und behält seine Einträge beim Schließen (Xaml.Behaviors löst bei jedem Menü-Schließen ab).
-Bekannte Grenze: Ein über eine Junction geöffneter Workspace bekommt keine Git-Funktionen, weil git den Zielpfad meldet. Demo-Screenshots als Rohbilder unter
+Bekannte Grenze: Ein über eine Junction geöffneter Workspace bekommt keine Git-Funktionen, weil git den Zielpfad meldet.
+Mitbehobener Upstream-Fehler: Ein Klick auf eine Zeilennummer setzte keinen Breakpoint (Handler in Tunnel und Bubble,
+schaltete doppelt); `EditorServicesAdapter.GetTextAsync` marshallt jetzt auf den UI-Thread (AvaloniaEdit `VerifyAccess`).
+Material-Icon `unfold_more` mit Eintrag in THIRD-PARTY-NOTICES. Demo-Screenshots als Rohbilder unter
 `xve-demo\shots\git\` (Showcase-Repo `xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.

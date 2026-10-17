@@ -19,7 +19,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 3 Verlauf, Commit-Details, Tags | erledigt, live geprüft, gepusht (3447b72) |
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
 | 5 Editor-API, Vergleich, Blame | erledigt, live geprüft, gepusht (0ae2ec7), eine Review-Runde |
-| 6 Feinere Commits, Stash | offen |
+| 6 Feinere Commits, Stash | Entwurf freigegeben (siehe „Phase-6-Entwurf“), Umsetzung läuft |
 | 7 Merge und Konflikte | offen |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
@@ -79,6 +79,21 @@ Phase-5-Entwurf (ersetzt 4.3 und 4.4, freigegeben):
   Liste; Doppelklick öffnet den Verlauf mit vorgewähltem Commit.
 - Pinsel neutral benannt (`SourceControl…Brush`) und von Explorer-Dekorationen und Gutter gemeinsam genutzt.
 
+Phase-6-Entwurf (freigegeben):
+
+- Hunk und Zeile ein Weg: Auswahl = Zeilenbereich im angezeigten Diff; der Service liest denselben Diff neu, lehnt bei
+  Abweichung ab (veralteter Diff), baut den Patch aus den Rohbytes und ruft `git apply [--cached] [--reverse] --recount
+  --whitespace=nowarn` (Stage `--cached`, Unstage `--cached --reverse`, Verwerfen `--reverse`, Schreibsperre).
+  Diff-Argumente immer mit `--no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/`.
+- Builder-Regeln: unausgewählte `-`/`+` werden Kontext bzw. entfallen je Richtung; Auswahl, die eine Zeile an
+  „No newline at end of file“ hängen würde, wird abgelehnt (git verklebt sonst still zwei Zeilen); Teilauswahl bei neuen
+  oder gelöschten Dateien schreibt den Dateikopf um. Kein Teil-Staging für unversionierte Dateien.
+- Registrierte Befehle `git.stageSelection`/`unstageSelection`/`discardSelection`; Verwerfen fragt immer nach.
+  Changes-Panel nutzt `UnifiedDiffEditor`; `GitPanelViewModel.DiffLines` wird `IReadOnlyList<DiffLine>` (PR-Notiz).
+- Amend: Checkbox in der Commit-Box, Nachricht aus HEAD vorbelegt; bei gepushtem HEAD Warnung mit Bestätigung.
+- Stash-Reiter im Repository-Panel: Stash (optional mit unversionierten Dateien), Apply über Commit-ID, Pop/Drop mit
+  Prüfung der Stash-ID, Drop fragt nach; kein „Show“ in Phase 6. Konflikte über den Snapshot erkannt.
+
 Sammelliste für den Schliff vor dem PR:
 
 - `HEAD@{n}` jenseits des Reflogs meldet nur „git rev-parse exited with code 128.“ statt gits Meldung.
@@ -101,7 +116,8 @@ auf jedem `ItemsControl` und behält seine Einträge beim Schließen (Xaml.Behav
 Bekannte Grenze: Ein über eine Junction geöffneter Workspace bekommt keine Git-Funktionen, weil git den Zielpfad meldet.
 Mitbehobener Upstream-Fehler: Ein Klick auf eine Zeilennummer setzte keinen Breakpoint (Handler in Tunnel und Bubble,
 schaltete doppelt); `EditorServicesAdapter.GetTextAsync` marshallt jetzt auf den UI-Thread (AvaloniaEdit `VerifyAccess`).
-Material-Icon `unfold_more` mit Eintrag in THIRD-PARTY-NOTICES. Demo-Screenshots als Rohbilder unter
+Material-Icon `unfold_more` mit Eintrag in THIRD-PARTY-NOTICES. Phase 6: `GitPanelViewModel.DiffLines` ändert den Typ
+auf `IReadOnlyList<DiffLine>`; der Panel-Diff ignoriert `diff.external` und textconv (behebt Exit 128 mit `diff.external`). Demo-Screenshots als Rohbilder unter
 `xve-demo\shots\git\` (Showcase-Repo `xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.

@@ -15,8 +15,8 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 |---|---|
 | 0 CLI-Fundament | erledigt, live geprüft |
 | 1 Session, Statusleiste, Kommandos | erledigt, live geprüft (inkl. Palette blendet Befehle mit falschem When aus, `IOutputChannel.Show()` holt den Kanal nach vorn) |
-| 2 Branches und Sync | erledigt, live geprüft, gepusht (3e0d4f2) |
-| 3 Verlauf, Commit-Details, Tags | offen |
+| 2 Branches und Sync | erledigt, live geprüft, gepusht (985d441) |
+| 3 Verlauf, Commit-Details, Tags | umgesetzt (lokal 0ed8286), Review und Livetest offen |
 | 4 Explorer-API | offen |
 | 5 Editor-API, Vergleich, Blame | offen |
 | 6 Feinere Commits, Stash | offen |
@@ -24,7 +24,7 @@ Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
 Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.
-Alle Reviews bis Phase 2 (Stand 3e0d4f2) sind abgearbeitet, keine offenen Befunde. Festgehaltene Entscheidungen:
+Alle Reviews bis Phase 2 (Stand 985d441) sind abgearbeitet, keine offenen Befunde. Festgehaltene Entscheidungen:
 - Unstage nutzt die Liste der gestagten Änderungen statt `git reset`, weil `reset` einen laufenden Merge abbricht;
   Ordner-Discard verwirft nur die bestätigte Liste.
 - Fetch ist schlicht `git fetch <remote>` je Remote: keine erzwungene Prune, keine eigenen Refspecs (sonst fehlen

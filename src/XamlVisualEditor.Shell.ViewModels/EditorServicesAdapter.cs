@@ -367,9 +367,12 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
         public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
 
+        // The document belongs to the UI thread.
         public Task<string> GetTextAsync(CancellationToken ct)
         {
-            return Task.FromResult(Document.Text);
+            return Dispatcher.UIThread.CheckAccess()
+                ? Task.FromResult(Document.Text)
+                : Dispatcher.UIThread.InvokeAsync(() => Document.Text, DispatcherPriority.Background, ct).GetTask();
         }
 
         public abstract Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct);

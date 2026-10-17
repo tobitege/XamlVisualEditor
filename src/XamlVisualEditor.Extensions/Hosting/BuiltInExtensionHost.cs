@@ -49,6 +49,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly IContextKeys? _contextKeys;
     private readonly IBackgroundActivities? _backgroundActivities;
     private readonly IDocumentOpenInterceptors? _documentOpenInterceptors;
+    private readonly IExplorerDecorations? _explorerDecorations;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
 
@@ -89,7 +90,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         ITextEditorViewHost? textEditorView = null,
         IContextKeys? contextKeys = null,
         IBackgroundActivities? backgroundActivities = null,
-        IDocumentOpenInterceptors? documentOpenInterceptors = null)
+        IDocumentOpenInterceptors? documentOpenInterceptors = null,
+        IExplorerDecorations? explorerDecorations = null)
     {
         _extensions = extensions;
         _packageStore = packageStore;
@@ -128,6 +130,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _contextKeys = contextKeys;
         _backgroundActivities = backgroundActivities;
         _documentOpenInterceptors = documentOpenInterceptors;
+        _explorerDecorations = explorerDecorations;
     }
 
     public async Task ActivateAsync(CancellationToken cancellationToken)
@@ -274,6 +277,7 @@ public sealed class BuiltInExtensionHost : IDisposable
             TextEditorView = _textEditorView,
             ContextKeys = _contextKeys,
             BackgroundActivities = _backgroundActivities,
+            ExplorerDecorations = _explorerDecorations,
             // An interceptor can redirect every file open, so only extensions that declare it receive the registry.
             DocumentOpenInterceptors = capabilities.Contains(ExtensionHostCapabilities.DocumentOpenInterceptors,
                 StringComparer.OrdinalIgnoreCase) ? _documentOpenInterceptors : null

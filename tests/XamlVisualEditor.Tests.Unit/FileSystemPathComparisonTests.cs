@@ -12,7 +12,7 @@ public sealed class FileSystemPathComparisonTests
     {
         bool pathsAreEqual = FileSystemPathComparison.Equals("Sample", "sample");
 
-        Assert.Equal(OperatingSystem.IsWindows(), pathsAreEqual);
+        Assert.Equal(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS(), pathsAreEqual);
     }
 
     [Fact]

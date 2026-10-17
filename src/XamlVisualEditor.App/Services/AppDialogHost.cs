@@ -102,10 +102,12 @@ public sealed class AppDialogHost : IDialogHost
             return default;
         }
 
-        using CancellationTokenRegistration registration = cancellationToken.Register(() =>
+        // Without owner the dialog task completes at once, so the registration lives until the window closes.
+        CancellationTokenRegistration registration = cancellationToken.Register(() =>
         {
             Dispatcher.UIThread.Post(() => dialog.Close());
         });
+        dialog.Closed += (_, _) => registration.Dispose();
 
         return await dialogTask.ConfigureAwait(false);
     }

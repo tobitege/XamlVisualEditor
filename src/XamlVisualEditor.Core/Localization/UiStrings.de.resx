@@ -834,9 +834,9 @@
   <data name="GitShowDiff" xml:space="preserve"><value>Diff anzeigen</value></data>
   <data name="GitHideDiff" xml:space="preserve"><value>Diff ausblenden</value></data>
   <data name="GitResizeDiff" xml:space="preserve"><value>Diff-Breite ändern</value></data>
-  <data name="GitMonitoringOn" xml:space="preserve"><value>Git: Ein</value></data>
-  <data name="GitMonitoringOff" xml:space="preserve"><value>Git: Aus</value></data>
-  <data name="GitMonitoringToggle" xml:space="preserve"><value>Git-Status und Dateiüberwachung ein- oder ausschalten</value></data>
+  <data name="GitMonitoringOn" xml:space="preserve"><value>Überwachung: Ein</value></data>
+  <data name="GitMonitoringOff" xml:space="preserve"><value>Überwachung: Aus</value></data>
+  <data name="GitMonitoringToggle" xml:space="preserve"><value>Den Arbeitsordner überwachen und den Git-Status nach Dateiänderungen aktualisieren. Änderungen im Git-Ordner und Git-Kommandos aktualisieren den Status immer.</value></data>
   <data name="WorkspaceNotGitRepository" xml:space="preserve"><value>Der Arbeitsbereich ist kein Git-Repository</value></data>
   <data name="XamlRootMissing" xml:space="preserve"><value>Das XAML-Dokument hat kein Wurzelelement.</value></data>
   <data name="XamlTagsRepaired" xml:space="preserve"><value>Das Dokument wurde automatisch repariert; nicht geschlossene Tags wurden ergänzt.</value></data>
@@ -1146,6 +1146,7 @@
   <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
   <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
   <data name="GitCommandFailed" xml:space="preserve"><value>Git-Befehl fehlgeschlagen: {0}</value></data>
+  <data name="GitRevisionNotOneCommitFormat" xml:space="preserve"><value>„{0}“ bezeichnet keinen einzelnen Commit.</value><comment>{0} is the revision as given, such as a branch, a tag or a range.</comment></data>
   <data name="SaveConflictTitle" xml:space="preserve"><value>Datei auf dem Datenträger geändert</value></data>
   <data name="SaveConflictPrompt" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Mit dem Text aus dem Editor überschreiben oder vom Datenträger neu laden und die Änderungen im Editor verwerfen?</value></data>
   <data name="Overwrite" xml:space="preserve"><value>Überschreiben</value></data>

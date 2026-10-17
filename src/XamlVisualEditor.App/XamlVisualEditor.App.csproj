@@ -94,6 +94,7 @@
     <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.SourceControl.UI\XamlVisualEditor.SourceControl.UI.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.GitExtension\XamlVisualEditor.GitExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.TfvcExtension\XamlVisualEditor.TfvcExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.Debugging.DapExtension\XamlVisualEditor.Debugging.DapExtension.csproj" />

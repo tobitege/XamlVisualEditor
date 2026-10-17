@@ -1,26 +1,22 @@
+using ReactiveUI.Primitives.Signals;
+using ReactiveUI.Primitives.Concurrency;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.IO;
-using System.Reactive;
+using System.Globalization;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
 using System.Threading;
 using Avalonia.Collections;
-using Avalonia.Controls;
-using Avalonia.Threading;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.GitExtension.Services;
+using XamlVisualEditor.SourceControl.UI.Models;
+
 using XamlVisualEditor.Core.Localization;
-using CoreGitDiffLineKind = XamlVisualEditor.Core.GitDiffLineKind;
-using XamlVisualEditor.Core.Interfaces;
-using XamlVisualEditor.Extensions;
-using ReactiveUI.Primitives.Signals;
-using ReactiveUI.Primitives.Concurrency;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.GitExtension;
 
@@ -45,6 +41,18 @@ public sealed partial class GitChangeEntryViewModel : ReactiveObject
         StatusLabel = FormatChangeKind(changeKind, isStaged, isUntracked);
     }
 
+    /// <summary>Creates the entry of <paramref name="change"/> in the staged or in the working tree list.</summary>
+    internal GitChangeEntryViewModel(GitFileChange change, bool isStaged)
+        : this(
+            change.Path,
+            change.OldPath,
+            isStaged ? change.IndexStatus : change.WorkTreeStatus,
+            isStaged,
+            GitCommandTarget.IsUntracked(change))
+    {
+        Change = change;
+    }
+
     public string Path { get; }
 
     public string? OldPath { get; }
@@ -58,6 +66,17 @@ public sealed partial class GitChangeEntryViewModel : ReactiveObject
     public bool IsUntracked { get; }
 
     public string StatusLabel { get; }
+
+    /// <summary>Gets every text <see cref="StatusLabel"/> can have, which sizes the status column.</summary>
+    public static IReadOnlyList<string> StatusLabels =>
+        Enum.GetValues<GitChangeKind>()
+            .SelectMany(kind => new[] { FormatChangeKind(kind, true, false), FormatChangeKind(kind, false, false) })
+            .Append(UiStrings.GitUntracked)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>Gets the status entry the item shows, or null for an item created from its values.</summary>
+    internal GitFileChange? Change { get; }
 
     private static string BuildDisplayPath(string path, string? oldPath)
     {
@@ -89,7 +108,7 @@ public sealed partial class GitChangeEntryViewModel : ReactiveObject
 }
 
 /// <summary>
-/// ViewModel for the git panel UI.
+/// Kind of a <see cref="GitDiffLineViewModel"/>; the Changes panel no longer uses it.
 /// </summary>
 public enum GitDiffLineKind
 {
@@ -102,7 +121,7 @@ public enum GitDiffLineKind
 }
 
 /// <summary>
-/// ViewModel entry representing a diff line for the preview.
+/// A diff line for <see cref="Controls.GitDiffTextEditor"/>; the Changes panel no longer uses it.
 /// </summary>
 public sealed partial class GitDiffLineViewModel
 {
@@ -131,32 +150,39 @@ public sealed partial class GitDiffLineViewModel
     public int? NewLine { get; }
 }
 
+/// <summary>
+/// ViewModel of the Git Changes panel. It shows the snapshots of a <see cref="GitSession"/>; its stage, unstage,
+/// discard and commit buttons run the registered Git commands, which ask, run git and report failures.
+/// </summary>
 public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 {
-    private readonly IGitService? _gitService;
-    private readonly IWorkspaceInfo? _workspaceInfo;
-    private readonly IDialogHost? _dialogHost;
+    private readonly GitSession _session;
+    private readonly Func<string, IReadOnlyList<object?>?, System.Threading.Tasks.Task> _executeCommand;
     private readonly CompositeDisposable _disposables = new();
+    private readonly CancellationTokenSource _lifetime = new();
     private readonly ObservableCollection<GitChangeEntryViewModel> _stagedItems = new();
     private readonly ObservableCollection<GitChangeEntryViewModel> _unstagedItems = new();
     private readonly DataGridCollectionView _stagedView;
     private readonly DataGridCollectionView _unstagedView;
-    private FileSystemWatcher? _watcher;
-    private IDisposable? _watcherSubscription;
-    private CancellationTokenSource? _monitoringCancellation;
-    private readonly Subject<Unit> _refreshRequests = new();
-    private readonly object _refreshSync = new();
-    private bool _refreshRunning;
-    private bool _refreshRequested;
-    private string? _repositoryWorkspacePath;
-    private string? _cachedRepositoryRoot;
     private readonly ObservableAsPropertyHelper<int> _stagedCount;
     private readonly ObservableAsPropertyHelper<int> _unstagedCount;
     private readonly ObservableAsPropertyHelper<int> _diffLineCount;
+    private bool _isDisposed;
+    private bool _snapshotAppliedSinceRefresh;
+
+    // The message of the last commit that checking IsAmend filled in, while it may still be shown unchanged.
+    private string? _amendMessage;
+
+    // The HEAD commit of the last applied snapshot.
+    private string? _headSha;
+
+    // The cancellation of the diff load that is running; only used on the UI thread.
+    private CancellationTokenSource? _diffLoad;
 
     [Reactive]
     public partial string? RepositoryRoot { get; private set; }
 
+    /// <summary>Gets whether the working folder watcher of the session is switched on.</summary>
     [Reactive]
     public partial bool IsGitMonitoringEnabled { get; private set; }
 
@@ -189,8 +215,31 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     [Reactive]
     public partial string? CommitMessage { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether <see cref="CommitCommand"/> amends the last commit. Checking it with an empty message box
+    /// fills in the message of the last commit; unchecking it clears that message again while it is unchanged.
+    /// </summary>
+    [Reactive]
+    public partial bool IsAmend { get; set; }
+
+    /// <summary>Gets whether the last commit can be amended: the branch has a commit and the git service can amend.</summary>
+    [Reactive]
+    public partial bool CanAmend { get; private set; }
+
     [Reactive]
     public partial string DiffText { get; private set; } = string.Empty;
+
+    /// <summary>Gets the lines of <see cref="DiffText"/>; a new list for every shown diff.</summary>
+    [Reactive]
+    public partial IReadOnlyList<DiffLine> DiffLines { get; private set; } = Array.Empty<DiffLine>();
+
+    /// <summary>Gets or sets the 0-based index of the hunk at the cursor of the diff, or -1.</summary>
+    [Reactive]
+    public partial int CurrentHunkIndex { get; set; } = -1;
+
+    /// <summary>Gets or sets the diff lines the selection in the diff touches, or null without a selection.</summary>
+    [Reactive]
+    public partial DiffLineRange? SelectedDiffRange { get; set; }
 
     [Reactive]
     public partial bool IsDiffVisible { get; private set; } = true;
@@ -211,8 +260,6 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     public DataGridCollectionView UnstagedView => _unstagedView;
 
-    public ObservableCollection<GitDiffLineViewModel> DiffLines { get; } = new();
-
     public int StagedCount => _stagedCount.Value;
 
     public int UnstagedCount => _unstagedCount.Value;
@@ -221,30 +268,48 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
     public ReactiveCommand<RxVoid, RxVoid> RefreshCommand { get; }
 
+    /// <summary>Switches the working folder watcher of the session on or off.</summary>
     public ReactiveCommand<RxVoid, RxVoid> ToggleMonitoringCommand { get; }
 
     public ReactiveCommand<RxVoid, RxVoid> ToggleDiffCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.STAGE"/> for the selected working tree change.</summary>
     public ReactiveCommand<RxVoid, RxVoid> StageCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.UNSTAGE"/> for the selected staged change.</summary>
     public ReactiveCommand<RxVoid, RxVoid> UnstageCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.DISCARD"/> for the selected working tree change.</summary>
     public ReactiveCommand<RxVoid, RxVoid> DiscardCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.STAGE_ALL"/>.</summary>
     public ReactiveCommand<RxVoid, RxVoid> StageAllCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.UNSTAGE_ALL"/>.</summary>
     public ReactiveCommand<RxVoid, RxVoid> UnstageAllCommand { get; }
 
+    /// <summary>
+    /// Runs <see cref="GitCommands.COMMIT"/>, which commits with <see cref="CommitMessage"/>, or amends the last commit
+    /// with it while <see cref="IsAmend"/> is set.
+    /// </summary>
     public ReactiveCommand<RxVoid, RxVoid> CommitCommand { get; }
 
-    public GitPanelViewModel(
-        IGitService? gitService = null,
-        IWorkspaceInfo? workspaceInfo = null,
-        IDialogHost? dialogHost = null)
+    /// <summary>Runs <see cref="GitCommands.STAGE_SELECTION"/> for the selected diff lines of a working tree change.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> StageSelectionCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.UNSTAGE_SELECTION"/> for the selected diff lines of a staged change.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> UnstageSelectionCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.DISCARD_SELECTION"/> for the selected diff lines of a working tree change.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> DiscardSelectionCommand { get; }
+
+    /// <summary>Creates the panel for a shared session; the session stays alive when the panel is disposed.</summary>
+    /// <param name="session">The Git session whose status is shown.</param>
+    /// <param name="executeCommand">Runs a Git command by id with arguments.</param>
+    public GitPanelViewModel(GitSession session, Func<string, IReadOnlyList<object?>?, System.Threading.Tasks.Task> executeCommand)
     {
-        _gitService = gitService;
-        _workspaceInfo = workspaceInfo;
-        _dialogHost = dialogHost;
+        _session = session;
+        _executeCommand = executeCommand;
 
         _stagedView = new DataGridCollectionView(_stagedItems);
         _unstagedView = new DataGridCollectionView(_unstagedItems);
@@ -279,44 +344,45 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         _unstagedCount = unstagedCountChanged.ToProperty(this, x => x.UnstagedCount);
         _disposables.Add(_unstagedCount);
 
-        IObservable<int> diffLineCountChanged = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
-                handler => DiffLines.CollectionChanged += handler,
-                handler => DiffLines.CollectionChanged -= handler)
-            .Select(_ => DiffLines.Count)
-            .StartWith(DiffLines.Count);
-        _diffLineCount = diffLineCountChanged.ToProperty(this, x => x.DiffLineCount);
+        _diffLineCount = this.WhenAnyValue(x => x.DiffLines).Select(lines => lines.Count).ToProperty(this, x => x.DiffLineCount);
         _disposables.Add(_diffLineCount);
 
-        ToggleMonitoringCommand = ReactiveCommand.Create(ToggleMonitoring);
-        _disposables.Add(ToggleMonitoringCommand);
-        ToggleDiffCommand = ReactiveCommand.Create(ToggleDiff);
-        _disposables.Add(ToggleDiffCommand);
-        RefreshCommand = ReactiveCommand.CreateFromTask(RefreshAsync,
-            this.WhenAnyValue(x => x.IsGitMonitoringEnabled));
+        ToggleMonitoringCommand = AddCommand(ReactiveCommand.CreateFromTask(ToggleMonitoringAsync));
+        ToggleDiffCommand = AddCommand(ReactiveCommand.Create(ToggleDiff));
+        RefreshCommand = AddCommand(ReactiveCommand.CreateFromTask(RefreshAsync));
 
-        IObservable<bool> canStage = this.WhenAnyValue(x => x.SelectedUnstagedChange, x => x.IsGitMonitoringEnabled,
-            (change, enabled) => enabled && change is not null);
-        IObservable<bool> canUnstage = this.WhenAnyValue(x => x.SelectedStagedChange, x => x.IsGitMonitoringEnabled,
-            (change, enabled) => enabled && change is not null);
-        IObservable<bool> canDiscard = this.WhenAnyValue(x => x.SelectedUnstagedChange, x => x.IsGitMonitoringEnabled,
-            (change, enabled) => enabled && change is { IsUntracked: false });
+        // The buttons are enabled for the same changes the commands work on.
+        IObservable<bool> canStage = this.WhenAnyValue(x => x.SelectedUnstagedChange)
+            .Select(entry => entry?.Change is { } change && GitCommandTarget.HasWorkingTreeChange(change));
+        IObservable<bool> canUnstage = this.WhenAnyValue(x => x.SelectedStagedChange)
+            .Select(entry => entry?.Change is { } change && GitCommandTarget.HasStagedChange(change));
+        IObservable<bool> canDiscard = this.WhenAnyValue(x => x.SelectedUnstagedChange)
+            .Select(entry => entry?.Change is { } change && GitCommandTarget.CanDiscard(change));
 
-        StageCommand = ReactiveCommand.CreateFromTask(StageSelectedAsync, canStage);
-        UnstageCommand = ReactiveCommand.CreateFromTask(UnstageSelectedAsync, canUnstage);
-        DiscardCommand = ReactiveCommand.CreateFromTask(DiscardSelectedAsync, canDiscard);
+        StageCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => ExecuteForAsync(GitCommands.STAGE, SelectedUnstagedChange), canStage));
+        UnstageCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => ExecuteForAsync(GitCommands.UNSTAGE, SelectedStagedChange), canUnstage));
+        DiscardCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => ExecuteForAsync(GitCommands.DISCARD, SelectedUnstagedChange), canDiscard));
 
-        StageAllCommand = ReactiveCommand.CreateFromTask(StageAllAsync,
-            this.WhenAnyValue(x => x.UnstagedCount, x => x.IsGitMonitoringEnabled,
-                (count, enabled) => enabled && count > 0));
-        UnstageAllCommand = ReactiveCommand.CreateFromTask(UnstageAllAsync,
-            this.WhenAnyValue(x => x.StagedCount, x => x.IsGitMonitoringEnabled,
-                (count, enabled) => enabled && count > 0));
+        StageAllCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => _executeCommand(GitCommands.STAGE_ALL, null),
+            this.WhenAnyValue(x => x.UnstagedCount).Select(count => count > 0)));
+        UnstageAllCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => _executeCommand(GitCommands.UNSTAGE_ALL, null),
+            this.WhenAnyValue(x => x.StagedCount).Select(count => count > 0)));
 
-        IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount,
-                x => x.IsRepository, x => x.IsGitMonitoringEnabled,
-                (message, count, isRepo, enabled) => enabled && isRepo && count > 0 && !string.IsNullOrWhiteSpace(message))
+        // Amending needs no staged changes: it can change the message only.
+        IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount, x => x.IsRepository, x => x.IsAmend,
+                (message, count, isRepo, isAmend) => isRepo && (count > 0 || isAmend) && !string.IsNullOrWhiteSpace(message))
             .DistinctUntilChanged();
-        CommitCommand = ReactiveCommand.CreateFromTask(CommitAsync, canCommit);
+        CommitCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.COMMIT, null), canCommit));
+
+        StageSelectionCommand = AddSelectionCommand(GitCommands.STAGE_SELECTION, GitPatchAction.Stage);
+        UnstageSelectionCommand = AddSelectionCommand(GitCommands.UNSTAGE_SELECTION, GitPatchAction.Unstage);
+        DiscardSelectionCommand = AddSelectionCommand(GitCommands.DISCARD_SELECTION, GitPatchAction.Discard);
+        _disposables.Add(this.WhenAnyValue(x => x.IsAmend).Skip(1).Subscribe(isAmend => _ = OnAmendChangedAsync(isAmend)));
 
         IDisposable stagedSelection = this.WhenAnyValue(x => x.SelectedStagedChange)
             .Where(change => change is not null)
@@ -340,8 +406,8 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             .Where(selection => selection.Property1 is null && selection.Property2 is null)
             .Subscribe(_ =>
             {
-                DiffText = string.Empty;
-                DiffLines.Clear();
+                CancelDiffLoad();
+                ShowDiff(string.Empty);
             });
         _disposables.Add(selectionClear);
 
@@ -351,64 +417,51 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             .Subscribe(_ => ApplyFilter());
         _disposables.Add(searchSubscription);
 
-        IDisposable refreshSubscription = _refreshRequests
-            .Throttle(TimeSpan.FromMilliseconds(500))
-            .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(request => _ = RefreshFromWatcherAsync());
-        _disposables.Add(refreshSubscription);
-
-        if (_workspaceInfo is not null)
-        {
-            EventHandler<WorkspaceChangedEventArgs> handler = (_, _) =>
-            {
-                if (IsGitMonitoringEnabled) _refreshRequests.OnNext(Unit.Default);
-            };
-            _workspaceInfo.WorkspaceChanged += handler;
-            _disposables.Add(Disposable.Create(() => _workspaceInfo.WorkspaceChanged -= handler));
-        }
+        _disposables.Add(_session.Snapshots.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(ApplySnapshot));
+        _disposables.Add(_session.RefreshCompleted.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(_ => OnRefreshCompleted()));
+        _disposables.Add(_session.IsRefreshing.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(isRefreshing => IsBusy = isRefreshing));
     }
 
     public void Dispose()
     {
-        IsGitMonitoringEnabled = false;
-        _monitoringCancellation?.Cancel();
-        _monitoringCancellation?.Dispose();
-        _monitoringCancellation = null;
-        StopWatcher();
-        _refreshRequests.Dispose();
-        _disposables.Dispose();
-    }
-
-    private void ToggleMonitoring()
-    {
-        if (IsGitMonitoringEnabled)
+        if (_isDisposed)
         {
-            IsGitMonitoringEnabled = false;
-            this.RaisePropertyChanged(nameof(GitMonitoringLabel));
-            _monitoringCancellation?.Cancel();
-            _monitoringCancellation?.Dispose();
-            _monitoringCancellation = null;
-            StopWatcher();
-            lock (_refreshSync) _refreshRequested = false;
-            _repositoryWorkspacePath = null;
-            _cachedRepositoryRoot = null;
-            RepositoryRoot = null;
-            BranchName = string.Empty;
-            UpstreamName = null;
-            AheadBy = 0;
-            BehindBy = 0;
-            IsRepository = false;
-            ErrorMessage = null;
-            SelectedStagedChange = null;
-            SelectedUnstagedChange = null;
-            ClearChanges();
             return;
         }
 
-        _monitoringCancellation = new CancellationTokenSource();
-        IsGitMonitoringEnabled = true;
+        _isDisposed = true;
+        _lifetime.Cancel();
+        _disposables.Dispose();
+    }
+
+    /// <summary>Refreshes the status of the session; completes when the refresh that includes this request is done.</summary>
+    public System.Threading.Tasks.Task RefreshAsync()
+    {
+        return _session.RefreshAsync();
+    }
+
+    private ReactiveCommand<RxVoid, RxVoid> AddCommand(ReactiveCommand<RxVoid, RxVoid> command)
+    {
+        _disposables.Add(command);
+        // Without a subscriber ReactiveUI ends the application when a command fails.
+        _disposables.Add(command.ThrownExceptions.Subscribe(error =>
+            ErrorMessage = string.Format(CultureInfo.CurrentCulture, UiStrings.GitCommandFailed, error.Message)));
+        return command;
+    }
+
+    private System.Threading.Tasks.Task ExecuteForAsync(string commandId, GitChangeEntryViewModel? entry)
+    {
+        return entry is null
+            ? System.Threading.Tasks.Task.CompletedTask
+            : _executeCommand(commandId, [entry.Path]);
+    }
+
+    private async System.Threading.Tasks.Task ToggleMonitoringAsync()
+    {
+        bool enabled = !IsGitMonitoringEnabled;
+        IsGitMonitoringEnabled = enabled;
         this.RaisePropertyChanged(nameof(GitMonitoringLabel));
-        _refreshRequests.OnNext(Unit.Default);
+        await _session.SetWorkingTreeWatcherEnabledAsync(enabled, _lifetime.Token);
     }
 
     private void ToggleDiff()
@@ -417,185 +470,107 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         this.RaisePropertyChanged(nameof(DiffToggleLabel));
     }
 
-    private async System.Threading.Tasks.Task RefreshFromWatcherAsync()
+    /// <summary>
+    /// Reloads the diff of the selected change after a refresh that published no snapshot: the file content may
+    /// have changed while its status stayed the same. A published snapshot already reloaded it through the restored
+    /// selection.
+    /// </summary>
+    private void OnRefreshCompleted()
     {
-        if (!IsGitMonitoringEnabled) return;
-        try
+        bool snapshotApplied = _snapshotAppliedSinceRefresh;
+        _snapshotAppliedSinceRefresh = false;
+        if (_isDisposed || snapshotApplied)
         {
-            await RefreshAsync();
-        }
-        catch (Exception exception)
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (IsGitMonitoringEnabled) ErrorMessage = exception.Message;
-            });
-        }
-    }
-
-    public async System.Threading.Tasks.Task RefreshAsync()
-    {
-        CancellationTokenSource? monitoringCancellation = _monitoringCancellation;
-        if (!IsGitMonitoringEnabled || monitoringCancellation is null) return;
-        CancellationToken cancellationToken = monitoringCancellation.Token;
-
-        lock (_refreshSync)
-        {
-            if (_refreshRunning)
-            {
-                _refreshRequested = true;
-                return;
-            }
-            _refreshRunning = true;
-        }
-
-        try
-        {
-            while (true)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await RefreshCoreAsync(cancellationToken);
-                lock (_refreshSync)
-                {
-                    if (!_refreshRequested)
-                    {
-                        _refreshRunning = false;
-                        return;
-                    }
-                    _refreshRequested = false;
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            bool restart = IsGitMonitoringEnabled && !ReferenceEquals(_monitoringCancellation, monitoringCancellation);
-            lock (_refreshSync)
-            {
-                _refreshRunning = false;
-                _refreshRequested = false;
-            }
-            if (restart) _refreshRequests.OnNext(Unit.Default);
-        }
-        catch
-        {
-            lock (_refreshSync)
-            {
-                _refreshRunning = false;
-                _refreshRequested = false;
-            }
-            throw;
-        }
-    }
-
-    private async System.Threading.Tasks.Task RefreshCoreAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (_gitService is null)
-        {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (cancellationToken.IsCancellationRequested) return;
-                    ErrorMessage = UiStrings.GitUnavailable;
-                    IsRepository = false;
-                    ClearChanges();
-                });
             return;
         }
 
-        string? workspacePath = _workspaceInfo?.WorkspacePath;
-        if (string.IsNullOrWhiteSpace(workspacePath))
+        if ((SelectedStagedChange ?? SelectedUnstagedChange) is { } selected)
         {
-            _repositoryWorkspacePath = null;
-            _cachedRepositoryRoot = null;
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (cancellationToken.IsCancellationRequested) return;
-                    RepositoryRoot = null;
-                    ErrorMessage = UiStrings.NoWorkspaceLoadedStatus;
-                    IsRepository = false;
-                    ClearChanges();
-                });
-            return;
-        }
-
-        IsBusy = true;
-        try
-        {
-            if (string.IsNullOrWhiteSpace(_cachedRepositoryRoot)
-                || !string.Equals(_repositoryWorkspacePath, workspacePath, StringComparison.OrdinalIgnoreCase))
-            {
-                _cachedRepositoryRoot = await _gitService.GetRepositoryRootAsync(workspacePath, cancellationToken);
-                _repositoryWorkspacePath = workspacePath;
-            }
-            string? repoRoot = _cachedRepositoryRoot;
-            if (string.IsNullOrWhiteSpace(repoRoot))
-            {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (cancellationToken.IsCancellationRequested) return;
-                        RepositoryRoot = null;
-                        ErrorMessage = UiStrings.WorkspaceNotGitRepository;
-                        IsRepository = false;
-                        ClearChanges();
-                    });
-                return;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            GitRepositoryStatus status = await _gitService.GetStatusAsync(repoRoot, cancellationToken);
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (cancellationToken.IsCancellationRequested) return;
-                    RepositoryRoot = repoRoot;
-                    ApplyStatus(status);
-                });
-        }
-        finally
-        {
-            IsBusy = false;
+            _ = LoadDiffAsync(selected);
         }
     }
 
-    private void ApplyStatus(GitRepositoryStatus status)
+    private void ApplySnapshot(GitSnapshot snapshot)
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _snapshotAppliedSinceRefresh = true;
+
+        if (IsGitMonitoringEnabled != snapshot.IsWorkingTreeWatcherEnabled)
+        {
+            IsGitMonitoringEnabled = snapshot.IsWorkingTreeWatcherEnabled;
+            this.RaisePropertyChanged(nameof(GitMonitoringLabel));
+        }
+
+        if (snapshot.State == GitSessionState.Unknown)
+        {
+            return;
+        }
+
+        if (snapshot.Status is null)
+        {
+            TrackHead(snapshot.RepositoryRoot, null);
+            RepositoryRoot = snapshot.RepositoryRoot;
+            BranchName = string.Empty;
+            UpstreamName = null;
+            AheadBy = 0;
+            BehindBy = 0;
+            IsRepository = snapshot.IsRepository;
+            CanAmend = false;
+            ErrorMessage = snapshot.ErrorMessage;
+            SelectedStagedChange = null;
+            SelectedUnstagedChange = null;
+            ClearChanges();
+            return;
+        }
+
+        GitRepositoryStatus status = snapshot.Status;
         string? selectedPath = SelectedStagedChange?.Path ?? SelectedUnstagedChange?.Path;
         bool wasStaged = SelectedStagedChange is not null;
 
+        TrackHead(snapshot.RepositoryRoot, status.HeadSha);
+        RepositoryRoot = snapshot.RepositoryRoot;
         BranchName = status.BranchName;
         UpstreamName = status.UpstreamName;
         AheadBy = status.AheadBy;
         BehindBy = status.BehindBy;
-        IsRepository = status.IsRepository;
-        ErrorMessage = status.ErrorMessage;
+        IsRepository = true;
+        CanAmend = !status.IsUnborn && _session.Services.Patch is not null;
+        ErrorMessage = snapshot.ErrorMessage;
 
         ReplaceItems(_stagedItems, status, isStaged: true);
         ReplaceItems(_unstagedItems, status, isStaged: false);
         ApplyFilter();
         RestoreSelection(selectedPath, wasStaged);
-        ConfigureWatcher(status.RepositoryRoot);
+    }
+
+    /// <summary>
+    /// Unchecks <see cref="IsAmend"/> when the repository or HEAD changed: an amend belongs to the commit it was
+    /// checked for, and unchecking clears a filled-in message that is still unchanged.
+    /// </summary>
+    private void TrackHead(string? repositoryRoot, string? headSha)
+    {
+        if (!string.Equals(repositoryRoot, RepositoryRoot, StringComparison.Ordinal)
+            || !string.Equals(headSha, _headSha, StringComparison.Ordinal))
+        {
+            IsAmend = false;
+        }
+
+        _headSha = headSha;
     }
 
     private void ClearChanges()
     {
         _stagedItems.Clear();
         _unstagedItems.Clear();
-        DiffLines.Clear();
-        DiffText = string.Empty;
+        ShowDiff(string.Empty);
         ApplyFilter();
     }
 
     private void ApplyFilter()
-    {
-        if (!Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.Post(ApplyFilterCore, DispatcherPriority.Background);
-            return;
-        }
-
-        ApplyFilterCore();
-    }
-
-    private void ApplyFilterCore()
     {
         string filter = SearchText?.Trim() ?? string.Empty;
         StringComparison comparison = StringComparison.OrdinalIgnoreCase;
@@ -618,12 +593,18 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         _unstagedView.Refresh();
     }
 
+    /// <summary>
+    /// Loads the diff of <paramref name="change"/> and shows it while the change is still selected. Each load cancels
+    /// the one before it, so a diff that finishes after another file was selected, or after a newer load of the same
+    /// file, is not shown.
+    /// </summary>
     private async System.Threading.Tasks.Task LoadDiffAsync(GitChangeEntryViewModel change)
     {
-        CancellationToken cancellationToken = _monitoringCancellation?.Token ?? CancellationToken.None;
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
+        CancelDiffLoad();
+        string? repositoryRoot = RepositoryRoot;
+        if (string.IsNullOrWhiteSpace(repositoryRoot))
         {
-            DiffText = string.Empty;
+            ShowDiff(string.Empty);
             return;
         }
 
@@ -634,263 +615,42 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             IsUntracked = change.IsUntracked
         };
 
+        using CancellationTokenSource load = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _diffLoad = load;
         try
         {
-            GitDiff diff = await _gitService.GetDiffAsync(RepositoryRoot, request, cancellationToken);
-            IReadOnlyList<GitDiffLineViewModel> lines = BuildDiffLines(diff);
-            Dispatcher.UIThread.Post(() =>
+            // Started on the UI thread, so the code after the await runs there again.
+            GitDiff diff = await _session.Services.Service.GetDiffAsync(repositoryRoot, request, load.Token);
+            if (load.IsCancellationRequested || !ReferenceEquals(change, SelectedStagedChange ?? SelectedUnstagedChange))
             {
-                if (cancellationToken.IsCancellationRequested) return;
-                DiffText = diff.RawText ?? string.Empty;
-                DiffLines.Clear();
-                foreach (GitDiffLineViewModel line in lines)
-                {
-                    DiffLines.Add(line);
-                }
-            });
+                return;
+            }
+
+            ShowDiff(diff.RawText ?? string.Empty);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (load.IsCancellationRequested)
         {
+        }
+        finally
+        {
+            if (ReferenceEquals(_diffLoad, load))
+            {
+                _diffLoad = null;
+            }
         }
     }
 
-    private async System.Threading.Tasks.Task StageSelectedAsync()
+    /// <summary>Cancels the diff load that is running; it then shows nothing.</summary>
+    private void CancelDiffLoad()
     {
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
-        {
-            return;
-        }
-
-        GitChangeEntryViewModel? selected = SelectedUnstagedChange;
-        if (selected is null)
-        {
-            return;
-        }
-
-        IGitService gitService = _gitService;
-        string repoPath = RepositoryRoot!;
-        string path = selected.Path;
-        await RunGitActionAsync(() => gitService.StageAsync(repoPath, new[] { path }));
-    }
-
-    private async System.Threading.Tasks.Task UnstageSelectedAsync()
-    {
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
-        {
-            return;
-        }
-
-        GitChangeEntryViewModel? selected = SelectedStagedChange;
-        if (selected is null)
-        {
-            return;
-        }
-
-        IGitService gitService = _gitService;
-        string repoPath = RepositoryRoot!;
-        string path = selected.Path;
-        await RunGitActionAsync(() => gitService.UnstageAsync(repoPath, new[] { path }));
-    }
-
-    private async System.Threading.Tasks.Task DiscardSelectedAsync()
-    {
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
-        {
-            return;
-        }
-
-        GitChangeEntryViewModel? selected = SelectedUnstagedChange;
-        if (selected is null || selected.IsUntracked)
-        {
-            return;
-        }
-
-        string repoPath = RepositoryRoot!;
-        string path = selected.Path;
-        bool confirmed = await ConfirmGitActionAsync(UiStrings.GitDiscardConfirmTitle,
-            string.Format(UiStrings.GitDiscardWorkingChangesPrompt, path), UiStrings.Discard, destructive: true);
-        if (!confirmed || !IsGitMonitoringEnabled || !string.Equals(RepositoryRoot, repoPath, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        IGitService gitService = _gitService;
-        await RunGitActionAsync(() => gitService.DiscardAsync(repoPath, new[] { path }));
-    }
-
-    private async System.Threading.Tasks.Task StageAllAsync()
-    {
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
-        {
-            return;
-        }
-
-        if (_unstagedItems.Count == 0)
-        {
-            return;
-        }
-
-        string[] paths = new string[_unstagedItems.Count];
-        for (int i = 0; i < _unstagedItems.Count; i++)
-        {
-            paths[i] = _unstagedItems[i].Path;
-        }
-
-        IGitService gitService = _gitService;
-        string repoPath = RepositoryRoot!;
-        await RunGitActionAsync(() => gitService.StageAsync(repoPath, paths));
-    }
-
-    private async System.Threading.Tasks.Task UnstageAllAsync()
-    {
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
-        {
-            return;
-        }
-
-        if (_stagedItems.Count == 0)
-        {
-            return;
-        }
-
-        string[] paths = new string[_stagedItems.Count];
-        for (int i = 0; i < _stagedItems.Count; i++)
-        {
-            paths[i] = _stagedItems[i].Path;
-        }
-
-        IGitService gitService = _gitService;
-        string repoPath = RepositoryRoot!;
-        await RunGitActionAsync(() => gitService.UnstageAsync(repoPath, paths));
-    }
-
-    private async System.Threading.Tasks.Task<bool> ConfirmGitActionAsync(
-        string title, string message, string action, bool destructive = false)
-    {
-        if (_dialogHost is null || _monitoringCancellation is null) return false;
-        bool? result = await _dialogHost.ShowDialogAsync<bool>(ConfirmationDialogRequest.DialogId,
-            new ConfirmationDialogRequest(title, message, action, destructive), _monitoringCancellation.Token);
-        return result == true;
-    }
-
-    private async System.Threading.Tasks.Task CommitAsync()
-    {
-        if (!IsGitMonitoringEnabled || _gitService is null || string.IsNullOrWhiteSpace(RepositoryRoot))
-        {
-            return;
-        }
-
-        string? message = CommitMessage?.Trim();
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return;
-        }
-
-        IGitService gitService = _gitService;
-        string repoPath = RepositoryRoot!;
-        string commitMessage = message;
-        await RunGitActionAsync(async () =>
-        {
-            await gitService.CommitAsync(repoPath, commitMessage);
-            CommitMessage = string.Empty;
-        });
+        _diffLoad?.Cancel();
+        _diffLoad = null;
     }
 
     /// <summary>
-    /// Runs a modifying git action, refreshes the status and shows a failure of the action in
-    /// <see cref="ErrorMessage"/> after the refresh.
+    /// Fills a list with the changes the matching command works on: the staged list with the changes Unstage
+    /// takes, the working tree list with the changes Stage takes. A conflicted file is in the working tree list only.
     /// </summary>
-    private async System.Threading.Tasks.Task RunGitActionAsync(Func<System.Threading.Tasks.Task> action)
-    {
-        string? failure = null;
-        try
-        {
-            await action();
-        }
-        catch (InvalidOperationException exception)
-        {
-            failure = string.Format(UiStrings.GitCommandFailed, exception.Message);
-        }
-
-        await RefreshAsync();
-        if (failure is not null)
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (IsGitMonitoringEnabled) ErrorMessage = failure;
-            });
-        }
-    }
-
-    private void ConfigureWatcher(string? repoRoot)
-    {
-        if (!IsGitMonitoringEnabled || string.IsNullOrWhiteSpace(repoRoot))
-        {
-            StopWatcher();
-            return;
-        }
-
-        if (_watcher is not null && string.Equals(_watcher.Path, repoRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        StopWatcher();
-        FileSystemWatcher watcher = new(repoRoot)
-        {
-            IncludeSubdirectories = true,
-            EnableRaisingEvents = false
-        };
-
-        FileSystemEventHandler handler = (_, args) =>
-        {
-            if (!IsGitMonitoringEnabled || IsIgnoredWatcherPath(repoRoot, args.FullPath))
-            {
-                return;
-            }
-
-            _refreshRequests.OnNext(Unit.Default);
-        };
-        RenamedEventHandler renamedHandler = (_, args) =>
-        {
-            if (!IsGitMonitoringEnabled || IsIgnoredWatcherPath(repoRoot, args.FullPath))
-            {
-                return;
-            }
-
-            _refreshRequests.OnNext(Unit.Default);
-        };
-        ErrorEventHandler errorHandler = (_, _) =>
-        {
-            if (IsGitMonitoringEnabled) _refreshRequests.OnNext(Unit.Default);
-        };
-
-        watcher.Changed += handler;
-        watcher.Created += handler;
-        watcher.Deleted += handler;
-        watcher.Renamed += renamedHandler;
-        watcher.Error += errorHandler;
-
-        _watcherSubscription = Disposable.Create(() =>
-        {
-            watcher.EnableRaisingEvents = false;
-            watcher.Changed -= handler;
-            watcher.Created -= handler;
-            watcher.Deleted -= handler;
-            watcher.Renamed -= renamedHandler;
-            watcher.Error -= errorHandler;
-        });
-        _watcher = watcher;
-        watcher.EnableRaisingEvents = true;
-    }
-
-    private void StopWatcher()
-    {
-        _watcherSubscription?.Dispose();
-        _watcherSubscription = null;
-        _watcher?.Dispose();
-        _watcher = null;
-    }
-
-
     private static void ReplaceItems(
         ObservableCollection<GitChangeEntryViewModel> target,
         GitRepositoryStatus status,
@@ -900,22 +660,13 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
         foreach (GitFileChange change in status.Changes)
         {
-            bool staged = isStaged
-                ? change.IndexStatus != GitChangeKind.None
-                : change.WorkTreeStatus != GitChangeKind.None;
-            if (!staged)
+            bool listed = isStaged
+                ? GitCommandTarget.HasStagedChange(change)
+                : GitCommandTarget.HasWorkingTreeChange(change);
+            if (listed)
             {
-                continue;
+                target.Add(new GitChangeEntryViewModel(change, isStaged));
             }
-
-            GitChangeKind kind = isStaged ? change.IndexStatus : change.WorkTreeStatus;
-            bool isUntracked = change.IndexStatus == GitChangeKind.Untracked || change.WorkTreeStatus == GitChangeKind.Untracked;
-            target.Add(new GitChangeEntryViewModel(
-                change.Path,
-                change.OldPath,
-                kind,
-                isStaged,
-                isUntracked));
         }
     }
 
@@ -953,7 +704,8 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     {
         foreach (GitChangeEntryViewModel item in items)
         {
-            if (PathsEqual(item.Path, selectedPath) || (item.OldPath is not null && PathsEqual(item.OldPath, selectedPath)))
+            if (FileSystemPathComparison.Equals(item.Path, selectedPath)
+                || (item.OldPath is not null && FileSystemPathComparison.Equals(item.OldPath, selectedPath)))
             {
                 return item;
             }
@@ -962,81 +714,108 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         return null;
     }
 
-    private static bool PathsEqual(string left, string right)
+    /// <summary>
+    /// Shows <paramref name="text"/> as the diff; its lines are numbered like the lines of git's output. The text is set
+    /// last, so the lines are in place when it changes.
+    /// </summary>
+    private void ShowDiff(string text)
     {
-        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsIgnoredWatcherPath(string repoRoot, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
+        // An unchanged diff keeps its lines, so the selection and the hunk at the cursor survive a refresh.
+        if (string.Equals(text, DiffText, StringComparison.Ordinal))
         {
-            return false;
+            return;
         }
 
-        char separator = Path.DirectorySeparatorChar;
-        string normalized = separator + Path.GetRelativePath(repoRoot, path)
-            .Replace(Path.AltDirectorySeparatorChar, separator);
-        return ContainsDirectory(".git") || ContainsDirectory("artifacts")
-            || ContainsDirectory("bin") || ContainsDirectory("obj")
-            || ContainsDirectory("TestResults");
-
-        bool ContainsDirectory(string name) =>
-            normalized.Contains(separator + name + separator, StringComparison.OrdinalIgnoreCase)
-            || normalized.EndsWith(separator + name, StringComparison.OrdinalIgnoreCase);
+        DiffLines = DiffLineBuilder.Parse(text);
+        DiffText = text;
     }
 
-    private static IReadOnlyList<GitDiffLineViewModel> BuildDiffLines(GitDiff diff)
+    /// <summary>
+    /// Returns the lines a selection command of <paramref name="action"/> works on: the selected diff lines, or the
+    /// hunk at the cursor, of the selected change, when they hold an added or removed line and the change allows the
+    /// action. Untracked and conflicted files have no partial actions.
+    /// </summary>
+    internal GitDiffSelection? GetDiffSelection(GitPatchAction action)
     {
-        if (diff.Files.Count == 0)
+        GitChangeEntryViewModel? entry = action == GitPatchAction.Unstage ? SelectedStagedChange : SelectedUnstagedChange;
+        if (entry?.Change is not { } change
+            || !(action == GitPatchAction.Unstage ? GitCommandTarget.HasStagedChange(change) : GitCommandTarget.CanDiscard(change))
+            || (SelectedDiffRange ?? FindHunk(CurrentHunkIndex)) is not { } range
+            || !DiffLines.Skip(range.Start).Take(range.Count).Any(line => line.Kind is DiffLineKind.Added or DiffLineKind.Removed))
         {
-            return Array.Empty<GitDiffLineViewModel>();
+            return null;
         }
 
-        List<GitDiffLineViewModel> results = new();
-        foreach (GitDiffFile file in diff.Files)
+        return new GitDiffSelection(entry.Path, action, DiffText, range.Start, range.Count);
+    }
+
+    /// <summary>Returns the lines of hunk <paramref name="index"/> from its header up to the next one, or null.</summary>
+    private DiffLineRange? FindHunk(int index)
+    {
+        int[] headers = Enumerable.Range(0, DiffLines.Count).Where(i => DiffLines[i].Kind == DiffLineKind.HunkHeader).ToArray();
+        if (index < 0 || index >= headers.Length)
         {
-            foreach (string header in file.HeaderLines)
+            return null;
+        }
+
+        int end = index + 1 < headers.Length ? headers[index + 1] : DiffLines.Count;
+        return new DiffLineRange(headers[index], end - headers[index]);
+    }
+
+    private ReactiveCommand<RxVoid, RxVoid> AddSelectionCommand(string commandId, GitPatchAction action)
+    {
+        IObservable<bool> canExecute = this.WhenAnyValue(
+                x => x.SelectedStagedChange,
+                x => x.SelectedUnstagedChange,
+                x => x.DiffLines,
+                x => x.SelectedDiffRange,
+                x => x.CurrentHunkIndex)
+            .Select(_ => GetDiffSelection(action) is not null)
+            .DistinctUntilChanged();
+        return AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(commandId, null), canExecute));
+    }
+
+    /// <summary>Clears the message box and the Amend box after a commit.</summary>
+    internal void ClearCommit()
+    {
+        IsAmend = false;
+        CommitMessage = string.Empty;
+    }
+
+    // Started on the UI thread, so the code after the await runs there again.
+    private async System.Threading.Tasks.Task OnAmendChangedAsync(bool isAmend)
+    {
+        if (!isAmend)
+        {
+            if (_amendMessage is not null && string.Equals(CommitMessage, _amendMessage, StringComparison.Ordinal))
             {
-                results.Add(new GitDiffLineViewModel(GitDiffLineKind.FileHeader, header, string.Empty, null, null));
+                CommitMessage = string.Empty;
             }
 
-            foreach (GitDiffHunk hunk in file.Hunks)
-            {
-                results.Add(new GitDiffLineViewModel(GitDiffLineKind.HunkHeader, hunk.Header, string.Empty, null, null));
-
-                foreach (GitDiffLine line in hunk.Lines)
-                {
-                    GitDiffLineKind kind = MapLineKind(line.Kind);
-                    string marker = GetMarker(kind);
-                    results.Add(new GitDiffLineViewModel(kind, line.Text, marker, line.OldLine, line.NewLine));
-                }
-            }
+            _amendMessage = null;
+            return;
         }
 
-        return results.Count == 0 ? Array.Empty<GitDiffLineViewModel>() : results;
-    }
-
-    private static GitDiffLineKind MapLineKind(CoreGitDiffLineKind kind)
-    {
-        return kind switch
+        if (!string.IsNullOrWhiteSpace(CommitMessage) || RepositoryRoot is not { } root || _session.Services.History is not { } history)
         {
-            CoreGitDiffLineKind.Added => GitDiffLineKind.Added,
-            CoreGitDiffLineKind.Removed => GitDiffLineKind.Removed,
-            CoreGitDiffLineKind.NoNewline => GitDiffLineKind.NoNewline,
-            _ => GitDiffLineKind.Context
-        };
-    }
+            return;
+        }
 
-    private static string GetMarker(GitDiffLineKind kind)
-    {
-        return kind switch
+        try
         {
-            GitDiffLineKind.Added => "+",
-            GitDiffLineKind.Removed => "-",
-            GitDiffLineKind.Context => " ",
-            GitDiffLineKind.NoNewline => "\\",
-            _ => string.Empty
-        };
+            GitCommitInfo head = await history.ResolveCommitAsync(root, "HEAD", _lifetime.Token);
+            if (IsAmend && string.IsNullOrWhiteSpace(CommitMessage))
+            {
+                _amendMessage = head.Message;
+                CommitMessage = head.Message;
+            }
+        }
+        catch (InvalidOperationException exception)
+        {
+            ErrorMessage = string.Format(CultureInfo.CurrentCulture, UiStrings.GitCommandFailed, exception.Message);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
     }
 }

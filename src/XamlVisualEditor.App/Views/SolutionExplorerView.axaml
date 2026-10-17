@@ -5,6 +5,7 @@
              xmlns:media="using:Avalonia.Media"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
              x:DataType="vm:SolutionExplorerViewModel"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.SolutionExplorerView">
@@ -37,7 +38,12 @@
                 v:SolutionExplorerOpenBehavior.IsEnabled="True"
                 v:DataGridContextSelectionBehavior.IsEnabled="True">
       <dg:DataGrid.ContextMenu>
-        <ContextMenu x:DataType="vm:SolutionExplorerViewModel">
+        <ContextMenu x:DataType="vm:SolutionExplorerViewModel"
+                     ItemTemplate="{DynamicResource ExtensionMenuItemTemplate}"
+                     v:ExtensionMenu.CommandArguments="{CompiledBinding SelectedNode, Converter={x:Static v:ExtensionMenu.TargetArguments}}">
+          <i:Interaction.Behaviors>
+            <v:MenuItemsBehavior Items="{CompiledBinding ExtensionContextMenuItems}" InsertIndex="2" />
+          </i:Interaction.Behaviors>
           <MenuItem Header="{x:Static loc:UiStrings.Open}"
                     Command="{CompiledBinding OpenSelectedCommand}" />
           <MenuItem Header="{x:Static loc:UiStrings.SetStartupProject}"
@@ -48,7 +54,11 @@
         <DataTemplate DataType="vm:SolutionExplorerNodeViewModel" x:DataType="vm:SolutionExplorerNodeViewModel">
           <Grid>
             <StackPanel Classes="explorer-row" Orientation="Horizontal"
-                        ToolTip.Tip="{CompiledBinding ProjectToolTip}">
+                        ToolTip.Tip="{CompiledBinding ProjectToolTip}"
+                        Classes.decoration-modified="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Modified}"
+                        Classes.decoration-added="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Added}"
+                        Classes.decoration-deleted="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Deleted}"
+                        Classes.decoration-conflicted="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Conflicted}">
               <TextBlock Text="▶"
                          Foreground="#2E8B57"
                          IsVisible="{CompiledBinding IsStartupProject}" />
@@ -62,8 +72,12 @@
                   </DataTemplate>
                 </ContentControl.DataTemplates>
               </ContentControl>
-              <TextBlock Text="{CompiledBinding Name}"
+              <TextBlock Classes="decorated" Text="{CompiledBinding Name}"
                          Classes.startup-project="{CompiledBinding IsStartupProject}" />
+              <TextBlock Classes="decorated explorer-badge"
+                         Text="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.Badge}}"
+                         ToolTip.Tip="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.ToolTip}}"
+                         IsVisible="{CompiledBinding $self.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
           </Grid>
         </DataTemplate>

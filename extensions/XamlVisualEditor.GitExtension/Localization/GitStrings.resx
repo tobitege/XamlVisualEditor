@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="ChangesViewTitle" xml:space="preserve"><value>Git Changes</value></data>
+  <data name="ToggleChangesViewCommand" xml:space="preserve"><value>Show or Hide Git Changes</value></data>
+  <data name="ShowChangesCommand" xml:space="preserve"><value>Open Git Changes</value></data>
+  <data name="RefreshCommand" xml:space="preserve"><value>Refresh Git Status</value></data>
+  <data name="ShowOutputCommand" xml:space="preserve"><value>Show Git Output</value></data>
+  <data name="InitCommand" xml:space="preserve"><value>Initialize Repository</value></data>
+  <data name="ToggleAutoRefreshCommand" xml:space="preserve"><value>Watch Working Folder</value></data>
+  <data name="ToggleExplorerDecorationsCommand" xml:space="preserve"><value>Show Git Status in Explorers</value></data>
+  <data name="StageCommand" xml:space="preserve"><value>Stage</value></data>
+  <data name="UnstageCommand" xml:space="preserve"><value>Unstage</value></data>
+  <data name="DiscardCommand" xml:space="preserve"><value>Discard Changes…</value></data>
+  <data name="StageAllCommand" xml:space="preserve"><value>Stage All Changes</value></data>
+  <data name="UnstageAllCommand" xml:space="preserve"><value>Unstage All Changes</value></data>
+  <data name="CommitCommand" xml:space="preserve"><value>Commit…</value></data>
+  <data name="NoTargetPath" xml:space="preserve"><value>Open a file of the repository or pass a path to the command.</value></data>
+  <data name="PathOutsideRepositoryFormat" xml:space="preserve"><value>{0} is not inside the repository {1}.</value></data>
+  <data name="NoChangesToStageFormat" xml:space="preserve"><value>{0} has no changes to stage.</value></data>
+  <data name="NoChangesToUnstageFormat" xml:space="preserve"><value>{0} has no staged changes.</value></data>
+  <data name="NoChangesToDiscardFormat" xml:space="preserve"><value>{0} has no changes that can be discarded. Untracked files are not removed.</value></data>
+  <data name="NothingToStage" xml:space="preserve"><value>There are no changes to stage.</value></data>
+  <data name="NothingToUnstage" xml:space="preserve"><value>There are no staged changes.</value></data>
+  <data name="NothingToCommit" xml:space="preserve"><value>Stage the changes you want to commit first.</value></data>
+  <data name="DiscardManyPromptFormat" xml:space="preserve"><value>Discard working-file changes in {0} files below {1}? The files are reset to their staged or committed version; staged changes are kept.</value></data>
+  <data name="CommitInputTitle" xml:space="preserve"><value>Commit</value></data>
+  <data name="CommitInputPrompt" xml:space="preserve"><value>Commit message</value></data>
+  <data name="InitNoWorkspace" xml:space="preserve"><value>Open a folder or workspace first.</value></data>
+  <data name="InitUnavailable" xml:space="preserve"><value>The git service of this application cannot create repositories.</value></data>
+  <data name="InitializedFormat" xml:space="preserve"><value>Created a git repository in {0}.</value></data>
+  <data name="InitAlreadyRepositoryFormat" xml:space="preserve"><value>{0} already belongs to the git repository in {1}; no repository was created.</value></data>
+  <data name="StatusBarBranchFormat" xml:space="preserve"><value>Branch {0}</value></data>
+  <data name="StatusBarDetachedFormat" xml:space="preserve"><value>Detached HEAD at {0}</value></data>
+  <data name="StatusBarUpstreamFormat" xml:space="preserve"><value>Upstream {0}: {1} ahead, {2} behind</value></data>
+  <data name="StatusBarNoUpstream" xml:space="preserve"><value>No upstream branch</value></data>
+  <data name="StatusBarChangesFormat" xml:space="preserve"><value>{0} changed files</value></data>
+  <data name="StatusBarClickHint" xml:space="preserve"><value>Click to open Git Changes.</value></data>
+  <data name="LogGitUnavailable" xml:space="preserve"><value>git was not found. Install Git or add it to PATH.</value></data>
+  <data name="LogRefreshFailed" xml:space="preserve"><value>Reading the Git status failed.</value></data>
+  <data name="LogWorkingTreeWatcherFailedFormat" xml:space="preserve"><value>Watching the working folder {0} failed: {1} The Git status still refreshes when the git folder changes, after Git commands of this application and on Refresh.</value></data>
+  <data name="LogGitDirectoryWatcherFailedFormat" xml:space="preserve"><value>Watching the git folder {0} failed: {1} The Git status refreshes after Git commands of this application and on Refresh.</value></data>
+  <data name="LogSettingsFailed" xml:space="preserve"><value>Reading or saving the Git settings failed.</value></data>
+  <data name="RepositoryViewTitle" xml:space="preserve"><value>Git Repository</value></data>
+  <data name="ToggleRepositoryViewCommand" xml:space="preserve"><value>Show or Hide Git Repository</value></data>
+  <data name="CheckoutCommand" xml:space="preserve"><value>Switch Branch…</value></data>
+  <data name="CreateBranchCommand" xml:space="preserve"><value>Create Branch…</value></data>
+  <data name="DeleteBranchCommand" xml:space="preserve"><value>Delete Branch…</value></data>
+  <data name="FetchCommand" xml:space="preserve"><value>Fetch</value></data>
+  <data name="PullCommand" xml:space="preserve"><value>Pull</value></data>
+  <data name="PushCommand" xml:space="preserve"><value>Push</value></data>
+  <data name="SyncCommand" xml:space="preserve"><value>Synchronize</value></data>
+  <data name="BranchesTab" xml:space="preserve"><value>Branches</value></data>
+  <data name="LocalBranchesGroup" xml:space="preserve"><value>Local</value></data>
+  <data name="RemoteBranchesGroup" xml:space="preserve"><value>Remote</value></data>
+  <data name="RefreshBranches" xml:space="preserve"><value>Refresh</value></data>
+  <data name="NewBranch" xml:space="preserve"><value>New Branch…</value></data>
+  <data name="SwitchToBranch" xml:space="preserve"><value>Switch to Branch</value></data>
+  <data name="NewBranchFromHere" xml:space="preserve"><value>New Branch from Here…</value></data>
+  <data name="CurrentBranch" xml:space="preserve"><value>Current branch</value></data>
+  <data name="UpstreamGoneFormat" xml:space="preserve"><value>Upstream {0} no longer exists</value></data>
+  <data name="NoBranches" xml:space="preserve"><value>There are no branches yet. Create the first commit.</value></data>
+  <data name="BranchesUnavailable" xml:space="preserve"><value>The git service of this application cannot list branches.</value></data>
+  <data name="RemotesUnavailable" xml:space="preserve"><value>The git service of this application cannot fetch, pull or push.</value></data>
+  <data name="LoadBranchesFailedFormat" xml:space="preserve"><value>Reading the branches failed: {0}</value></data>
+  <data name="CheckoutPickTitle" xml:space="preserve"><value>Switch to branch</value></data>
+  <data name="CurrentBranchDescription" xml:space="preserve"><value>current</value></data>
+  <data name="RemoteBranchDescription" xml:space="preserve"><value>remote branch</value></data>
+  <data name="AlreadyOnBranchFormat" xml:space="preserve"><value>{0} is already the current branch.</value></data>
+  <data name="BranchNotFoundFormat" xml:space="preserve"><value>The branch {0} does not exist.</value></data>
+  <data name="CreateBranchTitle" xml:space="preserve"><value>Create Branch</value></data>
+  <data name="CreateBranchPrompt" xml:space="preserve"><value>Name of the new branch</value></data>
+  <data name="CreateBranchFromPromptFormat" xml:space="preserve"><value>Name of the new branch, starting at {0}</value></data>
+  <data name="CreateBranchModeTitleFormat" xml:space="preserve"><value>Create branch {0}</value></data>
+  <data name="CreateAndSwitch" xml:space="preserve"><value>Create and switch to it</value></data>
+  <data name="CreateOnly" xml:space="preserve"><value>Create only</value></data>
+  <data name="DeleteBranchPickTitle" xml:space="preserve"><value>Delete branch</value></data>
+  <data name="NoBranchToDelete" xml:space="preserve"><value>There is no other local branch to delete.</value></data>
+  <data name="CannotDeleteCurrentFormat" xml:space="preserve"><value>{0} is the current branch and cannot be deleted. Switch to another branch first.</value></data>
+  <data name="CannotDeleteRemoteFormat" xml:space="preserve"><value>{0} is a remote branch; only local branches can be deleted here.</value></data>
+  <data name="DeleteBranchConfirmTitle" xml:space="preserve"><value>Delete Branch</value></data>
+  <data name="DeleteBranchPromptFormat" xml:space="preserve"><value>Delete the local branch {0}?</value></data>
+  <data name="DeleteBranchConfirm" xml:space="preserve"><value>Delete</value></data>
+  <data name="DeleteUnmergedPromptFormat" xml:space="preserve"><value>The branch {0} is not fully merged. Delete it anyway? Its commits that are on no other branch are lost.</value></data>
+  <data name="DeleteUnmergedConfirm" xml:space="preserve"><value>Delete Anyway</value></data>
+  <data name="BranchDeletedFormat" xml:space="preserve"><value>Deleted the branch {0}.</value></data>
+  <data name="FetchProgress" xml:space="preserve"><value>Fetching from the remotes…</value></data>
+  <data name="PullProgressFormat" xml:space="preserve"><value>Pulling {0}…</value></data>
+  <data name="PushProgressFormat" xml:space="preserve"><value>Pushing {0}…</value></data>
+  <data name="SyncProgressFormat" xml:space="preserve"><value>Synchronizing {0} with {1}…</value></data>
+  <data name="FetchSucceeded" xml:space="preserve"><value>Fetch finished.</value></data>
+  <data name="PullUpToDateFormat" xml:space="preserve"><value>{0} was already up to date with {1}; there was nothing to pull.</value></data>
+  <data name="PullFastForwardOneFormat" xml:space="preserve"><value>Pulled 1 commit from {1} into {0}.</value></data>
+  <data name="PullFastForwardManyFormat" xml:space="preserve"><value>Pulled {2} commits from {1} into {0}.</value></data>
+  <data name="PullSucceededFormat" xml:space="preserve"><value>Pulled {1} into {0}.</value></data>
+  <data name="PushSucceededFormat" xml:space="preserve"><value>Pushed {0} to {1}.</value></data>
+  <data name="SyncSucceededFormat" xml:space="preserve"><value>{0} is synchronized with {1}.</value></data>
+  <data name="OperationCancelledFormat" xml:space="preserve"><value>{0} was cancelled.</value></data>
+  <data name="PushSetUpstreamPromptFormat" xml:space="preserve"><value>The branch {0} has no upstream branch. Push it to {1} and make {1}/{0} its upstream?</value></data>
+  <data name="PushSetUpstreamConfirm" xml:space="preserve"><value>Push and Set Upstream</value></data>
+  <data name="DetachedHeadCannotPush" xml:space="preserve"><value>HEAD is detached. Switch to a branch before you push.</value></data>
+  <data name="NoRemote" xml:space="preserve"><value>The repository has no remote.</value></data>
+  <data name="NoUpstream" xml:space="preserve"><value>The current branch has no upstream branch. Push it first, which sets its upstream.</value></data>
+  <data name="AuthenticationFailedHint" xml:space="preserve"><value>Sign-in failed. Set up a credential helper (for example Git Credential Manager) or load your SSH key into the agent.</value></data>
+  <data name="HostKeyHint" xml:space="preserve"><value>The SSH host key of the server is unknown. Connect to the server once in a terminal, for example with ssh -T, check the key and accept it; the editor does not accept host keys by itself.</value></data>
+  <data name="PushRejectedHint" xml:space="preserve"><value>The remote rejected the push. Usually it has commits your branch does not have yet: pull first, then push again.</value></data>
+  <data name="PullDivergedHint" xml:space="preserve"><value>Your branch and its upstream have diverged, so a fast-forward is not possible. Merge or rebase in a terminal for now.</value></data>
+  <data name="TimeoutHint" xml:space="preserve"><value>Git did not finish in time and was stopped. Check the network connection and try again.</value></data>
+  <data name="RemoteFailureFormat" xml:space="preserve"><value>{0} Git reported: {1}</value></data>
+  <data name="CommitProgress" xml:space="preserve"><value>Committing…</value></data>
+  <data name="StatusBarStatusFailed" xml:space="preserve"><value>Git status failed</value></data>
+  <data name="FetchPartlyFailedFormat" xml:space="preserve"><value>Fetched {0}; the other remotes failed. {1}</value></data>
+  <data name="SyncPushFailedFormat" xml:space="preserve"><value>The pull of {1} into {0} completed, but the push failed. {2}</value></data>
+  <data name="LogProgressDialogFailed" xml:space="preserve"><value>The progress dialog could not be shown; the Git command runs without it.</value></data>
+  <data name="ForbiddenHint" xml:space="preserve"><value>The server accepted the sign-in but denies access to the repository. Check your permissions on the remote.</value></data>
+  <data name="NetworkHint" xml:space="preserve"><value>The server could not be reached. Check the network connection and the remote URL.</value></data>
+  <data name="RemoteRejectedHint" xml:space="preserve"><value>The remote declined the push, for example because the branch is protected or a server hook refused it. Pulling does not help; push to another branch or ask the owner of the repository.</value></data>
+  <data name="UpstreamGone" xml:space="preserve"><value>gone</value></data>
+  <data name="LocalBranchExistsTitleFormat" xml:space="preserve"><value>The local branch {0} does not track {1}</value></data>
+  <data name="SwitchToLocalBranchFormat" xml:space="preserve"><value>Switch to the local branch {0}</value></data>
+  <data name="TracksUpstreamFormat" xml:space="preserve"><value>tracks {0}</value></data>
+  <data name="NoUpstreamDescription" xml:space="preserve"><value>no upstream</value></data>
+  <data name="CreateBranchFromRemoteFormat" xml:space="preserve"><value>Create a new branch from {0}</value></data>
+  <data name="CheckoutDetachedFormat" xml:space="preserve"><value>Check out {0} without a branch (detached HEAD)</value></data>
+  <data name="UpstreamGoneHint" xml:space="preserve"><value>The upstream branch no longer exists on the remote, for example because it was deleted after a merge. Push the branch to create it again, or switch to another branch.</value></data>
+  <data name="InvalidBranchNameFormat" xml:space="preserve"><value>"{0}" is not a valid branch name. Branch names must not start with "-" and must not contain spaces, "..", "~", "^", ":", "?", "*", "[" or "\".</value></data>
+  <data name="SeeGitOutput" xml:space="preserve"><value>The complete Git output is in the Git output channel.</value></data>
+  <data name="HistoryViewTitle" xml:space="preserve"><value>Git History</value></data>
+  <data name="ToggleHistoryViewCommand" xml:space="preserve"><value>Show or Hide Git History</value></data>
+  <data name="ShowHistoryCommand" xml:space="preserve"><value>Show Repository History</value></data>
+  <data name="ShowFileHistoryCommand" xml:space="preserve"><value>Show History</value></data>
+  <data name="HistoryUnavailable" xml:space="preserve"><value>The git service of this application cannot read the history.</value></data>
+  <data name="HistoryScopeLabel" xml:space="preserve"><value>History of</value></data>
+  <data name="HistoryScopeRepository" xml:space="preserve"><value>Whole repository</value></data>
+  <data name="HistoryScopeFileFormat" xml:space="preserve"><value>File {0}</value></data>
+  <data name="HistoryScopeFolderFormat" xml:space="preserve"><value>Folder {0}</value></data>
+  <data name="HistoryScopeRevisionFormat" xml:space="preserve"><value>{0}, starting at {1}</value></data>
+  <data name="ShowWholeRepository" xml:space="preserve"><value>Whole Repository</value></data>
+  <data name="ShowWholeRepositoryToolTip" xml:space="preserve"><value>Show the history of the whole repository, starting at HEAD</value></data>
+  <data name="SearchMessages" xml:space="preserve"><value>Search commit messages</value></data>
+  <data name="FilterAuthor" xml:space="preserve"><value>Author name or email</value></data>
+  <data name="SearchButton" xml:space="preserve"><value>Search</value></data>
+  <data name="ShowAll" xml:space="preserve"><value>Show All</value></data>
+  <data name="RefreshHistory" xml:space="preserve"><value>Refresh</value></data>
+  <data name="LoadMore" xml:space="preserve"><value>Load More</value></data>
+  <data name="ColumnCommit" xml:space="preserve"><value>Commit</value></data>
+  <data name="ColumnMessage" xml:space="preserve"><value>Message</value></data>
+  <data name="ColumnAuthor" xml:space="preserve"><value>Author</value></data>
+  <data name="ColumnDate" xml:space="preserve"><value>Date</value></data>
+  <data name="NoCommits" xml:space="preserve"><value>There are no commits yet.</value></data>
+  <data name="NoMatchingCommits" xml:space="preserve"><value>No commit matches the filter.</value></data>
+  <data name="NoCommitsFound" xml:space="preserve"><value>No commits found.</value></data>
+  <data name="LoadHistoryFailedFormat" xml:space="preserve"><value>Reading the history failed: {0}</value></data>
+  <data name="CopyCommitId" xml:space="preserve"><value>Copy Commit ID</value></data>
+  <data name="SelectCommitHint" xml:space="preserve"><value>Select a commit to see its details.</value></data>
+  <data name="CommitSummaryFormat" xml:space="preserve"><value>{0} · {1} &lt;{2}&gt; · {3}</value></data>
+  <data name="CommitterFormat" xml:space="preserve"><value>Committed by {0} on {1}</value></data>
+  <data name="ParentsFormat" xml:space="preserve"><value>Parents: {0}</value></data>
+  <data name="MergeComparisonFormat" xml:space="preserve"><value>Merge commit: the files are compared with the first parent {0}.</value></data>
+  <data name="CommitFilesFormat" xml:space="preserve"><value>Changed files ({0})</value></data>
+  <data name="ColumnChange" xml:space="preserve"><value>Change</value></data>
+  <data name="ColumnPath" xml:space="preserve"><value>Path</value></data>
+  <data name="LoadCommitFailedFormat" xml:space="preserve"><value>Reading the commit failed: {0}</value></data>
+  <data name="LoadDiffFailedFormat" xml:space="preserve"><value>Reading the diff failed: {0}</value></data>
+  <data name="DiffTooLargeFormat" xml:space="preserve"><value>The diff has more than {1} lines or {2} MiB; the first {0} lines are shown.</value><comment>{0} is the number of shown lines, {1} the line limit and {2} the size limit in MiB.</comment></data>
+  <data name="PreviousChange" xml:space="preserve"><value>Previous Change</value></data>
+  <data name="NextChange" xml:space="preserve"><value>Next Change</value></data>
+  <data name="ToggleDiffPane" xml:space="preserve"><value>Show or Hide the Diff</value></data>
+  <data name="CopyPath" xml:space="preserve"><value>Copy Path</value></data>
+  <data name="ChangeAdded" xml:space="preserve"><value>Added</value></data>
+  <data name="ChangeModified" xml:space="preserve"><value>Modified</value></data>
+  <data name="ChangeDeleted" xml:space="preserve"><value>Deleted</value></data>
+  <data name="ChangeRenamed" xml:space="preserve"><value>Renamed</value></data>
+  <data name="ChangeCopied" xml:space="preserve"><value>Copied</value></data>
+  <data name="ChangeTypeChanged" xml:space="preserve"><value>Type changed</value></data>
+  <data name="ChangeUnmerged" xml:space="preserve"><value>Unmerged</value></data>
+  <data name="ChangeOther" xml:space="preserve"><value>Changed</value></data>
+  <data name="ChangeUntracked" xml:space="preserve"><value>Untracked</value></data>
+  <data name="ChangeConflicted" xml:space="preserve"><value>Merge conflict</value></data>
+  <data name="RenamedFromFormat" xml:space="preserve"><value>{0} (from {1})</value></data>
+  <data name="TagsTab" xml:space="preserve"><value>Tags</value></data>
+  <data name="ColumnTag" xml:space="preserve"><value>Tag</value></data>
+  <data name="NoTags" xml:space="preserve"><value>The repository has no tags.</value></data>
+  <data name="TagsUnavailable" xml:space="preserve"><value>The git service of this application cannot list tags.</value></data>
+  <data name="LoadTagsFailedFormat" xml:space="preserve"><value>Reading the tags failed: {0}</value></data>
+  <data name="AnnotatedTagFormat" xml:space="preserve"><value>Annotated tag by {0}</value></data>
+  <data name="LightweightTag" xml:space="preserve"><value>Lightweight tag</value></data>
+  <data name="TagTargetObjectFormat" xml:space="preserve"><value>{0} object</value></data>
+  <data name="TagNotCommitFormat" xml:space="preserve"><value>Points to a {0} object, not to a commit: it has no history, and no branch can start at it.</value></data>
+  <data name="ToggleChangeMarkersCommand" xml:space="preserve"><value>Show Git Changes in Editors</value></data>
+  <data name="CompareWithHeadCommand" xml:space="preserve"><value>Compare with HEAD</value></data>
+  <data name="CompareWithIndexCommand" xml:space="preserve"><value>Compare with Staged</value></data>
+  <data name="BlameCommand" xml:space="preserve"><value>Blame</value></data>
+  <data name="FileTargetRequired" xml:space="preserve"><value>Select a file; folders cannot be compared or blamed.</value></data>
+  <data name="CompareTitleFormat" xml:space="preserve"><value>{0} ({1})</value><comment>{0} is the file name, {1} HEAD or the name of the index.</comment></data>
+  <data name="BlameTitleFormat" xml:space="preserve"><value>{0} (Blame)</value></data>
+  <data name="IndexName" xml:space="preserve"><value>Stage</value></data>
+  <data name="Comparing" xml:space="preserve"><value>Comparing…</value></data>
+  <data name="CompareNoVersionFormat" xml:space="preserve"><value>{0} has no text version of this file to compare with: the file is new, untracked, in conflict, binary, stored with Git LFS or larger than 16 MiB.</value></data>
+  <data name="CompareNoChanges" xml:space="preserve"><value>The file has no changes.</value></data>
+  <data name="CompareOnlyIgnoredBytesFormat" xml:space="preserve"><value>No line differs from {0}, but Git reports a change of the saved file: only line endings, the byte order mark or the newline at the end differ, which this comparison ignores.</value></data>
+  <data name="WholeFile" xml:space="preserve"><value>Whole File</value></data>
+  <data name="CompareAgain" xml:space="preserve"><value>Compare Again</value></data>
+  <data name="LogCompareFailed" xml:space="preserve"><value>Comparing a file with its Git version failed.</value></data>
+  <data name="BlameLoading" xml:space="preserve"><value>Reading the blame…</value></data>
+  <data name="LoadBlameFailedFormat" xml:space="preserve"><value>Reading the blame failed: {0}</value></data>
+  <data name="BlameTruncated" xml:space="preserve"><value>The file is longer than 16 MiB; the last lines are missing.</value></data>
+  <data name="BlameUnavailable" xml:space="preserve"><value>The git service of this application cannot blame files.</value></data>
+  <data name="Uncommitted" xml:space="preserve"><value>Not committed</value></data>
+  <data name="RefreshBlame" xml:space="preserve"><value>Read Again</value></data>
+  <data name="BlameHint" xml:space="preserve"><value>Blame of the saved file. Double-click a line or press Enter to show its commit in the Git History.</value></data>
+  <data name="StageSelectionCommand" xml:space="preserve"><value>Stage Selected Lines</value></data>
+  <data name="UnstageSelectionCommand" xml:space="preserve"><value>Unstage Selected Lines</value></data>
+  <data name="DiscardSelectionCommand" xml:space="preserve"><value>Discard Selected Lines…</value></data>
+  <data name="StageSelectionTooltip" xml:space="preserve"><value>Stages the selected lines of the diff, or the hunk at the cursor, of a change in the working tree.</value></data>
+  <data name="UnstageSelectionTooltip" xml:space="preserve"><value>Unstages the selected lines of the diff, or the hunk at the cursor, of a staged change.</value></data>
+  <data name="DiscardSelectionTooltip" xml:space="preserve"><value>Discards the selected lines of the diff, or the hunk at the cursor, in the working file after a confirmation. Untracked files and files with conflicts are only staged or discarded as a whole.</value></data>
+  <data name="NoDiffSelection" xml:space="preserve"><value>Select changed lines in the diff of the Git Changes panel or place the cursor in a hunk. Untracked files and files with conflicts are only staged or discarded as a whole.</value></data>
+  <data name="DiscardSelectionPromptFormat" xml:space="preserve"><value>Discard the selected changes of {0}? They are not stored anywhere.</value></data>
+  <data name="DiffChanged" xml:space="preserve"><value>The diff changed in the meantime and was read again. Select the lines again.</value></data>
+  <data name="PatchMissingNewline" xml:space="preserve"><value>The selection would join the last line of the file, which has no line break, with the next line. Select the removed and the added last line together.</value></data>
+  <data name="PatchMultipleFiles" xml:space="preserve"><value>The type of this file changed; it can only be staged or discarded as a whole.</value></data>
+  <data name="PatchUnavailable" xml:space="preserve"><value>The git service of this application cannot stage selected lines or amend commits.</value></data>
+  <data name="CommitAmendCommand" xml:space="preserve"><value>Amend Last Commit…</value></data>
+  <data name="AmendLabel" xml:space="preserve"><value>Amend last commit</value></data>
+  <data name="AmendTooltip" xml:space="preserve"><value>Replaces the last commit by one with the staged changes and this message. Checking it fills in the message of the last commit.</value></data>
+  <data name="AmendPushedPromptFormat" xml:space="preserve"><value>The last commit of {0} is already in {1}. Amending it makes {0} diverge from {1}; the branch then needs a force push, which this application does not offer. Amend anyway?</value></data>
+  <data name="AmendConfirm" xml:space="preserve"><value>Amend</value></data>
+  <data name="AmendProgress" xml:space="preserve"><value>Amending the last commit…</value></data>
+  <data name="StashesTab" xml:space="preserve"><value>Stashes</value></data>
+  <data name="ColumnStash" xml:space="preserve"><value>Stash</value></data>
+  <data name="StashCommand" xml:space="preserve"><value>Stash Changes…</value></data>
+  <data name="StashIncludeUntrackedCommand" xml:space="preserve"><value>Stash Changes Including Untracked Files…</value></data>
+  <data name="StashApplyCommand" xml:space="preserve"><value>Apply Stash…</value></data>
+  <data name="StashPopCommand" xml:space="preserve"><value>Pop Stash…</value></data>
+  <data name="StashDropCommand" xml:space="preserve"><value>Drop Stash…</value></data>
+  <data name="StashButton" xml:space="preserve"><value>Stash</value></data>
+  <data name="StashIncludeUntrackedButton" xml:space="preserve"><value>Stash with Untracked</value></data>
+  <data name="StashApplyButton" xml:space="preserve"><value>Apply</value></data>
+  <data name="StashPopButton" xml:space="preserve"><value>Pop</value></data>
+  <data name="StashDropButton" xml:space="preserve"><value>Drop</value></data>
+  <data name="StashMessagePrompt" xml:space="preserve"><value>Stash message (optional)</value></data>
+  <data name="NothingToStash" xml:space="preserve"><value>There are no changes to stash. Untracked files are only stashed with "Stash Changes Including Untracked Files".</value></data>
+  <data name="NoStashes" xml:space="preserve"><value>The repository has no stashes.</value></data>
+  <data name="StashesUnavailable" xml:space="preserve"><value>The git service of this application cannot stash changes.</value></data>
+  <data name="LoadStashesFailedFormat" xml:space="preserve"><value>Reading the stashes failed: {0}</value></data>
+  <data name="StashNotFoundFormat" xml:space="preserve"><value>There is no stash with the commit {0}.</value></data>
+  <data name="StashMovedFormat" xml:space="preserve"><value>The stash list changed in the meantime, so {0} names another stash now; nothing was changed. Pick the stash again.</value></data>
+  <data name="StashConflicts" xml:space="preserve"><value>The stash was applied with conflicts and is kept. Resolve the conflicts in the files marked as conflicted.</value></data>
+  <data name="StashDropPromptFormat" xml:space="preserve"><value>Drop {0} ({1})? Its changes are lost.</value></data>
+  <data name="StashDropConfirm" xml:space="preserve"><value>Drop</value></data>
+  <data name="MergeCommand" xml:space="preserve"><value>Merge Branch…</value></data>
+  <data name="AbortMergeCommand" xml:space="preserve"><value>Abort Merge…</value></data>
+  <data name="MergePickTitle" xml:space="preserve"><value>Merge into the current branch</value></data>
+  <data name="NoBranchToMerge" xml:space="preserve"><value>There is no other branch to merge.</value></data>
+  <data name="MergedFormat" xml:space="preserve"><value>Merged {0} into {1}.</value></data>
+  <data name="MergeUpToDateFormat" xml:space="preserve"><value>{0} is already merged into {1}.</value></data>
+  <data name="MergeConflictsFormat" xml:space="preserve"><value>The merge of {0} stopped with conflicts. Resolve them in the files, stage the files and commit, or abort the merge.</value></data>
+  <data name="AbortMergeTitle" xml:space="preserve"><value>Abort Merge</value></data>
+  <data name="AbortMergePrompt" xml:space="preserve"><value>Abort the merge? The conflicted files return to their state before the merge; other changes stay.</value></data>
+  <data name="AbortMergeConfirm" xml:space="preserve"><value>Abort</value></data>
+  <data name="MergeAborted" xml:space="preserve"><value>The merge was aborted.</value></data>
+  <data name="StatusBarMerging" xml:space="preserve"><value>Merging</value></data>
+</root>

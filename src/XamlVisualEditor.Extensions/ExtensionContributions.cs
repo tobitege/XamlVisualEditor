@@ -89,6 +89,20 @@ public static class ExtensionMenuLocations
 
     /// <summary>The context menu of the text and code editors.</summary>
     public const string EditorContext = "menu.editor.context";
+
+    /// <summary>
+    /// The context menu of the File Explorer, the Solution Explorer and the extension trees whose items implement
+    /// <see cref="IExtensionTreeItemPathProvider"/>. The command receives the full path of the clicked file or folder
+    /// as <see cref="CommandContext.Arguments"/>[0]; a project node passes its project folder. The items are hidden on
+    /// nodes without a path.
+    /// </summary>
+    public const string ExplorerContext = "menu.explorer.context";
+
+    /// <summary>
+    /// The context menu of a document tab that shows a file. The command receives the full path of the file as
+    /// <see cref="CommandContext.Arguments"/>[0]; the items are hidden on tabs without a file.
+    /// </summary>
+    public const string DocumentTabContext = "menu.documentTab.context";
 }
 
 /// <summary>Known toolbar locations for extensions.</summary>

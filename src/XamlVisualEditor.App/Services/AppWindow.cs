@@ -83,7 +83,8 @@ public sealed class AppWindow : IWindow
                 info,
                 message => OutputChannelMessage?.Invoke(this, message),
                 cleared => OutputChannelCleared?.Invoke(this, cleared),
-                () => RemoveChannel(info));
+                () => RemoveChannel(info),
+                () => OutputChannelShowRequested?.Invoke(this, new OutputChannelEventArgs(info)));
 
             _channels[name] = channel;
             OutputChannelCreated?.Invoke(this, new OutputChannelEventArgs(info));
@@ -112,6 +113,8 @@ public sealed class AppWindow : IWindow
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
     {
@@ -242,47 +245,40 @@ public sealed class AppWindow : IWindow
         private readonly Action<OutputChannelMessageEventArgs>? _messageCallback;
         private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
         private readonly Action? _disposedCallback;
-        private readonly List<string> _lines = new();
+        private readonly Action _showCallback;
 
         public AppOutputChannel(
             OutputChannelInfo info,
             Action<OutputChannelMessageEventArgs>? messageCallback,
             Action<OutputChannelClearedEventArgs>? clearedCallback,
-            Action? disposedCallback)
+            Action? disposedCallback,
+            Action showCallback)
         {
             Info = info;
             _messageCallback = messageCallback;
             _clearedCallback = clearedCallback;
             _disposedCallback = disposedCallback;
+            _showCallback = showCallback;
         }
 
         public OutputChannelInfo Info { get; }
 
         public string Name => Info.Name;
 
+        // The output view keeps the text; the channel only passes it on and may be written from any thread.
         public void Append(string value)
         {
-            if (_lines.Count == 0)
-            {
-                _lines.Add(value);
-            }
-            else
-            {
-                int last = _lines.Count - 1;
-                _lines[last] = _lines[last] + value;
-            }
-
             _messageCallback?.Invoke(new OutputChannelMessageEventArgs(Info, value, false));
         }
 
         public void AppendLine(string value)
         {
-            _lines.Add(value);
             _messageCallback?.Invoke(new OutputChannelMessageEventArgs(Info, value, true));
         }
 
         public void Show()
         {
+            _showCallback();
         }
 
         public void Hide()
@@ -291,7 +287,6 @@ public sealed class AppWindow : IWindow
 
         public void Clear()
         {
-            _lines.Clear();
             _clearedCallback?.Invoke(new OutputChannelClearedEventArgs(Info));
         }
 

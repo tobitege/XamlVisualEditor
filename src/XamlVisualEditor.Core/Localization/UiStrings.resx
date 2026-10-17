@@ -834,9 +834,9 @@
   <data name="GitShowDiff" xml:space="preserve"><value>Show Diff</value></data>
   <data name="GitHideDiff" xml:space="preserve"><value>Hide Diff</value></data>
   <data name="GitResizeDiff" xml:space="preserve"><value>Resize Diff pane</value></data>
-  <data name="GitMonitoringOn" xml:space="preserve"><value>Git: On</value></data>
-  <data name="GitMonitoringOff" xml:space="preserve"><value>Git: Off</value></data>
-  <data name="GitMonitoringToggle" xml:space="preserve"><value>Enable or disable Git status and file monitoring</value></data>
+  <data name="GitMonitoringOn" xml:space="preserve"><value>Watch: On</value></data>
+  <data name="GitMonitoringOff" xml:space="preserve"><value>Watch: Off</value></data>
+  <data name="GitMonitoringToggle" xml:space="preserve"><value>Watch the working folder and refresh the Git status after file changes. Changes in the git folder and Git commands always refresh the status.</value></data>
   <data name="WorkspaceNotGitRepository" xml:space="preserve"><value>Workspace is not a git repository</value></data>
   <data name="XamlRootMissing" xml:space="preserve"><value>XAML document has no root element.</value></data>
   <data name="XamlTagsRepaired" xml:space="preserve"><value>Document was repaired automatically (unclosed tags).</value></data>
@@ -1146,6 +1146,7 @@
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
   <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
   <data name="GitCommandFailed" xml:space="preserve"><value>Git command failed: {0}</value></data>
+  <data name="GitRevisionNotOneCommitFormat" xml:space="preserve"><value>"{0}" does not name one commit.</value><comment>{0} is the revision as given, such as a branch, a tag or a range.</comment></data>
   <data name="SaveConflictTitle" xml:space="preserve"><value>File changed on disk</value></data>
   <data name="SaveConflictPrompt" xml:space="preserve"><value>"{0}" was changed outside the editor. Overwrite it with the text from the editor, or reload it from disk and discard the changes in the editor?</value></data>
   <data name="Overwrite" xml:space="preserve"><value>Overwrite</value></data>

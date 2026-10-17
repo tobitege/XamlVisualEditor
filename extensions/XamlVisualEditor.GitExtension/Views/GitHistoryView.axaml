@@ -1,0 +1,208 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:views="using:XamlVisualEditor.GitExtension.Views"
+             xmlns:gloc="using:XamlVisualEditor.GitExtension.Localization"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:behaviors="using:XamlVisualEditor.SourceControl.UI.Behaviors"
+             x:Class="XamlVisualEditor.GitExtension.Views.GitHistoryView"
+             x:DataType="vm:GitHistoryViewModel"
+             behaviors:ClipboardInteractionBehavior.Interaction="{CompiledBinding CopyToClipboard}">
+
+    <UserControl.Styles>
+        <Style Selector=":is(Button).git-action">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+        </Style>
+        <Style Selector=":is(Button).git-action PathIcon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+        </Style>
+        <Style Selector=":is(Button).git-action StackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="4" />
+        </Style>
+        <Style Selector=":is(Button).git-action TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="MenuItem PathIcon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel Margin="6">
+        <!-- Activity of this panel at its top edge; the strip keeps its height, so the layout never moves. -->
+        <Border DockPanel.Dock="Top" Height="2" Margin="-6,-6,-6,4" IsHitTestVisible="False">
+            <ProgressBar Height="2" MinHeight="2" IsIndeterminate="True" IsVisible="{CompiledBinding IsLoading}" />
+        </Border>
+
+        <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+            <TextBlock Text="{x:Static gloc:GitStrings.HistoryScopeLabel}" VerticalAlignment="Center" Margin="0,0,6,4" />
+            <TextBlock Name="ScopeText" Text="{CompiledBinding ScopeText}" FontWeight="SemiBold"
+                       VerticalAlignment="Center" Margin="0,0,8,4" />
+            <Button Name="ShowWholeRepositoryButton" Classes="git-action" Command="{CompiledBinding ShowWholeRepositoryCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.ShowWholeRepositoryToolTip}" ToolTip.ShowOnDisabled="True"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.ShowWholeRepository}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.ClearScope}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.ShowWholeRepository}" />
+                </StackPanel>
+            </Button>
+        </WrapPanel>
+
+        <!-- Fixed field widths; in a narrow dock the buttons move to the next line instead of squeezing the fields. -->
+        <WrapPanel Name="FilterBar" DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+            <TextBox Width="260" Margin="0,0,4,4"
+                     Text="{CompiledBinding SearchText, Mode=TwoWay}"
+                     PlaceholderText="{x:Static gloc:GitStrings.SearchMessages}"
+                     ToolTip.Tip="{x:Static gloc:GitStrings.SearchMessages}"
+                     AutomationProperties.Name="{x:Static gloc:GitStrings.SearchMessages}">
+                <TextBox.KeyBindings>
+                    <KeyBinding Gesture="Enter" Command="{CompiledBinding SearchCommand}" />
+                </TextBox.KeyBindings>
+            </TextBox>
+            <AutoCompleteBox Width="200" Margin="0,0,4,4"
+                             Text="{CompiledBinding AuthorText, Mode=TwoWay}"
+                             ItemsSource="{CompiledBinding KnownAuthors}"
+                             FilterMode="Contains"
+                             MinimumPrefixLength="1"
+                             PlaceholderText="{x:Static gloc:GitStrings.FilterAuthor}"
+                             ToolTip.Tip="{x:Static gloc:GitStrings.FilterAuthor}"
+                             AutomationProperties.Name="{x:Static gloc:GitStrings.FilterAuthor}">
+                <AutoCompleteBox.KeyBindings>
+                    <KeyBinding Gesture="Enter" Command="{CompiledBinding SearchCommand}" />
+                </AutoCompleteBox.KeyBindings>
+            </AutoCompleteBox>
+            <Button Classes="git-action" Command="{CompiledBinding SearchCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.SearchButton}" ToolTip.ShowOnDisabled="True"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.SearchButton}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.Search}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.SearchButton}" />
+                </StackPanel>
+            </Button>
+            <Button Classes="git-action" Command="{CompiledBinding ClearFilterCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.ShowAll}" ToolTip.ShowOnDisabled="True"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.ShowAll}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.ClearFilter}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.ShowAll}" />
+                </StackPanel>
+            </Button>
+            <Button Classes="git-action" Command="{CompiledBinding RefreshCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.RefreshHistory}" ToolTip.ShowOnDisabled="True"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.RefreshHistory}">
+                <StackPanel>
+                    <PathIcon Data="{x:Static vm:GitIcons.Refresh}" />
+                    <TextBlock Text="{x:Static gloc:GitStrings.RefreshHistory}" />
+                </StackPanel>
+            </Button>
+        </WrapPanel>
+
+        <TextBlock DockPanel.Dock="Top"
+                   Name="HistoryMessage"
+                   Text="{CompiledBinding Message}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,6"
+                   IsVisible="{CompiledBinding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <!-- The minimum heights keep the header and a row of the commit list and Load More visible at the height of a
+             bottom panel; below them the details shrink and scroll, and the splitter moves the border. The minimum of
+             the list row holds the minimum of the grid and the Load More button, so neither is pushed out of it. -->
+        <Grid Name="HistoryLayout">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="2*" MinHeight="74" />
+                <RowDefinition Height="4" />
+                <RowDefinition Height="3*" MinHeight="24" />
+            </Grid.RowDefinitions>
+            <DockPanel Grid.Row="0">
+                <Button Name="LoadMoreButton" DockPanel.Dock="Bottom" HorizontalAlignment="Left" Classes="git-action" Margin="0,4,0,0"
+                        Command="{CompiledBinding LoadMoreCommand}"
+                        IsVisible="{CompiledBinding HasMore}"
+                        ToolTip.Tip="{x:Static gloc:GitStrings.LoadMore}"
+                        AutomationProperties.Name="{x:Static gloc:GitStrings.LoadMore}">
+                    <StackPanel>
+                        <PathIcon Data="{x:Static vm:GitIcons.LoadMore}" />
+                        <TextBlock Text="{x:Static gloc:GitStrings.LoadMore}" />
+                    </StackPanel>
+                </Button>
+                <dg:DataGrid Name="CommitGrid"
+                             Classes="explorer-compact"
+                             MinHeight="48"
+                             ItemsSource="{CompiledBinding Commits}"
+                             SelectedItem="{CompiledBinding SelectedCommit, Mode=TwoWay}"
+                             IsEnabled="{CompiledBinding IsRepository}"
+                             AutoGenerateColumns="False"
+                             CanUserResizeColumns="True"
+                             CanUserSortColumns="False"
+                             GridLinesVisibility="None"
+                             IsReadOnly="True"
+                             AutomationProperties.Name="{x:Static gloc:GitStrings.HistoryViewTitle}"
+                             behaviors:RightClickSelectBehavior.IsEnabled="True"
+                             behaviors:ScrollSelectionIntoViewBehavior.IsEnabled="True">
+                    <dg:DataGrid.ContextMenu>
+                        <ContextMenu x:DataType="vm:GitHistoryViewModel">
+                            <MenuItem Header="{x:Static gloc:GitStrings.CopyCommitId}" Command="{CompiledBinding CopyCommitIdCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.Copy}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="{x:Static gloc:GitStrings.NewBranchFromHere}" Command="{CompiledBinding CreateBranchFromCommitCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.CreateBranch}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                        </ContextMenu>
+                    </dg:DataGrid.ContextMenu>
+                    <dg:DataGrid.Columns>
+                        <!-- The commit column fits the abbreviated id of the shown rows. The date column fits any date
+                             and time in English, German and the current culture, whatever rows are loaded, and Message
+                             is the only column that takes the remaining width. The template columns name what a copied
+                             row holds. -->
+                        <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnCommit}" Width="Auto"
+                                               x:DataType="vm:GitCommitRowViewModel"
+                                               Binding="{CompiledBinding ShortSha}" />
+                        <dg:DataGridTemplateColumn Header="{x:Static gloc:GitStrings.ColumnMessage}" Width="*"
+                                                   x:DataType="vm:GitCommitRowViewModel"
+                                                   ClipboardContentBinding="{CompiledBinding Subject}">
+                            <dg:DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="vm:GitCommitRowViewModel">
+                                    <DockPanel Background="Transparent" ToolTip.Tip="{CompiledBinding Message}">
+                                        <Border DockPanel.Dock="Left" Margin="0,0,6,0" Padding="4,0" CornerRadius="3"
+                                                VerticalAlignment="Center" BorderThickness="1"
+                                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                                IsVisible="{CompiledBinding HasRefs}">
+                                            <TextBlock Text="{CompiledBinding RefsText}" />
+                                        </Border>
+                                        <TextBlock Text="{CompiledBinding Subject}" TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </dg:DataGridTemplateColumn.CellTemplate>
+                        </dg:DataGridTemplateColumn>
+                        <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnAuthor}" Width="160"
+                                               x:DataType="vm:GitCommitRowViewModel"
+                                               Binding="{CompiledBinding AuthorName}" />
+                        <dg:DataGridTemplateColumn Header="{x:Static gloc:GitStrings.ColumnDate}" Width="Auto"
+                                                   x:DataType="vm:GitCommitRowViewModel"
+                                                   ClipboardContentBinding="{CompiledBinding DateText}">
+                            <dg:DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="vm:GitCommitRowViewModel">
+                                    <TextBlock Text="{CompiledBinding DateText}" Margin="12,0" VerticalAlignment="Center"
+                                               behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitDateSamples.Texts}"
+                                               behaviors:ColumnWidthSamples.WidestDigits="True" />
+                                </DataTemplate>
+                            </dg:DataGridTemplateColumn.CellTemplate>
+                        </dg:DataGridTemplateColumn>
+                    </dg:DataGrid.Columns>
+                </dg:DataGrid>
+            </DockPanel>
+            <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+            <views:GitCommitDetailsView Name="CommitDetails" Grid.Row="2" Margin="0,6,0,0"
+                                        DataContext="{CompiledBinding Details}" />
+        </Grid>
+    </DockPanel>
+</UserControl>

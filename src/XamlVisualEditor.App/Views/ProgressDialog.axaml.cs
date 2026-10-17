@@ -18,6 +18,15 @@ public sealed partial class ProgressDialog : Window
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += (_, _) => RegisterCloseHandler();
         Closed += (_, _) => _closeHandler?.Dispose();
+        // The window button cancels like the cancel button: the dialog closes with the result true.
+        Closing += (_, args) =>
+        {
+            if (args.CloseReason == WindowCloseReason.WindowClosing && !args.IsProgrammatic)
+            {
+                args.Cancel = true;
+                Dispatcher.UIThread.Post(() => Close(true));
+            }
+        };
         // The indeterminate animation takes its travel distance from the bar width when it starts; started before
         // the dialog is laid out, it runs over a width of zero and the bar stands still.
         Opened += (_, _) => Dispatcher.UIThread.Post(

@@ -234,14 +234,9 @@ public sealed class McpServer : IAsyncDisposable
             catch (HttpListenerException)
             {
             }
-            catch (ObjectDisposedException)
-            {
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            // Closing the listener during a pending accept can also report its released handle as invalid.
-            catch (ArgumentException) when (ct.IsCancellationRequested)
+            // The listener is closed only after the token was cancelled. Depending on the moment, the pending accept
+            // then reports a disposed object, a released handle as invalid argument or a listener that is not started.
+            catch (Exception) when (ct.IsCancellationRequested)
             {
             }
         }

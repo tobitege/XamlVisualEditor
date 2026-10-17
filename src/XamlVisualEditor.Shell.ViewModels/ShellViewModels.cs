@@ -2383,6 +2383,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly IReadOnlyList<LayoutPreset> _layoutPresets = LayoutPresetCatalog.Create();
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ICommand> _extensionCommandsById = new(StringComparer.Ordinal);
+    private readonly ExplorerDecorationRegistry? _explorerDecorations;
     private readonly Dictionary<string, IDisposable> _extensionCommandSubscriptionsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ExtensionStatusBarItemViewModel> _statusBarItemsById = new(StringComparer.Ordinal);
     private string? _activeExtensionViewId;
@@ -2477,6 +2478,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     /// <summary>Gets the extension-provided items of the text and code editor context menu.</summary>
     public ObservableCollection<ExtensionMenuItemViewModel> EditorContextMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets the extension-provided items of the explorer context menus; they follow the fixed items, so the first
+    /// entry is a separator.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> ExplorerContextMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets the extension-provided items of the document tab context menu; they follow the fixed items, so the first
+    /// entry is a separator.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> DocumentTabContextMenuItems { get; } = new();
 
     /// <summary>Holds the entries under View → Server.</summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ServerMenuItems { get; } = new();
@@ -3043,9 +3056,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IContextKeys? contextKeys = null,
         IBackgroundActivityMonitor? backgroundActivities = null,
         IDocumentOpenResolver? documentOpenResolver = null,
-        WorkspaceSessionStore? workspaceSessions = null)
+        WorkspaceSessionStore? workspaceSessions = null,
+        ExplorerDecorationRegistry? explorerDecorations = null)
     {
         _recentFilesPath = recentFilesPath;
+        _explorerDecorations = explorerDecorations;
         _workspaceSessions = workspaceSessions
             ?? new WorkspaceSessionStore(System.IO.Path.Combine(ShellSettingsPaths.GetRoot(), "workspace-sessions.json"));
         _backgroundActivities = backgroundActivities;
@@ -3123,9 +3138,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             extensionManager ?? new NullExtensionManager(),
             () => ExtensionPackageOpenInteraction.Handle(RxVoid.Default));
         InitializeThemePackages(extensionManager);
-        SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
+        SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands, explorerDecorations)
+        {
+            ExtensionContextMenuItems = ExplorerContextMenuItems
+        };
         DocumentTabCommands = new DocumentTabCommands(RevealInFileExplorerAsync, RevealInSolutionExplorer,
-            text => RunClipboardEditAsync(() => WriteClipboardAsync(text)));
+            text => RunClipboardEditAsync(() => WriteClipboardAsync(text)))
+        {
+            ExtensionItems = DocumentTabContextMenuItems
+        };
 
         if (_extensionContributions is not null)
         {
@@ -4873,27 +4894,40 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return _extensionViews.TryGetValue(viewId, out viewModel);
     }
 
+    // The palette offers the commands that are enabled as menu items are when it opens, and runs the selection only
+    // if it is still enabled.
     private async System.Threading.Tasks.Task ShowCommandPaletteAsync()
     {
-        if (CommandPaletteItems.Count == 0)
+        List<ExtensionCommandPaletteItemViewModel> items = CommandPaletteItems
+            .Where(item => IsExtensionCommandEnabled(item.CommandId))
+            .ToList();
+        if (items.Count == 0)
         {
             StatusText = UiStrings.NoExtensionCommands;
             return;
         }
 
-        CommandPaletteRequest request = new(UiStrings.CommandPalette, CommandPaletteItems.ToList());
+        CommandPaletteRequest request = new(UiStrings.CommandPalette, items);
         ExtensionCommandPaletteItemViewModel? selected = await CommandPaletteInteraction.Handle(request);
         if (selected is null)
         {
             return;
         }
 
+        if (!IsExtensionCommandEnabled(selected.CommandId))
+        {
+            StatusText = string.Format(UiStrings.ExtensionCommandUnavailable, selected.CommandId);
+            return;
+        }
+
         await ExecuteExtensionCommandAsync(selected.CommandId);
     }
 
-    private async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId)
+    /// <summary>Runs an extension command and reports a missing or failed command in the status bar.</summary>
+    internal async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId,
+        IReadOnlyList<object?>? arguments = null)
     {
-        bool executed = await TryExecuteExtensionCommandAsync(commandId);
+        bool executed = await TryExecuteExtensionCommandAsync(commandId, arguments);
         if (executed)
         {
             return;
@@ -4902,7 +4936,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         StatusText = string.Format(UiStrings.ExtensionCommandUnavailable, commandId);
     }
 
-    private async System.Threading.Tasks.Task<bool> TryExecuteExtensionCommandAsync(string commandId)
+    private async System.Threading.Tasks.Task<bool> TryExecuteExtensionCommandAsync(string commandId,
+        IReadOnlyList<object?>? arguments)
     {
         if (_extensionCommands is null)
         {
@@ -4911,7 +4946,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         try
         {
-            await _extensionCommands.ExecuteAsync(commandId, null, CancellationToken.None);
+            await _extensionCommands.ExecuteAsync(commandId, arguments, CancellationToken.None);
             return true;
         }
         catch (InvalidOperationException ex)
@@ -4949,17 +4984,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (!_themePreferencesDisposed) ApplyWorkspacePreviewTheme(_workspacePreviewTheme);
         if (_extensionContributions is null)
         {
-            DisposeCollectionItems(ExtensionMenuItems);
+            foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
+            {
+                DisposeCollectionItems(menu);
+            }
+
             AddExtensionManagerMenuItem();
-            DisposeCollectionItems(FileMenuItems);
-            DisposeCollectionItems(FileNewMenuItems);
             DisposeCollectionItems(FileNewMenuEntries);
-            DisposeCollectionItems(ViewMenuItems);
-            DisposeCollectionItems(ServerMenuItems);
-            DisposeCollectionItems(DebugMenuItems);
-            DisposeCollectionItems(EditMenuItems);
-            DisposeCollectionItems(EditorContextMenuItems);
-            DisposeCollectionItems(WorkspaceMenuItems);
             DisposeCollectionItems(ExtensionToolbarItems);
             DisposeCollectionItems(MainToolbarItems);
             CommandPaletteItems.Clear();
@@ -5040,7 +5071,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             ExtensionViewType.Tree => new ExtensionTreeViewModel(
                 contribution,
                 ResolveTreeProvider(contribution.ViewId),
-                _editorOptions.Current.FileExplorerFoldersBeforeFiles),
+                _editorOptions.Current.FileExplorerFoldersBeforeFiles,
+                _explorerDecorations)
+            {
+                ExtensionContextMenuItems = ExplorerContextMenuItems
+            },
             ExtensionViewType.Webview => new ExtensionWebviewViewModel(
                 contribution,
                 UiStrings.WebviewUnavailable),
@@ -5081,15 +5116,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private void UpdateExtensionMenuItems()
     {
-        DisposeCollectionItems(ExtensionMenuItems);
-        DisposeCollectionItems(FileMenuItems);
-        DisposeCollectionItems(FileNewMenuItems);
-        DisposeCollectionItems(ViewMenuItems);
-        DisposeCollectionItems(ServerMenuItems);
-        DisposeCollectionItems(DebugMenuItems);
-        DisposeCollectionItems(EditMenuItems);
-        DisposeCollectionItems(EditorContextMenuItems);
-        DisposeCollectionItems(WorkspaceMenuItems);
+        foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
+        {
+            DisposeCollectionItems(menu);
+        }
+
         AddExtensionManagerMenuItem();
 
         if (_extensionContributions is null)
@@ -5118,6 +5149,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 ExtensionMenuLocations.Tools => ExtensionMenuItems,
                 ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
                 ExtensionMenuLocations.EditorContext => EditorContextMenuItems,
+                ExtensionMenuLocations.ExplorerContext => ExplorerContextMenuItems,
+                ExtensionMenuLocations.DocumentTabContext => DocumentTabContextMenuItems,
                 _ => ExtensionMenuItems
             };
 
@@ -5138,6 +5171,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ArrangeMenuItems(ViewMenuItems, ViewMenuGroupOrder);
         ArrangeMenuItems(EditMenuItems, []);
         ArrangeMenuItems(EditorContextMenuItems, []);
+        ArrangeMenuItems(ExplorerContextMenuItems, [], afterFixedItems: true);
+        ArrangeMenuItems(DocumentTabContextMenuItems, [], afterFixedItems: true);
         RefreshMenuCheckStates();
         UpdateFileNewMenuEntries();
     }
@@ -5148,13 +5183,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     // Separates the groups of a menu and nests the items that name a submenu under one header per group and
     // submenu title; inside a submenu the submenu groups are separated. Groups listed in the order come first, the
-    // others follow alphabetically.
-    private static void ArrangeMenuItems(ObservableCollection<ExtensionMenuItemViewModel> items, string[] groupOrder)
+    // others follow alphabetically. Items that follow fixed items of the menu start with a separator.
+    private static void ArrangeMenuItems(ObservableCollection<ExtensionMenuItemViewModel> items, string[] groupOrder,
+        bool afterFixedItems = false)
     {
         List<ExtensionMenuItemViewModel> arranged = new(items.Count);
         foreach (IGrouping<string, ExtensionMenuItemViewModel> group in OrderGroups(items, item => item.Group, groupOrder))
         {
             AddGroup(arranged, group, NestSubmenus(group));
+        }
+
+        if (afterFixedItems && arranged.Count > 0)
+        {
+            arranged.Insert(0, ExtensionMenuItemViewModel.CreateSeparator(arranged[0].Location, null));
         }
 
         items.Clear();
@@ -5232,7 +5273,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return
         [
             ExtensionMenuItems, FileMenuItems, FileNewMenuItems, ViewMenuItems, ServerMenuItems, DebugMenuItems,
-            EditMenuItems, EditorContextMenuItems, WorkspaceMenuItems
+            EditMenuItems, EditorContextMenuItems, WorkspaceMenuItems, ExplorerContextMenuItems, DocumentTabContextMenuItems
         ];
     }
 
@@ -5481,8 +5522,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return existing;
         }
 
+        // Context menus of explorers and document tabs pass the command arguments as the command parameter.
         ExtensionAsyncCommand command = new(
-            () => ExecuteExtensionCommandAsync(commandId),
+            parameter => ExecuteExtensionCommandAsync(commandId, parameter as IReadOnlyList<object?>),
             () => IsExtensionCommandEnabled(commandId));
         _extensionCommandsById[commandId] = command;
         EnsureExtensionCommandSubscription(commandId, command);
@@ -5590,12 +5632,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private bool IsExtensionCommandEnabled(string commandId)
     {
-        if (_commandMetadata is not null && _commandMetadata.TryGet(commandId, out CommandMetadata metadata))
+        if (_commandMetadata is not null
+            && _commandMetadata.TryGet(commandId, out CommandMetadata metadata)
+            && !EvaluateWhenExpressionForContext(metadata.When))
         {
-            if (!EvaluateWhenExpressionForContext(metadata.When))
-            {
-                return false;
-            }
+            return false;
         }
 
         if (!TryGetHostCommand(commandId, out ICommand? hostCommand))
@@ -7479,6 +7520,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
+        if (e.Dockable is ExtensionDocument extensionDocument)
+        {
+            (extensionDocument.ViewModel as IDisposable)?.Dispose();
+            return;
+        }
+
         if (e.Dockable is TerminalTool terminalTool && terminalTool.TerminalViewModel is TerminalViewModel terminalVm)
         {
             RemoveTerminalSession(terminalVm);
@@ -7753,6 +7800,33 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         return dock.VisibleDockables.Contains(tool);
+    }
+
+    /// <summary>
+    /// Activates the extension document with the id, or adds one with the view model of
+    /// <paramref name="createViewModel"/>. Returns the view model of the shown document, or null without a document dock.
+    /// </summary>
+    public object? ShowExtensionDocument(string documentId, string title, string? toolTip, Func<object> createViewModel)
+    {
+        if (DockLayout is null)
+        {
+            return null;
+        }
+
+        if (XamlEditorDockFactory.FindDockable<ExtensionDocument>(DockLayout, ExtensionDocument.ID_PREFIX + documentId) is { } existing)
+        {
+            DockFactory.SetActiveDockable(existing);
+            return existing.ViewModel;
+        }
+
+        object viewModel = createViewModel();
+        if (DockFactory.AddDocument(DockLayout, new ExtensionDocument(documentId, title, toolTip, viewModel)) is null)
+        {
+            (viewModel as IDisposable)?.Dispose();
+            return null;
+        }
+
+        return viewModel;
     }
 
     public void ActivateExtensionView(string viewId)
@@ -9968,18 +10042,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             DockFactory.SaveLayout(DockLayout, layoutName: CurrentLayoutName);
         }
 
-        DisposeCollectionItems(ExtensionMenuItems);
-        DisposeCollectionItems(FileMenuItems);
-        DisposeCollectionItems(FileNewMenuItems);
+        foreach (ObservableCollection<ExtensionMenuItemViewModel> menu in GetExtensionMenus())
+        {
+            DisposeCollectionItems(menu);
+        }
+
         DisposeCollectionItems(FileNewMenuEntries);
-        DisposeCollectionItems(ViewMenuItems);
-        DisposeCollectionItems(ServerMenuItems);
         DisposeCollectionItems(LayoutPresetMenuItems);
         DisposeCollectionItems(SavedLayoutMenuItems);
-        DisposeCollectionItems(DebugMenuItems);
-        DisposeCollectionItems(EditMenuItems);
-        DisposeCollectionItems(EditorContextMenuItems);
-        DisposeCollectionItems(WorkspaceMenuItems);
         DisposeCollectionItems(ExtensionToolbarItems);
         DisposeCollectionItems(MainToolbarItems);
         ClearStatusBarItems();
@@ -10009,6 +10079,18 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
 
     /// <summary>Gets the full path (for files) or project path (for projects).</summary>
     public string? FullPath { get; }
+
+    /// <summary>
+    /// Gets the file or folder that explorer commands and decorations use: the file or folder itself, the folder of a
+    /// project, or null for the solution, solution folders and references.
+    /// </summary>
+    public string? ExplorerPath { get; }
+
+    /// <summary>Gets the decoration of <see cref="ExplorerPath"/>, or null.</summary>
+    [Reactive]
+    public partial ExplorerDecoration? Decoration { get; private set; }
+
+    internal void UpdateDecoration(ExplorerDecorationRegistry decorations) => Decoration = decorations.Find(ExplorerPath);
 
     /// <summary>Gets the project model (for project nodes).</summary>
     public ProjectModel? Project { get; }
@@ -10072,6 +10154,12 @@ public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
         Kind = kind;
         FullPath = fullPath;
         Project = project;
+        ExplorerPath = kind switch
+        {
+            SolutionExplorerNodeKind.File or SolutionExplorerNodeKind.XamlFile or SolutionExplorerNodeKind.Folder => fullPath,
+            SolutionExplorerNodeKind.Project => Path.GetDirectoryName(fullPath),
+            _ => null
+        };
 
         if ((kind == SolutionExplorerNodeKind.XamlFile || kind == SolutionExplorerNodeKind.File) && fullPath is not null)
         {
@@ -10312,9 +10400,13 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
     private readonly System.Reactive.Subjects.Subject<object> _revealRequests = new();
     private readonly ISystemIconService? _systemIcons;
     private readonly ICommands? _extensionCommands;
+    private readonly ExplorerDecorationRegistry? _decorations;
     private readonly IDisposable _filterSubscription;
 
     public SolutionExplorerNodeViewModel? Root { get; set; }
+
+    /// <summary>Gets the extension items that follow the fixed items of the context menu.</summary>
+    public IEnumerable<ExtensionMenuItemViewModel>? ExtensionContextMenuItems { get; init; }
 
     public ObservableCollection<SolutionExplorerNodeViewModel> RootItems { get; } = new();
 
@@ -10347,10 +10439,17 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
 
     public ReactiveCommand<RxVoid, RxVoid> SetStartupProjectCommand { get; }
 
-    public SolutionExplorerViewModel(ISystemIconService? systemIcons = null, ICommands? extensionCommands = null)
+    public SolutionExplorerViewModel(ISystemIconService? systemIcons = null, ICommands? extensionCommands = null,
+        ExplorerDecorationRegistry? decorations = null)
     {
         _systemIcons = systemIcons;
         _extensionCommands = extensionCommands;
+        _decorations = decorations;
+        if (_decorations is not null)
+        {
+            _decorations.Changed += OnDecorationsChanged;
+        }
+
         SortingModel = new SortingModel();
         FilteringModel = new FilteringModel();
         SearchModel = new SearchModel
@@ -10539,8 +10638,28 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             RootItems.Add(root);
         }
 
+        ApplyDecorations();
         Model.Refresh();
         ApplyFilterAndSearch(FilterText);
+    }
+
+    private void OnDecorationsChanged(object? sender, EventArgs e)
+    {
+        RxSchedulers.MainThreadScheduler.Schedule(ApplyDecorations);
+    }
+
+    // The tree is complete once loaded, so one pass over all nodes reaches every row.
+    private void ApplyDecorations()
+    {
+        if (_decorations is null)
+        {
+            return;
+        }
+
+        foreach (SolutionExplorerNodeViewModel node in RootItems.SelectMany(EnumerateNodes))
+        {
+            node.UpdateDecoration(_decorations);
+        }
     }
 
     private static void CollapseAll(SolutionExplorerNodeViewModel node)
@@ -10686,5 +10805,13 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
     }
 
     /// <summary>Stops the pending filter timer.</summary>
-    public void Dispose() => _filterSubscription.Dispose();
+    public void Dispose()
+    {
+        if (_decorations is not null)
+        {
+            _decorations.Changed -= OnDecorationsChanged;
+        }
+
+        _filterSubscription.Dispose();
+    }
 }

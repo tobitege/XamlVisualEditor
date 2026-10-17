@@ -114,6 +114,9 @@ public sealed class ExtensionContext
     /// <summary>Gets the registry for work that keeps the editor from being fully ready, when the host reports such work.</summary>
     public IBackgroundActivities? BackgroundActivities { get; init; }
 
+    /// <summary>Gets the decorations of files and folders in the explorers, when the host shows them.</summary>
+    public IExplorerDecorations? ExplorerDecorations { get; init; }
+
     /// <summary>
     /// Gets the registry for interceptors of user-requested opens, when the host consults them and the extension
     /// declares <see cref="ExtensionHostCapabilities.DocumentOpenInterceptors"/>.

@@ -81,7 +81,7 @@ public sealed class ExplorerDecorationRegistryTests
         Assert.Equal(Modified, registry.Find(folder + Path.DirectorySeparatorChar));
         Assert.Equal(Added, registry.Find(file));
         Assert.Null(registry.Find(null));
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
             Assert.Equal(Added, registry.Find(file.ToUpperInvariant()));
         }

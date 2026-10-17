@@ -32,7 +32,19 @@ public sealed class ExplorerDecorationPerformanceTests
             new ExtensionViewContribution("probe.large", "Large", ExtensionViewType.Tree, ExtensionViewLocation.Left, 0),
             new LargeTreeProvider(),
             decorations: registry);
+        // The tree applies its empty filter 150 ms after it is created and refreshes the model then, here on a timer
+        // thread. The folders load only after that second load of the root, so the refreshes cannot cancel each other.
+        TaskCompletionSource filterApplied = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int rootLoads = 0;
+        tree.Model.NodeLoaded += (_, e) =>
+        {
+            if (e.Node == tree.Model.Root && Interlocked.Increment(ref rootLoads) == 2)
+            {
+                filterApplied.TrySetResult();
+            }
+        };
         await tree.LoadAsync(CancellationToken.None);
+        await filterApplied.Task.WaitAsync(TimeSpan.FromSeconds(10));
         foreach (ExtensionTreeNodeViewModel folder in tree.RootItems)
         {
             await folder.EnsureChildrenAsync(CancellationToken.None);

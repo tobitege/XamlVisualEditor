@@ -43,7 +43,7 @@ public sealed class TextEditorLineMarkRegistryTests
         layer.Set(Path.Combine(Path.GetTempPath(), "marks", ".", "sub", "..", "a.txt"), [new TextEditorLineMark(1, 1, TextEditorLineMarkKind.Added)]);
 
         Assert.Single(registry.Find(Path.Combine(Path.GetTempPath(), "marks", "sub", "..", "a.txt"), out _));
-        Assert.Equal(OperatingSystem.IsWindows(), registry.Find(FilePath.ToUpperInvariant(), out _).Count == 1);
+        Assert.Equal(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS(), registry.Find(FilePath.ToUpperInvariant(), out _).Count == 1);
         Assert.Empty(registry.Find(null, out _));
         Assert.Equal([FilePath], changed);
     }

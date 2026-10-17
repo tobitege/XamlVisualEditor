@@ -20,7 +20,7 @@ Tests und einem Livetest per CDP. Testrepository: `D:\xve-demo\GitDemo` mit loka
 | 4 Explorer-API | erledigt, live geprüft, gepusht (62096e6), eine Review-Runde |
 | 5 Editor-API, Vergleich, Blame | erledigt, live geprüft, gepusht (0ae2ec7), eine Review-Runde |
 | 6 Feinere Commits, Stash | erledigt, live geprüft, gepusht (19a3662), Review + Datenverlust-Nachprüfung |
-| 7 Merge und Konflikte | offen |
+| 7 Merge und Konflikte | Entwurf freigegeben (siehe „Phase-7-Entwurf“), Umsetzung läuft |
 | 8 TFVC nutzt die gemeinsamen Teile | offen |
 
 Vor jedem Push läuft ein codereview-roasted; alle Befunde werden behoben, danach Livetest per CDP, dann Push.
@@ -94,6 +94,21 @@ Phase-6-Entwurf (freigegeben):
 - Stash-Reiter im Repository-Panel: Stash (optional mit unversionierten Dateien), Apply über Commit-ID, Pop/Drop mit
   Prüfung der Stash-ID, Drop fragt nach; kein „Show“ in Phase 6. Konflikte über den Snapshot erkannt.
 
+Phase-7-Entwurf (freigegeben):
+
+- `IGitMergeService`: Merge (`merge --no-edit`, Ergebnis über `MERGE_HEAD` statt Exitcode), Abort/Continue je nach
+  laufendem Vorgang (merge, rebase, cherry-pick, revert, am), Seite übernehmen über `ls-files -u`-Prüfung,
+  `restore --ours|--theirs` und vorhandenes `add -A` (gilt für alle Konfliktarten), vorbereitete Nachricht aus
+  `MERGE_MSG` über `stripspace --strip-comments`. Merge wird mit dem normalen Commit abgeschlossen.
+- UI: Statusleiste mit Vorgang und Konfliktzahl, Banner mit Abbrechen/Fortsetzen, Abschnitt „Konflikte“ (Öffnen,
+  Ours, Theirs, Als gelöst markieren); Commit gesperrt bei offenen Konflikten, Amend während Vorgängen gesperrt.
+  Gutter-Markerart `Conflict` je Block, Klick bietet ours/theirs/beide als ein Undo-Schritt im Puffer.
+- Rebase/Cherry-pick/Revert werden nicht gestartet, aber erkannt, abbrechbar und fortsetzbar.
+- Sicherheit: Abbrechen und Ours/Theirs fragen nach; „Als gelöst markieren“ prüft gespeicherte Dateien auf Marker;
+  Stage All/Ordner lösen keine Konflikte mehr; Stash während Vorgängen gesperrt (sonst wird der Merge still zum
+  normalen Commit). Befehle `git.merge`, `git.abort`, `git.continue`, `git.acceptOurs`, `git.acceptTheirs`,
+  `git.markResolved`, `git.resolveConflict`.
+
 Sammelliste für den Schliff vor dem PR:
 
 - `HEAD@{n}` jenseits des Reflogs meldet nur „git rev-parse exited with code 128.“ statt gits Meldung.
@@ -120,7 +135,10 @@ Bekannte Grenze: Ein über eine Junction geöffneter Workspace bekommt keine Git
 Mitbehobener Upstream-Fehler: Ein Klick auf eine Zeilennummer setzte keinen Breakpoint (Handler in Tunnel und Bubble,
 schaltete doppelt); `EditorServicesAdapter.GetTextAsync` marshallt jetzt auf den UI-Thread (AvaloniaEdit `VerifyAccess`).
 Material-Icon `unfold_more` mit Eintrag in THIRD-PARTY-NOTICES. Phase 6: `GitPanelViewModel.DiffLines` ändert den Typ
-auf `IReadOnlyList<DiffLine>`; der Panel-Diff ignoriert `diff.external` und textconv (behebt Exit 128 mit `diff.external`). Demo-Screenshots als Rohbilder unter
+auf `IReadOnlyList<DiffLine>`; der Panel-Diff ignoriert `diff.external` und textconv (behebt Exit 128 mit `diff.external`).
+Phase 7: Konfliktdateien stehen im Abschnitt „Konflikte“ statt in „Änderungen“; Stage löst keinen Konflikt mehr, „Als
+gelöst markieren“ tut es mit Markerprüfung; Stash ist während Merge/Rebase/Cherry-pick/Revert gesperrt; Ours/Theirs nutzt
+`git restore`, Löschungen werden wie mit `git rm` gelöst. Demo-Screenshots als Rohbilder unter
 `D:\xve-demo\shots\git\` (Showcase-Repo `D:\xve-demo\GitShowcase`), vor dem PR neu aufnehmen und annotieren.
 
 UI-Vorgabe für alle Git-Panels: Jeder Button bekommt ein `PathIcon` nach der Icon-Konvention der übrigen Panels (vorhandene Geometrien wiederverwenden, Theme-Pinsel, keine festen Farben, kein Opacity) und behält Beschriftung oder Tooltip.

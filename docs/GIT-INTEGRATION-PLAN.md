@@ -15,7 +15,8 @@
   work“ und wird NICHT verwendet. Von der Sammelliste ist nur der Stash-Dialogtitel behoben; der Rest bleibt offen.
 - **PR-Unterlagen:** Beschreibung in `D:\xve-demo\PR-git-integration.md` (englisch, ohne Attribution), Rohbilder
   `01`–`05` unter `D:\xve-demo\shots\git\` (05 = Merge-Auswahlliste), gehostet im Branch `roadmap-assets` unter
-  `git/` (a7b5791) und in der Beschreibung eingebunden. Offen: nur noch das Go des Nutzers zum Eröffnen des PR.
+  `git/` (a7b5791) und in der Beschreibung eingebunden. **PR #22 ist eröffnet** (17.10.2026, acht Commits). Weiter
+  geht es erst mit Review-Rückmeldungen aus Upstream; Fixes dazu kommen als Commits auf `git-integration`.
   Die gestrichenen Phasen 7 und 8 stehen unter „Folge-PR“.
 - **Arbeitsweise:** Ohne Agenten direkt arbeiten, kleinste Lösung, keine neuen Mechanismen, keine weiteren Phasen.
   Roasted Review vor dem Push nur für den Mini-Merge-Diff selbst durchführen. Kein Force-Push mehr.

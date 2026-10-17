@@ -212,4 +212,44 @@
   <data name="Uncommitted" xml:space="preserve"><value>Not committed</value></data>
   <data name="RefreshBlame" xml:space="preserve"><value>Read Again</value></data>
   <data name="BlameHint" xml:space="preserve"><value>Blame of the saved file. Double-click a line or press Enter to show its commit in the Git History.</value></data>
+  <data name="StageSelectionCommand" xml:space="preserve"><value>Stage Selected Lines</value></data>
+  <data name="UnstageSelectionCommand" xml:space="preserve"><value>Unstage Selected Lines</value></data>
+  <data name="DiscardSelectionCommand" xml:space="preserve"><value>Discard Selected Lines…</value></data>
+  <data name="StageSelectionTooltip" xml:space="preserve"><value>Stages the selected lines of the diff, or the hunk at the cursor, of a change in the working tree.</value></data>
+  <data name="UnstageSelectionTooltip" xml:space="preserve"><value>Unstages the selected lines of the diff, or the hunk at the cursor, of a staged change.</value></data>
+  <data name="DiscardSelectionTooltip" xml:space="preserve"><value>Discards the selected lines of the diff, or the hunk at the cursor, in the working file after a confirmation. Untracked files and files with conflicts are only staged or discarded as a whole.</value></data>
+  <data name="NoDiffSelection" xml:space="preserve"><value>Select changed lines in the diff of the Git Changes panel or place the cursor in a hunk. Untracked files and files with conflicts are only staged or discarded as a whole.</value></data>
+  <data name="DiscardSelectionPromptFormat" xml:space="preserve"><value>Discard the selected changes of {0}? They are not stored anywhere.</value></data>
+  <data name="DiffChanged" xml:space="preserve"><value>The diff changed in the meantime and was read again. Select the lines again.</value></data>
+  <data name="PatchMissingNewline" xml:space="preserve"><value>The selection would join the last line of the file, which has no line break, with the next line. Select the removed and the added last line together.</value></data>
+  <data name="PatchMultipleFiles" xml:space="preserve"><value>The type of this file changed; it can only be staged or discarded as a whole.</value></data>
+  <data name="PatchUnavailable" xml:space="preserve"><value>The git service of this application cannot stage selected lines or amend commits.</value></data>
+  <data name="CommitAmendCommand" xml:space="preserve"><value>Amend Last Commit…</value></data>
+  <data name="AmendLabel" xml:space="preserve"><value>Amend last commit</value></data>
+  <data name="AmendTooltip" xml:space="preserve"><value>Replaces the last commit by one with the staged changes and this message. Checking it fills in the message of the last commit.</value></data>
+  <data name="AmendPushedPromptFormat" xml:space="preserve"><value>The last commit of {0} is already in {1}. Amending it makes {0} diverge from {1}; the branch then needs a force push, which this application does not offer. Amend anyway?</value></data>
+  <data name="AmendConfirm" xml:space="preserve"><value>Amend</value></data>
+  <data name="AmendProgress" xml:space="preserve"><value>Amending the last commit…</value></data>
+  <data name="StashesTab" xml:space="preserve"><value>Stashes</value></data>
+  <data name="ColumnStash" xml:space="preserve"><value>Stash</value></data>
+  <data name="StashCommand" xml:space="preserve"><value>Stash Changes…</value></data>
+  <data name="StashIncludeUntrackedCommand" xml:space="preserve"><value>Stash Changes Including Untracked Files…</value></data>
+  <data name="StashApplyCommand" xml:space="preserve"><value>Apply Stash…</value></data>
+  <data name="StashPopCommand" xml:space="preserve"><value>Pop Stash…</value></data>
+  <data name="StashDropCommand" xml:space="preserve"><value>Drop Stash…</value></data>
+  <data name="StashButton" xml:space="preserve"><value>Stash</value></data>
+  <data name="StashIncludeUntrackedButton" xml:space="preserve"><value>Stash with Untracked</value></data>
+  <data name="StashApplyButton" xml:space="preserve"><value>Apply</value></data>
+  <data name="StashPopButton" xml:space="preserve"><value>Pop</value></data>
+  <data name="StashDropButton" xml:space="preserve"><value>Drop</value></data>
+  <data name="StashMessagePrompt" xml:space="preserve"><value>Stash message (optional)</value></data>
+  <data name="NothingToStash" xml:space="preserve"><value>There are no changes to stash. Untracked files are only stashed with "Stash Changes Including Untracked Files".</value></data>
+  <data name="NoStashes" xml:space="preserve"><value>The repository has no stashes.</value></data>
+  <data name="StashesUnavailable" xml:space="preserve"><value>The git service of this application cannot stash changes.</value></data>
+  <data name="LoadStashesFailedFormat" xml:space="preserve"><value>Reading the stashes failed: {0}</value></data>
+  <data name="StashNotFoundFormat" xml:space="preserve"><value>There is no stash with the commit {0}.</value></data>
+  <data name="StashMovedFormat" xml:space="preserve"><value>The stash list changed in the meantime, so {0} names another stash now; nothing was changed. Pick the stash again.</value></data>
+  <data name="StashConflicts" xml:space="preserve"><value>The stash was applied with conflicts and is kept. Resolve the conflicts in the files marked as conflicted.</value></data>
+  <data name="StashDropPromptFormat" xml:space="preserve"><value>Drop {0} ({1})? Its changes are lost.</value></data>
+  <data name="StashDropConfirm" xml:space="preserve"><value>Drop</value></data>
 </root>

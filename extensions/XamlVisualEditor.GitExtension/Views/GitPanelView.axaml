@@ -1,9 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
-             xmlns:controls="using:XamlVisualEditor.GitExtension.Controls"
+             xmlns:controls="using:XamlVisualEditor.SourceControl.UI.Controls"
              xmlns:views="using:XamlVisualEditor.GitExtension.Views"
              xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:gloc="using:XamlVisualEditor.GitExtension.Localization"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              xmlns:behaviors="using:XamlVisualEditor.SourceControl.UI.Behaviors"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.GitExtension.Views.GitPanelView"
@@ -150,17 +152,27 @@
             <DockPanel Name="GitListPane" Grid.Column="0">
                 <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
                     <TextBlock Text="{x:Static loc:UiStrings.Commit}" FontWeight="SemiBold" />
+                    <!-- Several lines: an amended message keeps its body. -->
                     <TextBox PlaceholderText="{x:Static loc:UiStrings.CommitMessage}"
                              PlaceholderForeground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120"
                              Text="{CompiledBinding CommitMessage, Mode=TwoWay}" />
-                    <Button Classes="git-action" Command="{CompiledBinding CommitCommand}"
-                            ToolTip.Tip="{x:Static loc:UiStrings.Commit}"
-                            AutomationProperties.Name="{x:Static loc:UiStrings.Commit}">
-                        <StackPanel>
-                            <PathIcon Data="{x:Static vm:GitIcons.Commit}" />
-                            <TextBlock Text="{x:Static loc:UiStrings.Commit}" />
-                        </StackPanel>
-                    </Button>
+                    <DockPanel LastChildFill="False">
+                        <Button Classes="git-action" Command="{CompiledBinding CommitCommand}"
+                                ToolTip.Tip="{x:Static loc:UiStrings.Commit}"
+                                AutomationProperties.Name="{x:Static loc:UiStrings.Commit}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.Commit}" />
+                                <TextBlock Text="{x:Static loc:UiStrings.Commit}" />
+                            </StackPanel>
+                        </Button>
+                        <CheckBox Name="AmendBox" Margin="12,0,0,0" VerticalAlignment="Center"
+                                  IsChecked="{CompiledBinding IsAmend, Mode=TwoWay}"
+                                  IsEnabled="{CompiledBinding CanAmend}"
+                                  Content="{x:Static gloc:GitStrings.AmendLabel}"
+                                  ToolTip.Tip="{x:Static gloc:GitStrings.AmendTooltip}" ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="{x:Static gloc:GitStrings.AmendLabel}" />
+                    </DockPanel>
                 </StackPanel>
 
                 <TabControl>
@@ -236,17 +248,44 @@
 
             <DockPanel Name="GitDiffPane" Grid.Column="2" Margin="8,0,0,0"
                        IsVisible="{CompiledBinding IsDiffVisible}">
-                <TextBlock DockPanel.Dock="Top"
-                           Text="{CompiledBinding DiffLineCount, StringFormat={x:Static loc:UiStrings.DiffCountFormat}}"
-                           FontWeight="SemiBold" Margin="0,0,0,4" />
-                <Border BorderBrush="#333" BorderThickness="1" Padding="4">
-                    <controls:GitDiffTextEditor DiffLines="{CompiledBinding DiffLines}"
-                                                IsReadOnly="True"
-                                                ShowLineNumbers="True"
+                <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="{CompiledBinding DiffLineCount, StringFormat={x:Static loc:UiStrings.DiffCountFormat}}"
+                               FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <!-- Without a selection the buttons work on the hunk at the cursor. -->
+                    <Button Classes="git-action" Command="{CompiledBinding StageSelectionCommand}"
+                            ToolTip.Tip="{x:Static gloc:GitStrings.StageSelectionTooltip}" ToolTip.ShowOnDisabled="True"
+                            AutomationProperties.Name="{x:Static gloc:GitStrings.StageSelectionCommand}" Margin="0,0,4,0">
+                        <StackPanel>
+                            <PathIcon Data="{x:Static vm:GitIcons.StageSelection}" />
+                            <TextBlock Text="{x:Static gloc:GitStrings.StageSelectionCommand}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="git-action" Command="{CompiledBinding UnstageSelectionCommand}"
+                            ToolTip.Tip="{x:Static gloc:GitStrings.UnstageSelectionTooltip}" ToolTip.ShowOnDisabled="True"
+                            AutomationProperties.Name="{x:Static gloc:GitStrings.UnstageSelectionCommand}" Margin="0,0,4,0">
+                        <StackPanel>
+                            <PathIcon Data="{x:Static vm:GitIcons.UnstageSelection}" />
+                            <TextBlock Text="{x:Static gloc:GitStrings.UnstageSelectionCommand}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="git-action" Command="{CompiledBinding DiscardSelectionCommand}"
+                            ToolTip.Tip="{x:Static gloc:GitStrings.DiscardSelectionTooltip}" ToolTip.ShowOnDisabled="True"
+                            AutomationProperties.Name="{x:Static gloc:GitStrings.DiscardSelectionCommand}">
+                        <StackPanel>
+                            <PathIcon Data="{x:Static vm:GitIcons.DiscardSelection}" />
+                            <TextBlock Text="{x:Static gloc:GitStrings.DiscardSelectionCommand}" />
+                        </StackPanel>
+                    </Button>
+                </WrapPanel>
+                <!-- The whole diff is shown, so the hunk at the cursor is never cut off. -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" Padding="4">
+                    <controls:UnifiedDiffEditor Name="GitDiffEditor"
+                                                MaxLineCount="{x:Static sys:Int32.MaxValue}"
+                                                DiffLines="{CompiledBinding DiffLines}"
+                                                CurrentHunkIndex="{CompiledBinding CurrentHunkIndex, Mode=TwoWay}"
+                                                SelectedLineRange="{CompiledBinding SelectedDiffRange, Mode=OneWayToSource}"
                                                 FontFamily="Cascadia Code, Consolas, Menlo, monospace"
                                                 FontSize="14"
-                                                Background="#1E1E1E"
-                                                Foreground="#D4D4D4"
                                                 HorizontalScrollBarVisibility="Auto"
                                                 VerticalScrollBarVisibility="Auto" />
                 </Border>

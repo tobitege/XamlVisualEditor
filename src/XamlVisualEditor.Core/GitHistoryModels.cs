@@ -336,3 +336,14 @@ public sealed record GitTag
     /// <summary>Gets the subject of the tag message of an annotated tag, or of the commit a lightweight tag points to.</summary>
     public string Subject { get; init; } = string.Empty;
 }
+
+/// <summary>A stash of a repository.</summary>
+/// <param name="Index">The position in the stash list, 0 for the newest stash.</param>
+/// <param name="ObjectId">The full id of the stash commit.</param>
+/// <param name="Message">The stash message, for example <c>On main: message</c> or <c>WIP on main: 1a2b3c4 subject</c>.</param>
+/// <param name="Created">The date the stash was created.</param>
+public sealed record GitStashEntry(int Index, string ObjectId, string Message, DateTimeOffset Created)
+{
+    /// <summary>Gets the name git gives the stash at <see cref="Index"/>, for example <c>stash@{0}</c>.</summary>
+    public string Name => "stash@{" + Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}";
+}

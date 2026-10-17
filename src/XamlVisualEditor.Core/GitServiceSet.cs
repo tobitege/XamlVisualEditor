@@ -35,6 +35,12 @@ public sealed class GitServiceSet
     /// <summary>Gets the file content and blame service, or null.</summary>
     public IGitContentService? Content { get; init; }
 
+    /// <summary>Gets the stage, unstage and discard service for selected diff lines and the amend service, or null.</summary>
+    public IGitPatchService? Patch { get; init; }
+
+    /// <summary>Gets the stash service, or null.</summary>
+    public IGitStashService? Stash { get; init; }
+
     /// <summary>
     /// Creates a set whose optional capabilities are the interfaces <paramref name="service"/> implements.
     /// </summary>
@@ -47,7 +53,9 @@ public sealed class GitServiceSet
             Branches = service as IGitBranchService,
             Remotes = service as IGitRemoteService,
             History = service as IGitHistoryService,
-            Content = service as IGitContentService
+            Content = service as IGitContentService,
+            Patch = service as IGitPatchService,
+            Stash = service as IGitStashService
         };
     }
 }

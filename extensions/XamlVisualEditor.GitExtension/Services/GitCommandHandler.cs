@@ -248,13 +248,15 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        if (GitCommandTarget.FindChanges(snapshot.Changes, string.Empty, GitCommandTarget.HasStagedChange).Count == 0)
+        // Amending needs no staged changes: it can change the message only.
+        GitPanelViewModel? panel = _panel();
+        bool amend = panel?.IsAmend == true;
+        if (!amend && GitCommandTarget.FindChanges(snapshot.Changes, string.Empty, GitCommandTarget.HasStagedChange).Count == 0)
         {
             await ShowInformationAsync(GitStrings.NothingToCommit);
             return;
         }
 
-        GitPanelViewModel? panel = _panel();
         string? message = panel?.CommitMessage?.Trim();
         bool fromPanel = !string.IsNullOrWhiteSpace(message);
         if (!fromPanel)
@@ -269,12 +271,27 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
+        // A HEAD that the upstream contains is pushed; replacing it makes the branch diverge from its upstream.
+        if (amend
+            && snapshot.HasUpstream
+            && snapshot.AheadBy == 0
+            && !await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.AmendPushedPromptFormat, snapshot.BranchName, snapshot.UpstreamName),
+                GitStrings.AmendConfirm,
+                GitStrings.AmendLabel,
+                isDestructive: true))
+        {
+            return;
+        }
+
         // Hooks such as pre-commit can run long; the progress dialog cancels the commit.
         string commitMessage = message;
         bool committed = await RunWithProgressAsync(
-            GitStrings.CommitInputTitle,
-            GitStrings.CommitProgress,
-            (services, root, ct) => services.Service.CommitAsync(root, commitMessage, ct));
+            amend ? GitStrings.AmendLabel : GitStrings.CommitInputTitle,
+            amend ? GitStrings.AmendProgress : GitStrings.CommitProgress,
+            (services, root, ct) => amend
+                ? (services.Patch ?? throw new InvalidOperationException(GitStrings.PatchUnavailable)).AmendAsync(root, commitMessage, ct)
+                : services.Service.CommitAsync(root, commitMessage, ct));
         if (committed && fromPanel && panel is not null)
         {
             ClearCommitMessage(panel);
@@ -374,11 +391,11 @@ internal sealed partial class GitCommandHandler
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
-            panel.CommitMessage = string.Empty;
+            panel.ClearCommit();
         }
         else
         {
-            Dispatcher.UIThread.Post(() => panel.CommitMessage = string.Empty);
+            Dispatcher.UIThread.Post(panel.ClearCommit);
         }
     }
 

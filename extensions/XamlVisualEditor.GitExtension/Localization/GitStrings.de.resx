@@ -212,4 +212,44 @@
   <data name="Uncommitted" xml:space="preserve"><value>Nicht committet</value></data>
   <data name="RefreshBlame" xml:space="preserve"><value>Erneut lesen</value></data>
   <data name="BlameHint" xml:space="preserve"><value>Blame der gespeicherten Datei. Doppelklick oder Eingabetaste auf einer Zeile zeigt ihren Commit in der Git-Historie.</value></data>
+  <data name="StageSelectionCommand" xml:space="preserve"><value>Auswahl stagen</value></data>
+  <data name="UnstageSelectionCommand" xml:space="preserve"><value>Auswahl aus dem Stage nehmen</value></data>
+  <data name="DiscardSelectionCommand" xml:space="preserve"><value>Auswahl verwerfen …</value></data>
+  <data name="StageSelectionTooltip" xml:space="preserve"><value>Stagt die ausgewählten Zeilen des Diffs oder den Hunk am Cursor einer Änderung im Arbeitsordner.</value></data>
+  <data name="UnstageSelectionTooltip" xml:space="preserve"><value>Nimmt die ausgewählten Zeilen des Diffs oder den Hunk am Cursor einer gestagten Änderung aus dem Stage.</value></data>
+  <data name="DiscardSelectionTooltip" xml:space="preserve"><value>Verwirft nach einer Rückfrage die ausgewählten Zeilen des Diffs oder den Hunk am Cursor in der Arbeitsdatei. Unversionierte Dateien und Dateien mit Konflikten werden nur als Ganzes gestagt oder verworfen.</value></data>
+  <data name="NoDiffSelection" xml:space="preserve"><value>Wähle im Diff des Panels „Git-Änderungen“ geänderte Zeilen aus oder setze den Cursor in einen Hunk. Unversionierte Dateien und Dateien mit Konflikten werden nur als Ganzes gestagt oder verworfen.</value></data>
+  <data name="DiscardSelectionPromptFormat" xml:space="preserve"><value>Ausgewählte Änderungen an {0} verwerfen? Sie werden nirgends gespeichert.</value></data>
+  <data name="DiffChanged" xml:space="preserve"><value>Der Diff hat sich inzwischen geändert und wurde neu gelesen. Wähle die Zeilen erneut aus.</value></data>
+  <data name="PatchMissingNewline" xml:space="preserve"><value>Die Auswahl würde die letzte Zeile der Datei, die keinen Zeilenumbruch hat, mit der nächsten Zeile verbinden. Wähle die entfernte und die hinzugefügte letzte Zeile zusammen aus.</value></data>
+  <data name="PatchMultipleFiles" xml:space="preserve"><value>Der Typ dieser Datei hat sich geändert; sie lässt sich nur als Ganzes stagen oder verwerfen.</value></data>
+  <data name="PatchUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann keine ausgewählten Zeilen stagen und keine Commits ändern.</value></data>
+  <data name="CommitAmendCommand" xml:space="preserve"><value>Letzten Commit ändern …</value></data>
+  <data name="AmendLabel" xml:space="preserve"><value>Letzten Commit ändern</value></data>
+  <data name="AmendTooltip" xml:space="preserve"><value>Ersetzt den letzten Commit durch einen mit den gestagten Änderungen und dieser Nachricht. Beim Ankreuzen wird die Nachricht des letzten Commits eingetragen.</value></data>
+  <data name="AmendPushedPromptFormat" xml:space="preserve"><value>Der letzte Commit von {0} ist bereits in {1}. Wenn du ihn änderst, weicht {0} von {1} ab; der Branch braucht dann einen Force-Push, den diese Anwendung nicht anbietet. Trotzdem ändern?</value></data>
+  <data name="AmendConfirm" xml:space="preserve"><value>Ändern</value></data>
+  <data name="AmendProgress" xml:space="preserve"><value>Letzter Commit wird geändert …</value></data>
+  <data name="StashesTab" xml:space="preserve"><value>Stashes</value></data>
+  <data name="ColumnStash" xml:space="preserve"><value>Stash</value></data>
+  <data name="StashCommand" xml:space="preserve"><value>Änderungen stashen …</value></data>
+  <data name="StashIncludeUntrackedCommand" xml:space="preserve"><value>Änderungen samt unversionierter Dateien stashen …</value></data>
+  <data name="StashApplyCommand" xml:space="preserve"><value>Stash anwenden …</value></data>
+  <data name="StashPopCommand" xml:space="preserve"><value>Stash anwenden und entfernen …</value></data>
+  <data name="StashDropCommand" xml:space="preserve"><value>Stash löschen …</value></data>
+  <data name="StashButton" xml:space="preserve"><value>Stashen</value></data>
+  <data name="StashIncludeUntrackedButton" xml:space="preserve"><value>Mit unversionierten stashen</value></data>
+  <data name="StashApplyButton" xml:space="preserve"><value>Anwenden</value></data>
+  <data name="StashPopButton" xml:space="preserve"><value>Anwenden und entfernen</value></data>
+  <data name="StashDropButton" xml:space="preserve"><value>Löschen</value></data>
+  <data name="StashMessagePrompt" xml:space="preserve"><value>Stash-Nachricht (optional)</value></data>
+  <data name="NothingToStash" xml:space="preserve"><value>Es gibt keine Änderungen zum Stashen. Unversionierte Dateien werden nur mit „Änderungen samt unversionierter Dateien stashen“ gestasht.</value></data>
+  <data name="NoStashes" xml:space="preserve"><value>Das Repository hat keine Stashes.</value></data>
+  <data name="StashesUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann keine Änderungen stashen.</value></data>
+  <data name="LoadStashesFailedFormat" xml:space="preserve"><value>Die Stashes konnten nicht gelesen werden: {0}</value></data>
+  <data name="StashNotFoundFormat" xml:space="preserve"><value>Es gibt keinen Stash mit dem Commit {0}.</value></data>
+  <data name="StashMovedFormat" xml:space="preserve"><value>Die Stash-Liste hat sich inzwischen geändert, {0} bezeichnet jetzt einen anderen Stash; es wurde nichts geändert. Wähle den Stash erneut aus.</value></data>
+  <data name="StashConflicts" xml:space="preserve"><value>Der Stash wurde mit Konflikten angewendet und bleibt erhalten. Löse die Konflikte in den als Konflikt markierten Dateien.</value></data>
+  <data name="StashDropPromptFormat" xml:space="preserve"><value>{0} ({1}) löschen? Seine Änderungen gehen verloren.</value></data>
+  <data name="StashDropConfirm" xml:space="preserve"><value>Löschen</value></data>
 </root>

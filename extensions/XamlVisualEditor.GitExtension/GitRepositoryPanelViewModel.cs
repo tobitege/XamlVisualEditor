@@ -188,14 +188,45 @@ public sealed class GitTagItemViewModel
 }
 
 /// <summary>
-/// ViewModel of the Git Repository panel: the local and remote-tracking branches and the tags of the session's
-/// repository and buttons for fetch, pull, push, sync and a new branch. The actions run the Git commands, which ask,
-/// show progress and report results.
+/// A stash in the Stashes tab of the Git Repository panel.
+/// </summary>
+public sealed class GitStashItemViewModel
+{
+    /// <summary>Creates the item for <paramref name="stash"/>.</summary>
+    public GitStashItemViewModel(GitStashEntry stash)
+    {
+        Stash = stash;
+        DateText = FormatDate(stash);
+    }
+
+    /// <summary>Gets the stash.</summary>
+    public GitStashEntry Stash { get; }
+
+    /// <summary>Gets the name git gives the stash, for example <c>stash@{0}</c>.</summary>
+    public string Name => Stash.Name;
+
+    /// <summary>Gets the stash message.</summary>
+    public string Message => Stash.Message;
+
+    /// <summary>Gets the date the stash was created; the sort key of the date column.</summary>
+    public DateTimeOffset Created => Stash.Created;
+
+    /// <summary>Gets the formatted date the stash was created.</summary>
+    public string DateText { get; }
+
+    /// <summary>Returns the local date and time <paramref name="stash"/> was created, formatted for the current culture.</summary>
+    public static string FormatDate(GitStashEntry stash) => stash.Created.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
+}
+
+/// <summary>
+/// ViewModel of the Git Repository panel: the local and remote-tracking branches, the tags and the stashes of the
+/// session's repository and buttons for fetch, pull, push, sync, a new branch and the stash commands. The actions run
+/// the Git commands, which ask, show progress and report results.
 /// </summary>
 /// <remarks>
-/// The branches and tags are read only while <see cref="IsShown"/> is true, and again only when a snapshot changes
-/// HEAD, the branch, its upstream state or <see cref="GitSnapshot.RefsVersion"/>; a newer read cancels an older one.
-/// Items of unchanged branches are kept.
+/// The branches, tags and stashes are read only while <see cref="IsShown"/> is true, and again only when a snapshot
+/// changes HEAD, the branch, its upstream state or <see cref="GitSnapshot.RefsVersion"/>; a newer read cancels an
+/// older one. Items of unchanged branches are kept.
 /// </remarks>
 public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDisposable
 {
@@ -204,6 +235,7 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     private readonly CompositeDisposable _disposables = new();
     private bool _branchesLoading;
     private bool _tagsLoading;
+    private bool _stashesLoading;
 
     /// <summary>Creates the panel for a shared session.</summary>
     /// <param name="session">The Git session whose repository is shown.</param>
@@ -241,23 +273,19 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             () => SelectedTag is { IsCommit: true } tag ? _executeCommand(GitCommands.CREATE_BRANCH, [tag.Tag.FullName]) : Task.CompletedTask,
             hasCommitTag));
 
+        StashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.STASH, null), isRepository));
+        StashIncludeUntrackedCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => _executeCommand(GitCommands.STASH_INCLUDE_UNTRACKED, null),
+            isRepository));
+        IObservable<bool> hasStash = this.WhenAnyValue(x => x.SelectedStash).Select(stash => stash is not null);
+        ApplyStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_APPLY), hasStash));
+        PopStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_POP), hasStash));
+        DropStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_DROP), hasStash));
+
         _disposables.Add(_session.Snapshots.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(OnSnapshot));
-
-        IObservable<BranchLoad> loads = Observable.Switch(_session.Snapshots
-            .DistinctUntilChanged(RefsKey.Of)
-            .Select(LoadBranches));
-        _disposables.Add(Observable.Switch(this.WhenAnyValue(x => x.IsShown)
-                .Select(isShown => isShown ? loads : Observable.Return(BranchLoad.Idle)))
-            .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(ApplyLoad));
-
-        IObservable<TagLoad> tagLoads = Observable.Switch(_session.Snapshots
-            .DistinctUntilChanged(RefsKey.Of)
-            .Select(LoadTags));
-        _disposables.Add(Observable.Switch(this.WhenAnyValue(x => x.IsShown)
-                .Select(isShown => isShown ? tagLoads : Observable.Return(TagLoad.Idle)))
-            .WitnessOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(ApplyTagLoad));
+        LoadWhileShown(LoadBranches, ApplyLoad);
+        LoadWhileShown(LoadTags, ApplyTagLoad);
+        LoadWhileShown(LoadStashes, ApplyStashLoad);
     }
 
     /// <summary>
@@ -287,7 +315,7 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     [Reactive]
     public partial string? StatusMessage { get; private set; }
 
-    /// <summary>Gets whether the branches or the tags are being read.</summary>
+    /// <summary>Gets whether the branches, the tags or the stashes are being read.</summary>
     [Reactive]
     public partial bool IsLoading { get; private set; }
 
@@ -307,6 +335,32 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at the selected tag, when it points to a commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> CreateBranchFromTagCommand { get; }
+
+    /// <summary>Gets the stashes, newest first.</summary>
+    public ObservableCollection<GitStashItemViewModel> Stashes { get; } = new();
+
+    /// <summary>Gets or sets the selected stash.</summary>
+    [Reactive]
+    public partial GitStashItemViewModel? SelectedStash { get; set; }
+
+    /// <summary>Gets why no stashes are listed, or a reading error; null while stashes are listed.</summary>
+    [Reactive]
+    public partial string? StashesMessage { get; private set; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH"/>.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> StashCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_INCLUDE_UNTRACKED"/>.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> StashIncludeUntrackedCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_APPLY"/> for the selected stash.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> ApplyStashCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_POP"/> for the selected stash.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> PopStashCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_DROP"/> for the selected stash.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> DropStashCommand { get; }
 
     /// <summary>Gets or sets the selected tree item: a group or a branch.</summary>
     [Reactive]
@@ -373,20 +427,65 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             : null;
     }
 
-    /// <summary>Returns the branch list of <paramref name="snapshot"/>, read in the background after a loading state.</summary>
-    private IObservable<BranchLoad> LoadBranches(GitSnapshot snapshot)
+    private Task RunForSelectedStashAsync(string commandId) =>
+        SelectedStash is { } stash ? _executeCommand(commandId, [stash.Stash.ObjectId]) : Task.CompletedTask;
+
+    /// <summary>Applies the loads of <paramref name="load"/> while the panel is shown and an idle state otherwise.</summary>
+    private void LoadWhileShown<T>(Func<GitSnapshot, IObservable<ListLoad<T>>> load, Action<ListLoad<T>> apply)
+    {
+        IObservable<ListLoad<T>> loads = Observable.Switch(_session.Snapshots
+            .DistinctUntilChanged(RefsKey.Of)
+            .Select(load));
+        _disposables.Add(Observable.Switch(this.WhenAnyValue(x => x.IsShown)
+                .Select(isShown => isShown ? loads : Observable.Return(ListLoad<T>.Idle)))
+            .WitnessOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(apply));
+    }
+
+    private IObservable<ListLoad<GitBranch>> LoadBranches(GitSnapshot snapshot) => LoadList<GitBranch>(
+        snapshot,
+        _session.Services.Branches is { } branches ? branches.GetBranchesAsync : null,
+        snapshot.State == GitSessionState.Unknown ? null : snapshot.ErrorMessage ?? UiStrings.WorkspaceNotGitRepository,
+        GitStrings.BranchesUnavailable,
+        GitStrings.NoBranches,
+        GitStrings.LoadBranchesFailedFormat);
+
+    private IObservable<ListLoad<GitTag>> LoadTags(GitSnapshot snapshot) => LoadList<GitTag>(
+        snapshot,
+        _session.Services.History is { } history ? history.GetTagsAsync : null,
+        null,
+        GitStrings.TagsUnavailable,
+        GitStrings.NoTags,
+        GitStrings.LoadTagsFailedFormat);
+
+    private IObservable<ListLoad<GitStashEntry>> LoadStashes(GitSnapshot snapshot) => LoadList<GitStashEntry>(
+        snapshot,
+        _session.Services.Stash is { } stashes ? stashes.ListAsync : null,
+        null,
+        GitStrings.StashesUnavailable,
+        GitStrings.NoStashes,
+        GitStrings.LoadStashesFailedFormat);
+
+    /// <summary>
+    /// Returns the list <paramref name="read"/> reads for <paramref name="snapshot"/> in the background after a loading
+    /// state, with the message shown instead of an empty list.
+    /// </summary>
+    private static IObservable<ListLoad<T>> LoadList<T>(
+        GitSnapshot snapshot,
+        Func<string, CancellationToken, Task<IReadOnlyList<T>>>? read,
+        string? noRepositoryMessage,
+        string unavailableMessage,
+        string emptyMessage,
+        string failedFormat)
     {
         if (!snapshot.IsRepository || snapshot.RepositoryRoot is null)
         {
-            return Observable.Return(BranchLoad.Loaded(
-                Array.Empty<GitBranch>(),
-                snapshot.State == GitSessionState.Unknown ? null : snapshot.ErrorMessage ?? UiStrings.WorkspaceNotGitRepository));
+            return Observable.Return(ListLoad<T>.Loaded(Array.Empty<T>(), noRepositoryMessage));
         }
 
-        IGitBranchService? branches = _session.Services.Branches;
-        if (branches is null)
+        if (read is null)
         {
-            return Observable.Return(BranchLoad.Loaded(Array.Empty<GitBranch>(), GitStrings.BranchesUnavailable));
+            return Observable.Return(ListLoad<T>.Loaded(Array.Empty<T>(), unavailableMessage));
         }
 
         string repositoryRoot = snapshot.RepositoryRoot;
@@ -394,63 +493,31 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             {
                 try
                 {
-                    IReadOnlyList<GitBranch> list = await branches.GetBranchesAsync(repositoryRoot, ct).ConfigureAwait(false);
-                    return BranchLoad.Loaded(list, list.Count == 0 ? GitStrings.NoBranches : null);
+                    IReadOnlyList<T> items = await read(repositoryRoot, ct).ConfigureAwait(false);
+                    return ListLoad<T>.Loaded(items, items.Count == 0 ? emptyMessage : null);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    return BranchLoad.Loaded(
-                        Array.Empty<GitBranch>(),
-                        string.Format(CultureInfo.CurrentCulture, GitStrings.LoadBranchesFailedFormat, exception.Message));
+                    return ListLoad<T>.Loaded(
+                        Array.Empty<T>(),
+                        string.Format(CultureInfo.CurrentCulture, failedFormat, exception.Message));
                 }
             })
-            .StartWith(BranchLoad.Loading);
+            .StartWith(ListLoad<T>.Loading);
     }
 
-    /// <summary>Returns the tag list of <paramref name="snapshot"/>, read in the background after a loading state.</summary>
-    private IObservable<TagLoad> LoadTags(GitSnapshot snapshot)
-    {
-        if (!snapshot.IsRepository || snapshot.RepositoryRoot is null)
-        {
-            return Observable.Return(TagLoad.Loaded(Array.Empty<GitTag>(), null));
-        }
-
-        IGitHistoryService? history = _session.Services.History;
-        if (history is null)
-        {
-            return Observable.Return(TagLoad.Loaded(Array.Empty<GitTag>(), GitStrings.TagsUnavailable));
-        }
-
-        string repositoryRoot = snapshot.RepositoryRoot;
-        return Observable.FromAsync(async ct =>
-            {
-                try
-                {
-                    IReadOnlyList<GitTag> tags = await history.GetTagsAsync(repositoryRoot, ct).ConfigureAwait(false);
-                    return TagLoad.Loaded(tags, tags.Count == 0 ? GitStrings.NoTags : null);
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    return TagLoad.Loaded(
-                        Array.Empty<GitTag>(),
-                        string.Format(CultureInfo.CurrentCulture, GitStrings.LoadTagsFailedFormat, exception.Message));
-                }
-            })
-            .StartWith(TagLoad.Loading);
-    }
-
-    private void ApplyTagLoad(TagLoad load)
+    private void ApplyTagLoad(ListLoad<GitTag> load)
     {
         _tagsLoading = load.IsLoading;
-        IsLoading = _branchesLoading || _tagsLoading;
-        if (load.Tags is null)
+        UpdateIsLoading();
+        if (load.Items is null)
         {
             return;
         }
 
         string? selected = SelectedTag?.Tag.FullName;
         Tags.Clear();
-        foreach (GitTag tag in load.Tags)
+        foreach (GitTag tag in load.Items)
         {
             Tags.Add(new GitTagItemViewModel(tag));
         }
@@ -459,19 +526,41 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         TagsMessage = load.Message;
     }
 
-    private void ApplyLoad(BranchLoad load)
+    private void ApplyStashLoad(ListLoad<GitStashEntry> load)
     {
-        _branchesLoading = load.IsLoading;
-        IsLoading = _branchesLoading || _tagsLoading;
-        if (load.Branches is null)
+        _stashesLoading = load.IsLoading;
+        UpdateIsLoading();
+        if (load.Items is null)
         {
             return;
         }
 
-        Reconcile(LocalGroup.Branches, load.Branches.Where(branch => !branch.IsRemote));
-        Reconcile(RemoteGroup.Branches, load.Branches.Where(branch => branch.IsRemote));
+        string? selected = SelectedStash?.Stash.ObjectId;
+        Stashes.Clear();
+        foreach (GitStashEntry stash in load.Items)
+        {
+            Stashes.Add(new GitStashItemViewModel(stash));
+        }
+
+        SelectedStash = Stashes.FirstOrDefault(item => string.Equals(item.Stash.ObjectId, selected, StringComparison.Ordinal));
+        StashesMessage = load.Message;
+    }
+
+    private void ApplyLoad(ListLoad<GitBranch> load)
+    {
+        _branchesLoading = load.IsLoading;
+        UpdateIsLoading();
+        if (load.Items is null)
+        {
+            return;
+        }
+
+        Reconcile(LocalGroup.Branches, load.Items.Where(branch => !branch.IsRemote));
+        Reconcile(RemoteGroup.Branches, load.Items.Where(branch => branch.IsRemote));
         StatusMessage = load.Message;
     }
+
+    private void UpdateIsLoading() => IsLoading = _branchesLoading || _tagsLoading || _stashesLoading;
 
     /// <summary>
     /// Makes <paramref name="items"/> show <paramref name="branches"/> in their order. Items are matched by full
@@ -554,25 +643,15 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     }
 
     /// <summary>
-    /// A state of the branch list: loading, idle, or loaded with branches and the message shown instead of or above
+    /// A state of a list of the panel: loading, idle, or loaded with items and the message shown instead of or above
     /// them.
     /// </summary>
-    private sealed record BranchLoad(bool IsLoading, IReadOnlyList<GitBranch>? Branches, string? Message)
+    private sealed record ListLoad<T>(bool IsLoading, IReadOnlyList<T>? Items, string? Message)
     {
-        public static BranchLoad Loading { get; } = new(true, null, null);
+        public static ListLoad<T> Loading { get; } = new(true, null, null);
 
-        public static BranchLoad Idle { get; } = new(false, null, null);
+        public static ListLoad<T> Idle { get; } = new(false, null, null);
 
-        public static BranchLoad Loaded(IReadOnlyList<GitBranch> branches, string? message) => new(false, branches, message);
-    }
-
-    /// <summary>A state of the tag list: loading, idle, or loaded with tags and the message shown instead of them.</summary>
-    private sealed record TagLoad(bool IsLoading, IReadOnlyList<GitTag>? Tags, string? Message)
-    {
-        public static TagLoad Loading { get; } = new(true, null, null);
-
-        public static TagLoad Idle { get; } = new(false, null, null);
-
-        public static TagLoad Loaded(IReadOnlyList<GitTag> tags, string? message) => new(false, tags, message);
+        public static ListLoad<T> Loaded(IReadOnlyList<T> items, string? message) => new(false, items, message);
     }
 }

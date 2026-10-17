@@ -52,8 +52,44 @@ public static class GitCommands
     /// <summary>Unstages all changes.</summary>
     public const string UNSTAGE_ALL = "git.unstageAll";
 
-    /// <summary>Commits the staged changes with the message of the panel or an entered message.</summary>
+    /// <summary>
+    /// Commits the staged changes with the message of the panel or an entered message; amends the last commit instead
+    /// while the Amend box of the panel is checked.
+    /// </summary>
     public const string COMMIT = "git.commit";
+
+    /// <summary>Shows the Git Changes panel with the Amend box checked; the commit button then amends the last commit.</summary>
+    public const string COMMIT_AMEND = "git.commitAmend";
+
+    /// <summary>
+    /// Stages the lines selected in the diff of the Git Changes panel, or the hunk at the cursor, of a working tree
+    /// change.
+    /// </summary>
+    public const string STAGE_SELECTION = "git.stageSelection";
+
+    /// <summary>Unstages the lines selected in the diff of the Git Changes panel, or the hunk at the cursor, of a staged change.</summary>
+    public const string UNSTAGE_SELECTION = "git.unstageSelection";
+
+    /// <summary>
+    /// Discards the lines selected in the diff of the Git Changes panel, or the hunk at the cursor, of a working tree
+    /// change after a confirmation.
+    /// </summary>
+    public const string DISCARD_SELECTION = "git.discardSelection";
+
+    /// <summary>Stashes the changes of the tracked files with an entered message.</summary>
+    public const string STASH = "git.stash";
+
+    /// <summary>Stashes the changes of the tracked files and the untracked files with an entered message.</summary>
+    public const string STASH_INCLUDE_UNTRACKED = "git.stashIncludeUntracked";
+
+    /// <summary>Applies the stash with the commit id in argument 0, otherwise one picked from a list, and keeps it.</summary>
+    public const string STASH_APPLY = "git.stashApply";
+
+    /// <summary>Applies the stash with the commit id in argument 0, otherwise one picked from a list, and removes it.</summary>
+    public const string STASH_POP = "git.stashPop";
+
+    /// <summary>Removes the stash with the commit id in argument 0, otherwise one picked from a list, after a confirmation.</summary>
+    public const string STASH_DROP = "git.stashDrop";
 
     /// <summary>View id of the Git Repository panel with the branches.</summary>
     public const string REPOSITORY_VIEW_ID = "git.repository";
@@ -150,6 +186,7 @@ public static class GitCommands
     private const string BRANCHES_GROUP = "4_branches";
     private const string SYNC_GROUP = "5_sync";
     private const string HISTORY_GROUP = "6_history";
+    private const string STASH_GROUP = "7_stash";
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
     private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
     private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
@@ -218,6 +255,24 @@ public static class GitCommands
             new CommandMetadata(GitStrings.CompareWithIndexCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 270));
         Register(BLAME, handler.BlameAsync,
             new CommandMetadata(GitStrings.BlameCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 280));
+        Register(COMMIT_AMEND, handler.CommitAmendAsync,
+            new CommandMetadata(GitStrings.CommitAmendCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 290));
+        Register(STAGE_SELECTION, handler.StageSelectionAsync,
+            new CommandMetadata(GitStrings.StageSelectionCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 300));
+        Register(UNSTAGE_SELECTION, handler.UnstageSelectionAsync,
+            new CommandMetadata(GitStrings.UnstageSelectionCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 310));
+        Register(DISCARD_SELECTION, handler.DiscardSelectionAsync,
+            new CommandMetadata(GitStrings.DiscardSelectionCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 320));
+        Register(STASH, handler.StashAsync,
+            new CommandMetadata(GitStrings.StashCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 330));
+        Register(STASH_INCLUDE_UNTRACKED, handler.StashIncludeUntrackedAsync,
+            new CommandMetadata(GitStrings.StashIncludeUntrackedCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 340));
+        Register(STASH_APPLY, handler.StashApplyAsync,
+            new CommandMetadata(GitStrings.StashApplyCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 350));
+        Register(STASH_POP, handler.StashPopAsync,
+            new CommandMetadata(GitStrings.StashPopCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 360));
+        Register(STASH_DROP, handler.StashDropAsync,
+            new CommandMetadata(GitStrings.StashDropCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 370));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -258,6 +313,7 @@ public static class GitCommands
                 ExtensionsItem(STAGE_ALL, GitStrings.StageAllCommand, CHANGES_GROUP, 50),
                 ExtensionsItem(UNSTAGE_ALL, GitStrings.UnstageAllCommand, CHANGES_GROUP, 60),
                 ExtensionsItem(COMMIT, GitStrings.CommitCommand, CHANGES_GROUP, 70),
+                ExtensionsItem(COMMIT_AMEND, GitStrings.CommitAmendCommand, CHANGES_GROUP, 75),
                 ExtensionsItem(INIT, GitStrings.InitCommand, REPOSITORY_GROUP, 80),
                 new ExtensionMenuContribution(TOGGLE_REPOSITORY_VIEW, GitStrings.RepositoryViewTitle, ExtensionMenuLocations.View, "views.left", 50),
                 ExtensionsItem(CHECKOUT, GitStrings.CheckoutCommand, BRANCHES_GROUP, 90),
@@ -269,6 +325,11 @@ public static class GitCommands
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
                 ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
+                ExtensionsItem(STASH, GitStrings.StashCommand, STASH_GROUP, 170),
+                ExtensionsItem(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, STASH_GROUP, 180),
+                ExtensionsItem(STASH_APPLY, GitStrings.StashApplyCommand, STASH_GROUP, 190),
+                ExtensionsItem(STASH_POP, GitStrings.StashPopCommand, STASH_GROUP, 200),
+                ExtensionsItem(STASH_DROP, GitStrings.StashDropCommand, STASH_GROUP, 210),
                 ContextItem(ExtensionMenuLocations.EditorContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.EditorContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
@@ -314,7 +375,16 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(TOGGLE_CHANGE_MARKERS, GitStrings.ToggleChangeMarkersCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(BLAME, GitStrings.BlameCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(BLAME, GitStrings.BlameCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(COMMIT_AMEND, GitStrings.CommitAmendCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STAGE_SELECTION, GitStrings.StageSelectionCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(UNSTAGE_SELECTION, GitStrings.UnstageSelectionCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(DISCARD_SELECTION, GitStrings.DiscardSelectionCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH, GitStrings.StashCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_APPLY, GitStrings.StashApplyCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_POP, GitStrings.StashPopCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_DROP, GitStrings.StashDropCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

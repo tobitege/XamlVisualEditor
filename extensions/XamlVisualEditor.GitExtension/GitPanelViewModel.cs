@@ -13,8 +13,8 @@ using Avalonia.Collections;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
-using CoreGitDiffLineKind = XamlVisualEditor.Core.GitDiffLineKind;
 using XamlVisualEditor.GitExtension.Services;
+using XamlVisualEditor.SourceControl.UI.Models;
 
 using XamlVisualEditor.Core.Localization;
 
@@ -108,7 +108,7 @@ public sealed partial class GitChangeEntryViewModel : ReactiveObject
 }
 
 /// <summary>
-/// ViewModel for the git panel UI.
+/// Kind of a <see cref="GitDiffLineViewModel"/>; the Changes panel no longer uses it.
 /// </summary>
 public enum GitDiffLineKind
 {
@@ -121,7 +121,7 @@ public enum GitDiffLineKind
 }
 
 /// <summary>
-/// ViewModel entry representing a diff line for the preview.
+/// A diff line for <see cref="Controls.GitDiffTextEditor"/>; the Changes panel no longer uses it.
 /// </summary>
 public sealed partial class GitDiffLineViewModel
 {
@@ -170,6 +170,12 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     private bool _isDisposed;
     private bool _snapshotAppliedSinceRefresh;
 
+    // The message of the last commit that checking IsAmend filled in, while it may still be shown unchanged.
+    private string? _amendMessage;
+
+    // The HEAD commit of the last applied snapshot.
+    private string? _headSha;
+
     // The cancellation of the diff load that is running; only used on the UI thread.
     private CancellationTokenSource? _diffLoad;
 
@@ -209,8 +215,31 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     [Reactive]
     public partial string? CommitMessage { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether <see cref="CommitCommand"/> amends the last commit. Checking it with an empty message box
+    /// fills in the message of the last commit; unchecking it clears that message again while it is unchanged.
+    /// </summary>
+    [Reactive]
+    public partial bool IsAmend { get; set; }
+
+    /// <summary>Gets whether the last commit can be amended: the branch has a commit and the git service can amend.</summary>
+    [Reactive]
+    public partial bool CanAmend { get; private set; }
+
     [Reactive]
     public partial string DiffText { get; private set; } = string.Empty;
+
+    /// <summary>Gets the lines of <see cref="DiffText"/>; a new list for every shown diff.</summary>
+    [Reactive]
+    public partial IReadOnlyList<DiffLine> DiffLines { get; private set; } = Array.Empty<DiffLine>();
+
+    /// <summary>Gets or sets the 0-based index of the hunk at the cursor of the diff, or -1.</summary>
+    [Reactive]
+    public partial int CurrentHunkIndex { get; set; } = -1;
+
+    /// <summary>Gets or sets the diff lines the selection in the diff touches, or null without a selection.</summary>
+    [Reactive]
+    public partial DiffLineRange? SelectedDiffRange { get; set; }
 
     [Reactive]
     public partial bool IsDiffVisible { get; private set; } = true;
@@ -230,8 +259,6 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     public DataGridCollectionView StagedView => _stagedView;
 
     public DataGridCollectionView UnstagedView => _unstagedView;
-
-    public ObservableCollection<GitDiffLineViewModel> DiffLines { get; } = new();
 
     public int StagedCount => _stagedCount.Value;
 
@@ -261,8 +288,20 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     /// <summary>Runs <see cref="GitCommands.UNSTAGE_ALL"/>.</summary>
     public ReactiveCommand<RxVoid, RxVoid> UnstageAllCommand { get; }
 
-    /// <summary>Runs <see cref="GitCommands.COMMIT"/>, which commits with <see cref="CommitMessage"/>.</summary>
+    /// <summary>
+    /// Runs <see cref="GitCommands.COMMIT"/>, which commits with <see cref="CommitMessage"/>, or amends the last commit
+    /// with it while <see cref="IsAmend"/> is set.
+    /// </summary>
     public ReactiveCommand<RxVoid, RxVoid> CommitCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STAGE_SELECTION"/> for the selected diff lines of a working tree change.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> StageSelectionCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.UNSTAGE_SELECTION"/> for the selected diff lines of a staged change.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> UnstageSelectionCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.DISCARD_SELECTION"/> for the selected diff lines of a working tree change.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> DiscardSelectionCommand { get; }
 
     /// <summary>Creates the panel for a shared session; the session stays alive when the panel is disposed.</summary>
     /// <param name="session">The Git session whose status is shown.</param>
@@ -305,12 +344,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         _unstagedCount = unstagedCountChanged.ToProperty(this, x => x.UnstagedCount);
         _disposables.Add(_unstagedCount);
 
-        IObservable<int> diffLineCountChanged = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
-                handler => DiffLines.CollectionChanged += handler,
-                handler => DiffLines.CollectionChanged -= handler)
-            .Select(_ => DiffLines.Count)
-            .StartWith(DiffLines.Count);
-        _diffLineCount = diffLineCountChanged.ToProperty(this, x => x.DiffLineCount);
+        _diffLineCount = this.WhenAnyValue(x => x.DiffLines).Select(lines => lines.Count).ToProperty(this, x => x.DiffLineCount);
         _disposables.Add(_diffLineCount);
 
         ToggleMonitoringCommand = AddCommand(ReactiveCommand.CreateFromTask(ToggleMonitoringAsync));
@@ -339,10 +373,16 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             () => _executeCommand(GitCommands.UNSTAGE_ALL, null),
             this.WhenAnyValue(x => x.StagedCount).Select(count => count > 0)));
 
-        IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount, x => x.IsRepository,
-                (message, count, isRepo) => isRepo && count > 0 && !string.IsNullOrWhiteSpace(message))
+        // Amending needs no staged changes: it can change the message only.
+        IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount, x => x.IsRepository, x => x.IsAmend,
+                (message, count, isRepo, isAmend) => isRepo && (count > 0 || isAmend) && !string.IsNullOrWhiteSpace(message))
             .DistinctUntilChanged();
         CommitCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.COMMIT, null), canCommit));
+
+        StageSelectionCommand = AddSelectionCommand(GitCommands.STAGE_SELECTION, GitPatchAction.Stage);
+        UnstageSelectionCommand = AddSelectionCommand(GitCommands.UNSTAGE_SELECTION, GitPatchAction.Unstage);
+        DiscardSelectionCommand = AddSelectionCommand(GitCommands.DISCARD_SELECTION, GitPatchAction.Discard);
+        _disposables.Add(this.WhenAnyValue(x => x.IsAmend).Skip(1).Subscribe(isAmend => _ = OnAmendChangedAsync(isAmend)));
 
         IDisposable stagedSelection = this.WhenAnyValue(x => x.SelectedStagedChange)
             .Where(change => change is not null)
@@ -367,8 +407,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             .Subscribe(_ =>
             {
                 CancelDiffLoad();
-                DiffText = string.Empty;
-                DiffLines.Clear();
+                ShowDiff(string.Empty);
             });
         _disposables.Add(selectionClear);
 
@@ -473,12 +512,14 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 
         if (snapshot.Status is null)
         {
+            TrackHead(snapshot.RepositoryRoot, null);
             RepositoryRoot = snapshot.RepositoryRoot;
             BranchName = string.Empty;
             UpstreamName = null;
             AheadBy = 0;
             BehindBy = 0;
             IsRepository = snapshot.IsRepository;
+            CanAmend = false;
             ErrorMessage = snapshot.ErrorMessage;
             SelectedStagedChange = null;
             SelectedUnstagedChange = null;
@@ -490,12 +531,14 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         string? selectedPath = SelectedStagedChange?.Path ?? SelectedUnstagedChange?.Path;
         bool wasStaged = SelectedStagedChange is not null;
 
+        TrackHead(snapshot.RepositoryRoot, status.HeadSha);
         RepositoryRoot = snapshot.RepositoryRoot;
         BranchName = status.BranchName;
         UpstreamName = status.UpstreamName;
         AheadBy = status.AheadBy;
         BehindBy = status.BehindBy;
         IsRepository = true;
+        CanAmend = !status.IsUnborn && _session.Services.Patch is not null;
         ErrorMessage = snapshot.ErrorMessage;
 
         ReplaceItems(_stagedItems, status, isStaged: true);
@@ -504,12 +547,26 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         RestoreSelection(selectedPath, wasStaged);
     }
 
+    /// <summary>
+    /// Unchecks <see cref="IsAmend"/> when the repository or HEAD changed: an amend belongs to the commit it was
+    /// checked for, and unchecking clears a filled-in message that is still unchanged.
+    /// </summary>
+    private void TrackHead(string? repositoryRoot, string? headSha)
+    {
+        if (!string.Equals(repositoryRoot, RepositoryRoot, StringComparison.Ordinal)
+            || !string.Equals(headSha, _headSha, StringComparison.Ordinal))
+        {
+            IsAmend = false;
+        }
+
+        _headSha = headSha;
+    }
+
     private void ClearChanges()
     {
         _stagedItems.Clear();
         _unstagedItems.Clear();
-        DiffLines.Clear();
-        DiffText = string.Empty;
+        ShowDiff(string.Empty);
         ApplyFilter();
     }
 
@@ -547,7 +604,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         string? repositoryRoot = RepositoryRoot;
         if (string.IsNullOrWhiteSpace(repositoryRoot))
         {
-            DiffText = string.Empty;
+            ShowDiff(string.Empty);
             return;
         }
 
@@ -569,12 +626,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
                 return;
             }
 
-            DiffText = diff.RawText ?? string.Empty;
-            DiffLines.Clear();
-            foreach (GitDiffLineViewModel line in BuildDiffLines(diff))
-            {
-                DiffLines.Add(line);
-            }
+            ShowDiff(diff.RawText ?? string.Empty);
         }
         catch (OperationCanceledException) when (load.IsCancellationRequested)
         {
@@ -662,57 +714,108 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         return null;
     }
 
-    private static IReadOnlyList<GitDiffLineViewModel> BuildDiffLines(GitDiff diff)
+    /// <summary>
+    /// Shows <paramref name="text"/> as the diff; its lines are numbered like the lines of git's output. The text is set
+    /// last, so the lines are in place when it changes.
+    /// </summary>
+    private void ShowDiff(string text)
     {
-        if (diff.Files.Count == 0)
+        // An unchanged diff keeps its lines, so the selection and the hunk at the cursor survive a refresh.
+        if (string.Equals(text, DiffText, StringComparison.Ordinal))
         {
-            return Array.Empty<GitDiffLineViewModel>();
+            return;
         }
 
-        List<GitDiffLineViewModel> results = new();
-        foreach (GitDiffFile file in diff.Files)
+        DiffLines = DiffLineBuilder.Parse(text);
+        DiffText = text;
+    }
+
+    /// <summary>
+    /// Returns the lines a selection command of <paramref name="action"/> works on: the selected diff lines, or the
+    /// hunk at the cursor, of the selected change, when they hold an added or removed line and the change allows the
+    /// action. Untracked and conflicted files have no partial actions.
+    /// </summary>
+    internal GitDiffSelection? GetDiffSelection(GitPatchAction action)
+    {
+        GitChangeEntryViewModel? entry = action == GitPatchAction.Unstage ? SelectedStagedChange : SelectedUnstagedChange;
+        if (entry?.Change is not { } change
+            || !(action == GitPatchAction.Unstage ? GitCommandTarget.HasStagedChange(change) : GitCommandTarget.CanDiscard(change))
+            || (SelectedDiffRange ?? FindHunk(CurrentHunkIndex)) is not { } range
+            || !DiffLines.Skip(range.Start).Take(range.Count).Any(line => line.Kind is DiffLineKind.Added or DiffLineKind.Removed))
         {
-            foreach (string header in file.HeaderLines)
-            {
-                results.Add(new GitDiffLineViewModel(GitDiffLineKind.FileHeader, header, string.Empty, null, null));
-            }
-
-            foreach (GitDiffHunk hunk in file.Hunks)
-            {
-                results.Add(new GitDiffLineViewModel(GitDiffLineKind.HunkHeader, hunk.Header, string.Empty, null, null));
-
-                foreach (GitDiffLine line in hunk.Lines)
-                {
-                    GitDiffLineKind kind = MapLineKind(line.Kind);
-                    string marker = GetMarker(kind);
-                    results.Add(new GitDiffLineViewModel(kind, line.Text, marker, line.OldLine, line.NewLine));
-                }
-            }
+            return null;
         }
 
-        return results.Count == 0 ? Array.Empty<GitDiffLineViewModel>() : results;
+        return new GitDiffSelection(entry.Path, action, DiffText, range.Start, range.Count);
     }
 
-    private static GitDiffLineKind MapLineKind(CoreGitDiffLineKind kind)
+    /// <summary>Returns the lines of hunk <paramref name="index"/> from its header up to the next one, or null.</summary>
+    private DiffLineRange? FindHunk(int index)
     {
-        return kind switch
+        int[] headers = Enumerable.Range(0, DiffLines.Count).Where(i => DiffLines[i].Kind == DiffLineKind.HunkHeader).ToArray();
+        if (index < 0 || index >= headers.Length)
         {
-            CoreGitDiffLineKind.Added => GitDiffLineKind.Added,
-            CoreGitDiffLineKind.Removed => GitDiffLineKind.Removed,
-            CoreGitDiffLineKind.NoNewline => GitDiffLineKind.NoNewline,
-            _ => GitDiffLineKind.Context
-        };
+            return null;
+        }
+
+        int end = index + 1 < headers.Length ? headers[index + 1] : DiffLines.Count;
+        return new DiffLineRange(headers[index], end - headers[index]);
     }
 
-    private static string GetMarker(GitDiffLineKind kind)
+    private ReactiveCommand<RxVoid, RxVoid> AddSelectionCommand(string commandId, GitPatchAction action)
     {
-        return kind switch
+        IObservable<bool> canExecute = this.WhenAnyValue(
+                x => x.SelectedStagedChange,
+                x => x.SelectedUnstagedChange,
+                x => x.DiffLines,
+                x => x.SelectedDiffRange,
+                x => x.CurrentHunkIndex)
+            .Select(_ => GetDiffSelection(action) is not null)
+            .DistinctUntilChanged();
+        return AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(commandId, null), canExecute));
+    }
+
+    /// <summary>Clears the message box and the Amend box after a commit.</summary>
+    internal void ClearCommit()
+    {
+        IsAmend = false;
+        CommitMessage = string.Empty;
+    }
+
+    // Started on the UI thread, so the code after the await runs there again.
+    private async System.Threading.Tasks.Task OnAmendChangedAsync(bool isAmend)
+    {
+        if (!isAmend)
         {
-            GitDiffLineKind.Added => "+",
-            GitDiffLineKind.Removed => "-",
-            GitDiffLineKind.Context => " ",
-            GitDiffLineKind.NoNewline => "\\",
-            _ => string.Empty
-        };
+            if (_amendMessage is not null && string.Equals(CommitMessage, _amendMessage, StringComparison.Ordinal))
+            {
+                CommitMessage = string.Empty;
+            }
+
+            _amendMessage = null;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(CommitMessage) || RepositoryRoot is not { } root || _session.Services.History is not { } history)
+        {
+            return;
+        }
+
+        try
+        {
+            GitCommitInfo head = await history.ResolveCommitAsync(root, "HEAD", _lifetime.Token);
+            if (IsAmend && string.IsNullOrWhiteSpace(CommitMessage))
+            {
+                _amendMessage = head.Message;
+                CommitMessage = head.Message;
+            }
+        }
+        catch (InvalidOperationException exception)
+        {
+            ErrorMessage = string.Format(CultureInfo.CurrentCulture, UiStrings.GitCommandFailed, exception.Message);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
     }
 }

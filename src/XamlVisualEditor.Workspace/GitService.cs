@@ -272,35 +272,33 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         return null;
     }
 
+    /// <summary>
+    /// Returns the arguments of the diff that <see cref="GetDiffAsync"/> shows and that
+    /// <see cref="ApplySelectionAsync"/> turns into a patch: without external diff tool and text conversion and with
+    /// the prefixes <c>a/</c> and <c>b/</c>, whatever <c>diff.external</c>, textconv attributes,
+    /// <c>diff.noprefix</c> or <c>diff.mnemonicPrefix</c> configure.
+    /// </summary>
     private static string[] BuildDiffArguments(GitDiffRequest request)
     {
-        List<string> args = new();
-
-        if (request.IsUntracked && !string.IsNullOrWhiteSpace(request.Path))
+        bool isUntracked = request.IsUntracked && !string.IsNullOrWhiteSpace(request.Path);
+        List<string> args = new() { "diff" };
+        if (isUntracked)
         {
-            args.Add("diff");
             args.Add("--no-index");
-            args.Add("--no-color");
-            args.Add("--unified=3");
-            args.Add("--");
-            args.Add("/dev/null");
-            args.Add(request.Path!);
-            return args.ToArray();
         }
-
-        args.Add("diff");
-        if (request.Staged)
+        else if (request.Staged)
         {
             args.Add("--cached");
         }
 
-        args.Add("--no-color");
-        args.Add("--unified=3");
-
-        if (!string.IsNullOrWhiteSpace(request.Path))
+        args.AddRange(["--no-color", "--unified=3", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"]);
+        if (isUntracked)
         {
-            args.Add("--");
-            args.Add(request.Path!);
+            args.AddRange(["--", "/dev/null", request.Path!]);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Path))
+        {
+            args.AddRange(["--", request.Path!]);
         }
 
         return args.ToArray();

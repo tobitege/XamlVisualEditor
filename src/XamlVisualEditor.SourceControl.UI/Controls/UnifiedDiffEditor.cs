@@ -312,7 +312,8 @@ public sealed class UnifiedDiffEditor : TextEditor
                 text.Append('\n');
             }
 
-            text.Append(shown[i].Text);
+            // A carriage return inside a line would start a new document line; editor line i must stay diff line i.
+            text.Append(shown[i].Text.Replace('\r', '␍'));
         }
 
         bool isTruncated = lines.Count > maxLineCount || HasMoreLines;

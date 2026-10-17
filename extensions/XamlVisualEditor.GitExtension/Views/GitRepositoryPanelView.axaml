@@ -239,6 +239,91 @@
                     </dg:DataGrid>
                 </DockPanel>
             </TabItem>
+            <TabItem Name="StashesTab" Header="{x:Static gloc:GitStrings.StashesTab}">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,4,0,2">
+                        <Button Classes="git-action" Command="{CompiledBinding StashCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.Stash}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding StashIncludeUntrackedCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashIncludeUntrackedCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashIncludeUntrackedCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.StashIncludeUntracked}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashIncludeUntrackedButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding ApplyStashCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashApplyCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashApplyCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.ApplyStash}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashApplyButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding PopStashCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashPopCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashPopCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.PopStash}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashPopButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding DropStashCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashDropCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashDropCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.DropStash}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashDropButton}" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="{CompiledBinding StashesMessage}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,6"
+                               IsVisible="{CompiledBinding StashesMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <dg:DataGrid Name="StashGrid"
+                                 Classes="explorer-compact"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 ItemsSource="{CompiledBinding Stashes}"
+                                 SelectedItem="{CompiledBinding SelectedStash, Mode=TwoWay}"
+                                 IsEnabled="{CompiledBinding IsRepository}"
+                                 AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
+                                 CanUserSortColumns="True"
+                                 GridLinesVisibility="None"
+                                 IsReadOnly="True"
+                                 AutomationProperties.Name="{x:Static gloc:GitStrings.StashesTab}"
+                                 behaviors:RightClickSelectBehavior.IsEnabled="True">
+                        <dg:DataGrid.Columns>
+                            <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnStash}" Width="Auto"
+                                                   x:DataType="vm:GitStashItemViewModel"
+                                                   Binding="{CompiledBinding Name}" SortMemberPath="Name" />
+                            <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnMessage}" Width="Auto"
+                                                   x:DataType="vm:GitStashItemViewModel"
+                                                   Binding="{CompiledBinding Message}" SortMemberPath="Message" />
+                            <!-- Fits any date and time in English, German and the current culture, whatever stashes are loaded. -->
+                            <dg:DataGridTemplateColumn Header="{x:Static gloc:GitStrings.ColumnDate}" Width="Auto" SortMemberPath="Created"
+                                                       x:DataType="vm:GitStashItemViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding DateText}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitStashItemViewModel">
+                                        <TextBlock Text="{CompiledBinding DateText}" Margin="12,0" VerticalAlignment="Center"
+                                                   behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitDateSamples.Texts}"
+                                                   behaviors:ColumnWidthSamples.WidestDigits="True" />
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
+                        </dg:DataGrid.Columns>
+                    </dg:DataGrid>
+                </DockPanel>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </UserControl>

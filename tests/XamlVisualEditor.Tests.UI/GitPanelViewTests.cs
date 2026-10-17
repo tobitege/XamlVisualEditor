@@ -21,7 +21,10 @@ using XamlVisualEditor.GitExtension.Controls;
 using XamlVisualEditor.GitExtension.Services;
 using XamlVisualEditor.GitExtension.Views;
 using XamlVisualEditor.SourceControl.UI.Behaviors;
+using XamlVisualEditor.SourceControl.UI.Controls;
+using XamlVisualEditor.SourceControl.UI.Models;
 using XamlVisualEditor.SourceControl.UI.Themes;
+using XamlVisualEditor.Tests.Shared;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
@@ -241,15 +244,15 @@ public sealed class GitPanelViewTests
         }
     };
 
+    private const string TWO_HUNK_DIFF = "diff --git a/c.cs b/c.cs\n--- a/c.cs\n+++ b/c.cs\n@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n"
+        + "@@ -10,2 +10,3 @@\n x\n+y\n z\n";
+
     [AvaloniaFact]
     public async Task GitPanelView_Renders_Diff_Lines()
     {
-        using PanelFixture panel = new(new ControlledGitService(blockFirstStatus: false));
+        using PanelFixture panel = await PanelFixture.CreateAsync(new ControlledGitService(CreateStatus(), blockFirstStatus: false) { DiffText = TWO_HUNK_DIFF });
         GitPanelViewModel vm = panel.ViewModel;
-        vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.FileHeader, "diff --git a/a.txt b/a.txt", string.Empty, null, null));
-        vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.HunkHeader, "@@ -1 +1 @@", "@@", null, null));
-        vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.Added, "added", "+", null, 1));
-        vm.DiffLines.Add(new GitDiffLineViewModel(GitDiffLineKind.Removed, "removed", "-", 1, null));
+        await SelectWorkingTreeChangeAsync(vm, "c.cs");
 
         GitPanelView view = new() { DataContext = vm };
         Window window = await ShowInWindowAsync(view);
@@ -266,17 +269,141 @@ public sealed class GitPanelViewTests
                     button => ReferenceEquals(button.Command, vm.DiscardCommand));
                 Assert.True(ToolTip.GetShowOnDisabled(discard));
                 Assert.Equal(UiStrings.GitDiscardTooltip, ToolTip.GetTip(discard));
-                GitDiffTextEditor? editor = view.GetVisualDescendants().OfType<GitDiffTextEditor>().FirstOrDefault();
-                Assert.NotNull(editor);
-                Assert.Contains("diff --git", editor!.Text);
-                Assert.Contains("+ added", editor.Text);
-                Assert.Contains("- removed", editor.Text);
+                UnifiedDiffEditor editor = Assert.IsType<UnifiedDiffEditor>(view.FindControl<UnifiedDiffEditor>("GitDiffEditor"));
+                Assert.Same(vm.DiffLines, editor.DiffLines);
+                Assert.Equal(TWO_HUNK_DIFF.TrimEnd('\n'), editor.Text);
+                Assert.Equal(12, vm.DiffLineCount);
+                // The colours come from the theme keys of the diff colours.
+                Assert.False(editor.IsSet(TemplatedControl.BackgroundProperty));
+                Assert.False(editor.IsSet(TemplatedControl.ForegroundProperty));
             });
         }
         finally
         {
             await Dispatcher.UIThread.InvokeAsync(() => window.Close());
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Changed_lines_selected_in_the_diff_or_the_hunk_at_the_cursor_enable_the_selection_buttons()
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false) { DiffText = TWO_HUNK_DIFF };
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
+        await SelectWorkingTreeChangeAsync(vm, "c.cs");
+        GitPanelView view = new() { DataContext = vm };
+        using ThemedWindow window = ThemedWindow.Show(view, 1400, 600);
+        UnifiedDiffEditor editor = Assert.IsType<UnifiedDiffEditor>(view.FindControl<UnifiedDiffEditor>("GitDiffEditor"));
+        ICommand stage = vm.StageSelectionCommand;
+        Assert.False(stage.CanExecute(null));
+
+        // Context lines alone hold nothing to stage.
+        SelectLines(editor, 5, 5);
+        window.Pump();
+        Assert.Equal(new DiffLineRange(4, 1), vm.SelectedDiffRange);
+        Assert.False(stage.CanExecute(null));
+
+        SelectLines(editor, 5, 7);
+        window.Pump();
+        Assert.True(stage.CanExecute(null));
+        Assert.True(((ICommand)vm.DiscardSelectionCommand).CanExecute(null));
+        Assert.False(((ICommand)vm.UnstageSelectionCommand).CanExecute(null));
+        Assert.Equal(
+            new XamlVisualEditor.Core.GitDiffSelection("c.cs", XamlVisualEditor.Core.GitPatchAction.Stage, TWO_HUNK_DIFF, 4, 3),
+            vm.GetDiffSelection(XamlVisualEditor.Core.GitPatchAction.Stage));
+
+        // Without a selection the hunk at the cursor counts.
+        editor.TextArea.ClearSelection();
+        editor.CurrentHunkIndex = 1;
+        window.Pump();
+        Assert.Null(vm.SelectedDiffRange);
+        Assert.Equal(1, vm.CurrentHunkIndex);
+        XamlVisualEditor.Core.GitDiffSelection hunk = vm.GetDiffSelection(XamlVisualEditor.Core.GitPatchAction.Stage)!;
+        Assert.Equal((8, 4), (hunk.FirstLine, hunk.LineCount));
+        await vm.StageSelectionCommand.Execute().ToTask();
+        Assert.Equal((GitCommands.STAGE_SELECTION, (IReadOnlyList<object?>?)null), panel.Executed[^1]);
+
+        // An untracked file is only staged as a whole.
+        gitService.DiffText = "diff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+n\n";
+        await SelectWorkingTreeChangeAsync(vm, "new.txt");
+        editor.CurrentHunkIndex = 0;
+        window.Pump();
+        Assert.Equal(0, vm.CurrentHunkIndex);
+        Assert.False(stage.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task A_refresh_with_an_unchanged_diff_keeps_the_selection()
+    {
+        ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false) { DiffText = TWO_HUNK_DIFF };
+        using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
+        GitPanelViewModel vm = panel.ViewModel;
+        await SelectWorkingTreeChangeAsync(vm, "c.cs");
+        GitPanelView view = new() { DataContext = vm };
+        using ThemedWindow window = ThemedWindow.Show(view, 1400, 600);
+        UnifiedDiffEditor editor = Assert.IsType<UnifiedDiffEditor>(view.FindControl<UnifiedDiffEditor>("GitDiffEditor"));
+        SelectLines(editor, 5, 7);
+        window.Pump();
+        TaskCompletionSource<GitDiff> reload = new();
+        gitService.GatedDiffs["c.cs"] = reload;
+        int diffCalls = gitService.DiffCalls;
+
+        // The status stays the same, so the refresh reloads the diff of the selected file.
+        await vm.RefreshAsync().WaitAsync(WaitLimit);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(diffCalls + 1, gitService.DiffCalls);
+        reload.SetResult(ControlledGitService.CreateDiff(TWO_HUNK_DIFF));
+        window.Pump();
+
+        Assert.Equal(new DiffLineRange(4, 3), editor.SelectedLineRange);
+        Assert.Equal(new DiffLineRange(4, 3), vm.SelectedDiffRange);
+        Assert.True(((ICommand)vm.StageSelectionCommand).CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task A_carriage_return_inside_a_line_keeps_each_editor_line_on_its_diff_line()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create();
+        string[] lines = Enumerable.Range(1, 30).Select(number => "line" + number).ToArray();
+        repository.CommitFileIn(repository.Path, "f.txt", string.Join('\n', lines) + "\n", "init");
+        lines[2] = "line3 old\rmac";
+        lines[25] = "line26 changed";
+        repository.WriteFile("f.txt", string.Join('\n', lines) + "\n");
+        XamlVisualEditor.Workspace.GitService git = new(options: repository.ProcessOptions);
+        string diff = (await git.GetDiffAsync(repository.Path, new GitDiffRequest { Path = "f.txt" }, ct)).RawText!;
+        UnifiedDiffEditor editor = new() { DiffLines = DiffLineBuilder.Parse(diff) };
+        using ThemedWindow window = ThemedWindow.Show(editor, 600, 400);
+
+        // Discard only the removed line: line26 comes back in front of the changed line.
+        AvaloniaEdit.Document.DocumentLine removed = editor.Document.Lines.First(line => editor.Document.GetText(line) == "-line26");
+        editor.Select(removed.Offset, removed.Length);
+        window.Pump();
+        DiffLineRange range = editor.SelectedLineRange!.Value;
+        await git.ApplySelectionAsync(
+            repository.Path,
+            new XamlVisualEditor.Core.GitDiffSelection("f.txt", XamlVisualEditor.Core.GitPatchAction.Discard, diff, range.Start, range.Count),
+            ct);
+
+        lines[25] = "line26\nline26 changed";
+        Assert.Equal(string.Join('\n', lines) + "\n", System.IO.File.ReadAllText(System.IO.Path.Combine(repository.Path, "f.txt")));
+        Assert.Equal(editor.DiffLines!.Count, editor.Document.LineCount);
+    }
+
+    /// <summary>Selects the working tree change of <paramref name="path"/> and waits until its new diff text is shown.</summary>
+    private static async Task SelectWorkingTreeChangeAsync(GitPanelViewModel vm, string path)
+    {
+        string previous = vm.DiffText;
+        Task<string> loaded = vm.WhenAnyValue(x => x.DiffText).FirstAsync(text => text != previous).Timeout(WaitLimit).ToTask();
+        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == path);
+        await loaded;
+    }
+
+    /// <summary>Selects the 1-based lines <paramref name="first"/> to <paramref name="last"/> of the editor.</summary>
+    private static void SelectLines(UnifiedDiffEditor editor, int first, int last)
+    {
+        int start = editor.Document.GetLineByNumber(first).Offset;
+        editor.Select(start, editor.Document.GetLineByNumber(last).EndOffset - start);
     }
 
     [AvaloniaFact]
@@ -329,7 +456,8 @@ public sealed class GitPanelViewTests
             ICommand[] commands =
             [
                 vm.RefreshCommand, vm.ToggleDiffCommand, vm.ToggleMonitoringCommand, vm.StageCommand,
-                vm.UnstageCommand, vm.DiscardCommand, vm.StageAllCommand, vm.UnstageAllCommand, vm.CommitCommand
+                vm.UnstageCommand, vm.DiscardCommand, vm.StageAllCommand, vm.UnstageAllCommand, vm.CommitCommand,
+                vm.StageSelectionCommand, vm.UnstageSelectionCommand, vm.DiscardSelectionCommand
             ];
             Button[] buttons = view.GetVisualDescendants().OfType<Button>()
                 .Where(button => button.Command is not null)

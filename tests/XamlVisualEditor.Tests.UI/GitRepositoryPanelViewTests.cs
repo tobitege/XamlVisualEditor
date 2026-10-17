@@ -541,6 +541,72 @@ public sealed class GitRepositoryPanelViewTests
         Assert.Empty(withoutTags.Panel.Tags);
     }
 
+    [AvaloniaFact]
+    public async Task Stashes_tab_lists_the_stashes_and_its_buttons_pass_the_commit_id_of_the_selected_stash()
+    {
+        StashList stashes = new(
+            new GitStashEntry(0, new string('b', 40), "On main: Grüße", new DateTimeOffset(2026, 10, 2, 8, 0, 0, TimeSpan.Zero)),
+            new GitStashEntry(1, new string('a', 40), "WIP on main: 1234567 first", new DateTimeOffset(2026, 10, 1, 8, 0, 0, TimeSpan.Zero)));
+        using Fixture fixture = await Fixture.CreateAsync(stash: stashes);
+        GitRepositoryPanelViewModel panel = fixture.Panel;
+        GitRepositoryPanelView view = new() { DataContext = panel };
+        using ThemedWindow window = ThemedWindow.Show(view, 900, 600);
+        view.FindControl<TabItem>("StashesTab")!.IsSelected = true;
+        window.Pump();
+
+        Assert.Null(panel.StashesMessage);
+        Assert.Equal(new[] { "stash@{0}", "stash@{1}" }, panel.Stashes.Select(stash => stash.Name));
+        DataGrid grid = view.FindControl<DataGrid>("StashGrid")!;
+        Assert.Equal(2, grid.GetVisualDescendants().OfType<DataGridRow>().Count(row => row.IsVisible));
+        (ReactiveCommand<RxVoid, RxVoid> Command, string CommandId)[] selected =
+        [
+            (panel.ApplyStashCommand, GitCommands.STASH_APPLY),
+            (panel.PopStashCommand, GitCommands.STASH_POP),
+            (panel.DropStashCommand, GitCommands.STASH_DROP)
+        ];
+        (ReactiveCommand<RxVoid, RxVoid> Command, string CommandId)[] always =
+        [
+            (panel.StashCommand, GitCommands.STASH),
+            (panel.StashIncludeUntrackedCommand, GitCommands.STASH_INCLUDE_UNTRACKED)
+        ];
+        foreach ((ReactiveCommand<RxVoid, RxVoid> command, string _) in selected.Concat(always))
+        {
+            Button button = Assert.Single(view.GetVisualDescendants().OfType<Button>(), candidate => ReferenceEquals(candidate.Command, command));
+            PathIcon icon = Assert.Single(button.GetVisualDescendants().OfType<PathIcon>());
+            Assert.NotNull(icon.Data);
+            Assert.False(icon.IsSet(TemplatedControl.ForegroundProperty));
+            Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => !string.IsNullOrWhiteSpace(text.Text));
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
+            Assert.IsType<string>(ToolTip.GetTip(button));
+        }
+
+        Assert.All(selected, entry => Assert.False(((ICommand)entry.Command).CanExecute(null)));
+        grid.SelectedItem = panel.Stashes[1];
+        window.Pump();
+        foreach ((ReactiveCommand<RxVoid, RxVoid> command, string commandId) in selected)
+        {
+            await command.Execute().ToTask();
+            Assert.Equal((commandId, new string('a', 40)), (fixture.Executed[^1].CommandId, fixture.Executed[^1].Arguments?.Single() as string));
+        }
+
+        foreach ((ReactiveCommand<RxVoid, RxVoid> command, string commandId) in always)
+        {
+            await command.Execute().ToTask();
+            Assert.Equal((commandId, (IReadOnlyList<object?>?)null), fixture.Executed[^1]);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Stashes_tab_says_when_there_are_no_stashes_or_the_service_cannot_list_them()
+    {
+        using Fixture withoutService = await Fixture.CreateAsync();
+        using Fixture withoutStashes = await Fixture.CreateAsync(stash: new StashList());
+
+        Assert.Equal(GitStrings.StashesUnavailable, withoutService.Panel.StashesMessage);
+        Assert.Equal(GitStrings.NoStashes, withoutStashes.Panel.StashesMessage);
+        Assert.Empty(withoutStashes.Panel.Stashes);
+    }
+
     /// <summary>Shows the content with the Fluent theme, which templates the tab control and the tree.</summary>
     private static Window Show(Control content, double width = 500, double height = 600)
     {
@@ -567,10 +633,10 @@ public sealed class GitRepositoryPanelViewTests
 
     private sealed class Fixture : IDisposable
     {
-        private Fixture(BranchGitService git, IGitHistoryService? history)
+        private Fixture(BranchGitService git, IGitHistoryService? history, IGitStashService? stash)
         {
             Git = git;
-            Session = new GitSession(new GitServiceSet(git) { Branches = git, History = history }, new WorkspaceInfo());
+            Session = new GitSession(new GitServiceSet(git) { Branches = git, History = history, Stash = stash }, new WorkspaceInfo());
             Panel = new GitRepositoryPanelViewModel(Session, (commandId, arguments) =>
             {
                 Executed.Add((commandId, arguments));
@@ -596,10 +662,11 @@ public sealed class GitRepositoryPanelViewTests
             string? branchError = null,
             bool shown = true,
             bool detached = false,
-            IGitHistoryService? history = null)
+            IGitHistoryService? history = null,
+            IGitStashService? stash = null)
         {
             BranchGitService git = new(upstream, branchError) { IsDetached = detached };
-            Fixture fixture = new(git, history);
+            Fixture fixture = new(git, history, stash);
             fixture.Panel.IsShown = shown;
             await fixture.Session.RefreshAsync();
             Dispatcher.UIThread.RunJobs();
@@ -612,6 +679,21 @@ public sealed class GitRepositoryPanelViewTests
             Panel.Dispose();
             Session.Dispose();
         }
+    }
+
+    /// <summary>A fixed list of stashes; changing them is not part of the panel.</summary>
+    private sealed class StashList(params GitStashEntry[] stashes) : IGitStashService
+    {
+        public Task<IReadOnlyList<GitStashEntry>> ListAsync(string repoPath, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<GitStashEntry>>(stashes);
+
+        public Task PushAsync(string repoPath, string? message, bool includeUntracked, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task ApplyAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<bool> PopAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<bool> DropAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class WorkspaceInfo : IWorkspaceInfo

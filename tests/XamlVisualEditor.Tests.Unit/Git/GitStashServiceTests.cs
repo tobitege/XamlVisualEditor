@@ -1,0 +1,117 @@
+using XamlVisualEditor.Core;
+using XamlVisualEditor.Tests.Shared;
+using XamlVisualEditor.Workspace;
+using Xunit;
+
+namespace XamlVisualEditor.Tests.Unit.Git;
+
+public sealed class GitStashServiceTests
+{
+    [Fact]
+    public async Task Push_with_message_and_untracked_files_lists_the_stash_with_its_fields()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.WriteFile("a.txt", "changed\n");
+        repository.WriteFile("neu.txt", "new\n");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.PushAsync(repository.Path, "Grüße", includeUntracked: true, ct);
+        IReadOnlyList<GitStashEntry> stashes = await service.ListAsync(repository.Path, ct);
+
+        GitStashEntry stash = Assert.Single(stashes);
+        Assert.Equal(0, stash.Index);
+        Assert.Equal("stash@{0}", stash.Name);
+        Assert.Equal(repository.RunGit("rev-parse", "stash@{0}").Trim(), stash.ObjectId);
+        Assert.Equal("On main: Grüße", stash.Message);
+        Assert.InRange(stash.Created, DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddMinutes(5));
+        Assert.Equal(string.Empty, repository.RunGit("status", "--porcelain"));
+    }
+
+    [Fact]
+    public async Task Push_without_untracked_files_keeps_them_and_push_without_changes_creates_no_stash()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.WriteFile("neu.txt", "new\n");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.PushAsync(repository.Path, null, includeUntracked: false, ct);
+
+        Assert.Empty(await service.ListAsync(repository.Path, ct));
+        Assert.True(File.Exists(Path.Combine(repository.Path, "neu.txt")));
+    }
+
+    [Fact]
+    public async Task Apply_by_commit_id_keeps_the_stash_after_the_list_changed()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt", "b.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.WriteFile("a.txt", "first\n");
+        await service.PushAsync(repository.Path, "first", includeUntracked: false, ct);
+        GitStashEntry first = Assert.Single(await service.ListAsync(repository.Path, ct));
+        repository.WriteFile("b.txt", "second\n");
+        await service.PushAsync(repository.Path, "second", includeUntracked: false, ct);
+
+        await service.ApplyAsync(repository.Path, first, ct);
+
+        Assert.Equal("first\n", File.ReadAllText(Path.Combine(repository.Path, "a.txt")));
+        Assert.Equal("b.txt\n", File.ReadAllText(Path.Combine(repository.Path, "b.txt")));
+        Assert.Equal(2, (await service.ListAsync(repository.Path, ct)).Count);
+    }
+
+    [Fact]
+    public async Task Pop_with_a_conflict_fails_and_keeps_the_stash_and_the_conflict()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.WriteFile("a.txt", "stashed\n");
+        await service.PushAsync(repository.Path, null, includeUntracked: false, ct);
+        repository.CommitFileIn(repository.Path, "a.txt", "committed\n", "conflicting");
+        GitStashEntry stash = Assert.Single(await service.ListAsync(repository.Path, ct));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PopAsync(repository.Path, stash, ct));
+
+        Assert.Equal(stash, Assert.Single(await service.ListAsync(repository.Path, ct)));
+        Assert.StartsWith("UU a.txt", repository.RunGit("status", "--porcelain"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Drop_and_pop_of_a_stash_that_moved_in_the_list_change_nothing()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt", "b.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.WriteFile("a.txt", "first\n");
+        await service.PushAsync(repository.Path, "first", includeUntracked: false, ct);
+        GitStashEntry first = Assert.Single(await service.ListAsync(repository.Path, ct));
+        repository.WriteFile("b.txt", "second\n");
+        repository.RunGit("stash", "push", "-q", "-m", "pushed elsewhere");
+
+        Assert.False(await service.DropAsync(repository.Path, first, ct));
+        Assert.False(await service.PopAsync(repository.Path, first, ct));
+
+        IReadOnlyList<GitStashEntry> stashes = await service.ListAsync(repository.Path, ct);
+        Assert.Equal(["On main: pushed elsewhere", "On main: first"], stashes.Select(stash => stash.Message));
+        Assert.True(await service.DropAsync(repository.Path, stashes[1], ct));
+        Assert.Equal("On main: pushed elsewhere", Assert.Single(await service.ListAsync(repository.Path, ct)).Message);
+    }
+
+    [Fact]
+    public async Task Pop_applies_and_removes_the_stash()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.WriteFile("a.txt", "stashed\n");
+        await service.PushAsync(repository.Path, null, includeUntracked: false, ct);
+        GitStashEntry stash = Assert.Single(await service.ListAsync(repository.Path, ct));
+
+        Assert.True(await service.PopAsync(repository.Path, stash, ct));
+
+        Assert.Empty(await service.ListAsync(repository.Path, ct));
+        Assert.Equal("stashed\n", File.ReadAllText(Path.Combine(repository.Path, "a.txt")));
+    }
+}

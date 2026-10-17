@@ -57,7 +57,16 @@ public sealed class GitCommandsTests
         { GitCommands.TOGGLE_CHANGE_MARKERS, GitStrings.ToggleChangeMarkersCommand, null },
         { GitCommands.COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, REPOSITORY_WHEN },
         { GitCommands.COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, REPOSITORY_WHEN },
-        { GitCommands.BLAME, GitStrings.BlameCommand, REPOSITORY_WHEN }
+        { GitCommands.BLAME, GitStrings.BlameCommand, REPOSITORY_WHEN },
+        { GitCommands.COMMIT_AMEND, GitStrings.CommitAmendCommand, REPOSITORY_WHEN },
+        { GitCommands.STAGE_SELECTION, GitStrings.StageSelectionCommand, REPOSITORY_WHEN },
+        { GitCommands.UNSTAGE_SELECTION, GitStrings.UnstageSelectionCommand, REPOSITORY_WHEN },
+        { GitCommands.DISCARD_SELECTION, GitStrings.DiscardSelectionCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH, GitStrings.StashCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_APPLY, GitStrings.StashApplyCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_POP, GitStrings.StashPopCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_DROP, GitStrings.StashDropCommand, REPOSITORY_WHEN }
     };
 
     [Theory]
@@ -84,7 +93,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(28, commandIds.Count);
+        Assert.Equal(37, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -118,9 +127,11 @@ public sealed class GitCommandsTests
         [
             GitCommands.SHOW_CHANGES, GitCommands.REFRESH, GitCommands.SHOW_OUTPUT, GitCommands.TOGGLE_AUTO_REFRESH,
             GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.TOGGLE_CHANGE_MARKERS,
-            GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.INIT,
+            GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.COMMIT_AMEND, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
-            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY
+            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
+            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_APPLY, GitCommands.STASH_POP,
+            GitCommands.STASH_DROP
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));

@@ -15,8 +15,12 @@
   work“ und wird NICHT verwendet. Von der Sammelliste ist nur der Stash-Dialogtitel behoben; der Rest bleibt offen.
 - **PR-Unterlagen:** Beschreibung in `xve-demo\PR-git-integration.md` (englisch, ohne Attribution), Rohbilder
   `01`–`05` unter `xve-demo\shots\git\` (05 = Merge-Auswahlliste), gehostet im Branch `roadmap-assets` unter
-  `git/` (a7b5791) und in der Beschreibung eingebunden. **PR #22 ist eröffnet** (17.10.2026, acht Commits). Weiter
-  geht es erst mit Review-Rückmeldungen aus Upstream; Fixes dazu kommen als Commits auf `git-integration`.
+  `git/` (a7b5791) und in der Beschreibung eingebunden. **PR #22 ist eröffnet** (17.10.2026) und die CI auf allen
+  drei Plattformen samt Paketprüfung grün (Stand eed4516: acht Phasen-Commits plus sechs Fix-Commits aus
+  CI-Befunden, die eigenständig bleiben; kein Squash, kein Force-Push am offenen PR). Weiter geht es erst mit
+  Review-Rückmeldungen aus Upstream; Fixes dazu kommen als Commits auf `git-integration`. Der Windows-Test
+  `AcpIntegrationTests.MockAgentRespondsToSessionFlow` fällt sporadisch, auch auf Upstream-main; ein neuer Lauf
+  lässt sich ohne Commit über Schließen und Wiederöffnen des PR auslösen.
   Die gestrichenen Phasen 7 und 8 stehen unter „Folge-PR“.
 - **Arbeitsweise:** Ohne Agenten direkt arbeiten, kleinste Lösung, keine neuen Mechanismen, keine weiteren Phasen.
   Roasted Review vor dem Push nur für den Mini-Merge-Diff selbst durchführen. Kein Force-Push mehr.

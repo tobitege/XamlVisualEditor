@@ -36,7 +36,41 @@ public sealed class GitStatusV2ParserTests
         Assert.False(status.IsDetached);
         Assert.False(status.IsUnborn);
         Assert.Equal(GitRepositoryOperation.None, status.Operation);
+        Assert.False(status.IsUpstreamGone);
         Assert.Empty(status.Changes);
+    }
+
+    [Fact]
+    public void Ordinary_and_renamed_entries_carry_the_index_object_id_and_other_entries_none()
+    {
+        const string INDEX_BLOB = "1234567890123456789012345678901234567890";
+        string output = Output(
+            $"1 .M N... 100644 100644 100644 {BLOB} {INDEX_BLOB} a.txt",
+            $"2 R. N... 100644 100644 100644 {BLOB} {INDEX_BLOB} R100 new.txt",
+            "old.txt",
+            Unmerged("UU", "conflict.txt"),
+            "? untracked.txt");
+
+        GitRepositoryStatus status = GitStatusParser.ParsePorcelainV2("/repo", output);
+
+        Assert.Equal(
+            [("a.txt", INDEX_BLOB), ("new.txt", INDEX_BLOB), ("conflict.txt", null), ("untracked.txt", null)],
+            status.Changes.Select(change => (change.Path, change.IndexObjectId)));
+    }
+
+    [Fact]
+    public void An_upstream_without_ahead_behind_line_is_gone()
+    {
+        string output = Output(
+            "# branch.oid " + SHA,
+            "# branch.head feature",
+            "# branch.upstream origin/feature");
+
+        GitRepositoryStatus status = GitStatusParser.ParsePorcelainV2("/repo", output);
+
+        Assert.Equal("origin/feature", status.UpstreamName);
+        Assert.True(status.IsUpstreamGone);
+        Assert.False(GitStatusParser.ParsePorcelainV2("/repo", Output("# branch.oid " + SHA, "# branch.head main")).IsUpstreamGone);
     }
 
     [Fact]

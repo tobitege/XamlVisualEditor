@@ -16,6 +16,13 @@ public interface IGitRepositoryService
     Task<string?> GetGitDirectoryAsync(string repoPath, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the absolute common git directory with the branches, <c>packed-refs</c> and <c>config</c>, which
+    /// differs from the git directory only in linked worktrees, or null when <paramref name="repoPath"/> is not
+    /// inside a repository.
+    /// </summary>
+    Task<string?> GetCommonDirectoryAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the names of the configured remotes; empty when there is none.
     /// </summary>
     Task<IReadOnlyList<string>> GetRemoteNamesAsync(string repoPath, CancellationToken ct = default);

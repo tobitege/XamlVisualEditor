@@ -4,6 +4,7 @@
              xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
              xmlns:media="using:Avalonia.Media"
              xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:loc="clr-namespace:XamlVisualEditor.Core.Localization;assembly=XamlVisualEditor.Core"
              x:Class="XamlVisualEditor.App.Views.ExtensionTreeView"
@@ -48,7 +49,12 @@
                 v:ExtensionTreeOpenBehavior.IsEnabled="True"
                 v:DataGridContextSelectionBehavior.IsEnabled="True">
       <dg:DataGrid.ContextMenu>
-        <ContextMenu x:DataType="vm:ExtensionTreeViewModel">
+        <ContextMenu x:DataType="vm:ExtensionTreeViewModel"
+                     ItemTemplate="{DynamicResource ExtensionMenuItemTemplate}"
+                     v:ExtensionMenu.CommandArguments="{CompiledBinding SelectedNode, Converter={x:Static v:ExtensionMenu.TargetArguments}}">
+          <i:Interaction.Behaviors>
+            <v:MenuItemsBehavior Items="{CompiledBinding ExtensionContextMenuItems}" InsertIndex="8" />
+          </i:Interaction.Behaviors>
           <MenuItem Header="{x:Static loc:UiStrings.Open}"
                     Command="{CompiledBinding OpenSelectedCommand}" />
           <MenuItem Header="{x:Static loc:UiStrings.OpenWorkspace}"
@@ -67,7 +73,11 @@
       </dg:DataGrid.ContextMenu>
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:ExtensionTreeNodeViewModel" x:DataType="vm:ExtensionTreeNodeViewModel">
-          <StackPanel Classes="explorer-row" Orientation="Horizontal">
+          <StackPanel Classes="explorer-row" Orientation="Horizontal"
+                      Classes.decoration-modified="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Modified}"
+                      Classes.decoration-added="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Added}"
+                      Classes.decoration-deleted="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Deleted}"
+                      Classes.decoration-conflicted="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.IsKind}, ConverterParameter=Conflicted}">
             <ContentControl Content="{CompiledBinding Icon}">
               <ContentControl.DataTemplates>
                 <DataTemplate x:DataType="media:IImage">
@@ -78,7 +88,11 @@
                 </DataTemplate>
               </ContentControl.DataTemplates>
             </ContentControl>
-            <TextBlock Text="{CompiledBinding Label}" />
+            <TextBlock Classes="decorated" Text="{CompiledBinding Label}" />
+            <TextBlock Classes="decorated explorer-badge"
+                       Text="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.Badge}}"
+                       ToolTip.Tip="{CompiledBinding Decoration, Converter={x:Static v:ExplorerDecorationConverters.ToolTip}}"
+                       IsVisible="{CompiledBinding $self.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Text="{CompiledBinding Description}"
                        Opacity="0.6" />
           </StackPanel>

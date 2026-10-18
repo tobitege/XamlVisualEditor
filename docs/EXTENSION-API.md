@@ -38,6 +38,7 @@ This is the current native .NET extension API surface. All types live in the
 - `Storage` (`IExtensionStorage`)
 - `Logger` (`IExtensionLogger`)
 - `PropertyEditors` (`IPropertyEditorRegistry`)
+- `ExplorerDecorations` (`IExplorerDecorations`, optional)
 
 ## Core Services
 
@@ -101,6 +102,7 @@ This is the current native .NET extension API surface. All types live in the
   - `OutputChannelRemoved` event
   - `OutputChannelMessage` event
   - `OutputChannelCleared` event
+  - `OutputChannelShowRequested` event (raised by `IOutputChannel.Show()`; the Output panel shows itself with that channel selected; the default implementation never raises it)
   - `CreateStatusBarItem(StatusBarAlignment alignment, int priority)`
 
 - `IExtensionPermissions`
@@ -266,6 +268,27 @@ This is the current native .NET extension API surface. All types live in the
   - `menu.tools`
   - `menu.tools.workspace`
   - `menu.extensions`
+  - `menu.editor.context`: context menu of the text and code editors
+  - `menu.explorer.context`: context menu of the File Explorer, the Solution Explorer and the extension trees whose
+    items implement `IExtensionTreeItemPathProvider`; the command receives `[fullPath]` of the clicked file or folder,
+    a project node the project folder, and the items are hidden on nodes without a path
+  - `menu.documentTab.context`: context menu of a document tab; the command receives `[fullPath]` of the file, and
+    the items are hidden on tabs without a file
+  - The items of the context menus follow the fixed items after a separator; `Submenu`, `SubmenuGroup`,
+    `CheckedWhen` and the `When` clause of the command apply as in the other menus.
+
+- `IExplorerDecorations` (`ExtensionContext.ExplorerDecorations`, null when the host shows no decorations)
+  - `CreateLayer()` returns an `IExplorerDecorationLayer`; layers are consulted in creation order and the first one
+    with an entry for a path wins
+  - `IExplorerDecorationLayer.Set(IEnumerable<KeyValuePair<string, ExplorerDecoration>> decorations)` replaces all
+    entries of the layer; keys are full paths of files and folders, a trailing separator is ignored, and it may be
+    called from any thread. `Dispose()` removes the entries.
+  - `ExplorerDecoration(ExplorerDecorationKind Kind, string? Badge = null, string? ToolTip = null)`: the label of the
+    node takes the theme colour of `Kind` (`Modified`, `Added`, `Deleted`, `Conflicted`), followed by the badge
+    with its tooltip. A node shows only its own entry; folders above a change need entries of their own.
+  - The theme colours are the brushes `SourceControlModifiedBrush`, `SourceControlAddedBrush`,
+    `SourceControlDeletedBrush` and `SourceControlConflictedBrush` of the light and the dark theme; the line marks of
+    the editors use the same brushes.
 
 - `IExtensionViewHost`
   - `VisibilityChanged` event (`ExtensionViewVisibilityChangedEventArgs`)
@@ -274,6 +297,13 @@ This is the current native .NET extension API surface. All types live in the
   - `ToggleAsync(string viewId, CancellationToken ct)`
   - `IsVisibleAsync(string viewId, CancellationToken ct)`
   - `ActivateAsync(string viewId, CancellationToken ct)`
+  - `ShowDocumentAsync(string documentId, string title, string? toolTip, Func<object> createViewModel, CancellationToken ct)`
+    opens a document tab with the content from `createViewModel`, or activates the open tab with the same id without
+    calling it, and returns the shown content; null when the host has no document tabs. The tab shows the content as
+    a content control does: an Avalonia `Control` as it is, any other object through the host's data templates,
+    which know only the view models of the built-in extensions, so an extension package returns its view, a
+    `Control` whose `DataContext` is its view model. The tab is not saved in the layout, and closing it disposes
+    content that implements `IDisposable`. Prefix the ids, for example with the extension id.
 
 ### ExtensionViewContribution
 
@@ -349,8 +379,22 @@ that it does not contain, or that the user closed, opens from the view menu or t
   - `NavigateBackAsync(CancellationToken ct)`
   - `NavigateForwardAsync(CancellationToken ct)`
 
+- `ITextEditorViewHost` (`ExtensionContext.TextEditorView`, optional)
+  - `Options`, `SetOptions(TextEditorViewOptions options)`, `OptionsChanged` event
+  - `HasActiveEditor`, `ExecuteAsync(TextEditorViewAction action, CancellationToken ct)`
+  - `CreateLineMarkLayer(string? clickCommandId = null)` returns an `ITextEditorLineMarkLayer`, or null when the host
+    draws no line marks. The editors of a file show the marks of the first layer, in creation order, that has marks
+    for it in a margin after the line numbers; a click on a mark runs `clickCommandId` with `[fullPath, line]`.
+  - `ITextEditorLineMarkLayer.Set(string filePath, IReadOnlyList<TextEditorLineMark> marks)` replaces the marks of
+    one file, given by its full path; an empty list removes them. It may be called from any thread. `Dispose()`
+    removes all marks of the layer.
+  - `TextEditorLineMark(int StartLine, int LineCount, TextEditorLineMarkKind Kind)` marks the 1-based lines
+    `StartLine` to `StartLine + LineCount - 1` in the theme colour of `Kind` (`Added`, `Modified`, `Deleted`); a
+    `LineCount` of 0 marks the boundary above `StartLine`, for example where lines were removed. Marks of a file must
+    not overlap.
+
 - `IEditorDocument`
   - `FilePath`, `LanguageId`, `CaretOffset`
-  - `GetTextAsync(CancellationToken ct)`
+  - `GetTextAsync(CancellationToken ct)`, callable from any thread
   - `ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)`
   - `Changed` event

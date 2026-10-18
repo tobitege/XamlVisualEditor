@@ -309,6 +309,33 @@ public sealed partial class InfiniteCanvasDocument : Document
 }
 
 /// <summary>
+/// Dock document that shows the view of an extension view model. It belongs to the session: the layout never saves it,
+/// and closing it disposes the view model.
+/// </summary>
+public sealed partial class ExtensionDocument : Document
+{
+    /// <summary>The prefix of the dock id before the document id of the extension.</summary>
+    public const string ID_PREFIX = "ExtensionDocument:";
+
+    public ExtensionDocument(string documentId, string title, string? toolTip, object viewModel)
+    {
+        Id = ID_PREFIX + documentId;
+        Title = title;
+        ToolTip = toolTip;
+        ViewModel = viewModel;
+        CanClose = true;
+    }
+
+    /// <summary>Gets the tooltip of the document tab, or null to show the title.</summary>
+    [IgnoreDataMember]
+    public string? ToolTip { get; }
+
+    /// <summary>Gets the view model whose view the document shows.</summary>
+    [IgnoreDataMember]
+    public object ViewModel { get; }
+}
+
+/// <summary>
 /// Factory that creates the default VS/Blend-style docking layout.
 /// </summary>
 public sealed partial class XamlEditorDockFactory : Factory
@@ -576,8 +603,13 @@ public sealed partial class XamlEditorDockFactory : Factory
 
     public InfiniteCanvasDocument? AddCanvasDocument(IRootDock rootDock, InfiniteCanvasViewModel canvasViewModel)
     {
-        InfiniteCanvasDocument doc = new(canvasViewModel);
+        return AddDocument(rootDock, new InfiniteCanvasDocument(canvasViewModel));
+    }
 
+    /// <summary>Adds a document to the document dock and activates it; null when the layout has no document dock.</summary>
+    public T? AddDocument<T>(IRootDock rootDock, T doc)
+        where T : Document
+    {
         DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
         if (docDock is not null)
         {
@@ -1017,7 +1049,8 @@ public sealed partial class XamlEditorDockFactory : Factory
     private static bool IsRuntimeDocument(JsonNode? node) =>
         node is JsonObject entry
         && entry["$type"]?.GetValue<string>() is { } type
-        && (type == typeof(TextDocument).FullName || type == typeof(DesignerDocument).FullName);
+        && (type == typeof(TextDocument).FullName || type == typeof(DesignerDocument).FullName
+            || type == typeof(ExtensionDocument).FullName);
 
     /// <summary>
     /// Gives a side tool dock without width its last width, or the default width, when it shows a tool again.
@@ -1336,7 +1369,7 @@ public sealed partial class XamlEditorDockFactory : Factory
 
         foreach ((Func<IDockable?> get, Action<IDockable?> set) in references)
         {
-            if (get() is DesignerDocument or TextDocument)
+            if (get() is DesignerDocument or TextDocument or ExtensionDocument)
             {
                 set(null);
             }
@@ -1349,7 +1382,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         {
             IDockable? value = get();
             references.Add((get, set));
-            if (value is DesignerDocument or TextDocument)
+            if (value is DesignerDocument or TextDocument or ExtensionDocument)
             {
                 restoreReferences.Add(() => set(value));
             }
@@ -1359,7 +1392,7 @@ public sealed partial class XamlEditorDockFactory : Factory
         {
             if (items is null) return;
             var documents = items.Select((item, index) => (Item: item, Index: index))
-                .Where(entry => entry.Item is DesignerDocument or TextDocument).ToArray();
+                .Where(entry => entry.Item is DesignerDocument or TextDocument or ExtensionDocument).ToArray();
             for (int index = documents.Length - 1; index >= 0; index--)
                 items.RemoveAt(documents[index].Index);
             if (documents.Length == 0) return;

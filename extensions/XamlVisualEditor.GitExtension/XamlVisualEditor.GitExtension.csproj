@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.SourceControl.UI\XamlVisualEditor.SourceControl.UI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Update="Localization\GitStrings.resx">

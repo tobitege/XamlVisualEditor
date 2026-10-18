@@ -182,6 +182,11 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
         Dispatcher.UIThread.Post(() => AppendMessage(channel, message, isLine, timestamp));
     }
 
+    public void HandleChannelShowRequested(OutputChannelInfo channel)
+    {
+        Dispatcher.UIThread.Post(() => SelectChannel(channel));
+    }
+
     public void Dispose()
     {
         _disposables.Dispose();
@@ -252,6 +257,18 @@ public sealed class OutputPanelViewModel : ReactiveObject, IDisposable
         {
             SelectedChannel = viewModel;
         }
+    }
+
+    private void SelectChannel(OutputChannelInfo channel)
+    {
+        AddChannel(channel);
+        OutputChannelViewModel selected = FindChannel(channel.Name)!;
+        if (!FilterChannel(selected))
+        {
+            ChannelSearchText = null;
+        }
+
+        SelectedChannel = selected;
     }
 
     private void RemoveChannel(OutputChannelInfo channel)

@@ -27,6 +27,7 @@
     <Project Path="src/XamlVisualEditor.Sync/XamlVisualEditor.Sync.csproj" />
     <Project Path="src/XamlVisualEditor.Collaboration/XamlVisualEditor.Collaboration.csproj" />
     <Project Path="src/XamlVisualEditor.Collaboration.UI/XamlVisualEditor.Collaboration.UI.csproj" />
+    <Project Path="src/XamlVisualEditor.SourceControl.UI/XamlVisualEditor.SourceControl.UI.csproj" />
     <Project Path="extensions/XamlVisualEditor.AnimationEditorExtension/XamlVisualEditor.AnimationEditorExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.CollaborationExtension/XamlVisualEditor.CollaborationExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.Debugging.DapExtension/XamlVisualEditor.Debugging.DapExtension.csproj" />

@@ -653,7 +653,7 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 _workspaceModel,
                 _workspaceInfo,
                 new StubSystemIconService(),
-                new InMemoryWindow(),
+                Window,
                 new InMemoryDialogHost(),
                 new InMemoryWorkspaceHost(),
                 _views,
@@ -682,6 +682,8 @@ public sealed class ExtensionCommandMenuIntegrationTests
         public MainWindowViewModel ViewModel { get; }
 
         public ContextKeyRegistry ContextKeys { get; } = new();
+
+        public InMemoryWindow Window { get; } = new();
 
         public TextEditorViewHost TextEditorView { get; }
 

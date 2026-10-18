@@ -41,6 +41,20 @@ public sealed class ExtensionViewHostAdapter : IExtensionViewHost, IDisposable
         await InvokeOnUiThreadAsync(() => _mainViewModel.ActivateExtensionView(viewId), cancellationToken);
     }
 
+    public async Task<object?> ShowDocumentAsync(
+        string documentId,
+        string title,
+        string? toolTip,
+        Func<object> createViewModel,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
+        ArgumentNullException.ThrowIfNull(createViewModel);
+        return await InvokeOnUiThreadAsync(
+            () => _mainViewModel.ShowExtensionDocument(documentId, title, toolTip, createViewModel),
+            cancellationToken);
+    }
+
     public void Dispose()
     {
         _mainViewModel.ExtensionViewVisibilityChanged -= OnExtensionViewVisibilityChanged;

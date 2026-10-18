@@ -13,6 +13,7 @@ public static class GitStatusParser
     /// </summary>
     /// <param name="repoPath">The repository root used for the status call.</param>
     /// <param name="statusOutput">The output of `git status --porcelain=v1 -b`.</param>
+    [Obsolete("The editor reads the status as porcelain v2; use ParsePorcelainV2.")]
     public static GitRepositoryStatus ParseStatus(string repoPath, string statusOutput)
     {
         string normalized = NormalizeLineEndings(statusOutput);
@@ -72,6 +73,8 @@ public static class GitStatusParser
         bool isUnborn = false;
         int aheadBy = 0;
         int behindBy = 0;
+        // Git writes branch.ab only when the upstream exists; branch.upstream alone means it is gone.
+        bool hasAheadBehind = false;
 
         List<GitFileChange> changes = new();
 
@@ -86,6 +89,7 @@ public static class GitStatusParser
             switch (entry[0])
             {
                 case '#':
+                    hasAheadBehind |= entry.StartsWith("# branch.ab ", StringComparison.Ordinal);
                     ParseV2Header(
                         entry,
                         ref branchName,
@@ -138,6 +142,7 @@ public static class GitStatusParser
             UpstreamName = upstreamName,
             AheadBy = aheadBy,
             BehindBy = behindBy,
+            IsUpstreamGone = upstreamName is not null && !hasAheadBehind,
             HeadSha = headSha,
             IsDetached = isDetached,
             IsUnborn = isUnborn,
@@ -212,7 +217,7 @@ public static class GitStatusParser
             return null;
         }
 
-        return CreateV2Change(fields[1], fields[8], oldPath: null);
+        return CreateV2Change(fields[1], fields[8], oldPath: null, fields[7]);
     }
 
     // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>, followed by the original path as its own entry
@@ -224,7 +229,7 @@ public static class GitStatusParser
             return null;
         }
 
-        return CreateV2Change(fields[1], fields[9], string.IsNullOrEmpty(originalPath) ? null : originalPath);
+        return CreateV2Change(fields[1], fields[9], string.IsNullOrEmpty(originalPath) ? null : originalPath, fields[7]);
     }
 
     // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
@@ -256,7 +261,7 @@ public static class GitStatusParser
         };
     }
 
-    private static GitFileChange CreateV2Change(string status, string path, string? oldPath)
+    private static GitFileChange CreateV2Change(string status, string path, string? oldPath, string indexObjectId)
     {
         // Porcelain v2 writes '.' for an unchanged side.
         GitChangeKind indexStatus = MapStatusChar(status[0] == '.' ? ' ' : status[0]);
@@ -265,6 +270,7 @@ public static class GitStatusParser
         {
             Path = path,
             OldPath = oldPath,
+            IndexObjectId = indexObjectId,
             IndexStatus = indexStatus,
             WorkTreeStatus = workTreeStatus,
             IsRenamed = indexStatus == GitChangeKind.Renamed || workTreeStatus == GitChangeKind.Renamed,

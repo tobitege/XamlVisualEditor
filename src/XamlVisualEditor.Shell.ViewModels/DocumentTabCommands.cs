@@ -38,4 +38,7 @@ public sealed class DocumentTabCommands
 
     /// <summary>Gets the command that copies the file name with its extension.</summary>
     public ReactiveCommand<string?, RxVoid> CopyFileNameCommand { get; }
+
+    /// <summary>Gets the extension items that follow the file commands; their commands receive the full path of the file.</summary>
+    public IEnumerable<ExtensionMenuItemViewModel>? ExtensionItems { get; init; }
 }

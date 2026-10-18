@@ -103,7 +103,7 @@ public sealed partial class GitOutputLogger : IExtensionLogger
 
         try
         {
-            _channel.AppendLine(DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + " " + line);
+            _channel.AppendLine(line);
         }
         catch (InvalidOperationException)
         {

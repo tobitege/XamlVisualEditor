@@ -27,14 +27,21 @@ internal sealed class GitTestRepository : IDisposable
         Environment = new Dictionary<string, string?>
         {
             ["GIT_CONFIG_NOSYSTEM"] = "1",
-            ["GIT_CONFIG_GLOBAL"] = globalConfig
+            ["GIT_CONFIG_GLOBAL"] = globalConfig,
+            // A temporary folder inside a repository must not make the folders of the test part of that repository.
+            ["GIT_CEILING_DIRECTORIES"] = root,
+            // A protocol allowlist of the machine, as some CI systems set it, would override protocol.ext.allow.
+            ["GIT_ALLOW_PROTOCOL"] = null
         };
     }
+
+    /// <summary>Gets the temporary folder that holds the working tree, the remote and the clones.</summary>
+    public string RootPath => _root;
 
     /// <summary>Gets the working tree root.</summary>
     public string Path { get; }
 
-    /// <summary>Gets the environment variables every git process of the test uses.</summary>
+    /// <summary>Gets the environment variables every git process of the test uses; a null value removes the variable.</summary>
     public IReadOnlyDictionary<string, string?> Environment { get; }
 
     /// <summary>Gets git process options with <see cref="Environment"/> for the service under test.</summary>
@@ -50,11 +57,13 @@ internal sealed class GitTestRepository : IDisposable
     public static GitTestRepository Create(params string[] committedFiles)
     {
         GitTestRepository repository = new(System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
+            ResolveLinks(System.IO.Path.GetTempPath()),
             "xve-git-" + Guid.NewGuid().ToString("N")));
         try
         {
-            Assert.SkipUnless(repository.TryRunGit(out _, "init", "-q", "-b", "main"), "git is not available.");
+            // init -b needs git 2.28; the editor supports git 2.26.
+            Assert.SkipUnless(repository.TryRunGit(out _, "init", "-q"), "git is not available.");
+            repository.RunGit("symbolic-ref", "HEAD", "refs/heads/main");
             repository.RunGit("config", "user.name", "Test");
             repository.RunGit("config", "user.email", "test@example.invalid");
             repository.RunGit("config", "core.autocrlf", "false");
@@ -85,10 +94,35 @@ internal sealed class GitTestRepository : IDisposable
     {
         string remote = System.IO.Path.Combine(_root, "remote.git");
         Directory.CreateDirectory(remote);
-        RunGitIn(remote, "init", "-q", "--bare", "-b", "main");
+        RunGitIn(remote, "init", "-q", "--bare");
+        RunGitIn(remote, "symbolic-ref", "HEAD", "refs/heads/main");
         RunGit("remote", "add", "origin", remote);
         RemotePath = remote;
         return remote;
+    }
+
+    /// <summary>
+    /// Clones the bare remote into the folder <paramref name="name"/> next to the working tree, as a second user of
+    /// the remote with its own user name, and returns the path of the clone.
+    /// </summary>
+    public string CloneRemote(string name)
+    {
+        string clone = System.IO.Path.Combine(_root, name);
+        RunGitIn(_root, "clone", "-q", RemotePath ?? throw new InvalidOperationException("Add the bare remote first."), clone);
+        RunGitIn(clone, "config", "user.name", "Other");
+        RunGitIn(clone, "config", "user.email", "other@example.invalid");
+        RunGitIn(clone, "config", "core.autocrlf", "false");
+        return clone;
+    }
+
+    /// <summary>Writes a file in <paramref name="workingTree"/>, stages it and commits it with <paramref name="message"/>.</summary>
+    public void CommitFileIn(string workingTree, string relativePath, string content, string message)
+    {
+        string fullPath = System.IO.Path.Combine(workingTree, relativePath);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
+        File.WriteAllText(fullPath, content);
+        RunGitIn(workingTree, "add", "--", relativePath);
+        RunGitIn(workingTree, "commit", "-q", "-m", message);
     }
 
     /// <summary>Writes a file below the working tree root, creating its folder.</summary>
@@ -103,8 +137,38 @@ internal sealed class GitTestRepository : IDisposable
     /// <summary>Runs git in the working tree, asserts exit code 0 and returns the output.</summary>
     public string RunGit(params string[] args) => RunGitIn(Path, args);
 
+    /// <summary>
+    /// Runs git in the working tree with <paramref name="date"/> as author and committer date, asserts exit code 0 and
+    /// returns the output.
+    /// </summary>
+    public string RunGitAt(DateTimeOffset date, params string[] args)
+    {
+        string gitDate = date.ToString("yyyy-MM-ddTHH:mm:sszzz", System.Globalization.CultureInfo.InvariantCulture);
+        Dictionary<string, string?> environment = new()
+        {
+            ["GIT_AUTHOR_DATE"] = gitDate,
+            ["GIT_COMMITTER_DATE"] = gitDate
+        };
+        Assert.True(
+            TryRunGitIn(Path, environment, out string output, args),
+            "git " + string.Join(' ', args) + " failed: " + output);
+        return output;
+    }
+
     /// <summary>Runs git in the working tree and returns whether it exited with code 0.</summary>
     public bool TryRunGit(out string output, params string[] args) => TryRunGitIn(Path, out output, args);
+
+    /// <summary>
+    /// Runs git in the working tree with <paramref name="input"/> as standard input, for example
+    /// <c>git fast-import</c>, asserts exit code 0 and returns the output.
+    /// </summary>
+    public string RunGitWithInput(string input, params string[] args)
+    {
+        Assert.True(
+            TryRunGitIn(Path, null, out string output, args, input),
+            "git " + string.Join(' ', args) + " failed: " + output);
+        return output;
+    }
 
     public void Dispose()
     {
@@ -126,7 +190,8 @@ internal sealed class GitTestRepository : IDisposable
         }
     }
 
-    private string RunGitIn(string workingDirectory, params string[] args)
+    /// <summary>Runs git in <paramref name="workingDirectory"/>, asserts exit code 0 and returns the output.</summary>
+    public string RunGitIn(string workingDirectory, params string[] args)
     {
         Assert.True(
             TryRunGitIn(workingDirectory, out string output, args),
@@ -134,7 +199,16 @@ internal sealed class GitTestRepository : IDisposable
         return output;
     }
 
-    private bool TryRunGitIn(string workingDirectory, out string output, params string[] args)
+    /// <summary>Runs git in <paramref name="workingDirectory"/> and returns whether it exited with code 0.</summary>
+    public bool TryRunGitIn(string workingDirectory, out string output, params string[] args) =>
+        TryRunGitIn(workingDirectory, null, out output, args);
+
+    private bool TryRunGitIn(
+        string workingDirectory,
+        IReadOnlyDictionary<string, string?>? extraEnvironment,
+        out string output,
+        string[] args,
+        string? input = null)
     {
         ProcessStartInfo startInfo = new()
         {
@@ -148,9 +222,22 @@ internal sealed class GitTestRepository : IDisposable
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        foreach (KeyValuePair<string, string?> variable in Environment)
+        List<KeyValuePair<string, string?>> variables = new(Environment);
+        if (extraEnvironment is not null)
         {
-            startInfo.Environment[variable.Key] = variable.Value;
+            variables.AddRange(extraEnvironment);
+        }
+
+        foreach (KeyValuePair<string, string?> variable in variables)
+        {
+            if (variable.Value is null)
+            {
+                startInfo.Environment.Remove(variable.Key);
+            }
+            else
+            {
+                startInfo.Environment[variable.Key] = variable.Value;
+            }
         }
 
         foreach (string arg in args)
@@ -161,9 +248,16 @@ internal sealed class GitTestRepository : IDisposable
         try
         {
             using Process process = Process.Start(startInfo)!;
-            process.StandardInput.Close();
             System.Threading.Tasks.Task<string> error = process.StandardError.ReadToEndAsync();
-            output = process.StandardOutput.ReadToEnd();
+            System.Threading.Tasks.Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
+            if (input is not null)
+            {
+                byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+                process.StandardInput.BaseStream.Write(bytes, 0, bytes.Length);
+            }
+
+            process.StandardInput.Close();
+            output = standardOutput.Result;
             process.WaitForExit();
             if (process.ExitCode != 0)
             {
@@ -177,5 +271,28 @@ internal sealed class GitTestRepository : IDisposable
             output = string.Empty;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Replaces every symbolic link or junction in <paramref name="path"/> by its target, as git reports paths. The
+    /// temporary folder of macOS, /var/folders, is a link to /private/var/folders.
+    /// </summary>
+    private static string ResolveLinks(string path)
+    {
+        string full = System.IO.Path.GetFullPath(path);
+        string current = System.IO.Path.GetPathRoot(full)!;
+        foreach (string segment in full.Substring(current.Length).Split(
+            new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = System.IO.Path.Combine(current, segment);
+            // A relative link target is relative to the folder that holds the link.
+            if (new DirectoryInfo(current).LinkTarget is { } target)
+            {
+                current = System.IO.Path.GetFullPath(target, System.IO.Path.GetDirectoryName(current)!);
+            }
+        }
+
+        return current;
     }
 }

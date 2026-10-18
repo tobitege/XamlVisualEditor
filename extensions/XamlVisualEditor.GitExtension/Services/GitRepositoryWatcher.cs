@@ -5,8 +5,11 @@ namespace XamlVisualEditor.GitExtension.Services;
 /// <summary>The part of a repository a <see cref="GitRepositoryWatcher"/> watches.</summary>
 public enum GitWatchedArea
 {
-    /// <summary>The git directory with HEAD, index, refs and the merge state files.</summary>
+    /// <summary>The git directory with HEAD, index and the merge and rebase state.</summary>
     GitDirectory,
+
+    /// <summary>The common git directory of a linked worktree with the branches, packed-refs and config.</summary>
+    CommonDirectory,
 
     /// <summary>The working folder, recursively.</summary>
     WorkingTree
@@ -34,32 +37,61 @@ public sealed class GitWatcherFailedEventArgs : EventArgs
 }
 
 /// <summary>
-/// Watches the git directory of a repository and, optionally, its working folder, and reports changes that can
-/// change the git status. Lock files, objects, logs and build output folders are ignored.
+/// Watches the state files of a repository and, optionally, its working folder, and reports changes that can change
+/// the git status. In the git directories only the listed state files count, so files git writes while it reads the
+/// status, such as the cookies of the fsmonitor daemon, cause no refresh. In the working folder, the git directory
+/// and build output folders are ignored.
 /// </summary>
 public sealed class GitRepositoryWatcher : IDisposable
 {
-    private static readonly string[] IgnoredGitDirectoryFolders = ["objects", "logs"];
+    /// <summary>The files of a git directory that hold the state of its working tree.</summary>
+    private static readonly string[] WorkingTreeStateFiles =
+        ["HEAD", "index", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "FETCH_HEAD"];
+
+    /// <summary>The folders of a git directory whose files hold the state of its working tree.</summary>
+    private static readonly string[] WorkingTreeStateFolders = ["refs", "rebase-merge", "rebase-apply"];
+
+    /// <summary>The files of the common git directory that every worktree shares.</summary>
+    private static readonly string[] SharedStateFiles = ["packed-refs", "config"];
+
+    /// <summary>The folders of the common git directory that every worktree shares.</summary>
+    private static readonly string[] SharedStateFolders = ["refs"];
+
+    /// <summary>The file of a git directory that holds packed references.</summary>
+    private static readonly string[] RefsFiles = ["packed-refs"];
+
+    /// <summary>The folder of a git directory that holds loose references.</summary>
+    private static readonly string[] RefsFolders = ["refs"];
+
     private static readonly string[] IgnoredWorkingTreeFolders = [".git", "bin", "obj", ".vs", "artifacts", "TestResults"];
 
     private readonly object _sync = new();
-    private FileSystemWatcher? _gitDirectoryWatcher;
-    private FileSystemWatcher? _workingTreeWatcher;
+    private readonly Dictionary<GitWatchedArea, FileSystemWatcher> _watchers = new();
     private bool _disposed;
 
     /// <summary>Creates a watcher; nothing is watched before <see cref="Start"/>.</summary>
     /// <param name="repositoryRoot">The working folder root.</param>
     /// <param name="gitDirectory">The absolute git directory, or null when it is unknown.</param>
+    /// <param name="commonDirectory">
+    /// The absolute common git directory; null or the git directory itself unless the repository is a linked worktree.
+    /// </param>
     /// <param name="watchWorkingTree">Whether the working folder is watched as well.</param>
-    public GitRepositoryWatcher(string repositoryRoot, string? gitDirectory, bool watchWorkingTree)
+    public GitRepositoryWatcher(string repositoryRoot, string? gitDirectory, string? commonDirectory, bool watchWorkingTree)
     {
         RepositoryRoot = Path.GetFullPath(repositoryRoot);
         GitDirectory = gitDirectory is null ? null : Path.GetFullPath(gitDirectory);
+        CommonDirectory = commonDirectory is null ? GitDirectory : Path.GetFullPath(commonDirectory);
         WatchWorkingTree = watchWorkingTree;
     }
 
     /// <summary>Raised on a thread-pool thread for every relevant file system change.</summary>
     public event EventHandler? Changed;
+
+    /// <summary>
+    /// Raised on a thread-pool thread before <see cref="Changed"/> when the change is below <c>refs</c> or of
+    /// <c>packed-refs</c> in a watched git directory, or when changes were lost.
+    /// </summary>
+    public event EventHandler? RefsChanged;
 
     /// <summary>Raised when watching an area failed; that area is not watched afterwards.</summary>
     public event EventHandler<GitWatcherFailedEventArgs>? Failed;
@@ -70,32 +102,22 @@ public sealed class GitRepositoryWatcher : IDisposable
     /// <summary>Gets the git directory, or null.</summary>
     public string? GitDirectory { get; }
 
+    /// <summary>Gets the common git directory; equal to <see cref="GitDirectory"/> outside linked worktrees.</summary>
+    public string? CommonDirectory { get; }
+
     /// <summary>Gets whether the working folder was requested to be watched.</summary>
     public bool WatchWorkingTree { get; }
 
     /// <summary>Gets whether the git directory is watched.</summary>
-    public bool IsWatchingGitDirectory
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return _gitDirectoryWatcher is not null;
-            }
-        }
-    }
+    public bool IsWatchingGitDirectory => IsWatching(GitWatchedArea.GitDirectory);
+
+    /// <summary>Gets whether a separate common git directory is watched.</summary>
+    public bool IsWatchingCommonDirectory => IsWatching(GitWatchedArea.CommonDirectory);
 
     /// <summary>Gets whether the working folder is watched.</summary>
-    public bool IsWatchingWorkingTree
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return _workingTreeWatcher is not null;
-            }
-        }
-    }
+    public bool IsWatchingWorkingTree => IsWatching(GitWatchedArea.WorkingTree);
+
+    private bool SharesCommonDirectory => FileSystemPathComparison.Equals(GitDirectory, CommonDirectory);
 
     /// <summary>
     /// Starts watching. An area that cannot be watched raises <see cref="Failed"/> before the method returns.
@@ -107,6 +129,11 @@ public sealed class GitRepositoryWatcher : IDisposable
             StartArea(GitWatchedArea.GitDirectory, GitDirectory);
         }
 
+        if (CommonDirectory is not null && !SharesCommonDirectory)
+        {
+            StartArea(GitWatchedArea.CommonDirectory, CommonDirectory);
+        }
+
         if (WatchWorkingTree)
         {
             StartArea(GitWatchedArea.WorkingTree, RepositoryRoot);
@@ -116,45 +143,39 @@ public sealed class GitRepositoryWatcher : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        FileSystemWatcher? gitDirectoryWatcher;
-        FileSystemWatcher? workingTreeWatcher;
+        FileSystemWatcher[] watchers;
         lock (_sync)
         {
             _disposed = true;
-            gitDirectoryWatcher = _gitDirectoryWatcher;
-            workingTreeWatcher = _workingTreeWatcher;
-            _gitDirectoryWatcher = null;
-            _workingTreeWatcher = null;
+            watchers = _watchers.Values.ToArray();
+            _watchers.Clear();
         }
 
-        gitDirectoryWatcher?.Dispose();
-        workingTreeWatcher?.Dispose();
+        foreach (FileSystemWatcher watcher in watchers)
+        {
+            watcher.Dispose();
+        }
     }
 
-    /// <summary>Returns whether a change below the git directory can change the git status.</summary>
+    /// <summary>
+    /// Returns whether a change below a git directory is one of the state files of its working tree: HEAD, index,
+    /// the merge, cherry-pick, revert and fetch heads, the rebase folders and the refs of the worktree.
+    /// </summary>
     internal static bool IsRelevantGitDirectoryPath(string gitDirectory, string fullPath)
     {
-        if (fullPath.EndsWith(".lock", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
+        return IsStatePath(gitDirectory, fullPath, WorkingTreeStateFiles, WorkingTreeStateFolders);
+    }
 
-        string relative = Path.GetRelativePath(gitDirectory, fullPath);
-        if (relative == "." || IsOutside(relative))
-        {
-            return true;
-        }
+    /// <summary>Returns whether a change below a common git directory is in its refs, packed-refs or config.</summary>
+    internal static bool IsRelevantCommonDirectoryPath(string commonDirectory, string fullPath)
+    {
+        return IsStatePath(commonDirectory, fullPath, SharedStateFiles, SharedStateFolders);
+    }
 
-        string firstSegment = FirstSegment(relative);
-        foreach (string ignored in IgnoredGitDirectoryFolders)
-        {
-            if (string.Equals(firstSegment, ignored, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
-
-        return true;
+    /// <summary>Returns whether a change below a git directory is below its <c>refs</c> folder or of its <c>packed-refs</c>.</summary>
+    internal static bool IsRefsPath(string gitDirectory, string fullPath)
+    {
+        return IsStatePath(gitDirectory, fullPath, RefsFiles, RefsFolders);
     }
 
     /// <summary>
@@ -168,15 +189,13 @@ public sealed class GitRepositoryWatcher : IDisposable
             return false;
         }
 
-        string relative = Path.GetRelativePath(repositoryRoot, fullPath);
-        if (relative == "." || IsOutside(relative))
+        string[]? segments = GetRelativeSegments(repositoryRoot, fullPath);
+        if (segments is null)
         {
             return false;
         }
 
-        foreach (string segment in relative.Split(
-                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-                     StringSplitOptions.RemoveEmptyEntries))
+        foreach (string segment in segments)
         {
             foreach (string ignored in IgnoredWorkingTreeFolders)
             {
@@ -188,6 +207,63 @@ public sealed class GitRepositoryWatcher : IDisposable
         }
 
         return true;
+    }
+
+    private static bool IsStatePath(string directory, string fullPath, string[] files, string[] folders)
+    {
+        // Git writes a lock file next to a state file and renames it over the file; the rename reports the file.
+        if (fullPath.EndsWith(".lock", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string[]? segments = GetRelativeSegments(directory, fullPath);
+        if (segments is null)
+        {
+            return false;
+        }
+
+        string first = segments[0];
+        return (segments.Length == 1 && Contains(files, first)) || Contains(folders, first);
+    }
+
+    private static bool Contains(string[] names, string name)
+    {
+        foreach (string candidate in names)
+        {
+            if (string.Equals(candidate, name, FileSystemPathComparison.Comparison))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Returns the segments of the path relative to the folder; null for the folder itself or a path outside it.</summary>
+    private static string[]? GetRelativeSegments(string folder, string fullPath)
+    {
+        string relative = Path.GetRelativePath(folder, fullPath);
+        if (relative == "."
+            || Path.IsPathRooted(relative)
+            || relative == ".."
+            || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return relative.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private bool IsWatching(GitWatchedArea area)
+    {
+        lock (_sync)
+        {
+            return _watchers.ContainsKey(area);
+        }
     }
 
     private void StartArea(GitWatchedArea area, string path)
@@ -216,14 +292,7 @@ public sealed class GitRepositoryWatcher : IDisposable
                     return;
                 }
 
-                if (area == GitWatchedArea.GitDirectory)
-                {
-                    _gitDirectoryWatcher = watcher;
-                }
-                else
-                {
-                    _workingTreeWatcher = watcher;
-                }
+                _watchers[area] = watcher;
             }
 
             watcher.EnableRaisingEvents = true;
@@ -238,9 +307,24 @@ public sealed class GitRepositoryWatcher : IDisposable
 
     private void OnChanged(GitWatchedArea area, string fullPath)
     {
-        bool relevant = area == GitWatchedArea.GitDirectory
-            ? IsRelevantGitDirectoryPath(GitDirectory!, fullPath)
-            : IsRelevantWorkingTreePath(RepositoryRoot, GitDirectory, fullPath);
+        bool relevant = area switch
+        {
+            GitWatchedArea.GitDirectory => IsRelevantGitDirectoryPath(GitDirectory!, fullPath)
+                || (SharesCommonDirectory && IsRelevantCommonDirectoryPath(GitDirectory!, fullPath)),
+            GitWatchedArea.CommonDirectory => IsRelevantCommonDirectoryPath(CommonDirectory!, fullPath),
+            _ => IsRelevantWorkingTreePath(RepositoryRoot, GitDirectory, fullPath)
+        };
+        bool refs = area switch
+        {
+            GitWatchedArea.GitDirectory => IsRefsPath(GitDirectory!, fullPath),
+            GitWatchedArea.CommonDirectory => IsRefsPath(CommonDirectory!, fullPath),
+            _ => false
+        };
+        if (refs)
+        {
+            RefsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         if (relevant)
         {
             Changed?.Invoke(this, EventArgs.Empty);
@@ -252,6 +336,11 @@ public sealed class GitRepositoryWatcher : IDisposable
         // A full event buffer loses single events only; a refresh reads the whole status anyway.
         if (exception is InternalBufferOverflowException)
         {
+            if (area != GitWatchedArea.WorkingTree)
+            {
+                RefsChanged?.Invoke(this, EventArgs.Empty);
+            }
+
             Changed?.Invoke(this, EventArgs.Empty);
             return;
         }
@@ -259,7 +348,7 @@ public sealed class GitRepositoryWatcher : IDisposable
         FileSystemWatcher? watcher;
         lock (_sync)
         {
-            watcher = area == GitWatchedArea.GitDirectory ? _gitDirectoryWatcher : _workingTreeWatcher;
+            _watchers.TryGetValue(area, out watcher);
         }
 
         if (watcher is null)
@@ -275,13 +364,9 @@ public sealed class GitRepositoryWatcher : IDisposable
     {
         lock (_sync)
         {
-            if (area == GitWatchedArea.GitDirectory && ReferenceEquals(_gitDirectoryWatcher, watcher))
+            if (_watchers.TryGetValue(area, out FileSystemWatcher? current) && ReferenceEquals(current, watcher))
             {
-                _gitDirectoryWatcher = null;
-            }
-            else if (area == GitWatchedArea.WorkingTree && ReferenceEquals(_workingTreeWatcher, watcher))
-            {
-                _workingTreeWatcher = null;
+                _watchers.Remove(area);
             }
         }
 
@@ -290,19 +375,5 @@ public sealed class GitRepositoryWatcher : IDisposable
             // The watcher may be raising this error; disposing it on another thread lets the handler return first.
             ThreadPool.QueueUserWorkItem(static state => ((FileSystemWatcher)state!).Dispose(), watcher);
         }
-    }
-
-    private static bool IsOutside(string relativePath)
-    {
-        return Path.IsPathRooted(relativePath)
-            || relativePath == ".."
-            || relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-            || relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
-    }
-
-    private static string FirstSegment(string relativePath)
-    {
-        int separator = relativePath.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
-        return separator < 0 ? relativePath : relativePath[..separator];
     }
 }

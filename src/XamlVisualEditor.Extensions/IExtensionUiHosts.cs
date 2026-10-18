@@ -22,8 +22,9 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
 /// <summary>Requests a modal, indeterminate progress dialog that blocks the editor while work runs.</summary>
 /// <remarks>
 /// The dialog closes when the cancellation token passed to <see cref="IDialogHost.ShowDialogAsync{T}"/> is cancelled,
-/// which the caller does when its work ends. The user can close it earlier with the cancel button or the window
-/// button; the dialog task then completes before the caller cancelled the token, and the caller cancels its work.
+/// which the caller does when its work ends; the dialog task then completes with null. The user can close it earlier
+/// with the cancel button or the window button; the dialog task then completes with true, and the caller cancels its
+/// work. Any other result, such as the immediate default of a host without main window, is no cancel.
 /// </remarks>
 public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null)
 {

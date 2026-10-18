@@ -1,9 +1,18 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        xmlns:v="using:XamlVisualEditor.App.Views"
         xmlns:styles="using:XamlVisualEditor.App.Styles">
-    <!-- Items of the text editor context menu come from extension menu contributions. -->
-    <Style Selector="ContextMenu.editor-context MenuItem" x:DataType="vm:ExtensionMenuItemViewModel">
+    <Styles.Resources>
+        <!-- MenuItemsBehavior builds the extension items of menus with fixed items from this template. -->
+        <DataTemplate x:Key="ExtensionMenuItemTemplate" x:DataType="vm:ExtensionMenuItemViewModel">
+            <MenuItem Classes="extension-item" />
+        </DataTemplate>
+    </Styles.Resources>
+    <!-- Items of the text editor context menu and extension items next to fixed items come from extension menu
+         contributions. -->
+    <Style Selector="ContextMenu.editor-context MenuItem, MenuItem.extension-item, MenuItem.extension-item MenuItem"
+           x:DataType="vm:ExtensionMenuItemViewModel">
         <Setter Property="Header" Value="{CompiledBinding Header}" />
         <Setter Property="IsEnabled" Value="{CompiledBinding IsEnabled}" />
         <Setter Property="Command" Value="{CompiledBinding Command}" />
@@ -11,5 +20,13 @@
         <Setter Property="ItemsSource" Value="{CompiledBinding Children}" />
         <Setter Property="ToggleType" Value="{CompiledBinding IsToggle, Converter={x:Static styles:MenuConverters.ToggleType}}" />
         <Setter Property="IsChecked" Value="{CompiledBinding IsChecked, Mode=OneWay}" />
+    </Style>
+    <!-- Extension items pass the arguments of their context menu, also from a submenu, and hide without them. -->
+    <Style Selector="MenuItem.extension-item, MenuItem.extension-item MenuItem">
+        <Setter Property="CommandParameter" Value="{CompiledBinding $parent[ContextMenu].(v:ExtensionMenu.CommandArguments)}" />
+    </Style>
+    <Style Selector="MenuItem.extension-item">
+        <Setter Property="IsVisible"
+                Value="{CompiledBinding $parent[ContextMenu].(v:ExtensionMenu.CommandArguments), Converter={x:Static ObjectConverters.IsNotNull}}" />
     </Style>
 </Styles>

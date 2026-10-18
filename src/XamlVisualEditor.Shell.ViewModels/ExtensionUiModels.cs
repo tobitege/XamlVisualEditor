@@ -22,6 +22,7 @@ using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Extensions.Hosting;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -354,13 +355,25 @@ public sealed partial class ExtensionKeyBindingViewModel : ReactiveObject
 
 public sealed partial class ExtensionAsyncCommand : ICommand
 {
-    private readonly Func<Task> _executeAsync;
+    private readonly Func<object?, Task> _executeAsync;
     private readonly Func<bool>? _canExecute;
 
     public ExtensionAsyncCommand(Func<Task> executeAsync, Func<bool>? canExecute = null)
+        : this(WithoutParameter(executeAsync), canExecute)
+    {
+    }
+
+    /// <summary>Creates a command whose action receives the command parameter.</summary>
+    public ExtensionAsyncCommand(Func<object?, Task> executeAsync, Func<bool>? canExecute = null)
     {
         _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
         _canExecute = canExecute;
+    }
+
+    private static Func<object?, Task> WithoutParameter(Func<Task> executeAsync)
+    {
+        ArgumentNullException.ThrowIfNull(executeAsync);
+        return _ => executeAsync();
     }
 
     public event EventHandler? CanExecuteChanged;
@@ -377,7 +390,7 @@ public sealed partial class ExtensionAsyncCommand : ICommand
             return;
         }
 
-        _ = _executeAsync().ContinueWith(
+        _ = _executeAsync(parameter).ContinueWith(
             static t => _ = t.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
@@ -534,14 +547,16 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
     private const string FilterPropertyPath = "Item.Label";
     private readonly System.Reactive.Subjects.Subject<object> _revealRequests = new();
     private readonly IExtensionTreeDataProvider _provider;
+    private readonly ExplorerDecorationRegistry? _decorations;
     private readonly IDisposable _filterSubscription;
     private bool _isDisposed;
 
     public ExtensionTreeViewModel(ExtensionViewContribution contribution, IExtensionTreeDataProvider provider,
-        bool foldersBeforeFiles = true)
+        bool foldersBeforeFiles = true, ExplorerDecorationRegistry? decorations = null)
         : base(contribution)
     {
         _provider = provider;
+        _decorations = decorations;
         FoldersBeforeFiles = foldersBeforeFiles;
         SortComparer = IsFileExplorer ? new FileExplorerComparer(this) : null;
 
@@ -621,9 +636,16 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
             canDelete);
 
         _provider.Changed += OnProviderChanged;
+        if (_decorations is not null)
+        {
+            _decorations.Changed += OnDecorationsChanged;
+        }
     }
 
     public BatchObservableCollection<ExtensionTreeNodeViewModel> RootItems { get; } = new();
+
+    /// <summary>Gets the extension items that follow the fixed items of the context menu.</summary>
+    public IEnumerable<ExtensionMenuItemViewModel>? ExtensionContextMenuItems { get; init; }
 
     public HierarchicalModel Model { get; }
 
@@ -667,7 +689,7 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         foreach (object item in items)
         {
             TreeItem treeItem = await _provider.GetTreeItemAsync(item, cancellationToken).ConfigureAwait(false);
-            nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, RefreshModel));
+            nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, RefreshModel, decorations: _decorations));
         }
 
         if (cancellationToken.IsCancellationRequested)
@@ -679,6 +701,8 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         {
             // The model rebuilds all root rows for each notification; one reset keeps large folders linear.
             RootItems.ReplaceAll(nodes);
+            // The nodes were created off the UI thread; decorations set since then reach them here.
+            ApplyDecorations();
             Model.Refresh();
             ApplyFilterAndSearch(FilterText);
         });
@@ -793,6 +817,11 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
         }
 
         _provider.Changed -= OnProviderChanged;
+        if (_decorations is not null)
+        {
+            _decorations.Changed -= OnDecorationsChanged;
+        }
+
         _filterSubscription.Dispose();
         _isDisposed = true;
     }
@@ -800,6 +829,30 @@ public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDispos
     private void OnProviderChanged(object? sender, EventArgs e)
     {
         RxSchedulers.MainThreadScheduler.Schedule(() => _ = ReloadAsync(CancellationToken.None));
+    }
+
+    private void OnDecorationsChanged(object? sender, EventArgs e)
+    {
+        RxSchedulers.MainThreadScheduler.Schedule(ApplyDecorations);
+    }
+
+    // Visits every loaded node; nodes loaded later look up their decoration when they are created.
+    private void ApplyDecorations()
+    {
+        if (_decorations is null)
+        {
+            return;
+        }
+
+        Stack<ExtensionTreeNodeViewModel> pending = new(RootItems);
+        while (pending.TryPop(out ExtensionTreeNodeViewModel? node))
+        {
+            node.UpdateDecoration();
+            foreach (ExtensionTreeNodeViewModel child in node.Children)
+            {
+                pending.Push(child);
+            }
+        }
     }
 
     private void SetExpanded(object item, bool value)
@@ -1081,15 +1134,20 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
     private readonly IExtensionTreeItemOperationsProvider? _operationsProvider;
     private readonly IExtensionTreeItemChildrenProvider? _childrenProvider;
     private readonly IExtensionTreeItemWorkspaceProvider? _workspaceProvider;
+    private readonly ExplorerDecorationRegistry? _decorations;
 
     public ExtensionTreeNodeViewModel(
         object element,
         TreeItem item,
         IExtensionTreeDataProvider provider,
         Action refresh,
-        bool isPlaceholder = false)
+        bool isPlaceholder = false,
+        ExplorerDecorationRegistry? decorations = null)
     {
         Element = element;
+        ExplorerPath = (element as IExtensionTreeItemPathProvider)?.FullPath;
+        _decorations = decorations;
+        UpdateDecoration();
         Label = item.Label;
         Description = item.Description;
         ContextValue = item.ContextValue;
@@ -1136,6 +1194,13 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
     }
 
     public object Element { get; }
+
+    /// <summary>Gets the full path of the file or folder the node stands for, or null.</summary>
+    public string? ExplorerPath { get; }
+
+    /// <summary>Gets the decoration of <see cref="ExplorerPath"/>, or null.</summary>
+    [Reactive]
+    public partial ExplorerDecoration? Decoration { get; private set; }
 
     public string Label { get; }
 
@@ -1231,7 +1296,7 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
             foreach (object item in items)
             {
                 TreeItem treeItem = await _provider.GetTreeItemAsync(item, cancellationToken);
-                nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, _refresh));
+                nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, _refresh, decorations: _decorations));
             }
 
             Children.ReplaceAll(nodes);
@@ -1244,6 +1309,8 @@ public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
             _loadGate.Release();
         }
     }
+
+    internal void UpdateDecoration() => Decoration = _decorations?.Find(ExplorerPath);
 
     private static ExtensionTreeNodeViewModel CreateLoadingPlaceholder(
         IExtensionTreeDataProvider provider,

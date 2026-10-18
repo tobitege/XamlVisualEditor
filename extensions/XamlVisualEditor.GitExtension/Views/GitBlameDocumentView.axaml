@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:gloc="using:XamlVisualEditor.GitExtension.Localization"
+             xmlns:behaviors="using:XamlVisualEditor.SourceControl.UI.Behaviors"
+             x:Class="XamlVisualEditor.GitExtension.Views.GitBlameDocumentView"
+             x:DataType="vm:GitBlameDocumentViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="ListBox.blame ListBoxItem">
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="ListBox.blame TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ListBox.blame TextBlock.code">
+            <Setter Property="FontFamily" Value="Cascadia Code, Consolas, Menlo, monospace" />
+            <Setter Property="TextTrimming" Value="None" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel Margin="4">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <Button Name="RefreshButton" DockPanel.Dock="Left" Padding="8,2" Margin="0,0,8,0"
+                    Command="{CompiledBinding RefreshCommand}"
+                    ToolTip.Tip="{x:Static gloc:GitStrings.RefreshBlame}"
+                    AutomationProperties.Name="{x:Static gloc:GitStrings.RefreshBlame}">
+                <PathIcon Data="{x:Static vm:GitIcons.Refresh}" Width="14" Height="14" />
+            </Button>
+            <TextBlock Text="{x:Static gloc:GitStrings.BlameHint}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{CompiledBinding Message}" TextWrapping="Wrap" Margin="0,0,0,4"
+                   IsVisible="{CompiledBinding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <ListBox Name="Lines" Classes="blame"
+                 ItemsSource="{CompiledBinding Rows}"
+                 SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                 AutomationProperties.Name="{x:Static gloc:GitStrings.BlameCommand}"
+                 behaviors:DoubleTapCommandBehavior.Command="{CompiledBinding OpenCommitCommand}">
+            <ListBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{CompiledBinding OpenCommitCommand}" />
+            </ListBox.KeyBindings>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:GitBlameRowViewModel">
+                    <Grid ColumnDefinitions="Auto,140,150,48,*" ToolTip.Tip="{CompiledBinding Summary}">
+                        <!-- The samples, measured without height, make every row's commit column as wide as the
+                             widest commit text, an id or the localized note of uncommitted lines. -->
+                        <ItemsControl Grid.Column="0" Height="0" ClipToBounds="True" Focusable="False"
+                                      FontFamily="Cascadia Code, Consolas, Menlo, monospace"
+                                      ItemsSource="{x:Static vm:GitBlameRowViewModel.CommitTextSamples}" />
+                        <TextBlock Grid.Column="0" Classes="code" Text="{CompiledBinding CommitText}" />
+                        <TextBlock Grid.Column="1" Text="{CompiledBinding AuthorText}" Margin="4,0" />
+                        <TextBlock Grid.Column="2" Text="{CompiledBinding DateText}" Margin="4,0" />
+                        <TextBlock Grid.Column="3" Classes="code" Text="{CompiledBinding LineNumber}"
+                                   HorizontalAlignment="Right" Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="4" Classes="code" Text="{CompiledBinding Text}" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</UserControl>

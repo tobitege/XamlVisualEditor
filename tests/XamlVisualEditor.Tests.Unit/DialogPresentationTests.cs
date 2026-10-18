@@ -113,6 +113,25 @@ public sealed class DialogPresentationTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task DialogWithoutMainWindowCompletesAtOnceAndClosesWithItsToken()
+    {
+        AppDialogHost host = new(new MainWindowProvider());
+        Window shown = new();
+        using IDisposable registration = host.RegisterDialog("test.unowned", _ => shown);
+        using CancellationTokenSource workDone = new();
+
+        bool? result = await host.ShowDialogAsync<bool?>("test.unowned", null, workDone.Token);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(result);
+        Assert.True(shown.IsVisible);
+
+        workDone.Cancel();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(shown.IsVisible);
+    }
+
     private static void Flush(Window owner)
     {
         Dispatcher.UIThread.RunJobs();

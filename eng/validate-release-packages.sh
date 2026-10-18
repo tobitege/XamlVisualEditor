@@ -22,13 +22,13 @@ shopt -s nullglob
 packages=("${package_directory}"/*.nupkg)
 symbol_packages=("${package_directory}"/*.snupkg)
 
-if [[ ${#packages[@]} -ne 48 ]]; then
-  echo "Expected 48 NuGet packages, found ${#packages[@]}." >&2
+if [[ ${#packages[@]} -ne 49 ]]; then
+  echo "Expected 49 NuGet packages, found ${#packages[@]}." >&2
   exit 1
 fi
 
-if [[ ${#symbol_packages[@]} -ne 48 ]]; then
-  echo "Expected 48 symbol packages, found ${#symbol_packages[@]}." >&2
+if [[ ${#symbol_packages[@]} -ne 49 ]]; then
+  echo "Expected 49 symbol packages, found ${#symbol_packages[@]}." >&2
   exit 1
 fi
 
@@ -101,4 +101,4 @@ if ! diff -u "${package_ids_file}" "${readme_badges_file}"; then
   exit 1
 fi
 
-echo "Validated 48 NuGet packages, 48 symbol packages, 21 extension manifests, and README package badges for ${package_version}."
+echo "Validated 49 NuGet packages, 49 symbol packages, 21 extension manifests, and README package badges for ${package_version}."

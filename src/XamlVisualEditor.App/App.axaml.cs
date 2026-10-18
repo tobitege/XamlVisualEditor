@@ -232,15 +232,7 @@ public sealed class App : Application
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
         services.AddSingleton<IDotNetCli, DotNetCliRunner>();
         services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();
-        services.AddSingleton<GitService>();
-        services.AddSingleton<IGitService>(sp => sp.GetRequiredService<GitService>());
-        services.AddSingleton<IGitRepositoryService>(sp => sp.GetRequiredService<GitService>());
-        services.AddSingleton<IGitCommandLog>(sp => sp.GetRequiredService<GitService>());
-        services.AddSingleton(sp => new GitServiceSet(sp.GetRequiredService<IGitService>())
-        {
-            Repository = sp.GetRequiredService<IGitRepositoryService>(),
-            CommandLog = sp.GetRequiredService<IGitCommandLog>()
-        });
+        services.AddSingleton<IGitService, GitService>();
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
         services.AddSingleton<IPtyProvider>(_ => PtyProviderFactory.CreateDefault());
@@ -316,10 +308,16 @@ public sealed class App : Application
         {
             MainWindowViewModel mainViewModel = sp.GetRequiredService<MainWindowViewModel>();
             IObservable<object?> activeDocument = mainViewModel.WhenAnyValue(x => x.ActiveTextEditorDocument);
-            return new TextEditorViewHost(mainViewModel.EditorContextMenuItems, activeDocument, sp.GetRequiredService<IContextKeys>());
+            return new TextEditorViewHost(
+                mainViewModel.EditorContextMenuItems,
+                activeDocument,
+                sp.GetRequiredService<IContextKeys>(),
+                (commandId, arguments) => _ = mainViewModel.ExecuteExtensionCommandAsync(commandId, arguments));
         });
         services.AddSingleton<ITextEditorViewHost>(sp => sp.GetRequiredService<TextEditorViewHost>());
         services.AddSingleton<IContextKeys, ContextKeyRegistry>();
+        services.AddSingleton<ExplorerDecorationRegistry>();
+        services.AddSingleton<IExplorerDecorations>(sp => sp.GetRequiredService<ExplorerDecorationRegistry>());
         services.AddSingleton<IDesignerHost, ShellDesignerHost>();
         services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();

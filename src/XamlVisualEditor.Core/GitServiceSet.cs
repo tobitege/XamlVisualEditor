@@ -23,6 +23,24 @@ public sealed class GitServiceSet
     /// <summary>Gets the report of the git commands that ran, or null.</summary>
     public IGitCommandLog? CommandLog { get; init; }
 
+    /// <summary>Gets the branch list, switch, create and delete service, or null.</summary>
+    public IGitBranchService? Branches { get; init; }
+
+    /// <summary>Gets the remote list, fetch, pull and push service, or null.</summary>
+    public IGitRemoteService? Remotes { get; init; }
+
+    /// <summary>Gets the log, commit details and tag service, or null.</summary>
+    public IGitHistoryService? History { get; init; }
+
+    /// <summary>Gets the file content and blame service, or null.</summary>
+    public IGitContentService? Content { get; init; }
+
+    /// <summary>Gets the stage, unstage and discard service for selected diff lines and the amend service, or null.</summary>
+    public IGitPatchService? Patch { get; init; }
+
+    /// <summary>Gets the stash service, or null.</summary>
+    public IGitStashService? Stash { get; init; }
+
     /// <summary>
     /// Creates a set whose optional capabilities are the interfaces <paramref name="service"/> implements.
     /// </summary>
@@ -31,7 +49,13 @@ public sealed class GitServiceSet
         return new GitServiceSet(service)
         {
             Repository = service as IGitRepositoryService,
-            CommandLog = service as IGitCommandLog
+            CommandLog = service as IGitCommandLog,
+            Branches = service as IGitBranchService,
+            Remotes = service as IGitRemoteService,
+            History = service as IGitHistoryService,
+            Content = service as IGitContentService,
+            Patch = service as IGitPatchService,
+            Stash = service as IGitStashService
         };
     }
 }

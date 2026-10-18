@@ -6,13 +6,14 @@ namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
 /// Provides git operations for repository status, diff, and staging workflows. Paths are passed as literal
-/// paths, not as patterns. Stage, unstage, discard and commit throw <see cref="System.InvalidOperationException"/>
-/// with git's error output when git fails.
+/// paths, not as patterns; a folder path stands for every file below it and <c>.</c> for the whole repository.
+/// Status, stage, unstage, discard and commit throw <see cref="System.InvalidOperationException"/> with git's
+/// error output when git fails.
 /// </summary>
 public interface IGitService
 {
     /// <summary>
-    /// Resolves the git repository root for a file or directory.
+    /// Resolves the git repository root for a file or directory; null when the path is not inside a repository.
     /// </summary>
     Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default);
 

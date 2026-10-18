@@ -1,0 +1,163 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.GitExtension"
+             xmlns:gloc="using:XamlVisualEditor.GitExtension.Localization"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:behaviors="using:XamlVisualEditor.SourceControl.UI.Behaviors"
+             xmlns:controls="using:XamlVisualEditor.SourceControl.UI.Controls"
+             x:Class="XamlVisualEditor.GitExtension.Views.GitCommitDetailsView"
+             x:DataType="vm:GitCommitDetailsViewModel"
+             behaviors:ClipboardInteractionBehavior.Interaction="{CompiledBinding CopyToClipboard}">
+
+    <UserControl.Styles>
+        <Style Selector=":is(Button).git-action">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+        </Style>
+        <Style Selector=":is(Button).git-action PathIcon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+        </Style>
+        <Style Selector=":is(Button).git-action StackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="4" />
+        </Style>
+        <Style Selector=":is(Button).git-action TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="MenuItem PathIcon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top"
+                   Text="{x:Static gloc:GitStrings.SelectCommitHint}"
+                   IsVisible="{CompiledBinding !HasCommit}" />
+
+        <Grid Name="DetailsGrid" RowDefinitions="*" IsVisible="{CompiledBinding HasCommit}"
+              behaviors:DiffPaneBehavior.IsOpen="{CompiledBinding IsDiffVisible}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="220" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="3*" MinWidth="180" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Header and file list share the height; the header scrolls within its row, which is as high as the
+                 header of a commit with a short message, and the file list keeps its column header and one row. -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MaxHeight="160" />
+                    <RowDefinition Height="*" MinHeight="48" />
+                </Grid.RowDefinitions>
+                <ScrollViewer Name="HeaderScroller"
+                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <SelectableTextBlock Name="CommitTitle" Text="{CompiledBinding Title}"
+                                             FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <SelectableTextBlock Name="CommitSummary" Text="{CompiledBinding Summary}"
+                                             TextWrapping="Wrap" Margin="0,2,0,0" />
+                        <TextBlock Text="{CompiledBinding CommitterText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                   IsVisible="{CompiledBinding CommitterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <SelectableTextBlock Text="{CompiledBinding ParentsText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                             IsVisible="{CompiledBinding ParentsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <TextBlock Name="MergeNote" Text="{CompiledBinding MergeText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                   IsVisible="{CompiledBinding MergeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <TextBox Name="CommitMessage" Margin="0,6,0,0"
+                                 Text="{CompiledBinding MessageText, Mode=OneWay}"
+                                 IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MinHeight="48" MaxHeight="120"
+                                 AutomationProperties.Name="{x:Static gloc:GitStrings.ColumnMessage}" />
+                        <TextBlock Text="{CompiledBinding StatusMessage}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   IsVisible="{CompiledBinding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <DockPanel Margin="0,6,0,4">
+                            <Button DockPanel.Dock="Right" Classes="git-action" Margin="0"
+                                    Command="{CompiledBinding ToggleDiffCommand}"
+                                    ToolTip.Tip="{x:Static gloc:GitStrings.ToggleDiffPane}"
+                                    AutomationProperties.Name="{x:Static gloc:GitStrings.ToggleDiffPane}">
+                                <PathIcon Data="{x:Static vm:GitIcons.ToggleDiff}" />
+                            </Button>
+                            <TextBlock Text="{CompiledBinding FilesHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </StackPanel>
+                </ScrollViewer>
+                <dg:DataGrid Grid.Row="1" Name="FileGrid"
+                             Classes="explorer-compact"
+                             ItemsSource="{CompiledBinding Files}"
+                             SelectedItem="{CompiledBinding SelectedFile, Mode=TwoWay}"
+                             AutoGenerateColumns="False"
+                             CanUserResizeColumns="True"
+                             CanUserSortColumns="True"
+                             GridLinesVisibility="None"
+                             IsReadOnly="True"
+                             AutomationProperties.Name="{CompiledBinding FilesHeader}"
+                             behaviors:RightClickSelectBehavior.IsEnabled="True">
+                    <dg:DataGrid.ContextMenu>
+                        <ContextMenu x:DataType="vm:GitCommitDetailsViewModel">
+                            <MenuItem Header="{x:Static gloc:GitStrings.ShowFileHistoryCommand}" Command="{CompiledBinding ShowFileHistoryCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.History}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="{x:Static gloc:GitStrings.CopyPath}" Command="{CompiledBinding CopyPathCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.Copy}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                        </ContextMenu>
+                    </dg:DataGrid.ContextMenu>
+                    <dg:DataGrid.Columns>
+                        <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnChange}" Width="110"
+                                               x:DataType="vm:GitCommitFileRowViewModel"
+                                               Binding="{CompiledBinding ChangeText}" SortMemberPath="ChangeText" />
+                        <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnPath}" Width="*"
+                                               x:DataType="vm:GitCommitFileRowViewModel"
+                                               Binding="{CompiledBinding DisplayPath}" SortMemberPath="Path" />
+                    </dg:DataGrid.Columns>
+                </dg:DataGrid>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Width="4"
+                          Background="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          IsVisible="{CompiledBinding IsDiffVisible}" />
+
+            <DockPanel Grid.Column="2" Margin="6,0,0,0" IsVisible="{CompiledBinding IsDiffVisible}">
+                <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                    <Button Name="PreviousChangeButton" Classes="git-action" Command="{CompiledBinding PreviousHunkCommand}"
+                            ToolTip.Tip="{x:Static gloc:GitStrings.PreviousChange}" ToolTip.ShowOnDisabled="True"
+                            AutomationProperties.Name="{x:Static gloc:GitStrings.PreviousChange}">
+                        <StackPanel>
+                            <PathIcon Data="{x:Static vm:GitIcons.PreviousHunk}" />
+                            <TextBlock Text="{x:Static gloc:GitStrings.PreviousChange}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Name="NextChangeButton" Classes="git-action" Command="{CompiledBinding NextHunkCommand}"
+                            ToolTip.Tip="{x:Static gloc:GitStrings.NextChange}" ToolTip.ShowOnDisabled="True"
+                            AutomationProperties.Name="{x:Static gloc:GitStrings.NextChange}">
+                        <StackPanel>
+                            <PathIcon Data="{x:Static vm:GitIcons.NextHunk}" />
+                            <TextBlock Text="{x:Static gloc:GitStrings.NextChange}" />
+                        </StackPanel>
+                    </Button>
+                </WrapPanel>
+                <TextBlock DockPanel.Dock="Top" Text="{CompiledBinding DiffMessage}" TextWrapping="Wrap" Margin="0,0,0,4"
+                           IsVisible="{CompiledBinding DiffMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" Padding="4">
+                    <controls:UnifiedDiffEditor Name="DiffEditor"
+                                                DiffLines="{CompiledBinding DiffLines}"
+                                                HasMoreLines="{CompiledBinding IsDiffTruncated}"
+                                                CurrentHunkIndex="{CompiledBinding CurrentHunkIndex, Mode=TwoWay}"
+                                                HunkCount="{CompiledBinding HunkCount, Mode=OneWayToSource}"
+                                                TruncationNotice="{CompiledBinding DiffTruncationNotice}"
+                                                FontFamily="Cascadia Code, Consolas, Menlo, monospace"
+                                                FontSize="13"
+                                                HorizontalScrollBarVisibility="Auto"
+                                                VerticalScrollBarVisibility="Auto" />
+                </Border>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

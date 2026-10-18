@@ -35,8 +35,9 @@ public sealed class GitOutputLoggerTests
             "fatal: Authentication failed for 'https://user:secret@example.com/r.git'"));
 
         Assert.Equal(2, channel.Lines.Count);
-        Assert.EndsWith("> git push https://***@example.com/r.git \"a b.txt\" [42 ms] (exit code 128)", channel.Lines[0]);
-        Assert.EndsWith("fatal: Authentication failed for 'https://***@example.com/r.git'", channel.Lines[1]);
+        // The Output panel shows the time in its own column, so the lines carry no timestamp.
+        Assert.Equal("> git push https://***@example.com/r.git \"a b.txt\" [42 ms] (exit code 128)", channel.Lines[0]);
+        Assert.Equal("fatal: Authentication failed for 'https://***@example.com/r.git'", channel.Lines[1]);
         Assert.DoesNotContain("secret", string.Join("\n", channel.Lines));
         Assert.Empty(host.Entries);
     }

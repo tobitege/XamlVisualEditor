@@ -67,7 +67,8 @@ public sealed class InMemoryWindow : IWindow
             name,
             message => OutputChannelMessage?.Invoke(this, message),
             cleared => OutputChannelCleared?.Invoke(this, cleared),
-            () => RemoveChannel(info));
+            () => RemoveChannel(info),
+            shown => OutputChannelShowRequested?.Invoke(this, shown));
 
         _channels[name] = channel;
         OutputChannelCreated?.Invoke(this, new OutputChannelEventArgs(info));
@@ -93,6 +94,8 @@ public sealed class InMemoryWindow : IWindow
     public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
 
     public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelShowRequested;
 #pragma warning restore CS0067
 
     /// <inheritdoc />
@@ -155,6 +158,7 @@ public sealed class InMemoryOutputChannel : IOutputChannel
     private readonly Action<OutputChannelMessageEventArgs>? _messageCallback;
     private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
     private readonly Action? _disposedCallback;
+    private readonly Action<OutputChannelEventArgs>? _showCallback;
 
     /// <summary>Creates a channel.</summary>
     public InMemoryOutputChannel(
@@ -162,12 +166,24 @@ public sealed class InMemoryOutputChannel : IOutputChannel
         Action<OutputChannelMessageEventArgs>? messageCallback = null,
         Action<OutputChannelClearedEventArgs>? clearedCallback = null,
         Action? disposedCallback = null)
+        : this(name, messageCallback, clearedCallback, disposedCallback, null)
+    {
+    }
+
+    /// <summary>Creates a channel whose <see cref="Show"/> calls <paramref name="showCallback"/>.</summary>
+    public InMemoryOutputChannel(
+        string name,
+        Action<OutputChannelMessageEventArgs>? messageCallback,
+        Action<OutputChannelClearedEventArgs>? clearedCallback,
+        Action? disposedCallback,
+        Action<OutputChannelEventArgs>? showCallback)
     {
         Name = name;
         _info = new OutputChannelInfo(name);
         _messageCallback = messageCallback;
         _clearedCallback = clearedCallback;
         _disposedCallback = disposedCallback;
+        _showCallback = showCallback;
     }
 
     /// <inheritdoc />
@@ -202,6 +218,7 @@ public sealed class InMemoryOutputChannel : IOutputChannel
     /// <inheritdoc />
     public void Show()
     {
+        _showCallback?.Invoke(new OutputChannelEventArgs(_info));
     }
 
     /// <inheritdoc />

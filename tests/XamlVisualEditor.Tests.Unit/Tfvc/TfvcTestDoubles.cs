@@ -432,8 +432,16 @@ internal sealed class RecordingWindow : IWindow
 
     public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult(InputBoxResult);
 
+    /// <summary>Gets or sets what the quick pick returns for its items; null cancels every quick pick.</summary>
+    public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? QuickPick { get; set; }
+
+    public List<(IReadOnlyList<QuickPickItem> Items, QuickPickOptions Options)> QuickPicks { get; } = new();
+
     public Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, QuickPickOptions options, CancellationToken cancellationToken)
-        => Task.FromResult<QuickPickItem?>(null);
+    {
+        QuickPicks.Add((items, options));
+        return Task.FromResult(QuickPick?.Invoke(items));
+    }
 
     public IOutputChannel CreateOutputChannel(string name) => throw new NotSupportedException();
 
@@ -457,6 +465,9 @@ internal sealed class RecordingExtensionViewHost : IExtensionViewHost
 
     public List<string> Toggled { get; } = new();
 
+    /// <summary>Gets or sets what runs when a view is shown, as a host that attaches the view at that moment.</summary>
+    public Action<string>? Showing { get; set; }
+
 #pragma warning disable CS0067
     public event EventHandler<ExtensionViewVisibilityChangedEventArgs>? VisibilityChanged;
     public event EventHandler<ExtensionViewFocusChangedEventArgs>? FocusChanged;
@@ -465,6 +476,7 @@ internal sealed class RecordingExtensionViewHost : IExtensionViewHost
     public Task ShowAsync(string viewId, CancellationToken cancellationToken)
     {
         Shown.Add(viewId);
+        Showing?.Invoke(viewId);
         return Task.CompletedTask;
     }
 
@@ -477,6 +489,29 @@ internal sealed class RecordingExtensionViewHost : IExtensionViewHost
     public Task<bool> IsVisibleAsync(string viewId, CancellationToken cancellationToken) => Task.FromResult(false);
 
     public Task ActivateAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Gets the shown documents in order, also those that were open already.</summary>
+    public List<(string Id, string Title, string? ToolTip)> ShownDocuments { get; } = new();
+
+    /// <summary>Gets the view models of the open documents by id.</summary>
+    public Dictionary<string, object> DocumentViewModels { get; } = new();
+
+    public Task<object?> ShowDocumentAsync(
+        string documentId,
+        string title,
+        string? toolTip,
+        Func<object> createViewModel,
+        CancellationToken cancellationToken)
+    {
+        ShownDocuments.Add((documentId, title, toolTip));
+        if (!DocumentViewModels.TryGetValue(documentId, out object? viewModel))
+        {
+            viewModel = createViewModel();
+            DocumentViewModels.Add(documentId, viewModel);
+        }
+
+        return Task.FromResult<object?>(viewModel);
+    }
 }
 
 internal sealed class ScriptedDialogHost : IDialogHost
@@ -514,6 +549,8 @@ internal sealed class ConfirmingDialogHost : IDialogHost
 
 internal sealed class FakeEditorDocument : IEditorDocument
 {
+    private int _textReads;
+
     public FakeEditorDocument(string filePath, string text)
     {
         FilePath = filePath;
@@ -538,7 +575,14 @@ internal sealed class FakeEditorDocument : IEditorDocument
     public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
 #pragma warning restore CS0067
 
-    public Task<string> GetTextAsync(CancellationToken ct) => Task.FromResult(Text);
+    /// <summary>Gets how often the text was read.</summary>
+    public int TextReads => Volatile.Read(ref _textReads);
+
+    public Task<string> GetTextAsync(CancellationToken ct)
+    {
+        Interlocked.Increment(ref _textReads);
+        return Task.FromResult(Text);
+    }
 
     public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct) => Task.CompletedTask;
 

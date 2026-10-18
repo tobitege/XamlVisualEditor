@@ -1,0 +1,44 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace XamlVisualEditor.Core.Interfaces;
+
+/// <summary>
+/// Exchanges commits with remotes. Fetch, pull and push never prompt on a terminal, stop their network part after
+/// the network timeout and report failures in their <see cref="GitRemoteResult"/>; cancelling the token stops git
+/// and throws <see cref="System.OperationCanceledException"/>. The network part does not wait for, and does not
+/// hold up, the writing commands of the repository such as stage or commit.
+/// </summary>
+public interface IGitRemoteService
+{
+    /// <summary>Returns the configured remotes; empty when there is none.</summary>
+    Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches every remote that a fetch of all remotes does not skip, one remote after the other, as configured for
+    /// it: with its refspecs and with pruning only when <c>fetch.prune</c> or <c>remote.&lt;name&gt;.prune</c> asks
+    /// for it. A failing remote does not stop the others: the result then fails with the failure of the first
+    /// failing remote and lists the fetched ones in <see cref="GitRemoteResult.FetchedRemotes"/>.
+    /// </summary>
+    Task<GitRemoteResult> FetchAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches the remote of the upstream branch of the current branch as <c>git pull</c> does, with the configured
+    /// refspecs, tags and pruning of that remote, and fast-forwards the branch to its upstream. A branch that has
+    /// diverged from its upstream is left unchanged and the result reports <see cref="GitRemoteFailureKind.Diverged"/>,
+    /// one whose upstream no longer exists on the remote <see cref="GitRemoteFailureKind.UpstreamGone"/>, also when no
+    /// fetch pruned its remote-tracking branch. <see cref="GitRemoteResult.PulledCommitCount"/> tells a fast-forward
+    /// from a branch that was already up to date, or is null when git could not count the pulled commits, such as on
+    /// an unborn branch. When a second pull of the same repository fast-forwards between this pull's fast-forward and
+    /// its count, the count of this pull is 0. Cancellation stops the fetch and the wait for other writing commands;
+    /// once the fast-forward has started, it is finished.
+    /// </summary>
+    Task<GitRemoteResult> PullAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pushes the current branch to its upstream. With <paramref name="setUpstreamRemote"/>, it is pushed to the
+    /// branch of the same name on that remote, which then becomes its upstream.
+    /// </summary>
+    Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default);
+}

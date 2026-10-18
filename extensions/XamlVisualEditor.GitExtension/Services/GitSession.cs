@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using XamlVisualEditor.Core;
@@ -19,11 +20,14 @@ namespace XamlVisualEditor.GitExtension.Services;
 /// </summary>
 /// <remarks>
 /// Refreshes never overlap: a refresh requested while one runs starts exactly one more refresh after it, and
-/// every request made meanwhile completes with that one.
+/// every request made meanwhile completes with that one. A snapshot equal to the current one is not published.
 /// </remarks>
 public sealed class GitSession : IDisposable
 {
-    /// <summary>Gets how long file system changes are collected before they cause one refresh.</summary>
+    /// <summary>
+    /// Gets the interval in which file system changes are collected; changes within one interval cause one refresh
+    /// at its end, also while further changes keep coming.
+    /// </summary>
     public static TimeSpan RefreshDelay { get; } = TimeSpan.FromMilliseconds(500);
 
     private readonly GitServiceSet _services;
@@ -32,6 +36,7 @@ public sealed class GitSession : IDisposable
     private readonly IExtensionLogger? _logger;
     private readonly BehaviorSubject<GitSnapshot> _snapshots = new(GitSnapshot.Initial);
     private readonly BehaviorSubject<bool> _isRefreshing = new(false);
+    private readonly Subject<Unit> _refreshCompleted = new();
     private readonly Subject<Unit> _changeRequests = new();
     private readonly IDisposable _changeSubscription;
     private readonly CancellationTokenSource _lifetime = new();
@@ -47,6 +52,7 @@ public sealed class GitSession : IDisposable
     private bool _workingTreeWatcherFailed;
     private bool _gitDirectoryWatcherFailed;
     private bool _gitUnavailableLogged;
+    private int _refsVersion;
     private string? _cachedWorkspacePath;
     private string? _cachedRepositoryRoot;
     private GitRepositoryWatcher? _watcher;
@@ -56,18 +62,20 @@ public sealed class GitSession : IDisposable
     /// <param name="workspaceInfo">The workspace whose repository is tracked; null tracks no workspace.</param>
     /// <param name="settings">Persists the working folder watcher switch; null keeps it in memory.</param>
     /// <param name="logger">Receives watcher failures and refresh errors.</param>
+    /// <param name="scheduler">Times <see cref="RefreshDelay"/>; <see cref="Scheduler.Default"/> when null.</param>
     public GitSession(
         GitServiceSet services,
         IWorkspaceInfo? workspaceInfo,
         GitSettingsStore? settings = null,
-        IExtensionLogger? logger = null)
+        IExtensionLogger? logger = null,
+        IScheduler? scheduler = null)
     {
         _services = services;
         _workspaceInfo = workspaceInfo;
         _settings = settings;
         _logger = logger;
         _changeSubscription = _changeRequests
-            .Throttle(RefreshDelay)
+            .Sample(RefreshDelay, scheduler ?? Scheduler.Default)
             .Subscribe(OnChangeRequestsSettled);
     }
 
@@ -82,6 +90,14 @@ public sealed class GitSession : IDisposable
 
     /// <summary>Gets whether a refresh runs; a new subscriber receives the current value first.</summary>
     public IObservable<bool> IsRefreshing => _isRefreshing.AsObservable();
+
+    /// <summary>
+    /// Gets a signal after every finished refresh, also one whose snapshot equals the current one and is therefore
+    /// not published, after the snapshot of that refresh. A file whose content changed while its status stayed the
+    /// same leaves the snapshot unchanged, so views of content, such as a diff, reload on this signal. Signals
+    /// arrive on thread-pool threads.
+    /// </summary>
+    public IObservable<Unit> RefreshCompleted => _refreshCompleted.AsObservable();
 
     /// <summary>Gets the latest snapshot.</summary>
     public GitSnapshot Current => _snapshots.Value;
@@ -163,6 +179,8 @@ public sealed class GitSession : IDisposable
             else
             {
                 _refreshRunning = true;
+                // Under the lock, so the end of a previous refresh cannot report false after this true.
+                _isRefreshing.OnNext(true);
                 TaskCompletionSource current = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 task = current.Task;
                 _ = Task.Run(() => RunRefreshLoopAsync(current));
@@ -172,7 +190,20 @@ public sealed class GitSession : IDisposable
         return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
 
-    /// <summary>Requests a refresh after <see cref="RefreshDelay"/>; further requests within the delay restart it.</summary>
+    /// <summary>
+    /// Refreshes like <see cref="RefreshAsync"/> and increases <see cref="GitSnapshot.RefsVersion"/>, so consumers
+    /// read the branches again; for a refresh the user asked for.
+    /// </summary>
+    public Task RefreshAllAsync(CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _refsVersion);
+        return RefreshAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Requests a refresh at the end of the current <see cref="RefreshDelay"/> interval; all requests of an interval
+    /// cause one refresh.
+    /// </summary>
     public void RequestRefresh()
     {
         _changeRequests.OnNext(Unit.Default);
@@ -199,7 +230,7 @@ public sealed class GitSession : IDisposable
         GitSnapshot current = Current;
         if (current.RepositoryRoot is not null)
         {
-            ConfigureWatcher(current.RepositoryRoot, current.GitDirectory);
+            ConfigureWatcher(current.RepositoryRoot, current.GitDirectory, current.CommonDirectory);
         }
 
         if (_settings is not null)
@@ -246,11 +277,37 @@ public sealed class GitSession : IDisposable
     }
 
     /// <summary>
+    /// Runs an operation with all git services on the repository of the current snapshot and refreshes the status
+    /// afterwards, also when the operation failed or was cancelled. The operation may change branches, so the refresh
+    /// increases <see cref="GitSnapshot.RefsVersion"/>. Exceptions of the operation are passed on after the refresh.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The workspace is not inside a repository.</exception>
+    public async Task<T> RunWithServicesAsync<T>(
+        Func<GitServiceSet, string, CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        string repositoryRoot = Current.RepositoryRoot
+            ?? throw new InvalidOperationException(UiStrings.WorkspaceNotGitRepository);
+        try
+        {
+            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                _lifetime.Token);
+            return await operation(_services, repositoryRoot, linked.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            await RefreshAllAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Creates a repository in the workspace folder, or in the folder of the workspace file, and refreshes the
-    /// status. Returns the folder.
+    /// status. A folder that already belongs to a repository is left unchanged; the result then names that
+    /// repository.
     /// </summary>
     /// <exception cref="InvalidOperationException">No workspace is open, the services cannot create repositories, or git failed.</exception>
-    public async Task<string> InitializeRepositoryAsync(CancellationToken cancellationToken = default)
+    public async Task<GitInitializeResult> InitializeRepositoryAsync(CancellationToken cancellationToken = default)
     {
         string workspacePath = _workspaceInfo?.WorkspacePath is { Length: > 0 } path
             ? path
@@ -260,6 +317,12 @@ public sealed class GitSession : IDisposable
         string folder = File.Exists(workspacePath)
             ? Path.GetDirectoryName(Path.GetFullPath(workspacePath))!
             : workspacePath;
+        string? existingRoot = await _services.Service.GetRepositoryRootAsync(folder, cancellationToken).ConfigureAwait(false);
+        if (existingRoot is not null)
+        {
+            return new GitInitializeResult(folder, Path.GetFullPath(existingRoot));
+        }
+
         try
         {
             await repository.InitAsync(folder, cancellationToken).ConfigureAwait(false);
@@ -275,7 +338,7 @@ public sealed class GitSession : IDisposable
             await RefreshAsync().ConfigureAwait(false);
         }
 
-        return folder;
+        return new GitInitializeResult(folder, null);
     }
 
     /// <inheritdoc />
@@ -311,6 +374,7 @@ public sealed class GitSession : IDisposable
         lock (_publishSync)
         {
             _snapshots.OnCompleted();
+            _refreshCompleted.OnCompleted();
         }
 
         _isRefreshing.OnCompleted();
@@ -323,7 +387,6 @@ public sealed class GitSession : IDisposable
 
     private async Task RunRefreshLoopAsync(TaskCompletionSource current)
     {
-        _isRefreshing.OnNext(true);
         while (true)
         {
             try
@@ -339,12 +402,14 @@ public sealed class GitSession : IDisposable
                 Publish(Current with { ErrorMessage = exception.Message });
             }
 
+            SignalRefreshCompleted();
             current.TrySetResult();
             lock (_sync)
             {
                 if (_disposed || _pendingRefresh is null)
                 {
                     _refreshRunning = false;
+                    _isRefreshing.OnNext(false);
                     break;
                 }
 
@@ -352,8 +417,6 @@ public sealed class GitSession : IDisposable
                 _pendingRefresh = null;
             }
         }
-
-        _isRefreshing.OnNext(false);
     }
 
     private async Task RefreshCoreAsync(CancellationToken cancellationToken)
@@ -402,11 +465,35 @@ public sealed class GitSession : IDisposable
             return;
         }
 
-        string? gitDirectory = _services.Repository is null
-            ? FindDefaultGitDirectory(repositoryRoot)
-            : await _services.Repository.GetGitDirectoryAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
-        GitRepositoryStatus status = await _services.Service.GetStatusAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
-        if (!status.IsRepository)
+        string? gitDirectory;
+        string? commonDirectory;
+        if (_services.Repository is null)
+        {
+            gitDirectory = FindDefaultGitDirectory(repositoryRoot);
+            commonDirectory = gitDirectory;
+        }
+        else
+        {
+            gitDirectory = await _services.Repository.GetGitDirectoryAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
+            commonDirectory = await _services.Repository.GetCommonDirectoryAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
+        }
+
+        // The repository was found, so a failing status, for example of a damaged index or while another git
+        // command rewrites it, keeps the repository and its watchers; the next change reads the status again.
+        GitRepositoryStatus? status = null;
+        string? statusError = null;
+        try
+        {
+            status = await _services.Service.GetStatusAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            statusError = exception.Message.Trim();
+        }
+
+        // The cached root hides a repository that was deleted; asking git again tells a deleted repository from a
+        // damaged one.
+        if (status is null)
         {
             lock (_sync)
             {
@@ -414,19 +501,29 @@ public sealed class GitSession : IDisposable
                 _cachedWorkspacePath = null;
             }
 
-            StopWatcher();
-            Publish(new GitSnapshot
+            string? currentRoot = await ResolveRepositoryRootAsync(workspacePath, cancellationToken).ConfigureAwait(false);
+            if (currentRoot is null)
             {
-                State = GitSessionState.NotRepository,
-                WorkspacePath = workspacePath,
-                ErrorMessage = string.IsNullOrWhiteSpace(status.ErrorMessage)
-                    ? UiStrings.WorkspaceNotGitRepository
-                    : status.ErrorMessage.Trim()
-            });
-            return;
+                StopWatcher();
+                Publish(new GitSnapshot
+                {
+                    State = GitSessionState.NotRepository,
+                    WorkspacePath = workspacePath,
+                    ErrorMessage = UiStrings.WorkspaceNotGitRepository
+                });
+                return;
+            }
+
+            if (!FileSystemPathComparison.Equals(currentRoot, repositoryRoot))
+            {
+                // The workspace now belongs to another repository, such as an enclosing one; the root is cached, so
+                // this second pass does not come here again.
+                await RefreshCoreAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
         }
 
-        bool hasRemote = !string.IsNullOrEmpty(status.UpstreamName);
+        bool hasRemote = !string.IsNullOrEmpty(status?.UpstreamName);
         if (!hasRemote && _services.Repository is not null)
         {
             IReadOnlyList<string> remotes = await _services.Repository
@@ -436,16 +533,17 @@ public sealed class GitSession : IDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        ConfigureWatcher(repositoryRoot, gitDirectory);
+        ConfigureWatcher(repositoryRoot, gitDirectory, commonDirectory);
         Publish(new GitSnapshot
         {
-            State = GitSessionState.Repository,
+            State = status is null ? GitSessionState.StatusFailed : GitSessionState.Repository,
             WorkspacePath = workspacePath,
             RepositoryRoot = repositoryRoot,
             GitDirectory = gitDirectory,
+            CommonDirectory = commonDirectory,
             Status = status,
             HasRemote = hasRemote,
-            ErrorMessage = status.ErrorMessage
+            ErrorMessage = statusError ?? status?.ErrorMessage
         });
     }
 
@@ -492,11 +590,35 @@ public sealed class GitSession : IDisposable
                 enabled = _workingTreeWatcherEnabled;
             }
 
-            _snapshots.OnNext(snapshot with { IsWorkingTreeWatcherEnabled = enabled });
+            GitSnapshot next = snapshot with
+            {
+                IsWorkingTreeWatcherEnabled = enabled,
+                RefsVersion = Volatile.Read(ref _refsVersion)
+            };
+            if (!next.Equals(_snapshots.Value))
+            {
+                _snapshots.OnNext(next);
+            }
         }
     }
 
-    private void ConfigureWatcher(string repositoryRoot, string? gitDirectory)
+    private void SignalRefreshCompleted()
+    {
+        lock (_publishSync)
+        {
+            lock (_sync)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+            }
+
+            _refreshCompleted.OnNext(Unit.Default);
+        }
+    }
+
+    private void ConfigureWatcher(string repositoryRoot, string? gitDirectory, string? commonDirectory)
     {
         string fullRepositoryRoot = Path.GetFullPath(repositoryRoot);
         lock (_watcherSync)
@@ -504,6 +626,7 @@ public sealed class GitSession : IDisposable
             GitRepositoryWatcher? existing = _watcher;
             bool watchWorkingTree;
             string? watchedGitDirectory;
+            string? watchedCommonDirectory;
             lock (_sync)
             {
                 if (_disposed)
@@ -519,12 +642,15 @@ public sealed class GitSession : IDisposable
                 }
 
                 watchWorkingTree = _workingTreeWatcherEnabled && !_workingTreeWatcherFailed;
-                watchedGitDirectory = _gitDirectoryWatcherFailed || gitDirectory is null ? null : Path.GetFullPath(gitDirectory);
+                bool watchGitDirectories = !_gitDirectoryWatcherFailed && gitDirectory is not null;
+                watchedGitDirectory = watchGitDirectories ? Path.GetFullPath(gitDirectory!) : null;
+                watchedCommonDirectory = watchGitDirectories ? Path.GetFullPath(commonDirectory ?? gitDirectory!) : null;
             }
 
             if (existing is not null
                 && FileSystemPathComparison.Equals(existing.RepositoryRoot, fullRepositoryRoot)
                 && FileSystemPathComparison.Equals(existing.GitDirectory, watchedGitDirectory)
+                && FileSystemPathComparison.Equals(existing.CommonDirectory, watchedCommonDirectory)
                 && existing.WatchWorkingTree == watchWorkingTree)
             {
                 return;
@@ -537,15 +663,24 @@ public sealed class GitSession : IDisposable
                 return;
             }
 
-            GitRepositoryWatcher watcher = new(repositoryRoot, watchedGitDirectory, watchWorkingTree);
+            GitRepositoryWatcher watcher = new(repositoryRoot, watchedGitDirectory, watchedCommonDirectory, watchWorkingTree);
+            watcher.RefsChanged += (_, _) => Interlocked.Increment(ref _refsVersion);
             watcher.Changed += (_, _) => RequestRefresh();
-            watcher.Failed += (_, args) => OnWatcherFailed(repositoryRoot, gitDirectory, args);
+            watcher.Failed += (_, args) => OnWatcherFailed(repositoryRoot, gitDirectory, commonDirectory, args);
             _watcher = watcher;
             watcher.Start();
         }
     }
 
-    private void OnWatcherFailed(string repositoryRoot, string? gitDirectory, GitWatcherFailedEventArgs args)
+    /// <summary>
+    /// Stops watching the failed area for this repository: a failing git or common directory ends the watching of
+    /// both, a failing working folder ends that one. The status is then refreshed after the editor's own commands.
+    /// </summary>
+    private void OnWatcherFailed(
+        string repositoryRoot,
+        string? gitDirectory,
+        string? commonDirectory,
+        GitWatcherFailedEventArgs args)
     {
         lock (_sync)
         {
@@ -570,7 +705,7 @@ public sealed class GitSession : IDisposable
         _logger?.Warn(string.Format(CultureInfo.CurrentCulture, format, args.Path, args.Exception.Message));
 
         // The failing watcher may still run its start or error handler; the replacement starts outside of it.
-        _ = Task.Run(() => ConfigureWatcher(repositoryRoot, gitDirectory));
+        _ = Task.Run(() => ConfigureWatcher(repositoryRoot, gitDirectory, commonDirectory));
     }
 
     private void StopWatcher()
@@ -586,4 +721,15 @@ public sealed class GitSession : IDisposable
             }
         }
     }
+}
+
+/// <summary>Result of <see cref="GitSession.InitializeRepositoryAsync"/>.</summary>
+/// <param name="Folder">The folder of the workspace.</param>
+/// <param name="ExistingRepositoryRoot">
+/// The root of the repository the folder already belonged to, in which case no repository was created; otherwise null.
+/// </param>
+public sealed record GitInitializeResult(string Folder, string? ExistingRepositoryRoot)
+{
+    /// <summary>Gets whether a repository was created.</summary>
+    public bool Created => ExistingRepositoryRoot is null;
 }

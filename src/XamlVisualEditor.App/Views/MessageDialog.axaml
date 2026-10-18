@@ -16,7 +16,14 @@
   <Grid Margin="16" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
     <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
     <ScrollViewer Grid.Row="1" MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-      <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+      <SelectableTextBlock x:Name="MessageText" Text="{CompiledBinding Message}" TextWrapping="Wrap">
+        <SelectableTextBlock.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="{x:Static loc:UiStrings.Copy}" InputGesture="Ctrl+C" Click="OnCopyClick" />
+            <MenuItem Header="{x:Static loc:UiStrings.SelectAll}" InputGesture="Ctrl+A" Click="OnSelectAllClick" />
+          </MenuFlyout>
+        </SelectableTextBlock.ContextFlyout>
+      </SelectableTextBlock>
     </ScrollViewer>
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="{x:Static loc:UiStrings.Ok}" Command="{CompiledBinding ConfirmCommand}" IsDefault="True" />

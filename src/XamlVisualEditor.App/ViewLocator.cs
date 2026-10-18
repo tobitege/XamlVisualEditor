@@ -56,6 +56,7 @@ public sealed class ViewLocator : IDataTemplate
                 DesignerDocument doc => new DesignerDocumentView { DataContext = doc.DocumentViewModel },
                 TextDocument doc => new TextFileView { DataContext = doc.DocumentViewModel },
                 InfiniteCanvasDocument doc => new InfiniteCanvasView { DataContext = doc.CanvasViewModel },
+                ExtensionDocument doc => new ContentControl { Content = doc.ViewModel },
                 CanvasMdiDocument doc when doc.DocumentViewModel is DesignerDocumentViewModel designer =>
                     new DesignerDocumentView { DataContext = designer },
                 CanvasMdiDocument doc when doc.DocumentViewModel is TextDocumentViewModel text =>
@@ -104,6 +105,10 @@ public sealed class ViewLocator : IDataTemplate
             AnimationEditorViewModel => new AnimationEditorView(),
             TerminalViewModel => new TerminalView(),
             GitPanelViewModel => new GitPanelView(),
+            GitRepositoryPanelViewModel => new GitRepositoryPanelView(),
+            GitHistoryViewModel => new GitHistoryView(),
+            GitCompareDocumentViewModel => new GitCompareDocumentView(),
+            GitBlameDocumentViewModel => new GitBlameDocumentView(),
             PendingChangesViewModel => new PendingChangesView(),
             SourceControlExplorerViewModel => new SourceControlExplorerView(),
             TfvcHistoryViewModel => new TfvcHistoryView(),
@@ -164,6 +169,10 @@ public sealed class ViewLocator : IDataTemplate
             or AnimationEditorViewModel
             or TerminalViewModel
             or GitPanelViewModel
+            or GitRepositoryPanelViewModel
+            or GitHistoryViewModel
+            or GitCompareDocumentViewModel
+            or GitBlameDocumentViewModel
             or PendingChangesViewModel
             or SourceControlExplorerViewModel
             or TfvcHistoryViewModel

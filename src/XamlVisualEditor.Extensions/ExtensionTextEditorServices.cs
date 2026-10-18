@@ -165,4 +165,37 @@ public interface ITextEditorViewHost
 
     /// <summary>Raised after the options changed.</summary>
     event EventHandler? OptionsChanged;
+
+    /// <summary>
+    /// Creates an empty layer of line marks, which the editors of a file show in a margin beside the line numbers.
+    /// A click on a mark runs <paramref name="clickCommandId"/> with the full path and the 1-based line as arguments.
+    /// Returns null when the host draws no line marks.
+    /// </summary>
+    ITextEditorLineMarkLayer? CreateLineMarkLayer(string? clickCommandId = null) => null;
+}
+
+/// <summary>The colour class of a line mark; the host maps each kind to a theme brush.</summary>
+public enum TextEditorLineMarkKind
+{
+    Added,
+    Modified,
+    Deleted
+}
+
+/// <summary>
+/// Marks the lines <paramref name="StartLine"/> to <paramref name="StartLine"/> + <paramref name="LineCount"/> - 1
+/// (1-based). A <paramref name="LineCount"/> of 0 marks the boundary above <paramref name="StartLine"/>, for example
+/// where lines were removed.
+/// </summary>
+public sealed record TextEditorLineMark(int StartLine, int LineCount, TextEditorLineMarkKind Kind);
+
+/// <summary>The line marks of one source; disposing the layer removes them.</summary>
+public interface ITextEditorLineMarkLayer : IDisposable
+{
+    /// <summary>
+    /// Replaces the marks of one file, given by its full path; an empty list removes them. An editor shows the marks of
+    /// the first layer, in creation order, that has marks for its file. Callable from any thread; the host copies the
+    /// marks and never calls back into the extension.
+    /// </summary>
+    void Set(string filePath, IReadOnlyList<TextEditorLineMark> marks);
 }

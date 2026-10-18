@@ -13,13 +13,14 @@ using XamlVisualEditor.Core.Interfaces;
 namespace XamlVisualEditor.Workspace;
 
 /// <summary>
-/// Git CLI-backed service for repository status and diff operations.
+/// Git CLI-backed service for repository status, diff, branch, remote and history operations.
 /// </summary>
-public sealed class GitService : IGitService, IGitRepositoryService, IGitCommandLog
+public sealed partial class GitService : IGitService, IGitRepositoryService, IGitCommandLog, IGitBranchService, IGitRemoteService, IGitHistoryService
 {
     private readonly ILogger<GitService> _logger;
+    private readonly GitProcessOptions _options;
     private readonly GitProcessRunner _runner;
-    private readonly ConcurrentDictionary<string, string> _gitDirectories = new(FileSystemPathComparison.Comparer);
+    private readonly ConcurrentDictionary<string, GitDirectories> _gitDirectories = new(FileSystemPathComparison.Comparer);
     private int _versionChecked;
 
     /// <summary>Creates the service.</summary>
@@ -28,10 +29,12 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
     public GitService(ILogger<GitService>? logger = null, GitProcessOptions? options = null)
     {
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GitService>.Instance;
-        _runner = new GitProcessRunner(options ?? GitProcessOptions.Default);
+        _options = options ?? GitProcessOptions.Default;
+        _runner = new GitProcessRunner(_options, logger: _logger);
     }
 
     /// <inheritdoc />
+    /// <remarks>Raised on the thread that ran git; an exception of a subscriber is logged and does not fail the command.</remarks>
     public event EventHandler<GitCommandLogEntry>? CommandCompleted;
 
     public async Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default)
@@ -45,7 +48,7 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
         GitProcessResult result = await RunGitAsync(
             workingDirectory,
             new[] { "rev-parse", "--show-toplevel" },
-            isReadOnly: true,
+            GitCommandAccess.Read,
             ct,
             allowNonZeroExitCode: true);
         if (result.ExitCode != 0)
@@ -59,22 +62,9 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
 
     public async Task<GitRepositoryStatus> GetStatusAsync(string repoPath, CancellationToken ct = default)
     {
-        GitProcessResult result = await RunGitAsync(
-            repoPath,
-            new[] { "--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal" },
-            isReadOnly: true,
-            ct);
-        if (result.ExitCode != 0)
-        {
-            return new GitRepositoryStatus
-            {
-                RepositoryRoot = repoPath,
-                IsRepository = false,
-                ErrorMessage = result.StandardError,
-                Changes = Array.Empty<GitFileChange>()
-            };
-        }
-
+        string[] args = { "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal" };
+        GitProcessResult result = await RunGitAsync(repoPath, args, GitCommandAccess.Read, ct);
+        ThrowIfFailed(result, args[0]);
         GitRepositoryOperation operation = await GetOperationAsync(repoPath, ct);
         return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation);
     }
@@ -82,7 +72,7 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
     public async Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default)
     {
         string[] args = BuildDiffArguments(request);
-        GitProcessResult result = await RunGitAsync(repoPath, args, isReadOnly: true, ct, allowNonZeroExitCode: true);
+        GitProcessResult result = await RunGitAsync(repoPath, args, GitCommandAccess.Read, ct, allowNonZeroExitCode: true);
         if (result.ExitCode > 1)
         {
             _logger.LogWarning("git diff failed: {Error}", result.StandardError);
@@ -96,42 +86,49 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
         return GitDiffParser.ParseUnifiedDiff(result.StandardOutput);
     }
 
-    public async Task StageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
+    /// <inheritdoc />
+    /// <remarks>Also stages deletions; <c>.</c> stages everything like <c>git add -A</c>.</remarks>
+    public Task StageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
     {
-        if (paths.Count == 0)
-        {
-            return;
-        }
-
-        List<string> args = new() { "add", "--" };
-        args.AddRange(paths);
-        await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+        return RunPathCommandAsync(repoPath, new[] { "add", "-A" }, paths, ct);
     }
 
-    public async Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs <c>git reset</c> with paths, which also works before the first commit and, unlike <c>git reset</c>
+    /// without paths, keeps a merge in progress.
+    /// </remarks>
+    public Task UnstageAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
     {
-        if (paths.Count == 0)
-        {
-            return;
-        }
-
-        List<string> args = new() { "reset", "-q", "--" };
-        args.AddRange(paths);
-        await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+        return RunPathCommandAsync(repoPath, new[] { "reset", "-q" }, paths, ct);
     }
 
-    public async Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
+    /// <inheritdoc />
+    public Task DiscardAsync(string repoPath, IReadOnlyList<string> paths, CancellationToken ct = default)
     {
-        if (paths.Count == 0)
-        {
-            return;
-        }
-
         // Restores the working file from the index only: staged content stays, and a file that is
         // staged but not yet committed is never removed from disk.
-        List<string> args = new() { "restore", "--worktree", "--" };
-        args.AddRange(paths);
-        await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+        return RunPathCommandAsync(repoPath, new[] { "restore", "--worktree" }, paths, ct);
+    }
+
+    /// <summary>
+    /// Runs a modifying command on <paramref name="paths"/>. The paths are written NUL-separated to the standard
+    /// input of git, which has no command line length limit.
+    /// </summary>
+    private async Task RunPathCommandAsync(
+        string repoPath,
+        string[] command,
+        IReadOnlyList<string> paths,
+        CancellationToken ct)
+    {
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        List<string> args = new(command) { "--pathspec-from-file=-", "--pathspec-file-nul" };
+        await using Stream input = GitProcessRequest.Utf8Input(string.Join('\0', paths));
+        await RunGitCheckedAsync(repoPath, args, input, ct);
     }
 
     public async Task CommitAsync(string repoPath, string message, CancellationToken ct = default)
@@ -156,21 +153,8 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
         Stream? standardInput,
         CancellationToken ct)
     {
-        GitProcessResult result = await RunGitAsync(workingDirectory, args, isReadOnly: false, ct, standardInput: standardInput);
-        if (result.ExitCode == 0)
-        {
-            return;
-        }
-
-        string error = result.StandardError.Trim();
-        if (error.Length == 0)
-        {
-            error = result.StandardOutput.Trim();
-        }
-
-        throw new InvalidOperationException(error.Length == 0
-            ? $"git {args[0]} exited with code {result.ExitCode}."
-            : error);
+        GitProcessResult result = await RunGitAsync(workingDirectory, args, GitCommandAccess.Write, ct, standardInput: standardInput);
+        ThrowIfFailed(result, args[0]);
     }
 
     private async Task<GitRepositoryOperation> GetOperationAsync(string repoPath, CancellationToken ct)
@@ -185,7 +169,7 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
         GitProcessResult result = await RunGitAsync(
             repoPath,
             new[] { "remote" },
-            isReadOnly: true,
+            GitCommandAccess.Read,
             ct,
             allowNonZeroExitCode: true);
         if (result.ExitCode != 0)
@@ -207,26 +191,42 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
     /// <inheritdoc />
     public async Task<string?> GetGitDirectoryAsync(string repoPath, CancellationToken ct = default)
     {
-        if (_gitDirectories.TryGetValue(repoPath, out string? cached))
+        return (await GetDirectoriesAsync(repoPath, ct))?.GitDirectory;
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetCommonDirectoryAsync(string repoPath, CancellationToken ct = default)
+    {
+        return (await GetDirectoriesAsync(repoPath, ct))?.CommonDirectory;
+    }
+
+    private async Task<GitDirectories?> GetDirectoriesAsync(string repoPath, CancellationToken ct)
+    {
+        if (_gitDirectories.TryGetValue(repoPath, out GitDirectories? cached))
         {
             return cached;
         }
 
         GitProcessResult result = await RunGitAsync(
             repoPath,
-            new[] { "rev-parse", "--absolute-git-dir" },
-            isReadOnly: true,
+            new[] { "rev-parse", "--absolute-git-dir", "--git-common-dir" },
+            GitCommandAccess.Read,
             ct,
             allowNonZeroExitCode: true);
-        string gitDirectory = result.StandardOutput.Trim();
-        if (result.ExitCode != 0 || gitDirectory.Length == 0)
+        string[] lines = result.StandardOutput.Split(
+            new[] { '\r', '\n' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (result.ExitCode != 0 || lines.Length < 2)
         {
             return null;
         }
 
-        gitDirectory = Path.GetFullPath(gitDirectory);
-        _gitDirectories[repoPath] = gitDirectory;
-        return gitDirectory;
+        // A relative common directory is relative to the folder git ran in.
+        GitDirectories directories = new(
+            Path.GetFullPath(lines[0]),
+            Path.GetFullPath(lines[1], Path.GetFullPath(repoPath)));
+        _gitDirectories[repoPath] = directories;
+        return directories;
     }
 
     internal static GitRepositoryOperation DetectOperation(string gitDirectory)
@@ -272,35 +272,33 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
         return null;
     }
 
+    /// <summary>
+    /// Returns the arguments of the diff that <see cref="GetDiffAsync"/> shows and that
+    /// <see cref="ApplySelectionAsync"/> turns into a patch: without external diff tool and text conversion and with
+    /// the prefixes <c>a/</c> and <c>b/</c>, whatever <c>diff.external</c>, textconv attributes,
+    /// <c>diff.noprefix</c> or <c>diff.mnemonicPrefix</c> configure.
+    /// </summary>
     private static string[] BuildDiffArguments(GitDiffRequest request)
     {
-        List<string> args = new();
-
-        if (request.IsUntracked && !string.IsNullOrWhiteSpace(request.Path))
+        bool isUntracked = request.IsUntracked && !string.IsNullOrWhiteSpace(request.Path);
+        List<string> args = new() { "diff" };
+        if (isUntracked)
         {
-            args.Add("diff");
             args.Add("--no-index");
-            args.Add("--no-color");
-            args.Add("--unified=3");
-            args.Add("--");
-            args.Add("/dev/null");
-            args.Add(request.Path!);
-            return args.ToArray();
         }
-
-        args.Add("diff");
-        if (request.Staged)
+        else if (request.Staged)
         {
             args.Add("--cached");
         }
 
-        args.Add("--no-color");
-        args.Add("--unified=3");
-
-        if (!string.IsNullOrWhiteSpace(request.Path))
+        args.AddRange(["--no-color", "--unified=3", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"]);
+        if (isUntracked)
         {
-            args.Add("--");
-            args.Add(request.Path!);
+            args.AddRange(["--", "/dev/null", request.Path!]);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Path))
+        {
+            args.AddRange(["--", request.Path!]);
         }
 
         return args.ToArray();
@@ -309,32 +307,52 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
     private async Task<GitProcessResult> RunGitAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
-        bool isReadOnly,
+        GitCommandAccess access,
         CancellationToken ct,
         bool allowNonZeroExitCode = false,
-        Stream? standardInput = null)
+        Stream? standardInput = null,
+        IReadOnlyDictionary<string, string?>? environment = null,
+        TimeSpan? timeout = null,
+        CancellationToken? waitCancellation = null,
+        int? maxOutputLines = null,
+        int? maxOutputBytes = null)
     {
         if (Interlocked.Exchange(ref _versionChecked, 1) == 0)
         {
             await WarnIfOutdatedAsync(workingDirectory, ct);
         }
 
+        Action<IReadOnlyList<string>, int>? processStarted = _options.ProcessStarted;
         long started = Stopwatch.GetTimestamp();
         GitProcessResult result = await _runner.RunAsync(
             new GitProcessRequest
             {
                 WorkingDirectory = workingDirectory,
                 Arguments = args,
-                IsReadOnly = isReadOnly,
-                StandardInput = standardInput
+                Access = access,
+                StandardInput = standardInput,
+                Environment = environment,
+                Timeout = timeout,
+                MaxOutputLines = maxOutputLines,
+                MaxOutputBytes = maxOutputBytes,
+                ProcessStarted = processStarted is null ? null : id => processStarted(args, id)
             },
-            ct);
-        CommandCompleted?.Invoke(this, new GitCommandLogEntry(
-            workingDirectory,
-            args,
-            result.ExitCode,
-            Stopwatch.GetElapsedTime(started),
-            result.StandardError.Trim()));
+            ct,
+            waitCancellation);
+        try
+        {
+            CommandCompleted?.Invoke(this, new GitCommandLogEntry(
+                workingDirectory,
+                args,
+                result.ExitCode,
+                Stopwatch.GetElapsedTime(started),
+                result.StandardError.Trim()));
+        }
+        catch (Exception exception)
+        {
+            // A failing subscriber must not change the result of the git command.
+            _logger.LogWarning(exception, "A subscriber of CommandCompleted failed.");
+        }
 
         if (!allowNonZeroExitCode && result.ExitCode != 0)
         {
@@ -344,12 +362,15 @@ public sealed class GitService : IGitService, IGitRepositoryService, IGitCommand
         return result;
     }
 
+    /// <summary>The git directory and the common git directory of a working tree.</summary>
+    private sealed record GitDirectories(string GitDirectory, string CommonDirectory);
+
     private async Task WarnIfOutdatedAsync(string workingDirectory, CancellationToken ct)
     {
         try
         {
             GitProcessResult result = await _runner.RunAsync(
-                new GitProcessRequest { WorkingDirectory = workingDirectory, Arguments = new[] { "--version" }, IsReadOnly = true },
+                new GitProcessRequest { WorkingDirectory = workingDirectory, Arguments = new[] { "--version" } },
                 ct);
             if (GitExecutableLocator.TryParseVersion(result.StandardOutput, out Version? version)
                 && version < GitExecutableLocator.MinimumVersion)

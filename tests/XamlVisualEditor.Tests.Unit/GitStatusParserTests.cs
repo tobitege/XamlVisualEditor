@@ -1,6 +1,9 @@
 using XamlVisualEditor.Core;
 using Xunit;
 
+// The obsolete porcelain v1 parser stays public until it is removed, so it stays tested.
+#pragma warning disable CS0618
+
 namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class GitStatusParserTests

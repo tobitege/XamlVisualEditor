@@ -290,10 +290,11 @@ public sealed class BreakpointMarginBehavior
             DetachEditor();
             _editor = editor;
             _textAreaPointerHandler = OnTextAreaPointerPressed;
+            // Only the tunnel pass: a press passes the text area twice with both strategies, which toggled twice.
             _editor.TextArea.AddHandler(
                 InputElement.PointerPressedEvent,
                 _textAreaPointerHandler,
-                RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+                RoutingStrategies.Tunnel,
                 handledEventsToo: true);
         }
 
@@ -314,7 +315,8 @@ public sealed class BreakpointMarginBehavior
             {
                 return;
             }
-            if (e.Handled && ReferenceEquals(e.Source, this))
+            // The change marks beside the line numbers handle their own clicks.
+            if ((e.Handled && ReferenceEquals(e.Source, this)) || e.Source is LineMarkMargin)
             {
                 return;
             }

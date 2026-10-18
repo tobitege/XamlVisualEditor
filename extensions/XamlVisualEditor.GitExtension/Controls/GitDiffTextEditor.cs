@@ -3,15 +3,18 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
+using XamlVisualEditor.SourceControl.UI.Themes;
 
 namespace XamlVisualEditor.GitExtension.Controls;
 
 /// <summary>
-/// TextEditor that renders git diffs with colored line types.
+/// TextEditor that renders git diffs with colored line types: the resources under the keys of
+/// <see cref="DiffColors"/>, which an application or theme can define, else the defaults of <see cref="DiffColors"/>.
 /// </summary>
 public sealed class GitDiffTextEditor : TextEditor
 {
@@ -25,6 +28,8 @@ public sealed class GitDiffTextEditor : TextEditor
     {
         DiffLinesProperty.Changed.AddClassHandler<GitDiffTextEditor>((editor, args) =>
             editor.OnDiffLinesChanged(args));
+        ThemeVariantScope.ActualThemeVariantProperty.Changed.AddClassHandler<GitDiffTextEditor>((editor, _) =>
+            editor.TextArea.TextView.Redraw());
     }
 
     public GitDiffTextEditor()
@@ -32,6 +37,8 @@ public sealed class GitDiffTextEditor : TextEditor
         _colorizer = new DiffLineColorizer(this);
         TextArea.TextView.LineTransformers.Add(_colorizer);
         Document ??= new TextDocument();
+        // A resource under a key of DiffColors may have changed here, above or in the application.
+        ResourcesChanged += (_, _) => TextArea.TextView.Redraw();
     }
 
     protected override Type StyleKeyOverride => typeof(TextEditor);
@@ -127,8 +134,8 @@ public sealed class GitDiffTextEditor : TextEditor
             }
 
             GitDiffLineKind kind = _lines[index].Kind;
-            IBrush? foreground = GetForeground(kind);
-            IBrush? background = GetBackground(kind);
+            IBrush? foreground = FindBrush(GetForegroundKey(kind));
+            IBrush? background = FindBrush(GetBackgroundKey(kind));
 
             if (foreground is null && background is null)
             {
@@ -149,26 +156,28 @@ public sealed class GitDiffTextEditor : TextEditor
             });
         }
 
-        private static IBrush? GetForeground(GitDiffLineKind kind)
+        private IBrush? FindBrush(string? key) => key is null ? null : DiffColors.Find(_owner, key);
+
+        private static string? GetForegroundKey(GitDiffLineKind kind)
         {
             return kind switch
             {
-                GitDiffLineKind.Added => Brushes.ForestGreen,
-                GitDiffLineKind.Removed => Brushes.IndianRed,
-                GitDiffLineKind.HunkHeader => Brushes.DodgerBlue,
-                GitDiffLineKind.FileHeader => Brushes.SlateGray,
-                GitDiffLineKind.NoNewline => Brushes.Orange,
+                GitDiffLineKind.Added => DiffColors.ADDED_FOREGROUND_KEY,
+                GitDiffLineKind.Removed => DiffColors.REMOVED_FOREGROUND_KEY,
+                GitDiffLineKind.HunkHeader => DiffColors.HUNK_HEADER_FOREGROUND_KEY,
+                GitDiffLineKind.FileHeader => DiffColors.FILE_HEADER_FOREGROUND_KEY,
+                GitDiffLineKind.NoNewline => DiffColors.NO_NEWLINE_FOREGROUND_KEY,
                 _ => null
             };
         }
 
-        private static IBrush? GetBackground(GitDiffLineKind kind)
+        private static string? GetBackgroundKey(GitDiffLineKind kind)
         {
             return kind switch
             {
-                GitDiffLineKind.Added => new SolidColorBrush(Color.Parse("#1A1F8A4C")),
-                GitDiffLineKind.Removed => new SolidColorBrush(Color.Parse("#1AE5534B")),
-                GitDiffLineKind.HunkHeader => new SolidColorBrush(Color.Parse("#1A1E3A8A")),
+                GitDiffLineKind.Added => DiffColors.ADDED_BACKGROUND_KEY,
+                GitDiffLineKind.Removed => DiffColors.REMOVED_BACKGROUND_KEY,
+                GitDiffLineKind.HunkHeader => DiffColors.HUNK_HEADER_BACKGROUND_KEY,
                 _ => null
             };
         }

@@ -2,9 +2,9 @@ using System;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
-using XamlVisualEditor.Extensions;
-
+using Avalonia.Threading;
 using XamlVisualEditor.Core.Localization;
+using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.OutputExtension;
 
@@ -133,16 +133,24 @@ public sealed class OutputExtension : IXveExtension
             viewModel.HandleChannelCleared(args.Channel);
         EventHandler<OutputChannelMessageEventArgs> messageHandler = (_, args) =>
             viewModel.HandleChannelMessage(args.Channel, args.Message, args.IsLine);
+        EventHandler<OutputChannelEventArgs> showRequestedHandler = (_, args) =>
+        {
+            viewModel.HandleChannelShowRequested(args.Channel);
+            // Show may be called on any thread; the view host works on the UI thread.
+            Dispatcher.UIThread.Post(() => _ = context.ViewHost.ActivateAsync(ViewId, CancellationToken.None));
+        };
 
         context.Window.OutputChannelCreated += createdHandler;
         context.Window.OutputChannelRemoved += removedHandler;
         context.Window.OutputChannelCleared += clearedHandler;
         context.Window.OutputChannelMessage += messageHandler;
+        context.Window.OutputChannelShowRequested += showRequestedHandler;
 
         context.Subscriptions.Add(Disposable.Create(() => context.Window.OutputChannelCreated -= createdHandler));
         context.Subscriptions.Add(Disposable.Create(() => context.Window.OutputChannelRemoved -= removedHandler));
         context.Subscriptions.Add(Disposable.Create(() => context.Window.OutputChannelCleared -= clearedHandler));
         context.Subscriptions.Add(Disposable.Create(() => context.Window.OutputChannelMessage -= messageHandler));
+        context.Subscriptions.Add(Disposable.Create(() => context.Window.OutputChannelShowRequested -= showRequestedHandler));
         context.Subscriptions.Add(Disposable.Create(viewModel.Dispose));
 
         await viewModel.InitializeAsync(cancellationToken);

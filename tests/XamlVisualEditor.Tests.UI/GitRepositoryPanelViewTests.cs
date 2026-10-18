@@ -828,6 +828,9 @@ public sealed class GitRepositoryPanelViewTests
         public Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
             throw new NotSupportedException();
 

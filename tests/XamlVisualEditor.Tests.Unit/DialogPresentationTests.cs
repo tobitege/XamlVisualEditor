@@ -360,7 +360,8 @@ public sealed class DialogPresentationTests
     {
         using GitTestRepository repository = CreateRepositoryWithWaitingHook();
         GitService git = new(options: repository.ProcessOptions);
-        MainWindow window = new() { WhenGitWritesEnded = git.WhenWritesEnded };
+        using MainWindowViewModel viewModel = new(recentFilesPath: Path.Combine(repository.RootPath, "recent.json"));
+        MainWindow window = new(viewModel) { WhenGitWritesEnded = git.WhenWritesEnded };
         TimeSpan delay = MainWindow.GitWriteCloseDelay;
         MainWindow.GitWriteCloseDelay = TimeSpan.FromMilliseconds(200);
         window.Show();
@@ -368,8 +369,11 @@ public sealed class DialogPresentationTests
         try
         {
             await WaitUntilAsync(() => File.Exists(Path.Combine(repository.Path, ".git", "hook-started")));
+            // As after File › Exit, the documents were confirmed before the window waits for git.
+            Assert.True(await viewModel.ConfirmShutdownAsync());
 
-            // The window button of the progress asks, and the window button of the question keeps the editor open.
+            // The window button of the progress asks, and the window button of the question keeps the editor open and
+            // withdraws the confirmation of the documents, so documents changed from then on are asked about again.
             window.Close();
             ProgressDialog progress = await WaitForOwnedAsync<ProgressDialog>(window);
             await WaitUntilAsync(() => ((ProgressDialogViewModel)progress.DataContext!).CanCancel);
@@ -377,7 +381,7 @@ public sealed class DialogPresentationTests
             ConfirmDialog question = await WaitForOwnedAsync<ConfirmDialog>(window);
             Assert.Equal(UiStrings.GitWritesCloseAnywayPrompt, ((ConfirmDialogViewModel)question.DataContext!).Message);
             CloseWithWindowButton(question);
-            await WaitUntilAsync(() => window.OwnedWindows.Count == 0);
+            await WaitUntilAsync(() => window.OwnedWindows.Count == 0 && !viewModel.IsShutdownConfirmed);
             Assert.True(window.IsVisible);
 
             // The button of the progress asks again, and only the confirmation closes the editor while git runs. The

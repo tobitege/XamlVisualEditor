@@ -422,6 +422,7 @@ Mark them resolved anyway?</value></data>
 
 Usually {1} has commits that {0} does not have yet; pull first to keep them. Only if you rewrote {0}, for example with an amend or a rebase, a force push replaces the commits on the remote: they are lost for everyone, and git refuses when the remote got commits since the last fetch. Force push?</value></data>
   <data name="ForcePushedFormat" xml:space="preserve"><value>Force pushed {0} to {1}.</value></data>
+  <data name="ForcePushUnavailableFormat" xml:space="preserve"><value>{0} cannot be force pushed to {1}: a push of {0} goes to another branch, its upstream is a local branch, or {1} was not fetched yet.</value></data>
   <data name="ForcePushStaleHint" xml:space="preserve"><value>The remote got commits since the last fetch, so git refused the force push and nothing changed. Fetch, look at the new commits and decide again.</value></data>
   <data name="StashPathsCommand" xml:space="preserve"><value>Stash Changes of This File or Folder…</value></data>
   <data name="StashStagedCommand" xml:space="preserve"><value>Stash Staged Changes…</value></data>

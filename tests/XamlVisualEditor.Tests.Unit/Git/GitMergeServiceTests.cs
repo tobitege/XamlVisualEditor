@@ -599,6 +599,86 @@ public sealed class GitMergeServiceTests
         Assert.Equal("edited\n", repository.ReadFile("b.txt"));
     }
 
+    [Fact]
+    public async Task Rebase_of_a_named_branch_rebases_it_although_another_one_is_checked_out()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Add b");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Add c");
+        string main = repository.RunGit("rev-parse", "main").Trim();
+        GitService service = new(options: repository.ProcessOptions);
+
+        Assert.Equal(GitMergeResult.Merged, await service.RebaseAsync(repository.Path, "main", "feature", ct));
+
+        Assert.Equal("feature", repository.RunGit("branch", "--show-current").Trim());
+        Assert.Equal(main, repository.RunGit("rev-parse", "feature~1").Trim());
+        Assert.Equal(main, repository.RunGit("rev-parse", "main").Trim());
+    }
+
+    [Fact]
+    public async Task A_cherry_pick_git_refuses_during_a_stopped_merge_throws_instead_of_reporting_a_stop()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = CreateDivergedBranches();
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.Equal(GitMergeResult.Stopped, await service.MergeAsync(repository.Path, "feature", ct));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CherryPickAsync(repository.Path, "feature", ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.MergeAsync(repository.Path, "feature", ct));
+
+        Assert.Equal(GitRepositoryOperation.Merging, (await service.GetStatusAsync(repository.Path, ct)).Operation);
+    }
+
+    [Fact]
+    public async Task A_cherry_pick_that_stops_beside_a_sequence_with_a_committed_step_reports_the_stop()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "a.txt", "feature\n", "Feature");
+        repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Second");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
+        repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Other");
+        string conflicting = repository.RunGit("rev-parse", "feature~1").Trim();
+        GitService service = new(options: repository.ProcessOptions);
+        // The sequence stops at its first step, which is committed on the command line; its rest waits in the sequencer.
+        Assert.False(repository.TryRunGit(out _, "cherry-pick", "main..feature"));
+        Assert.True(await service.TakeSideAsync(repository.Path, ["a.txt"], GitConflictSide.Theirs, ct));
+        repository.RunGit("commit", "-q", "--no-edit");
+        repository.WriteFile("a.txt", "main again\n");
+        repository.RunGit("commit", "-q", "-am", "Main again");
+
+        Assert.Equal(GitMergeResult.Stopped, await service.CherryPickAsync(repository.Path, conflicting, ct));
+        Assert.Equal(conflicting, repository.RunGit("rev-parse", "CHERRY_PICK_HEAD").Trim());
+    }
+
+    [Fact]
+    public async Task Skip_refuses_a_rebase_step_other_than_the_confirmed_one()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        // Replaying Two and Three onto main conflicts at both, as main changed a.txt as well.
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "a.txt", "two\n", "Two");
+        repository.CommitFileIn(repository.Path, "a.txt", "three\n", "Three");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
+        repository.RunGit("switch", "-q", "feature");
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.False(repository.TryRunGit(out _, "rebase", "main"));
+        string? confirmed = (await service.GetStatusAsync(repository.Path, ct)).OperationStep;
+
+        Assert.False(repository.TryRunGit(out _, "rebase", "--skip"));
+        Assert.NotEqual(confirmed, (await service.GetStatusAsync(repository.Path, ct)).OperationStep);
+
+        Assert.False(await service.SkipAsync(repository.Path, GitRepositoryOperation.Rebasing, confirmed, ct));
+        Assert.Equal(GitRepositoryOperation.Rebasing, (await service.GetStatusAsync(repository.Path, ct)).Operation);
+    }
+
     private static async Task<bool> SkipCurrentStepAsync(GitService service, GitTestRepository repository, GitRepositoryOperation operation)
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

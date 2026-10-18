@@ -317,7 +317,7 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         }
         catch (IOException)
         {
-            // git replaced the file meanwhile; the step is then unknown, which a confirmed step does not match.
+            // git replaced the file meanwhile; the step is then unknown and matches only a confirmed step that was unknown too.
             return null;
         }
     }

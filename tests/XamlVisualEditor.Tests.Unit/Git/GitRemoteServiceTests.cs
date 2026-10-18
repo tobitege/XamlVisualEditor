@@ -109,6 +109,41 @@ public sealed class GitRemoteServiceTests
             (await service.ForcePushAsync(repository.Path, "nothing", Sha(repository, "HEAD"), ct)).FailureKind);
     }
 
+    [Fact]
+    public async Task A_force_push_lease_is_given_only_when_the_push_goes_to_the_fetched_upstream_on_a_remote()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        Assert.Equal(Sha(repository, "origin/main"), await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
+
+        // feature tracks origin/main, but push.default=current pushes it to origin/feature.
+        repository.RunGit("switch", "-q", "-c", "feature", "--track", "origin/main");
+        repository.RunGit("config", "push.default", "current");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "feature", ct));
+
+        // main pushes to another remote than its upstream.
+        repository.RunGit("remote", "add", "fork", repository.RemotePath!);
+        repository.RunGit("config", "branch.main.pushRemote", "fork");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
+        repository.RunGit("config", "--unset", "branch.main.pushRemote");
+
+        // The upstream of local is the local branch main.
+        repository.RunGit("switch", "-q", "-c", "local", "--track", "main");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "local", ct));
+
+        // The upstream of fresh was never fetched.
+        repository.RunGit("switch", "-q", "-c", "fresh");
+        repository.RunGit("config", "branch.fresh.remote", "origin");
+        repository.RunGit("config", "branch.fresh.merge", "refs/heads/fresh");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "fresh", ct));
+        Assert.Equal(
+            GitRemoteFailureKind.NoUpstream,
+            (await service.ForcePushAsync(repository.Path, "local", Sha(repository, "main"), ct)).FailureKind);
+    }
+
     private static string Sha(GitTestRepository repository, string revision) => repository.RunGit("rev-parse", revision).Trim();
 
     [Fact]

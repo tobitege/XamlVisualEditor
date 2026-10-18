@@ -422,6 +422,7 @@ Trotzdem als gelöst markieren?</value></data>
 
 Meist hat {1} Commits, die {0} noch nicht hat; hole sie zuerst per Pull, um sie zu behalten. Nur wenn du {0} umgeschrieben hast, zum Beispiel mit einem Amend oder Rebase, ersetzt ein Force Push die Commits auf dem Remote: Sie gehen für alle verloren, und git verweigert es, wenn der Remote seit dem letzten Fetch Commits bekommen hat. Force Push ausführen?</value></data>
   <data name="ForcePushedFormat" xml:space="preserve"><value>{0} per Force Push nach {1} gepusht.</value></data>
+  <data name="ForcePushUnavailableFormat" xml:space="preserve"><value>{0} lässt sich nicht per Force Push nach {1} pushen: Ein Push von {0} geht an einen anderen Branch, sein Upstream ist ein lokaler Branch, oder {1} wurde noch nicht geholt.</value></data>
   <data name="ForcePushStaleHint" xml:space="preserve"><value>Der Remote hat seit dem letzten Fetch Commits bekommen, deshalb hat git den Force Push verweigert und nichts geändert. Hole sie per Fetch, sieh dir die neuen Commits an und entscheide neu.</value></data>
   <data name="StashPathsCommand" xml:space="preserve"><value>Änderungen dieser Datei oder dieses Ordners stashen …</value></data>
   <data name="StashStagedCommand" xml:space="preserve"><value>Gestagte Änderungen stashen …</value></data>

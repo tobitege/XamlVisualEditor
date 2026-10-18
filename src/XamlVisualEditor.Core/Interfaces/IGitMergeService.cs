@@ -61,7 +61,8 @@ public interface IGitMergeService
     Task<GitMergeResult> RevertAsync(string repoPath, string commit, CancellationToken ct = default);
 
     /// <summary>
-    /// Replays the commits of <paramref name="branch"/>, after switching to it, or of HEAD when it is null, that
+    /// Replays the commits of <paramref name="branch"/>, a branch or a commit that git checks out first, or of HEAD when
+    /// it is null, that
     /// <paramref name="upstream"/>, a branch, tag or commit, does not have on top of it. Returns
     /// <see cref="GitMergeResult.AlreadyUpToDate"/> when the branch already contains it, <see cref="GitMergeResult.Stopped"/>
     /// when a conflict stopped a step and the rebase is in progress, and throws when git refuses before changing

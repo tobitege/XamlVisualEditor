@@ -140,7 +140,9 @@ public sealed class GitStashCommandsTests
 
         (IReadOnlyList<QuickPickItem> items, QuickPickOptions options) = Assert.Single(fixture.Window.QuickPicks);
         // The title is the command without the ellipsis that marks it in the menus.
-        Assert.Equal(GitStrings.StashPopCommand.TrimEnd('…').TrimEnd(), options.Title);
+        Assert.EndsWith("…", GitStrings.StashPopCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("…", options.Title, StringComparison.Ordinal);
+        Assert.StartsWith(options.Title, GitStrings.StashPopCommand, StringComparison.Ordinal);
         Assert.Equal(("stash@{0}", "On main: first"), (items[0].Label, items[0].Description));
         Assert.Equal("first\n", File.ReadAllText(Path.Combine(fixture.Repository.Path, "a.txt")));
         Assert.Equal(

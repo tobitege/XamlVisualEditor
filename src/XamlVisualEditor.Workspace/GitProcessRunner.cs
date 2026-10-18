@@ -32,6 +32,7 @@ internal sealed class GitProcessRunner
     private readonly ILogger _logger;
     private readonly Lazy<GitExecutable> _executable;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _writeGates = new(FileSystemPathComparison.Comparer);
+    private readonly AsyncLocal<SemaphoreSlim?> _heldGate = new();
     private readonly object _writesGate = new();
     private int _writes;
     private TaskCompletionSource? _writesEnded;
@@ -77,22 +78,67 @@ internal sealed class GitProcessRunner
             return await RunProcessAsync(request, ct).ConfigureAwait(false);
         }
 
+        // A command of RunWithWriteGateAsync runs under the gate its flow already holds.
+        bool held = _heldGate.Value == writeGate;
         CountWrite(1);
         try
         {
-            Task wait = writeGate.WaitAsync(waitCancellation ?? ct);
-            if (!wait.IsCompleted)
+            if (!held)
             {
-                _options.WriteGateWaitStarted?.Invoke(request.Arguments);
+                Task wait = writeGate.WaitAsync(waitCancellation ?? ct);
+                if (!wait.IsCompleted)
+                {
+                    _options.WriteGateWaitStarted?.Invoke(request.Arguments);
+                }
+
+                await wait.ConfigureAwait(false);
             }
 
-            await wait.ConfigureAwait(false);
             try
             {
                 return await RunProcessAsync(request, ct).ConfigureAwait(false);
             }
             finally
             {
+                if (!held)
+                {
+                    writeGate.Release();
+                }
+            }
+        }
+        finally
+        {
+            CountWrite(-1);
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="action"/> while holding the write gate of <paramref name="workingDirectory"/>: the writing
+    /// commands it runs do not wait for the gate, and no other writing command runs between them, so a check of the
+    /// repository state still holds for the command it decides on.
+    /// </summary>
+    /// <param name="waitCancellation">Cancels the wait for the gate.</param>
+    public async Task<T> RunWithWriteGateAsync<T>(string workingDirectory, Func<Task<T>> action, CancellationToken waitCancellation)
+    {
+        SemaphoreSlim writeGate = GetWriteGate(workingDirectory);
+        if (_heldGate.Value == writeGate)
+        {
+            return await action().ConfigureAwait(false);
+        }
+
+        CountWrite(1);
+        try
+        {
+            await writeGate.WaitAsync(waitCancellation).ConfigureAwait(false);
+            // Set in this flow only: the action and the commands it starts see it, the caller does not.
+            _heldGate.Value = writeGate;
+            try
+            {
+                return await action().ConfigureAwait(false);
+            }
+            finally
+            {
+                _heldGate.Value = null;
                 writeGate.Release();
             }
         }

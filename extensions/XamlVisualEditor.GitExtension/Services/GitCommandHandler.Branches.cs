@@ -320,10 +320,11 @@ internal sealed partial class GitCommandHandler
 
         // After an amend or a rebase of a pushed branch only a force push gets through; it replaces commits on the
         // remote, so the question starts with git's reason and pulling, which keeps them, and the default declines.
-        // The force push replaces only the upstream commit known before the question.
+        // It is offered only when it replaces the branch that rejected the push, and only the commit known before the
+        // question; otherwise the rejection shows as an error.
         if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected }
             && setUpstreamRemote is null
-            && await ReadUpstreamShaAsync(branch) is { } lease)
+            && await ReadForcePushLeaseAsync(branch) is { } lease)
         {
             if (await ConfirmAsync(
                     string.Format(
@@ -368,9 +369,9 @@ internal sealed partial class GitCommandHandler
 
         string branch = snapshot.BranchName;
         string upstream = snapshot.UpstreamName!;
-        if (await ReadUpstreamShaAsync(branch) is not { } lease)
+        if (await ReadForcePushLeaseAsync(branch) is not { } lease)
         {
-            await ShowInformationAsync(GitStrings.NoUpstream);
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushUnavailableFormat, branch, upstream));
             return;
         }
 
@@ -384,20 +385,19 @@ internal sealed partial class GitCommandHandler
         }
     }
 
-    /// <summary>Returns the commit the remote-tracking branch of <paramref name="branch"/>'s upstream points to, or null.</summary>
-    private async Task<string?> ReadUpstreamShaAsync(string branch)
+    /// <summary>
+    /// Returns the lease of a force push of <paramref name="branch"/>, see <see cref="IGitRemoteService.GetForcePushLeaseAsync"/>,
+    /// or null when a force push could replace something else than the push.
+    /// </summary>
+    private async Task<string?> ReadForcePushLeaseAsync(string branch)
     {
-        if (_session.Services.History is not { } history || _session.Current.RepositoryRoot is not { } root)
-        {
-            return null;
-        }
-
         try
         {
-            return (await history.ResolveCommitAsync(root, branch + "@{upstream}", CancellationToken.None)).Sha;
+            return await _session.Services.Remotes!.GetForcePushLeaseAsync(_session.Current.RepositoryRoot!, branch, CancellationToken.None);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException exception)
         {
+            _logger?.Error(exception.Message, exception);
             return null;
         }
     }

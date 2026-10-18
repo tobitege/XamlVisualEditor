@@ -115,11 +115,16 @@ public sealed partial class MainWindow : Window
                         _isWaitingForGit = false;
                     }
 
-                    if (close)
+                    // Both approvals hold for this close only: the editor that stays open asks again next time.
+                    if (!close)
                     {
-                        _closeDespiteGit = true;
-                        Close();
+                        (DataContext as MainWindowViewModel)?.ResetShutdownConfirmation();
+                        return;
                     }
+
+                    _closeDespiteGit = true;
+                    Close();
+                    _closeDespiteGit = false;
                 });
                 return;
             }

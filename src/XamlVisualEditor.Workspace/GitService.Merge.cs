@@ -16,7 +16,7 @@ public sealed partial class GitService : IGitMergeService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(revision);
         (GitProcessResult result, bool stopped) = await RunStoppingCommandAsync(
-            repoPath, ["merge", "--no-edit", "--", revision], GitRepositoryOperation.Merging, ct);
+            repoPath, ["merge", "--no-edit", "--", revision], revision, GitRepositoryOperation.Merging, UntranslatedOutput, ct);
         if (stopped)
         {
             return GitMergeResult.Stopped;
@@ -29,7 +29,7 @@ public sealed partial class GitService : IGitMergeService
 
     /// <inheritdoc />
     public Task<bool> AbortAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default) =>
-        RunConfirmedOperationCommandAsync(repoPath, operation, "--abort", ct);
+        RunConfirmedOperationCommandAsync(repoPath, operation, step => true, "--abort", ct);
 
     /// <inheritdoc />
     public async Task ContinueAsync(string repoPath, CancellationToken ct = default) =>
@@ -37,17 +37,10 @@ public sealed partial class GitService : IGitMergeService
 
     /// <inheritdoc />
     /// <remarks>A merge has no steps; git merge has no --skip.</remarks>
-    public async Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, string? step, CancellationToken ct = default)
-    {
-        if (operation == GitRepositoryOperation.Merging
-            || await GetGitDirectoryAsync(repoPath, ct) is not { } gitDirectory
-            || ReadOperationStep(gitDirectory, operation) != step)
-        {
-            return false;
-        }
-
-        return await RunConfirmedOperationCommandAsync(repoPath, operation, "--skip", ct);
-    }
+    public Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, string? step, CancellationToken ct = default) =>
+        operation == GitRepositoryOperation.Merging
+            ? Task.FromResult(false)
+            : RunConfirmedOperationCommandAsync(repoPath, operation, current => current == step, "--skip", ct);
 
     /// <inheritdoc />
     public Task<GitMergeResult> CherryPickAsync(string repoPath, string commit, CancellationToken ct = default) =>
@@ -64,7 +57,8 @@ public sealed partial class GitService : IGitMergeService
         string[] args = branch is null
             ? ["rebase", "--end-of-options", upstream]
             : ["rebase", "--end-of-options", upstream, branch];
-        (GitProcessResult result, bool stopped) = await RunStoppingCommandAsync(repoPath, args, GitRepositoryOperation.Rebasing, ct);
+        (GitProcessResult result, bool stopped) = await RunStoppingCommandAsync(
+            repoPath, args, upstream, GitRepositoryOperation.Rebasing, UntranslatedOutput, ct);
         if (stopped)
         {
             return GitMergeResult.Stopped;
@@ -86,56 +80,124 @@ public sealed partial class GitService : IGitMergeService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commit);
         (_, bool stopped) = await RunStoppingCommandAsync(
-            repoPath, [command, "--no-edit", "--end-of-options", commit], stoppedOperation, ct);
+            repoPath, [command, "--no-edit", "--end-of-options", commit], commit, stoppedOperation, null, ct);
         return stopped ? GitMergeResult.Stopped : GitMergeResult.Merged;
     }
 
     /// <summary>
-    /// Runs a merge, rebase, cherry-pick or revert and tells whether it stopped with <paramref name="stoppedOperation"/>
-    /// in progress; throws with git's output when git refused. git exits with code 1 both when it stopped and when it
-    /// refused, so the operation decides, and only one that this command started: an operation in progress before
-    /// makes git refuse.
+    /// Runs a merge, rebase, cherry-pick or revert of <paramref name="target"/> and tells whether it stopped; throws
+    /// with git's output when git refused. git exits with code 1 when it stopped, and when it refused because of a
+    /// conflicting operation with 128; code 1 alone does not tell a stop, so it stopped only when
+    /// <paramref name="stoppedOperation"/> is in progress for the commit of <paramref name="target"/>.
     /// </summary>
-    private async Task<(GitProcessResult Result, bool Stopped)> RunStoppingCommandAsync(
+    private Task<(GitProcessResult Result, bool Stopped)> RunStoppingCommandAsync(
         string repoPath,
         string[] args,
+        string target,
         GitRepositoryOperation stoppedOperation,
-        CancellationToken ct)
-    {
-        bool wasInProgress = await GetOperationAsync(repoPath, ct) != GitRepositoryOperation.None;
-        GitProcessResult result = await RunWorkingTreeCommandAsync(repoPath, args, ct, UntranslatedOutput);
-        if (result.ExitCode == 0)
+        IReadOnlyDictionary<string, string?>? environment,
+        CancellationToken ct) =>
+        RunUnderWriteGateAsync(repoPath, async () =>
         {
+            string? targetId = await TryResolveCommitIdAsync(repoPath, target, ct);
+            GitProcessResult result = await RunWorkingTreeCommandAsync(repoPath, args, ct, environment);
+            if (result.ExitCode == 0)
+            {
+                return (result, false);
+            }
+
+            if (result.ExitCode == 1
+                && targetId is not null
+                && await GetGitDirectoryAsync(repoPath, CancellationToken.None) is { } gitDirectory
+                && DetectOperation(gitDirectory) == stoppedOperation
+                && ReadOperationTarget(gitDirectory, stoppedOperation) == targetId)
+            {
+                return (result, true);
+            }
+
+            ThrowIfFailed(result, args[0]);
             return (result, false);
-        }
+        }, ct);
 
-        if (!wasInProgress && await GetOperationAsync(repoPath, CancellationToken.None) == stoppedOperation)
+    /// <summary>Returns the full id of the commit <paramref name="revision"/> names, or null when it names none.</summary>
+    private async Task<string?> TryResolveCommitIdAsync(string repoPath, string revision, CancellationToken ct)
+    {
+        try
         {
-            return (result, true);
+            return (await ResolveCommitAsync(repoPath, revision, ct)).Sha;
         }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
-        ThrowIfFailed(result, args[0]);
-        return (result, false);
+    /// <summary>
+    /// Returns the commit <paramref name="operation"/> works with: the merged, picked or reverted commit, or the commit a
+    /// rebase replays onto; null when git names none.
+    /// </summary>
+    private static string? ReadOperationTarget(string gitDirectory, GitRepositoryOperation operation)
+    {
+        string[] files = operation switch
+        {
+            GitRepositoryOperation.Merging => ["MERGE_HEAD"],
+            GitRepositoryOperation.CherryPicking => ["CHERRY_PICK_HEAD"],
+            GitRepositoryOperation.Reverting => ["REVERT_HEAD"],
+            GitRepositoryOperation.Rebasing => [Path.Combine("rebase-merge", "onto"), Path.Combine("rebase-apply", "onto")],
+            _ => []
+        };
+        string? file = files.Select(name => Path.Combine(gitDirectory, name)).FirstOrDefault(File.Exists);
+        try
+        {
+            // MERGE_HEAD lists each merged commit on a line of its own.
+            return file is null ? null : File.ReadLines(file).FirstOrDefault()?.Trim();
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
     /// Runs <c>git &lt;operation&gt; &lt;option&gt;</c> when <paramref name="operation"/>, the one the user confirmed, is
-    /// in progress; returns false and runs nothing otherwise.
+    /// in progress and its step passes <paramref name="isConfirmedStep"/> (see
+    /// <see cref="GitRepositoryStatus.OperationStep"/>); returns false and runs nothing otherwise. The check and the
+    /// command hold the write gate together, so no writing command of the editor moves the operation between them.
     /// </summary>
-    private async Task<bool> RunConfirmedOperationCommandAsync(
+    private Task<bool> RunConfirmedOperationCommandAsync(
         string repoPath,
         GitRepositoryOperation operation,
+        Func<string?, bool> isConfirmedStep,
         string option,
-        CancellationToken ct)
-    {
-        GitRepositoryOperation current = await GetOperationAsync(repoPath, ct);
-        if (current != operation || current == GitRepositoryOperation.None)
+        CancellationToken ct) =>
+        RunUnderWriteGateAsync(repoPath, async () =>
         {
-            return false;
-        }
+            if (await GetGitDirectoryAsync(repoPath, ct) is not { } gitDirectory)
+            {
+                return false;
+            }
 
-        await RunOperationCommandAsync(repoPath, current, option, ct);
-        return true;
+            GitRepositoryOperation current = DetectOperation(gitDirectory);
+            if (current != operation || current == GitRepositoryOperation.None || !isConfirmedStep(ReadOperationStep(gitDirectory, current)))
+            {
+                return false;
+            }
+
+            await RunOperationCommandAsync(repoPath, current, option, ct);
+            return true;
+        }, ct);
+
+    /// <summary>
+    /// Runs <paramref name="action"/> with the write gate of the repository held, see
+    /// <see cref="GitProcessRunner.RunWithWriteGateAsync"/>. As for a writing command, <paramref name="ct"/> cancels only
+    /// the wait for the gate, and a stop of the <see cref="GitProcessStop"/> scope ends it.
+    /// </summary>
+    private async Task<T> RunUnderWriteGateAsync<T>(string repoPath, Func<Task<T>> action, CancellationToken ct)
+    {
+        GitProcessStop? scope = GitProcessStop.Current;
+        using IDisposable? writing = scope?.BeginWrite();
+        using CancellationTokenSource? wait = scope is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, scope.Token);
+        return await _runner.RunWithWriteGateAsync(repoPath, action, wait?.Token ?? ct);
     }
 
     /// <inheritdoc />

@@ -870,7 +870,7 @@ public sealed class GitCommandsTests
                 string.Format(GitStrings.RemoteFailureFormat, GitStrings.PushRejectedHint, "! [rejected]        main -> main (non-fast-forward)")
             ],
             registration.Window.Errors);
-        // Without a history service the commit of the upstream is unknown, so no force push is offered.
+        // Without a lease, as when the push goes elsewhere than the upstream, no force push is offered.
         Assert.Empty(registration.Dialogs.Confirmations);
         Assert.Empty(registration.Window.Infos);
         Assert.Equal(["fetch", "pull", "push"], remotes.Calls);

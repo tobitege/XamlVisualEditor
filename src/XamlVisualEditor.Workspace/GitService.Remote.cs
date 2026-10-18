@@ -423,15 +423,48 @@ public sealed partial class GitService
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedUpstreamSha);
         string? remote = await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct);
         string? upstream = await ReadConfigAsync(repoPath, "branch." + branch + ".merge", ct);
-        if (remote is null || upstream is null)
+        // The remote "." is the repository itself: its upstream is a local branch, which a force push would rewrite.
+        if (remote is null or "." || upstream is null)
         {
-            return GitRemoteResult.Failed(GitRemoteFailureKind.NoUpstream, $"The branch {branch} has no upstream branch.");
+            return GitRemoteResult.Failed(GitRemoteFailureKind.NoUpstream, $"The branch {branch} has no upstream branch on a remote.");
         }
 
         return await RunNetworkCommandAsync(
             repoPath,
             ["push", "--force-with-lease=" + upstream + ":" + expectedUpstreamSha, "--", remote, LOCAL_BRANCH_PREFIX + branch + ":" + upstream],
             ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <c>@{push}</c> names the remote-tracking branch a plain <c>git push</c> of the branch updates, <c>@{upstream}</c>
+    /// the one <see cref="ForcePushAsync"/> replaces; only when both are the same does the force push replace what
+    /// rejected the push. git fails to resolve <c>@{push}</c> when <c>push.default=simple</c> and the names differ.
+    /// </remarks>
+    public async Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(branch);
+        if (await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct) is null or ".")
+        {
+            return null;
+        }
+
+        string? push = await ReadRevisionAsync(repoPath, ["--symbolic-full-name", branch + "@{push}"], ct);
+        string? upstream = await ReadRevisionAsync(repoPath, ["--symbolic-full-name", branch + "@{upstream}"], ct);
+        if (push is null || push != upstream)
+        {
+            return null;
+        }
+
+        return await ReadRevisionAsync(repoPath, ["--verify", "--quiet", upstream], ct);
+    }
+
+    /// <summary>Returns the output of <c>git rev-parse</c> with <paramref name="args"/>, or null when it fails.</summary>
+    private async Task<string?> ReadRevisionAsync(string repoPath, string[] args, CancellationToken ct)
+    {
+        GitProcessResult result = await RunGitAsync(repoPath, ["rev-parse", .. args], GitCommandAccess.Read, ct, allowNonZeroExitCode: true);
+        string value = result.StandardOutput.Trim();
+        return result.ExitCode == 0 && value.Length > 0 ? value : null;
     }
 
     /// <summary>Returns the value of a git configuration key, or null when it is not set.</summary>

@@ -206,7 +206,8 @@ internal sealed partial class GitCommandHandler
         }
 
         string current = CurrentBranchName();
-        string? branch = _session.Current.IsDetached ? null : current;
+        // A detached HEAD is rebased by its commit, so a commit checked out meanwhile is not.
+        string? branch = _session.Current.IsDetached ? _session.Current.Status?.HeadSha : current;
         if (!await ConfirmAsync(
                 string.Format(CultureInfo.CurrentCulture, GitStrings.RebasePromptFormat, current, target.Name),
                 GitStrings.RebaseConfirm,

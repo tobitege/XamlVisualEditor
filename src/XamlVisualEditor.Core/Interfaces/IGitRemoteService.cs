@@ -80,6 +80,14 @@ public interface IGitRemoteService
     Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the commit the remote-tracking branch of <paramref name="branch"/>'s upstream points to, the lease of
+    /// <see cref="ForcePushAsync"/>, or null when a force push would replace something else than what a push of the
+    /// branch is rejected by: the branch has no upstream, its upstream is a local branch, its pushes go elsewhere, for
+    /// example by <c>push.default</c> or <c>pushRemote</c>, or the remote-tracking branch was never fetched.
+    /// </summary>
+    Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default);
+
+    /// <summary>
     /// Pushes the tag <paramref name="name"/> to <paramref name="remote"/>. A tag of that name on the remote that
     /// points elsewhere is not replaced; the result reports <see cref="GitRemoteFailureKind.Rejected"/>.
     /// </summary>

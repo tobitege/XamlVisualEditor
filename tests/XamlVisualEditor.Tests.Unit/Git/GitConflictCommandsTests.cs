@@ -280,6 +280,66 @@ public sealed class GitConflictCommandsTests
 
         Assert.Equal(GitRepositoryOperation.None, fixture.Session.Current.Operation);
         Assert.Equal("Orig|Feature", repository.RunGit("log", "-1", "--format=%an|%s").Trim());
+        // git continues to the end once it started, so the progress offers no cancel.
+        Assert.False(Assert.Single(fixture.Dialogs.Progress).CanCancel);
+    }
+
+    [Fact]
+    public async Task A_merge_picked_from_the_list_asks_first_and_a_declined_question_merges_nothing()
+    {
+        bool confirm = false;
+        using Fixture fixture = await Fixture.CreateAsync((_, _) => confirm, startMerge: false);
+        fixture.Window.QuickPick = items => items[0];
+        string head = fixture.Repository.RunGit("rev-parse", "HEAD");
+
+        await fixture.ExecuteAsync(GitCommands.MERGE);
+
+        ConfirmationDialogRequest question = Assert.Single(fixture.Dialogs.Confirmations);
+        Assert.Equal(string.Format(GitStrings.MergePromptFormat, "feature", "main"), question.Message);
+        Assert.True(question.IsDestructive);
+        Assert.Equal(head, fixture.Repository.RunGit("rev-parse", "HEAD"));
+        Assert.Equal(GitRepositoryOperation.None, fixture.Session.Current.Operation);
+
+        confirm = true;
+        await fixture.ExecuteAsync(GitCommands.MERGE);
+
+        Assert.Equal(GitRepositoryOperation.Merging, fixture.Session.Current.Operation);
+    }
+
+    [Fact]
+    public async Task Abort_of_an_operation_that_changed_while_the_question_was_open_aborts_nothing()
+    {
+        Fixture? fixture = null;
+        string? head = null;
+        // The merge ends elsewhere while the question is open.
+        fixture = await Fixture.CreateAsync((_, _) =>
+        {
+            fixture!.Repository.RunGit("merge", "--abort");
+            head = fixture.Repository.RunGit("rev-parse", "HEAD");
+            return true;
+        });
+        using (fixture)
+        {
+            await fixture.ExecuteAsync(GitCommands.ABORT);
+
+            Assert.Equal([GitStrings.OperationChanged], fixture.Window.Infos);
+            Assert.Equal(GitRepositoryOperation.None, fixture.Session.Current.Operation);
+            Assert.Equal(head, fixture.Repository.RunGit("rev-parse", "HEAD"));
+        }
+    }
+
+    [Fact]
+    public async Task Taking_a_side_refuses_a_file_with_unsaved_changes_in_the_editor()
+    {
+        using Fixture fixture = await Fixture.CreateAsync((_, _) => true);
+        FakeEditorDocument document = fixture.Open("content.txt");
+        document.Edit("a\nedited in the editor\nc\n");
+
+        await fixture.ExecuteAsync(GitCommands.ACCEPT_THEIRS, "content.txt");
+
+        Assert.Empty(fixture.Dialogs.Confirmations);
+        Assert.Equal([string.Format(GitStrings.TakeSideUnsavedFormat, "content.txt")], fixture.Window.Infos);
+        Assert.Contains("content.txt", fixture.Repository.RunGit("ls-files", "-u"));
     }
 
     [Fact]

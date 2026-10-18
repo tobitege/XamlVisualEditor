@@ -1084,6 +1084,20 @@ public sealed class GitCommandsTests
     }
 
     [Fact]
+    public async Task A_sync_cancelled_after_its_pull_says_that_the_pull_happened_and_runs_no_push()
+    {
+        ScriptedRemoteService remotes = new() { Block = true, FinishWhenCancelled = true };
+        using Registration registration = await Registration.CreateAsync(remotes: remotes, upstream: "origin/main");
+        registration.Dialogs.ProgressMode = ProgressDialogMode.Cancel;
+
+        await registration.Commands.ExecuteAsync(GitCommands.SYNC, null, CancellationToken.None);
+
+        Assert.Equal(["pull"], remotes.Calls);
+        Assert.Equal([string.Format(GitStrings.SyncPushCancelledFormat, "main", "origin/main")], registration.Window.Infos);
+        Assert.Empty(registration.Window.Errors);
+    }
+
+    [Fact]
     public async Task Sync_reports_the_completed_pull_when_the_push_fails()
     {
         const string rejection = "! [rejected]        main -> main (fetch first)";

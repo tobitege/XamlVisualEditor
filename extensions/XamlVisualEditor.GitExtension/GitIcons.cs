@@ -3,7 +3,7 @@ namespace XamlVisualEditor.GitExtension;
 /// <summary>
 /// Fluent System Icons (20, regular) of the Git panel buttons. Path data is copied verbatim from @fluentui/svg-icons;
 /// refresh, add and undo are the same geometries as in the animation editor toolbar. <see cref="WholeFile"/> is a
-/// Material icon, and <see cref="Rename"/> is drawn for the Git panels.
+/// Material icon, and <see cref="Rename"/> and <see cref="RemoteUrl"/> are drawn for the Git panels.
 /// </summary>
 public static class GitIcons
 {
@@ -140,10 +140,16 @@ public static class GitIcons
     public const string MarkResolved = Commit;
 
     /// <summary>
-    /// A text cursor, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; renames a branch or a remote
-    /// and changes the URL of a remote.
+    /// A text cursor, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; renames a branch or a remote.
     /// </summary>
     public const string Rename = "M6.5 3h7a.5.5 0 0 1 0 1h-3v12h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3V4h-3a.5.5 0 0 1 0-1z";
+
+    /// <summary>
+    /// A globe of a ring, a meridian and the equator, drawn for the Git panels in the 20 by 20 grid of the Fluent icons;
+    /// changes the URL of a remote.
+    /// </summary>
+    public const string RemoteUrl =
+        "M10 2a8 8 0 1 1 0 16a8 8 0 1 1 0-16zm0 1a7 7 0 1 0 0 14a7 7 0 1 0 0-14zm0 .5a3 6.5 0 1 1 0 13a3 6.5 0 1 1 0-13zm0 1a2 5.5 0 1 0 0 11a2 5.5 0 1 0 0-11zM3 9.5h14v1H3z";
 
     /// <summary>eye_20_regular, the same geometry as <see cref="WatchWorkingFolder"/>; shows the files of a stash.</summary>
     public const string ShowStash = WatchWorkingFolder;

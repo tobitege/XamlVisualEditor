@@ -24,9 +24,11 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
 /// The dialog closes when the cancellation token passed to <see cref="IDialogHost.ShowDialogAsync{T}"/> is cancelled,
 /// which the caller does when its work ends; the dialog task then completes with null. The user can close it earlier
 /// with the cancel button or the window button; the dialog task then completes with true, and the caller cancels its
-/// work. Any other result, such as the immediate default of a host without main window, is no cancel.
+/// work. Any other result, such as the immediate default of a host without main window, is no cancel. With
+/// <c>CanCancel</c> false the dialog has no cancel button and ignores the window button, for work that cannot be
+/// stopped once it started.
 /// </remarks>
-public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null)
+public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null, bool CanCancel = true)
 {
     /// <summary>Identifier of the shared progress dialog.</summary>
     public const string DialogId = "xve.progress";

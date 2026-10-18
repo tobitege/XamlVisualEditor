@@ -136,17 +136,22 @@ public sealed class ProgressDialogViewModel : ReactiveObject
     public string Message { get; }
     public string CancelText { get; }
 
+    /// <summary>Gets whether the user can cancel; false hides the cancel button and ignores the window button.</summary>
+    public bool CanCancel { get; }
+
     public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
     public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
-    public ProgressDialogViewModel(string title, string message, string? cancelText = null)
+    public ProgressDialogViewModel(string title, string message, string? cancelText = null, bool canCancel = true)
     {
         Title = title;
         Message = message;
         CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
-        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
-            await CloseInteraction.Handle(true));
+        CanCancel = canCancel;
+        CancelCommand = ReactiveCommand.CreateFromTask(
+            async () => await CloseInteraction.Handle(true),
+            Observable.Return(canCancel));
     }
 }
 

@@ -116,9 +116,10 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
             this.WhenAnyValue(x => x.CurrentHunkIndex, x => x.HunkCount, (index, count) => index < count - 1)));
         ToggleDiffCommand = AddCommand(ReactiveCommand.Create(() => { IsDiffVisible = !IsDiffVisible; }));
         CopyPathCommand = AddCommand(ReactiveCommand.CreateFromTask(CopyPathAsync, hasFile));
+        // An untracked file of a stash has no history: its commit only holds the stashed untracked files.
         ShowFileHistoryCommand = AddCommand(ReactiveCommand.CreateFromTask(
             ShowFileHistoryAsync,
-            hasFile.Select(selected => selected && executeCommand is not null)));
+            this.WhenAnyValue(x => x.SelectedFile).Select(file => file is { Commit: null } && executeCommand is not null)));
 
         _disposables.Add(Observable.Switch(this.WhenAnyValue(x => x.Commit)
                 .DistinctUntilChanged(commit => commit?.Sha)
@@ -278,13 +279,16 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
 
     private Task ShowFileHistoryAsync()
     {
-        if (SelectedFile is not { } file || _context is not { } context || _executeCommand is null)
+        if (SelectedFile is not { Commit: null } file || _context is not { } context || _executeCommand is null)
         {
             return Task.CompletedTask;
         }
 
+        // The history of a stashed file starts at the commit the stash was made on: the stash commit itself is a
+        // merge with the internal index commit.
         string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(context.RepositoryRoot, file.Path));
-        return _executeCommand(GitCommands.SHOW_FILE_HISTORY, [fullPath, (file.Commit ?? context.Commit).Sha]);
+        string start = _isStash ? context.Commit.ParentShas[0] : context.Commit.Sha;
+        return _executeCommand(GitCommands.SHOW_FILE_HISTORY, [fullPath, start]);
     }
 
     /// <summary>Returns the details of <paramref name="commit"/>, read in the background after its header.</summary>

@@ -38,10 +38,21 @@ public sealed partial class GitService : IGitMergeService
     }
 
     /// <inheritdoc />
-    public Task AbortAsync(string repoPath, CancellationToken ct = default) => RunOperationCommandAsync(repoPath, "--abort", ct);
+    public async Task<bool> AbortAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default)
+    {
+        GitRepositoryOperation current = await GetOperationAsync(repoPath, ct);
+        if (current != operation || current == GitRepositoryOperation.None)
+        {
+            return false;
+        }
+
+        await RunOperationCommandAsync(repoPath, current, "--abort", ct);
+        return true;
+    }
 
     /// <inheritdoc />
-    public Task ContinueAsync(string repoPath, CancellationToken ct = default) => RunOperationCommandAsync(repoPath, "--continue", ct);
+    public async Task ContinueAsync(string repoPath, CancellationToken ct = default) =>
+        await RunOperationCommandAsync(repoPath, await GetOperationAsync(repoPath, ct), "--continue", ct);
 
     /// <inheritdoc />
     /// <remarks>
@@ -103,10 +114,10 @@ public sealed partial class GitService : IGitMergeService
         return stripped.Length == 0 ? null : stripped;
     }
 
-    /// <summary>Runs <c>git &lt;operation&gt; &lt;option&gt;</c> for the operation in progress.</summary>
-    private async Task RunOperationCommandAsync(string repoPath, string option, CancellationToken ct)
+    /// <summary>Runs <c>git &lt;operation&gt; &lt;option&gt;</c> for <paramref name="operation"/>, the operation in progress.</summary>
+    private async Task RunOperationCommandAsync(string repoPath, GitRepositoryOperation operation, string option, CancellationToken ct)
     {
-        string? command = await GetOperationAsync(repoPath, ct) switch
+        string? command = operation switch
         {
             GitRepositoryOperation.Merging => "merge",
             GitRepositoryOperation.Rebasing => "rebase",
@@ -125,23 +136,13 @@ public sealed partial class GitService : IGitMergeService
     }
 
     /// <summary>
-    /// Runs a command that rewrites the working tree. <paramref name="ct"/> cancels only the wait for the write gate:
-    /// a process stopped in the middle would leave the working tree half updated.
+    /// Runs a command that rewrites the working tree and returns also a failed result. As every writing command,
+    /// <paramref name="ct"/> cancels only the wait for the write gate.
     /// </summary>
-    private async Task<GitProcessResult> RunWorkingTreeCommandAsync(
+    private Task<GitProcessResult> RunWorkingTreeCommandAsync(
         string repoPath,
         string[] args,
         CancellationToken ct,
-        IReadOnlyDictionary<string, string?>? environment = null)
-    {
-        ct.ThrowIfCancellationRequested();
-        return await RunGitAsync(
-            repoPath,
-            args,
-            GitCommandAccess.Write,
-            CancellationToken.None,
-            allowNonZeroExitCode: true,
-            environment: environment,
-            waitCancellation: ct);
-    }
+        IReadOnlyDictionary<string, string?>? environment = null) =>
+        RunGitAsync(repoPath, args, GitCommandAccess.Write, ct, allowNonZeroExitCode: true, environment: environment);
 }

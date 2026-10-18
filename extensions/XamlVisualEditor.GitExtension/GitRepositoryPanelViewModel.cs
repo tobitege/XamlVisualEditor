@@ -234,12 +234,12 @@ public sealed class GitRemoteItemViewModel
     public GitRemoteItemViewModel(GitRemote remote)
     {
         Remote = remote;
-        UrlText = GitRemoteUrls.Redact(remote.FetchUrl);
+        UrlText = GitUrlCredentials.Mask(remote.FetchUrl);
         string fetch = string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteFetchUrlFormat, UrlText);
         ToolTip = string.Equals(remote.PushUrl, remote.FetchUrl, StringComparison.Ordinal)
             ? fetch
             : fetch + Environment.NewLine
-              + string.Format(CultureInfo.CurrentCulture, GitStrings.RemotePushUrlFormat, GitRemoteUrls.Redact(remote.PushUrl));
+              + string.Format(CultureInfo.CurrentCulture, GitStrings.RemotePushUrlFormat, GitUrlCredentials.Mask(remote.PushUrl));
     }
 
     /// <summary>Gets the remote.</summary>
@@ -570,8 +570,8 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         snapshot,
         _session.Services.Remotes is { } remotes ? remotes.GetRemotesAsync : null,
         null,
-        GitStrings.RemotesUnavailable,
-        GitStrings.NoRemotes,
+        GitStrings.RemoteListUnavailable,
+        GitStrings.NoRemote,
         GitStrings.LoadRemotesFailedFormat);
 
     /// <summary>

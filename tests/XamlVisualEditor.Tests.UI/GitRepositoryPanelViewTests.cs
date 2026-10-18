@@ -628,9 +628,9 @@ public sealed class GitRepositoryPanelViewTests
 
         Assert.Null(panel.RemotesMessage);
         Assert.Equal(
-            new[] { ("origin", "https://user:***@example.com/a.git"), ("backup", "../backup.git") },
+            new[] { ("origin", "https://***@example.com/a.git"), ("backup", "../backup.git") },
             panel.Remotes.Select(remote => (remote.Name, remote.UrlText)));
-        Assert.Equal(string.Format(GitStrings.RemoteFetchUrlFormat, "https://user:***@example.com/a.git"), panel.Remotes[0].ToolTip);
+        Assert.Equal(string.Format(GitStrings.RemoteFetchUrlFormat, "https://***@example.com/a.git"), panel.Remotes[0].ToolTip);
         Assert.Equal(
             string.Format(GitStrings.RemoteFetchUrlFormat, "../backup.git") + Environment.NewLine
             + string.Format(GitStrings.RemotePushUrlFormat, "https://example.com/push.git"),
@@ -673,8 +673,8 @@ public sealed class GitRepositoryPanelViewTests
         using Fixture withoutService = await Fixture.CreateAsync();
         using Fixture withoutRemotes = await Fixture.CreateAsync(remotes: new RemoteList());
 
-        Assert.Equal(GitStrings.RemotesUnavailable, withoutService.Panel.RemotesMessage);
-        Assert.Equal(GitStrings.NoRemotes, withoutRemotes.Panel.RemotesMessage);
+        Assert.Equal(GitStrings.RemoteListUnavailable, withoutService.Panel.RemotesMessage);
+        Assert.Equal(GitStrings.NoRemote, withoutRemotes.Panel.RemotesMessage);
         Assert.Empty(withoutRemotes.Panel.Remotes);
     }
 

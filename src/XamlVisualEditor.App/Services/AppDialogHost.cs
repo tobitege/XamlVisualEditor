@@ -35,7 +35,7 @@ public sealed class AppDialogHost : IDialogHost
                 throw new ArgumentException("Progress dialog requires a progress request.", nameof(input));
             return new ProgressDialog
             {
-                DataContext = new ProgressDialogViewModel(request.Title, request.Message, request.CancelText)
+                DataContext = new ProgressDialogViewModel(request.Title, request.Message, request.CancelText, request.CanCancel)
             };
         };
     }
@@ -74,6 +74,14 @@ public sealed class AppDialogHost : IDialogHost
         }
 
         Window? owner = _windowProvider.MainWindow;
+
+        // Without owner the dialog completes at once with the default result, so a dialog that asks the user would show
+        // buttons without effect. Only the progress dialog, which asks nothing, is shown then.
+        if (owner is null && !string.Equals(dialogId, ProgressDialogRequest.DialogId, StringComparison.Ordinal))
+        {
+            return default;
+        }
+
         Task<T?>? dialogTask = null;
         Window? dialog = null;
 

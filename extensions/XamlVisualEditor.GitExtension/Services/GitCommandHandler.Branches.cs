@@ -342,8 +342,32 @@ internal sealed partial class GitCommandHandler
             {
                 IGitRemoteService remotes = services.Remotes!;
                 GitRemoteResult pull = await remotes.PullAsync(root, ct).ConfigureAwait(false);
-                return new SyncResult(pull, pull.Success ? await remotes.PushAsync(root, ct: ct).ConfigureAwait(false) : null);
+                if (!pull.Success)
+                {
+                    return new SyncResult(pull, null);
+                }
+
+                // The pull already changed the branch: a cancel from here on stops only the push, and the result says so.
+                try
+                {
+                    ct.ThrowIfCancellationRequested();
+                    return new SyncResult(pull, await remotes.PushAsync(root, ct: ct).ConfigureAwait(false));
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return new SyncResult(pull, null, PushCancelled: true);
+                }
             });
+        if (result is { PushCancelled: true })
+        {
+            await ShowInformationAsync(string.Format(
+                CultureInfo.CurrentCulture,
+                GitStrings.SyncPushCancelledFormat,
+                snapshot.BranchName,
+                snapshot.UpstreamName));
+            return;
+        }
+
         if (result?.Push is not { Success: false } push)
         {
             await ReportRemoteResultAsync(
@@ -373,13 +397,14 @@ internal sealed partial class GitCommandHandler
     private async Task<T?> RunWithProgressAsync<T>(
         string title,
         string message,
-        Func<GitServiceSet, string, CancellationToken, Task<T>> operation)
+        Func<GitServiceSet, string, CancellationToken, Task<T>> operation,
+        bool canCancel = true)
         where T : class
     {
         using CancellationTokenSource work = new();
         using CancellationTokenSource closeDialog = new();
         Task<T> run = _session.RunWithServicesAsync(operation, work.Token);
-        Task<bool?> dialog = ShowProgressAsync(title, message, closeDialog.Token);
+        Task<bool?> dialog = ShowProgressAsync(title, message, canCancel, closeDialog.Token);
         if (await Task.WhenAny(run, dialog) == dialog && await dialog == true)
         {
             work.Cancel();
@@ -409,7 +434,8 @@ internal sealed partial class GitCommandHandler
     private async Task<bool> RunWithProgressAsync(
         string title,
         string message,
-        Func<GitServiceSet, string, CancellationToken, Task> operation)
+        Func<GitServiceSet, string, CancellationToken, Task> operation,
+        bool canCancel = true)
     {
         object? completed = await RunWithProgressAsync<object>(
             title,
@@ -418,7 +444,8 @@ internal sealed partial class GitCommandHandler
             {
                 await operation(services, root, ct).ConfigureAwait(false);
                 return true;
-            });
+            },
+            canCancel);
         return completed is not null;
     }
 
@@ -426,13 +453,13 @@ internal sealed partial class GitCommandHandler
     /// Shows the progress dialog until <paramref name="closeToken"/> is cancelled. Returns true when the user
     /// cancelled, otherwise null; a dialog that fails is logged and counts as not cancelled.
     /// </summary>
-    private async Task<bool?> ShowProgressAsync(string title, string message, CancellationToken closeToken)
+    private async Task<bool?> ShowProgressAsync(string title, string message, bool canCancel, CancellationToken closeToken)
     {
         try
         {
             return await _dialogHost.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest(title, message),
+                new ProgressDialogRequest(title, message, CanCancel: canCancel),
                 closeToken);
         }
         catch (OperationCanceledException)
@@ -484,7 +511,7 @@ internal sealed partial class GitCommandHandler
     /// </summary>
     private static string FormatRemoteFailure(GitRemoteResult result)
     {
-        string gitMessage = GitOutputLogger.MaskCredentials(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message));
+        string gitMessage = GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message));
         string? hint = result.FailureKind switch
         {
             GitRemoteFailureKind.Authentication => GitStrings.AuthenticationFailedHint,
@@ -790,6 +817,6 @@ internal sealed partial class GitCommandHandler
             ? argument
             : null;
 
-    /// <summary>The pull of a sync and the push that follows a successful pull.</summary>
-    private sealed record SyncResult(GitRemoteResult Pull, GitRemoteResult? Push);
+    /// <summary>The pull of a sync and the push that follows a successful pull, or that the user cancelled it.</summary>
+    private sealed record SyncResult(GitRemoteResult Pull, GitRemoteResult? Push, bool PushCancelled = false);
 }

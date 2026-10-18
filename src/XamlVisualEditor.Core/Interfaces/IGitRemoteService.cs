@@ -18,14 +18,15 @@ public interface IGitRemoteService
     /// <summary>
     /// Adds the remote <paramref name="name"/> with <paramref name="url"/> for fetch and push, without fetching it.
     /// Throws <see cref="System.InvalidOperationException"/> with git's error output when git refuses the name, for
-    /// example because a remote of that name exists.
+    /// example because a remote of that name exists, and <see cref="System.ArgumentException"/> for a name that starts
+    /// with <c>-</c>, which git accepts but which other commands could read as an option.
     /// </summary>
     Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default);
 
     /// <summary>
     /// Renames the remote <paramref name="name"/> to <paramref name="newName"/> with its remote-tracking branches and
     /// the upstreams of the branches that track them. Throws <see cref="System.InvalidOperationException"/> with git's
-    /// error output when git fails.
+    /// error output when git fails, and <see cref="System.ArgumentException"/> for a new name that starts with <c>-</c>.
     /// </summary>
     Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default);
 

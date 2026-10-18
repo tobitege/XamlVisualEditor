@@ -144,7 +144,7 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
 
         // Standard input carries the message as UTF-8 bytes and has no command line length limit.
         await using Stream input = GitProcessRequest.Utf8Input(message);
-        await RunGitCheckedAsync(repoPath, new[] { "commit", "-F", "-" }, input, ct);
+        await RunGitCheckedAsync(repoPath, new[] { "commit", "-F", "-" }, input, ct, cancellable: true);
     }
 
     /// <summary>
@@ -155,9 +155,16 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         string workingDirectory,
         IReadOnlyList<string> args,
         Stream? standardInput,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool cancellable = false)
     {
-        GitProcessResult result = await RunGitAsync(workingDirectory, args, GitCommandAccess.Write, ct, standardInput: standardInput);
+        GitProcessResult result = await RunGitAsync(
+            workingDirectory,
+            args,
+            GitCommandAccess.Write,
+            ct,
+            standardInput: standardInput,
+            cancellable: cancellable);
         ThrowIfFailed(result, args[0]);
     }
 
@@ -343,11 +350,21 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         TimeSpan? timeout = null,
         CancellationToken? waitCancellation = null,
         int? maxOutputLines = null,
-        int? maxOutputBytes = null)
+        int? maxOutputBytes = null,
+        bool cancellable = false)
     {
         if (Interlocked.Exchange(ref _versionChecked, 1) == 0)
         {
             await WarnIfOutdatedAsync(workingDirectory, ct);
+        }
+
+        // A writing command stopped half way can leave index.lock behind and a half updated working tree, so once it
+        // runs, it is finished: cancelling stops only the wait for the other writing commands. A commit stays
+        // cancellable, because its hooks can hang and stopping git before it writes the commit changes nothing.
+        if (access == GitCommandAccess.Write && !cancellable)
+        {
+            waitCancellation ??= ct;
+            ct = CancellationToken.None;
         }
 
         Action<IReadOnlyList<string>, int>? processStarted = _options.ProcessStarted;
@@ -384,7 +401,8 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
 
         if (!allowNonZeroExitCode && result.ExitCode != 0)
         {
-            _logger.LogWarning("git command failed: {Args} ({ExitCode})", string.Join(" ", args), result.ExitCode);
+            // An argument can be a URL with a token, such as the URL of git remote add.
+            _logger.LogWarning("git command failed: {Args} ({ExitCode})", GitUrlCredentials.Mask(string.Join(" ", args)), result.ExitCode);
         }
 
         return result;

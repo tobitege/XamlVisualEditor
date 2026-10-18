@@ -71,6 +71,26 @@ public sealed class GitRemoteServiceTests
     }
 
     [Fact]
+    public async Task An_option_like_remote_name_is_refused_and_one_made_elsewhere_is_fetched_as_a_name()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.RunGit("remote", "add", "origin", "../nowhere");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.AddRemoteAsync(repository.Path, "--upload-pack=echo", "../nowhere", ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RenameRemoteAsync(repository.Path, "origin", "-x", ct));
+        Assert.Equal("origin", repository.RunGit("remote").Trim());
+
+        // git itself accepts the name; the fetch must pass it as the remote, not as the option --upload-pack.
+        repository.RunGit("remote", "add", "--", "--upload-pack=echo", "../nowhere");
+        GitRemoteResult fetched = await service.FetchAsync(repository.Path, ct);
+
+        Assert.False(fetched.Success);
+        Assert.DoesNotContain("bad line length", fetched.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task An_option_like_url_is_stored_as_the_url()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

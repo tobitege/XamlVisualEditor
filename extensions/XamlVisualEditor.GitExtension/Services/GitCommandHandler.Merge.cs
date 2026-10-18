@@ -34,8 +34,15 @@ internal sealed partial class GitCommandHandler
                 return;
             }
 
+            // The list starts on its first branch, so a plain Enter picks one; the merge, which the editor cannot undo,
+            // asks first, and Enter there cancels.
             target = await PickBranchAsync(candidates, GitStrings.MergePickTitle);
-            if (target is null)
+            if (target is null
+                || !await ConfirmAsync(
+                    string.Format(CultureInfo.CurrentCulture, GitStrings.MergePromptFormat, target.Name, CurrentBranchName()),
+                    GitStrings.MergeConfirm,
+                    GitStrings.MergeCommand,
+                    isDestructive: true))
             {
                 return;
             }
@@ -43,7 +50,7 @@ internal sealed partial class GitCommandHandler
 
         // The short name keeps the message that git writes: "Merge branch 'feature/x'".
         string name = target.Name;
-        string current = _session.Current.BranchName is { Length: > 0 } branch ? branch : "HEAD";
+        string current = CurrentBranchName();
         GitMergeResult? result = await TryRunMergeAsync<GitMergeResult>(async (merge, root, ct) =>
             await merge.MergeAsync(root, name, ct));
         switch (result)
@@ -81,15 +88,16 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        if (await TryRunMergeAsync<bool>(async (merge, root, ct) =>
-            {
-                await merge.AbortAsync(root, ct);
-                return true;
-            }) == true)
+        // The operation is checked again: another program may have ended or changed it while the question was open.
+        GitRepositoryOperation confirmed = snapshot.Operation;
+        bool? aborted = await TryRunMergeAsync<bool>(async (merge, root, ct) => await merge.AbortAsync(root, confirmed, ct));
+        if (aborted is not null)
         {
-            await ShowInformationAsync(GitStrings.OperationAborted);
+            await ShowInformationAsync(aborted.Value ? GitStrings.OperationAborted : GitStrings.OperationChanged);
         }
     }
+
+    private string CurrentBranchName() => _session.Current.BranchName is { Length: > 0 } branch ? branch : "HEAD";
 
     // A merge is completed by a commit; git's own merge --continue is that commit.
     public async Task ContinueAsync(CommandContext context)
@@ -113,10 +121,12 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
+        // git continues to the end once it started, so the dialog offers no cancel that would not stop it.
         await RunWithProgressAsync(
             GitStrings.ContinueCommand,
             GitStrings.ContinueProgress,
-            (services, root, ct) => services.Merge!.ContinueAsync(root, ct));
+            (services, root, ct) => services.Merge!.ContinueAsync(root, ct),
+            canCancel: false);
     }
 
     public Task AcceptOursAsync(CommandContext context) =>
@@ -154,7 +164,7 @@ internal sealed partial class GitCommandHandler
                     string.Join(Environment.NewLine, withMarkers)),
                 GitStrings.MarkResolvedCommand,
                 GitStrings.MarkResolvedCommand,
-                isDestructive: false))
+                isDestructive: true))
         {
             return;
         }
@@ -254,6 +264,16 @@ internal sealed partial class GitCommandHandler
         }
 
         IReadOnlyList<string> paths = GitCommandTarget.PathsOf(conflicts);
+        // Taking a side replaces the files, which an editor with unsaved changes would then hold in another version.
+        if (_session.Current.RepositoryRoot is { } repositoryRoot && await FindUnsavedAsync(repositoryRoot, paths) is { Length: > 0 } unsaved)
+        {
+            await ShowInformationAsync(string.Format(
+                CultureInfo.CurrentCulture,
+                GitStrings.TakeSideUnsavedFormat,
+                string.Join(Environment.NewLine, unsaved)));
+            return;
+        }
+
         string files = conflicts.Count == 1
             ? conflicts[0].Path
             : string.Format(CultureInfo.CurrentCulture, GitStrings.FilesCountFormat, conflicts.Count);

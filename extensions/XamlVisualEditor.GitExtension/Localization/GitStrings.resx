@@ -330,7 +330,7 @@ Mark them resolved anyway?</value></data>
   <data name="StashClearCommand" xml:space="preserve"><value>Clear All Stashes…</value></data>
   <data name="StashClearButton" xml:space="preserve"><value>Clear All</value></data>
   <data name="StashClearConfirm" xml:space="preserve"><value>Clear All</value></data>
-  <data name="StashClearPromptFormat" xml:space="preserve"><value>Drop every stash ({0})? Their changes are lost.</value></data>
+  <data name="StashClearPromptFormat" xml:space="preserve"><value>Clear all stashes ({0})? Their changes are lost.</value></data>
   <data name="RemotesTab" xml:space="preserve"><value>Remotes</value></data>
   <data name="ColumnRemote" xml:space="preserve"><value>Remote</value></data>
   <data name="ColumnUrl" xml:space="preserve"><value>URL</value></data>
@@ -350,6 +350,16 @@ Mark them resolved anyway?</value></data>
   <data name="RemoteUrlPromptFormat" xml:space="preserve"><value>URL of {0}</value></data>
   <data name="RenameRemotePromptFormat" xml:space="preserve"><value>New name for {0}</value></data>
   <data name="RemoteNotFoundFormat" xml:space="preserve"><value>The remote {0} does not exist.</value></data>
-  <data name="NoRemotes" xml:space="preserve"><value>The repository has no remote.</value></data>
   <data name="LoadRemotesFailedFormat" xml:space="preserve"><value>Reading the remotes failed: {0}</value></data>
+  <data name="InvalidRemoteNameFormat" xml:space="preserve"><value>{0} is no usable remote name. A remote name must not start with "-".</value></data>
+  <data name="RemoteUrlKeepsPushUrlPromptFormat" xml:space="preserve"><value>URL of {0}. Its own push URL {1} stays.</value></data>
+  <data name="RemoteListUnavailable" xml:space="preserve"><value>The git service of this application cannot list or change remotes.</value></data>
+  <data name="StashBranchStoppedFormat" xml:space="preserve"><value>The branch {0} was created and checked out, but {1} could not be applied there. The stash stays in the list.</value></data>
+  <data name="MergePromptFormat" xml:space="preserve"><value>Merge {0} into {1}?</value></data>
+  <data name="MergeConfirm" xml:space="preserve"><value>Merge</value></data>
+  <data name="OperationChanged" xml:space="preserve"><value>The operation in progress changed while the question was open. Nothing was aborted.</value></data>
+  <data name="StashesChanged" xml:space="preserve"><value>The stashes changed while the question was open. Nothing was cleared.</value></data>
+  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Save or close these files first. Taking a side replaces them, and the editor holds unsaved changes of them.
+{0}</value></data>
+  <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} was pulled into {0}. The push was cancelled.</value></data>
 </root>

@@ -17,7 +17,7 @@ internal sealed partial class GitCommandHandler
 
         // The first remote of a repository is usually origin, as git names the remote of a clone.
         string? name = await AskAsync(GitStrings.AddRemoteCommand, GitStrings.RemoteNamePrompt, remotes.Count == 0 ? GitRemote.DEFAULT_NAME : null);
-        if (name is null)
+        if (name is null || await RefuseOptionLikeNameAsync(name))
         {
             return;
         }
@@ -43,7 +43,9 @@ internal sealed partial class GitCommandHandler
             GitStrings.RenameRemoteCommand,
             string.Format(CultureInfo.CurrentCulture, GitStrings.RenameRemotePromptFormat, remote.Name),
             remote.Name);
-        if (newName is not null && !string.Equals(newName, remote.Name, StringComparison.Ordinal))
+        if (newName is not null
+            && !string.Equals(newName, remote.Name, StringComparison.Ordinal)
+            && !await RefuseOptionLikeNameAsync(newName))
         {
             await TryRunRemoteAsync((service, root, ct) => service.RenameRemoteAsync(root, remote.Name, newName, ct));
         }
@@ -56,10 +58,11 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        string? url = await AskAsync(
-            GitStrings.SetRemoteUrlCommand,
-            string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlPromptFormat, remote.Name),
-            remote.FetchUrl);
+        // git remote set-url changes the URL only; a push URL of its own stays, which the prompt says.
+        string prompt = string.Equals(remote.PushUrl, remote.FetchUrl, StringComparison.Ordinal)
+            ? string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlPromptFormat, remote.Name)
+            : string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlKeepsPushUrlPromptFormat, remote.Name, GitUrlCredentials.Mask(remote.PushUrl));
+        string? url = await AskAsync(GitStrings.SetRemoteUrlCommand, prompt, remote.FetchUrl);
         if (url is not null && !string.Equals(url, remote.FetchUrl, StringComparison.Ordinal))
         {
             await TryRunRemoteAsync((service, root, ct) => service.SetRemoteUrlAsync(root, remote.Name, url, ct));
@@ -79,6 +82,21 @@ internal sealed partial class GitCommandHandler
         }
 
         await TryRunRemoteAsync((service, root, ct) => service.RemoveRemoteAsync(root, remote.Name, ct));
+    }
+
+    /// <summary>
+    /// Reports and returns true for a name that starts with "-": git accepts it, but a command that passes it without
+    /// "--" reads it as an option.
+    /// </summary>
+    private async Task<bool> RefuseOptionLikeNameAsync(string name)
+    {
+        if (!name.StartsWith('-'))
+        {
+            return false;
+        }
+
+        await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.InvalidRemoteNameFormat, name));
+        return true;
     }
 
     /// <summary>Returns the remote named in argument 0, or one picked from a list; null after reporting why there is none.</summary>
@@ -102,13 +120,13 @@ internal sealed partial class GitCommandHandler
 
         if (remotes.Count == 0)
         {
-            await ShowInformationAsync(GitStrings.NoRemotes);
+            await ShowInformationAsync(GitStrings.NoRemote);
             return null;
         }
 
         // The remote names are distinct, so the index of the picked item is its remote.
         QuickPickItem[] items = remotes
-            .Select(remote => new QuickPickItem(remote.Name, GitRemoteUrls.Redact(remote.FetchUrl), null))
+            .Select(remote => new QuickPickItem(remote.Name, GitUrlCredentials.Mask(remote.FetchUrl), null))
             .ToArray();
         QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
         int index = picked is null ? -1 : Array.IndexOf(items, picked);

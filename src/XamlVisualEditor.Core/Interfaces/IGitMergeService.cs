@@ -20,11 +20,13 @@ public interface IGitMergeService
     Task<GitMergeResult> MergeAsync(string repoPath, string revision, CancellationToken ct = default);
 
     /// <summary>
-    /// Aborts the operation in progress and restores the state before it. Edits in conflicted files are lost;
-    /// git refuses, and changes nothing, when a file the operation changed was edited afterwards.
+    /// Aborts the operation in progress when it is <paramref name="operation"/>, the one the user confirmed, and
+    /// restores the state before it; returns false and changes nothing when another or no operation is in progress.
+    /// Edits in conflicted files are lost; git refuses, and changes nothing, when a file the operation changed was
+    /// edited afterwards.
     /// </summary>
     /// <remarks>Cancelling stops only the wait for other git commands; an abort that started runs to its end.</remarks>
-    Task AbortAsync(string repoPath, CancellationToken ct = default);
+    Task<bool> AbortAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default);
 
     /// <summary>
     /// Continues the operation in progress with git's prepared message; for a merge, this commits it. git refuses

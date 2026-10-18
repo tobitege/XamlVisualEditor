@@ -411,7 +411,7 @@ internal sealed partial class GitCommandHandler
         string message = string.Format(
             CultureInfo.CurrentCulture,
             UiStrings.GitCommandFailed,
-            GitOutputLogger.MaskCredentials(GitRemoteErrorClassifier.SelectDecisiveLine(exception.Message)));
+            GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(exception.Message)));
         _logger?.Error(message);
         await _window.ShowErrorMessageAsync(AppendOutputHint(message), CancellationToken.None);
     }

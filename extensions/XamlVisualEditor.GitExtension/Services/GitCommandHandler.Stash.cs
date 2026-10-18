@@ -97,10 +97,10 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // Named by the commit id: the name stash@{n} moves when a stash is added or removed.
+        // Named by the commit id, in the id and the title: the name stash@{n} moves when a stash is added or removed.
         await _viewHost.ShowDocumentAsync(
             "git.stash:" + stash.ObjectId,
-            string.Format(CultureInfo.CurrentCulture, GitStrings.StashTitleFormat, stash.Name),
+            string.Format(CultureInfo.CurrentCulture, GitStrings.StashTitleFormat, commit.ShortSha),
             stash.Message,
             () => GitCommitDetailsViewModel.ForStash(_session, _executeCommand, commit),
             CancellationToken.None);
@@ -124,7 +124,23 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        await ApplyStashAsync(stash, (stashes, root, ct) => stashes.BranchAsync(root, stash, name, ct));
+        // git creates and checks out the branch before it applies the stash; when applying fails, the user is on the
+        // new branch and the stash stays.
+        try
+        {
+            if (!await _session.RunWithServicesAsync((services, root, ct) => services.Stash!.BranchAsync(root, stash, name, ct)))
+            {
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashMovedFormat, stash.Name));
+            }
+        }
+        catch (InvalidOperationException) when (string.Equals(_session.Current.BranchName, name, StringComparison.Ordinal))
+        {
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashBranchStoppedFormat, name, stash.Name));
+        }
+        catch (InvalidOperationException exception)
+        {
+            await ReportFailureAsync(exception);
+        }
     }
 
     public async Task StashClearAsync(CommandContext context)
@@ -151,17 +167,30 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        if (await ConfirmAsync(
+        if (!await ConfirmAsync(
                 string.Format(CultureInfo.CurrentCulture, GitStrings.StashClearPromptFormat, stashes.Count),
                 GitStrings.StashClearConfirm,
                 GitStrings.StashClearCommand,
                 isDestructive: true))
         {
-            await TryRunStashAsync(async (service, root, ct) =>
+            return;
+        }
+
+        // Only the confirmed stashes are cleared: a stash made while the question was open keeps the list as it is.
+        bool? cleared = await TryRunStashAsync(async (service, root, ct) =>
+        {
+            IReadOnlyList<GitStashEntry> current = await service.ListAsync(root, ct);
+            if (!current.Select(stash => stash.ObjectId).SequenceEqual(stashes.Select(stash => stash.ObjectId), StringComparer.Ordinal))
             {
-                await service.ClearAsync(root, ct);
-                return true;
-            });
+                return false;
+            }
+
+            await service.ClearAsync(root, ct);
+            return true;
+        });
+        if (cleared == false)
+        {
+            await ShowInformationAsync(GitStrings.StashesChanged);
         }
     }
 
@@ -197,28 +226,25 @@ internal sealed partial class GitCommandHandler
         });
     }
 
-    private Task ApplyStashAsync(GitStashEntry stash, bool pop) =>
-        ApplyStashAsync(stash, async (stashes, root, ct) =>
-        {
-            if (pop)
-            {
-                return await stashes.PopAsync(root, stash, ct);
-            }
-
-            await stashes.ApplyAsync(root, stash, ct);
-            return true;
-        });
-
     /// <summary>
-    /// Applies a stash with <paramref name="apply"/>, which returns false when the stash moved. A stash that applied
-    /// with conflicts stays in the list; that is reported instead of git's output when the conflicts are new.
+    /// Applies or pops a stash. A stash that applied with conflicts stays in the list; that is reported instead of
+    /// git's output when the conflicts are new.
     /// </summary>
-    private async Task ApplyStashAsync(GitStashEntry stash, Func<IGitStashService, string, CancellationToken, Task<bool>> apply)
+    private async Task ApplyStashAsync(GitStashEntry stash, bool pop)
     {
         bool hadConflicts = _session.Current.HasConflicts;
         try
         {
-            bool applied = await _session.RunWithServicesAsync((services, root, ct) => apply(services.Stash!, root, ct));
+            bool applied = await _session.RunWithServicesAsync(async (services, root, ct) =>
+            {
+                if (pop)
+                {
+                    return await services.Stash!.PopAsync(root, stash, ct);
+                }
+
+                await services.Stash!.ApplyAsync(root, stash, ct);
+                return true;
+            });
             if (!applied)
             {
                 await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashMovedFormat, stash.Name));

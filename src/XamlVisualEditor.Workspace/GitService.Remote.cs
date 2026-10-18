@@ -29,12 +29,28 @@ public sealed partial class GitService
     }
 
     /// <inheritdoc />
-    public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default) =>
-        RunRemoteCommandAsync(repoPath, "add", name, url, ct);
+    public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default)
+    {
+        ThrowIfOptionLike(name, nameof(name));
+        return RunRemoteCommandAsync(repoPath, "add", name, url, ct);
+    }
 
     /// <inheritdoc />
-    public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
-        RunRemoteCommandAsync(repoPath, "rename", name, newName, ct);
+    public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default)
+    {
+        ThrowIfOptionLike(newName, nameof(newName));
+        return RunRemoteCommandAsync(repoPath, "rename", name, newName, ct);
+    }
+
+    // git accepts such a name, and a command that passes it without "--", in this or another program, reads it as an
+    // option, for example --upload-pack=<command> in git fetch.
+    private static void ThrowIfOptionLike(string name, string parameterName)
+    {
+        if (name.StartsWith('-'))
+        {
+            throw new ArgumentException("A remote name must not start with '-'.", parameterName);
+        }
+    }
 
     /// <inheritdoc />
     public Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default) =>
@@ -82,7 +98,8 @@ public sealed partial class GitService
                 continue;
             }
 
-            GitRemoteResult result = await RunNetworkCommandAsync(repoPath, new[] { "fetch", remote }, environment, ct);
+            // A remote name that starts with "-", which git accepts, must not become an option.
+            GitRemoteResult result = await RunNetworkCommandAsync(repoPath, new[] { "fetch", "--", remote }, environment, ct);
             if (result.Success)
             {
                 fetched.Add(remote);
@@ -386,7 +403,7 @@ public sealed partial class GitService
     {
         string[] args = setUpstreamRemote is null
             ? new[] { "push" }
-            : new[] { "push", "--set-upstream", setUpstreamRemote, "HEAD" };
+            : new[] { "push", "--set-upstream", "--", setUpstreamRemote, "HEAD" };
         return RunNetworkCommandAsync(repoPath, args, ct);
     }
 

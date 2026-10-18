@@ -60,6 +60,6 @@ public sealed partial class GitService : IGitPatchService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         await using Stream input = GitProcessRequest.Utf8Input(message);
-        await RunGitCheckedAsync(repoPath, new[] { "commit", "--amend", "-F", "-" }, input, ct);
+        await RunGitCheckedAsync(repoPath, new[] { "commit", "--amend", "-F", "-" }, input, ct, cancellable: true);
     }
 }

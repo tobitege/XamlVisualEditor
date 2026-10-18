@@ -15,9 +15,11 @@ public sealed class GitOutputLoggerTests
     [InlineData("ssh://git@host:22/repo", "ssh://***@host:22/repo")]
     [InlineData("https://example.com/repo.git", "https://example.com/repo.git")]
     [InlineData("git@github.com:owner/repo.git", "git@github.com:owner/repo.git")]
-    public void MaskCredentials_replaces_the_user_information_of_urls(string text, string expected)
+    [InlineData("https://example.com/a@b/repo.git", "https://example.com/a@b/repo.git")]
+    [InlineData("../remote.git", "../remote.git")]
+    public void Mask_replaces_the_user_information_of_urls(string text, string expected)
     {
-        Assert.Equal(expected, GitOutputLogger.MaskCredentials(text));
+        Assert.Equal(expected, GitUrlCredentials.Mask(text));
     }
 
     [Fact]

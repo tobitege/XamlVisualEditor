@@ -345,11 +345,21 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="RemoveRemoteCommand" xml:space="preserve"><value>Remote entfernen …</value></data>
   <data name="RemoveRemoteButton" xml:space="preserve"><value>Entfernen</value></data>
   <data name="RemoveRemoteConfirm" xml:space="preserve"><value>Entfernen</value></data>
-  <data name="RemoveRemotePromptFormat" xml:space="preserve"><value>Das Remote {0} entfernen? Seine Remote-Tracking-Branches werden gelöscht, und die Branches, die ihnen folgen, verlieren ihren Upstream.</value></data>
+  <data name="RemoveRemotePromptFormat" xml:space="preserve"><value>Den Remote {0} entfernen? Seine Remote-Tracking-Branches werden gelöscht, und die Branches, die ihnen folgen, verlieren ihren Upstream.</value></data>
   <data name="RemoteNamePrompt" xml:space="preserve"><value>Name des neuen Remotes</value></data>
   <data name="RemoteUrlPromptFormat" xml:space="preserve"><value>URL von {0}</value></data>
   <data name="RenameRemotePromptFormat" xml:space="preserve"><value>Neuer Name für {0}</value></data>
-  <data name="RemoteNotFoundFormat" xml:space="preserve"><value>Das Remote {0} existiert nicht.</value></data>
-  <data name="NoRemotes" xml:space="preserve"><value>Das Repository hat kein Remote.</value></data>
+  <data name="RemoteNotFoundFormat" xml:space="preserve"><value>Der Remote {0} existiert nicht.</value></data>
   <data name="LoadRemotesFailedFormat" xml:space="preserve"><value>Die Remotes konnten nicht gelesen werden: {0}</value></data>
+  <data name="InvalidRemoteNameFormat" xml:space="preserve"><value>{0} ist kein verwendbarer Remote-Name. Ein Remote-Name darf nicht mit „-“ beginnen.</value></data>
+  <data name="RemoteUrlKeepsPushUrlPromptFormat" xml:space="preserve"><value>URL von {0}. Seine eigene Push-URL {1} bleibt.</value></data>
+  <data name="RemoteListUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann Remotes nicht auflisten oder ändern.</value></data>
+  <data name="StashBranchStoppedFormat" xml:space="preserve"><value>Der Branch {0} wurde erstellt und ausgecheckt, aber {1} ließ sich dort nicht anwenden. Der Stash bleibt in der Liste.</value></data>
+  <data name="MergePromptFormat" xml:space="preserve"><value>{0} in {1} mergen?</value></data>
+  <data name="MergeConfirm" xml:space="preserve"><value>Mergen</value></data>
+  <data name="OperationChanged" xml:space="preserve"><value>Der laufende Vorgang hat sich geändert, während die Frage offen war. Es wurde nichts abgebrochen.</value></data>
+  <data name="StashesChanged" xml:space="preserve"><value>Die Stashes haben sich geändert, während die Frage offen war. Es wurde nichts gelöscht.</value></data>
+  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Diese Dateien zuerst speichern oder schließen. Eine Seite zu übernehmen ersetzt sie, und der Editor hat ungespeicherte Änderungen daran.
+{0}</value></data>
+  <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} wurde in {0} gepullt. Der Push wurde abgebrochen.</value></data>
 </root>

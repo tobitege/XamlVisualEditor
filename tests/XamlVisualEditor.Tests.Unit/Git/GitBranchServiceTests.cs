@@ -305,6 +305,31 @@ public sealed class GitBranchServiceTests
     }
 
     [Fact]
+    public async Task A_switch_cancelled_while_git_runs_runs_to_its_end()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        // The hook keeps git running after the checkout, long enough to cancel it.
+        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\nsleep 2\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        GitService service = new(options: repository.ProcessOptions);
+        using CancellationTokenSource cancel = new();
+        Task switching = service.SwitchAsync(repository.Path, "other", cancel.Token);
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        cancel.Cancel();
+
+        await switching;
+
+        Assert.Equal("other", CurrentBranch(repository));
+        Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "index.lock")));
+    }
+
+    [Fact]
     public async Task Deleting_the_current_branch_throws()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");

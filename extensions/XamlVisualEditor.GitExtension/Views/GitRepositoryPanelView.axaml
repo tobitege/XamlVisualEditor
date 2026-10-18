@@ -290,20 +290,20 @@
                                 <TextBlock Text="{x:Static gloc:GitStrings.StashPopButton}" />
                             </StackPanel>
                         </Button>
-                        <Button Classes="git-action" Command="{CompiledBinding DropStashCommand}"
-                                ToolTip.Tip="{x:Static gloc:GitStrings.StashDropCommand}" ToolTip.ShowOnDisabled="True"
-                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashDropCommand}">
-                            <StackPanel>
-                                <PathIcon Data="{x:Static vm:GitIcons.DropStash}" />
-                                <TextBlock Text="{x:Static gloc:GitStrings.StashDropButton}" />
-                            </StackPanel>
-                        </Button>
                         <Button Classes="git-action" Command="{CompiledBinding StashBranchCommand}"
                                 ToolTip.Tip="{x:Static gloc:GitStrings.StashBranchCommand}" ToolTip.ShowOnDisabled="True"
                                 AutomationProperties.Name="{x:Static gloc:GitStrings.StashBranchCommand}">
                             <StackPanel>
                                 <PathIcon Data="{x:Static vm:GitIcons.StashBranch}" />
                                 <TextBlock Text="{x:Static gloc:GitStrings.StashBranchButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding DropStashCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashDropCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashDropCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.DropStash}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashDropButton}" />
                             </StackPanel>
                         </Button>
                         <Button Classes="git-action" Command="{CompiledBinding ClearStashesCommand}"
@@ -402,7 +402,7 @@
                                 ToolTip.Tip="{x:Static gloc:GitStrings.SetRemoteUrlCommand}" ToolTip.ShowOnDisabled="True"
                                 AutomationProperties.Name="{x:Static gloc:GitStrings.SetRemoteUrlCommand}">
                             <StackPanel>
-                                <PathIcon Data="{x:Static vm:GitIcons.Rename}" />
+                                <PathIcon Data="{x:Static vm:GitIcons.RemoteUrl}" />
                                 <TextBlock Text="{x:Static gloc:GitStrings.SetRemoteUrlButton}" />
                             </StackPanel>
                         </Button>
@@ -441,12 +441,12 @@
                                  IsReadOnly="True"
                                  AutomationProperties.Name="{x:Static gloc:GitStrings.RemotesTab}"
                                  behaviors:RightClickSelectBehavior.IsEnabled="True"
-                                 behaviors:DoubleTapCommandBehavior.Command="{CompiledBinding SetRemoteUrlCommand}">
+                                 behaviors:DoubleTapCommandBehavior.Command="{CompiledBinding RenameRemoteCommand}">
                         <dg:DataGrid.ContextMenu>
                             <ContextMenu x:DataType="vm:GitRepositoryPanelViewModel">
                                 <MenuItem Header="{x:Static gloc:GitStrings.SetRemoteUrlCommand}" Command="{CompiledBinding SetRemoteUrlCommand}">
                                     <MenuItem.Icon>
-                                        <PathIcon Data="{x:Static vm:GitIcons.Rename}" />
+                                        <PathIcon Data="{x:Static vm:GitIcons.RemoteUrl}" />
                                     </MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="{x:Static gloc:GitStrings.RenameRemoteCommand}" Command="{CompiledBinding RenameRemoteCommand}">

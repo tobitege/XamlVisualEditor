@@ -1,7 +1,11 @@
 using System.Globalization;
+using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.LogicalTree;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -114,14 +118,14 @@ public sealed class DialogPresentationTests
     }
 
     [AvaloniaFact]
-    public async Task DialogWithoutMainWindowCompletesAtOnceAndClosesWithItsToken()
+    public async Task ProgressWithoutMainWindowCompletesAtOnceAndClosesWithItsToken()
     {
         AppDialogHost host = new(new MainWindowProvider());
         Window shown = new();
-        using IDisposable registration = host.RegisterDialog("test.unowned", _ => shown);
+        using IDisposable registration = host.RegisterDialog(ProgressDialogRequest.DialogId, _ => shown);
         using CancellationTokenSource workDone = new();
 
-        bool? result = await host.ShowDialogAsync<bool?>("test.unowned", null, workDone.Token);
+        bool? result = await host.ShowDialogAsync<bool?>(ProgressDialogRequest.DialogId, null, workDone.Token);
         Dispatcher.UIThread.RunJobs();
         Assert.Null(result);
         Assert.True(shown.IsVisible);
@@ -130,6 +134,93 @@ public sealed class DialogPresentationTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.False(shown.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task A_question_without_main_window_is_not_shown_and_answers_no()
+    {
+        AppDialogHost host = new(new MainWindowProvider());
+        Window question = new();
+        using IDisposable registration = host.RegisterDialog("test.question", _ => question);
+
+        bool? answer = await host.ShowDialogAsync<bool?>("test.question", null, CancellationToken.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(answer);
+        Assert.False(question.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task A_destructive_question_starts_on_cancel_so_enter_space_or_the_window_button_answer_no()
+    {
+        foreach ((Key key, PhysicalKey physicalKey, string? symbol) in new (Key, PhysicalKey, string?)[]
+                 {
+                     (Key.Enter, PhysicalKey.Enter, "\r"), (Key.Space, PhysicalKey.Space, " "), (Key.Escape, PhysicalKey.Escape, null)
+                 })
+        {
+            Window owner = new() { Width = 800, Height = 700 };
+            try
+            {
+                owner.Show();
+                AppDialogHost host = new(new MainWindowProvider { MainWindow = owner });
+                Task<bool?> answer = host.ShowDialogAsync<bool?>(
+                    ConfirmationDialogRequest.DialogId,
+                    new ConfirmationDialogRequest("Delete", "Delete it?", "Delete", IsDestructive: true),
+                    CancellationToken.None);
+                Flush(owner);
+                ConfirmDialog dialog = Assert.IsType<ConfirmDialog>(Assert.Single(owner.OwnedWindows));
+                Button cancel = Assert.Single(dialog.GetVisualDescendants().OfType<Button>(), button => button.Name == "CancelButton");
+                Assert.True(cancel.IsFocused, key.ToString());
+
+                // Enter and Escape act on the press and close the dialog; a button clicks on the release of Space.
+                dialog.KeyPress(key, RawInputModifiers.None, physicalKey, symbol);
+                if (key == Key.Space)
+                {
+                    dialog.KeyRelease(key, RawInputModifiers.None, physicalKey, symbol);
+                }
+
+                Flush(owner);
+
+                Assert.False(await answer, key.ToString());
+            }
+            finally
+            {
+                owner.Close();
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Progress_that_cannot_be_cancelled_has_no_cancel_button_and_ignores_escape()
+    {
+        Window owner = new() { Width = 800, Height = 700 };
+        try
+        {
+            owner.Show();
+            AppDialogHost host = new(new MainWindowProvider { MainWindow = owner });
+            using CancellationTokenSource workDone = new();
+            Task<bool?> result = host.ShowDialogAsync<bool?>(
+                ProgressDialogRequest.DialogId,
+                new ProgressDialogRequest("Continue", "Continuing", CanCancel: false),
+                workDone.Token);
+            Flush(owner);
+            ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
+            Assert.False(Assert.Single(dialog.GetLogicalDescendants().OfType<Button>(), button => button.Name == "CancelButton").IsVisible);
+            Assert.False(Assert.IsType<ProgressDialogViewModel>(dialog.DataContext).CancelCommand.CanExecute.FirstAsync().Wait());
+
+            dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            Flush(owner);
+            Assert.True(dialog.IsVisible);
+            Assert.False(result.IsCompleted);
+
+            workDone.Cancel();
+            Flush(owner);
+            Assert.Null(await result);
+        }
+        finally
+        {
+            owner.Close();
+        }
     }
 
     private static void Flush(Window owner)

@@ -189,7 +189,11 @@ public sealed class GitMergeServiceTests
         GitService service = new(options: repository.ProcessOptions);
         string head = repository.RunGit("rev-parse", "HEAD");
 
-        await service.AbortAsync(repository.Path, ct);
+        // The confirmed operation is checked first: a confirmed rebase aborts no merge.
+        Assert.False(await service.AbortAsync(repository.Path, GitRepositoryOperation.Rebasing, ct));
+        Assert.Equal(GitRepositoryOperation.Merging, (await service.GetStatusAsync(repository.Path, ct)).Operation);
+
+        Assert.True(await service.AbortAsync(repository.Path, GitRepositoryOperation.Merging, ct));
 
         Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
         Assert.Equal(head, repository.RunGit("rev-parse", "HEAD"));
@@ -206,7 +210,7 @@ public sealed class GitMergeServiceTests
         // clean.txt was merged without conflict; git refuses to abort over an edit of it.
         repository.WriteFile("clean.txt", "edited after the merge started\n");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AbortAsync(repository.Path, ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AbortAsync(repository.Path, GitRepositoryOperation.Merging, ct));
 
         Assert.Equal(GitRepositoryOperation.Merging, (await service.GetStatusAsync(repository.Path, ct)).Operation);
         Assert.Equal("edited after the merge started\n", repository.ReadFile("clean.txt"));
@@ -348,7 +352,7 @@ public sealed class GitMergeServiceTests
         Assert.False(repository.TryRunGit(out _, "revert", "--no-edit", "HEAD~1"));
         Assert.Equal(GitRepositoryOperation.Reverting, (await service.GetStatusAsync(repository.Path, ct)).Operation);
 
-        await service.AbortAsync(repository.Path, ct);
+        Assert.True(await service.AbortAsync(repository.Path, GitRepositoryOperation.Reverting, ct));
 
         Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
         Assert.Equal(head, repository.RunGit("rev-parse", "HEAD"));
@@ -367,20 +371,21 @@ public sealed class GitMergeServiceTests
         Assert.False(repository.TryRunGit(out _, "am", "-3", patch));
         Assert.Equal(GitRepositoryOperation.ApplyingPatches, (await service.GetStatusAsync(repository.Path, ct)).Operation);
 
-        await service.AbortAsync(repository.Path, ct);
+        Assert.True(await service.AbortAsync(repository.Path, GitRepositoryOperation.ApplyingPatches, ct));
 
         Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
         Assert.Equal(head, repository.RunGit("rev-parse", "HEAD"));
     }
 
     [Fact]
-    public async Task Abort_and_continue_without_an_operation_fail()
+    public async Task Abort_without_an_operation_changes_nothing_and_continue_fails()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         using GitTestRepository repository = GitTestRepository.Create("a.txt");
         GitService service = new(options: repository.ProcessOptions);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AbortAsync(repository.Path, ct));
+        Assert.False(await service.AbortAsync(repository.Path, GitRepositoryOperation.Merging, ct));
+        Assert.False(await service.AbortAsync(repository.Path, GitRepositoryOperation.None, ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.ContinueAsync(repository.Path, ct));
     }
 

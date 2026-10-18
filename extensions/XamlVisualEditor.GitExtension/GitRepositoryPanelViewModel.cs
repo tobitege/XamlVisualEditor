@@ -337,6 +337,7 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         StashIncludeUntrackedCommand = AddCommand(ReactiveCommand.CreateFromTask(
             () => _executeCommand(GitCommands.STASH_INCLUDE_UNTRACKED, null),
             isRepository));
+        StashStagedCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.STASH_STAGED, null), isRepository));
         IObservable<bool> hasStash = this.WhenAnyValue(x => x.SelectedStash).Select(stash => stash is not null);
         ApplyStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_APPLY), hasStash));
         PopStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_POP), hasStash));
@@ -442,6 +443,9 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     /// <summary>Runs <see cref="GitCommands.STASH_INCLUDE_UNTRACKED"/>.</summary>
     public ReactiveCommand<RxVoid, RxVoid> StashIncludeUntrackedCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_STAGED"/>.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> StashStagedCommand { get; }
 
     /// <summary>Runs <see cref="GitCommands.STASH_APPLY"/> for the selected stash.</summary>
     public ReactiveCommand<RxVoid, RxVoid> ApplyStashCommand { get; }

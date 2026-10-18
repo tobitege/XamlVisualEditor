@@ -92,7 +92,9 @@ public sealed class GitCommandsTests
         { GitCommands.PUSH_TAG, GitStrings.PushTagCommand, REMOTE_WHEN },
         { GitCommands.DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, REMOTE_WHEN },
         { GitCommands.REBASE, GitStrings.RebaseCommand, NO_OPERATION_WHEN },
-        { GitCommands.FORCE_PUSH, GitStrings.ForcePushCommand, "git.isRepository && git.hasUpstream" }
+        { GitCommands.FORCE_PUSH, GitStrings.ForcePushCommand, "git.isRepository && git.hasUpstream" },
+        { GitCommands.STASH_PATHS, GitStrings.StashPathsCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_STAGED, GitStrings.StashStagedCommand, NO_OPERATION_WHEN }
     };
 
     [Theory]
@@ -119,7 +121,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(61, commandIds.Count);
+        Assert.Equal(63, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -158,7 +160,7 @@ public sealed class GitCommandsTests
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.FORCE_PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
             GitCommands.REBASE,
             GitCommands.CREATE_TAG, GitCommands.PUSH_TAG, GitCommands.DELETE_TAG, GitCommands.DELETE_REMOTE_TAG,
-            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
+            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_STAGED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
             GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,
             GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.SKIP, GitCommands.ABORT,
             GitCommands.ADD_REMOTE, GitCommands.RENAME_REMOTE, GitCommands.SET_REMOTE_URL, GitCommands.REMOVE_REMOTE
@@ -179,18 +181,18 @@ public sealed class GitCommandsTests
         [
             GitCommands.ACCEPT_OURS, GitCommands.ACCEPT_THEIRS, GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD,
             GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD, GitCommands.MARK_RESOLVED, GitCommands.SHOW_FILE_HISTORY,
-            GitCommands.STAGE, GitCommands.UNSTAGE
+            GitCommands.STAGE, GitCommands.STASH_PATHS, GitCommands.UNSTAGE
         ];
         string[] editorIds =
         [
             GitCommands.ACCEPT_OURS, GitCommands.ACCEPT_THEIRS, GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD,
             GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD, GitCommands.MARK_RESOLVED, GitCommands.RESOLVE_CONFLICT,
-            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
+            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.STASH_PATHS, GitCommands.UNSTAGE
         ];
         string[] tabIds =
         [
             GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD, GitCommands.COMPARE_WITH_INDEX,
-            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
+            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.STASH_PATHS, GitCommands.UNSTAGE
         ];
         ExtensionMenuContribution[] contextItems = items
             .Where(item => item.Location is ExtensionMenuLocations.EditorContext or ExtensionMenuLocations.ExplorerContext
@@ -866,14 +868,14 @@ public sealed class GitCommandsTests
                 string.Format(GitStrings.RemoteFailureFormat, GitStrings.PullDivergedHint, "fatal: Not possible to fast-forward, aborting.")
             ],
             registration.Window.Errors);
-        Assert.Empty(registration.Window.Infos);
-        Assert.Equal(["fetch", "pull", "push"], remotes.Calls);
         // A rejected push asks whether to force push, with git's line; the declined question pushes nothing more.
         ConfirmationDialogRequest question = Assert.Single(registration.Dialogs.Confirmations);
         Assert.True(question.IsDestructive);
         Assert.Equal(
             string.Format(GitStrings.ForcePushAfterRejectPromptFormat, "main", "origin/main", "! [rejected]        main -> main (non-fast-forward)"),
             question.Message);
+        Assert.Empty(registration.Window.Infos);
+        Assert.Equal(["fetch", "pull", "push"], remotes.Calls);
     }
 
     [Fact]

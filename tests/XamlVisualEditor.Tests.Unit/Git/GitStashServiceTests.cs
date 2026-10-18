@@ -43,6 +43,51 @@ public sealed class GitStashServiceTests
     }
 
     [Fact]
+    public async Task Push_of_paths_stashes_only_them_with_their_untracked_files_and_takes_a_name_with_brackets_literally()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt", "b.txt", "a1.txt");
+        string committed = repository.RunGit("show", "HEAD:a.txt");
+        repository.WriteFile("a.txt", "changed\n");
+        repository.WriteFile("b.txt", "changed\n");
+        repository.WriteFile("a1.txt", "changed\n");
+        repository.WriteFile("a[1].txt", "new\n");
+        repository.WriteFile("dir/new.txt", "new\n");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.PushPathsAsync(repository.Path, "part", ["a.txt", "a[1].txt", "dir"], ct);
+
+        Assert.Equal(committed, repository.ReadFile("a.txt"));
+        Assert.Null(repository.ReadFile("a[1].txt"));
+        Assert.Null(repository.ReadFile("dir/new.txt"));
+        // A pattern "a[1].txt" would have matched a1.txt.
+        Assert.Equal("changed\n", repository.ReadFile("a1.txt"));
+        Assert.Equal("changed\n", repository.ReadFile("b.txt"));
+        Assert.Equal("On main: part", Assert.Single(await service.ListAsync(repository.Path, ct)).Message);
+        Assert.Equal("new\n", repository.RunGit("show", "stash@{0}^3:a[1].txt"));
+    }
+
+    [Fact]
+    public async Task Push_of_the_staged_changes_keeps_the_unstaged_and_untracked_ones()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt", "b.txt");
+        string committed = repository.RunGit("show", "HEAD:a.txt");
+        repository.WriteFile("a.txt", "staged\n");
+        repository.RunGit("add", "a.txt");
+        repository.WriteFile("b.txt", "unstaged\n");
+        repository.WriteFile("new.txt", "new\n");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.PushStagedAsync(repository.Path, null, ct);
+
+        Assert.Equal(committed, repository.ReadFile("a.txt"));
+        Assert.Equal("unstaged\n", repository.ReadFile("b.txt"));
+        Assert.Equal("new\n", repository.ReadFile("new.txt"));
+        Assert.Equal("a.txt", repository.RunGit("stash", "show", "--name-only").Trim());
+    }
+
+    [Fact]
     public async Task Apply_by_commit_id_keeps_the_stash_after_the_list_changed()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

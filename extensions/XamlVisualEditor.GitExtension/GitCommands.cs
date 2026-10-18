@@ -194,6 +194,15 @@ public static class GitCommands
     public const string FORCE_PUSH = "git.forcePush";
 
     /// <summary>
+    /// Stashes the staged and unstaged changes of a file or folder, argument 0, otherwise of the active document, with
+    /// an entered message; untracked files among them are stashed too.
+    /// </summary>
+    public const string STASH_PATHS = "git.stashPaths";
+
+    /// <summary>Stashes only the staged changes with an entered message.</summary>
+    public const string STASH_STAGED = "git.stashStaged";
+
+    /// <summary>
     /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
     /// version of the current branch after a confirmation; a file that side deleted is deleted.
     /// </summary>
@@ -441,6 +450,10 @@ public static class GitCommands
             new CommandMetadata(GitStrings.RebaseCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 600));
         Register(FORCE_PUSH, handler.ForcePushAsync,
             new CommandMetadata(GitStrings.ForcePushCommand, CATEGORY, When: UPSTREAM_WHEN, Priority: 610));
+        Register(STASH_PATHS, handler.StashPathsAsync,
+            new CommandMetadata(GitStrings.StashPathsCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 620));
+        Register(STASH_STAGED, handler.StashStagedAsync,
+            new CommandMetadata(GitStrings.StashStagedCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 630));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -506,6 +519,7 @@ public static class GitCommands
                 ExtensionsItem(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, HISTORY_GROUP, 168),
                 ExtensionsItem(STASH, GitStrings.StashCommand, STASH_GROUP, 170),
                 ExtensionsItem(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, STASH_GROUP, 180),
+                ExtensionsItem(STASH_STAGED, GitStrings.StashStagedCommand, STASH_GROUP, 182),
                 ExtensionsItem(STASH_APPLY, GitStrings.StashApplyCommand, STASH_GROUP, 190),
                 ExtensionsItem(STASH_POP, GitStrings.StashPopCommand, STASH_GROUP, 200),
                 ExtensionsItem(STASH_SHOW, GitStrings.StashShowCommand, STASH_GROUP, 185),
@@ -519,6 +533,7 @@ public static class GitCommands
                 ContextItem(ExtensionMenuLocations.EditorContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.EditorContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
+                ContextItem(ExtensionMenuLocations.EditorContext, STASH_PATHS, GitStrings.StashPathsCommand, 35),
                 ContextItem(ExtensionMenuLocations.EditorContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.EditorContext),
                 ContextItem(ExtensionMenuLocations.EditorContext, RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, 80),
@@ -526,11 +541,13 @@ public static class GitCommands
                 ContextItem(ExtensionMenuLocations.ExplorerContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, DISCARD, GitStrings.DiscardCommand, 30),
+                ContextItem(ExtensionMenuLocations.ExplorerContext, STASH_PATHS, GitStrings.StashPathsCommand, 35),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.ExplorerContext),
                 .. ConflictItems(ExtensionMenuLocations.ExplorerContext),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, UNSTAGE, GitStrings.UnstageCommand, 20),
+                ContextItem(ExtensionMenuLocations.DocumentTabContext, STASH_PATHS, GitStrings.StashPathsCommand, 35),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.DocumentTabContext)
             ]));
@@ -597,7 +614,9 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(PUSH_TAG, GitStrings.PushTagCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(REBASE, GitStrings.RebaseCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(FORCE_PUSH, GitStrings.ForcePushCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(FORCE_PUSH, GitStrings.ForcePushCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_PATHS, GitStrings.StashPathsCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_STAGED, GitStrings.StashStagedCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

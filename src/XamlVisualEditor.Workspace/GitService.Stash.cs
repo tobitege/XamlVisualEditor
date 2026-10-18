@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
@@ -28,17 +29,42 @@ public sealed partial class GitService : IGitStashService
     /// <c>git stash push --include-untracked</c> stores the untracked files but leaves them in the working tree. It
     /// passes no pathspec, so nothing else changes.
     /// </remarks>
-    public async Task PushAsync(string repoPath, string? message, bool includeUntracked, CancellationToken ct = default)
+    public Task PushAsync(string repoPath, string? message, bool includeUntracked, CancellationToken ct = default) =>
+        PushStashAsync(repoPath, message, includeUntracked ? ["--include-untracked"] : [], [], ct);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Each path gets the <c>literal</c> pathspec magic instead of <c>GIT_LITERAL_PATHSPECS</c>, which the push runs
+    /// without (see <see cref="PushAsync"/>), so a name with <c>*</c> or <c>?</c> stashes only that file.
+    /// </remarks>
+    public Task PushPathsAsync(string repoPath, string? message, IReadOnlyList<string> paths, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfZero(paths.Count);
+        return PushStashAsync(repoPath, message, ["--include-untracked"], paths.Select(path => ":(literal)" + path).ToArray(), ct);
+    }
+
+    /// <inheritdoc />
+    public Task PushStagedAsync(string repoPath, string? message, CancellationToken ct = default) =>
+        PushStashAsync(repoPath, message, ["--staged"], [], ct);
+
+    private async Task PushStashAsync(
+        string repoPath,
+        string? message,
+        string[] options,
+        string[] pathspecs,
+        CancellationToken ct)
     {
         List<string> args = new() { "stash", "push" };
-        if (includeUntracked)
-        {
-            args.Add("--include-untracked");
-        }
-
+        args.AddRange(options);
         if (!string.IsNullOrWhiteSpace(message))
         {
             args.AddRange(["-m", message]);
+        }
+
+        if (pathspecs.Length > 0)
+        {
+            args.Add("--");
+            args.AddRange(pathspecs);
         }
 
         GitProcessResult result = await RunGitAsync(repoPath, args, GitCommandAccess.Write, ct, environment: PatternPathspecs);

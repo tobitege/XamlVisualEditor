@@ -332,6 +332,14 @@
                                 <TextBlock Text="{x:Static gloc:GitStrings.StashIncludeUntrackedButton}" />
                             </StackPanel>
                         </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding StashStagedCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashStagedCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashStagedCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.StashStaged}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashStagedButton}" />
+                            </StackPanel>
+                        </Button>
                         <Button Classes="git-action" Command="{CompiledBinding ShowStashCommand}"
                                 ToolTip.Tip="{x:Static gloc:GitStrings.StashShowCommand}" ToolTip.ShowOnDisabled="True"
                                 AutomationProperties.Name="{x:Static gloc:GitStrings.StashShowCommand}">

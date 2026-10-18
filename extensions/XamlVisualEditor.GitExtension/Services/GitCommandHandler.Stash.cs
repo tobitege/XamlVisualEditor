@@ -24,6 +24,64 @@ internal sealed partial class GitCommandHandler
         }
     }
 
+    // Argument 0 is a file or folder, as the context menus pass it; without it, the active document.
+    public async Task StashPathsAsync(CommandContext context)
+    {
+        if (await RefuseDuringOperationAsync() || !await EnsureStashServiceAsync() || await ResolveTargetAsync(context) is not { } target)
+        {
+            return;
+        }
+
+        IReadOnlyList<GitFileChange> changes = GitCommandTarget.FindChanges(
+            _session.Current.Changes,
+            target.RepositoryPath,
+            change => !change.IsConflicted);
+        if (changes.Count == 0)
+        {
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.NoChangesToStashFormat, target.DisplayPath));
+            return;
+        }
+
+        if (await AskStashMessageAsync(GitStrings.StashPathsCommand) is not { } message)
+        {
+            return;
+        }
+
+        // Exactly the listed files are stashed, never a file that changed after the last refresh; a rename with its old
+        // path, so the stash takes both halves of it.
+        string[] paths = changes
+            .SelectMany(change => change.OldPath is { } oldPath ? new[] { change.Path, oldPath } : [change.Path])
+            .ToArray();
+        await TryRunStashAsync(async (stashes, root, ct) =>
+        {
+            await stashes.PushPathsAsync(root, message, paths, ct);
+            return true;
+        });
+    }
+
+    public async Task StashStagedAsync(CommandContext context)
+    {
+        if (await RefuseDuringOperationAsync() || !await EnsureStashServiceAsync())
+        {
+            return;
+        }
+
+        if (!_session.Current.Changes.Any(GitCommandTarget.HasStagedChange))
+        {
+            await ShowInformationAsync(GitStrings.NothingStagedToStash);
+            return;
+        }
+
+        if (await AskStashMessageAsync(GitStrings.StashStagedCommand) is { } message)
+        {
+            await TryRunStashAsync(async (stashes, root, ct) =>
+            {
+                await stashes.PushStagedAsync(root, message, ct);
+                return true;
+            });
+        }
+    }
+
     public async Task StashApplyAsync(CommandContext context)
     {
         if (!await RefuseDuringOperationAsync() && await PickStashAsync(context, GitStrings.StashApplyCommand) is { } stash)
@@ -214,23 +272,21 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        string? message = await _window.ShowInputBoxAsync(
-            new InputBoxOptions(
-                includeUntracked ? GitStrings.StashIncludeUntrackedCommand : GitStrings.StashCommand,
-                GitStrings.StashMessagePrompt,
-                null),
-            CancellationToken.None);
-        if (message is null)
+        if (await AskStashMessageAsync(includeUntracked ? GitStrings.StashIncludeUntrackedCommand : GitStrings.StashCommand) is not { } message)
         {
             return;
         }
 
         await TryRunStashAsync(async (stashes, root, ct) =>
         {
-            await stashes.PushAsync(root, message.Trim(), includeUntracked, ct);
+            await stashes.PushAsync(root, message, includeUntracked, ct);
             return true;
         });
     }
+
+    /// <summary>Returns the entered stash message without surrounding spaces, empty for git's message, or null when cancelled.</summary>
+    private async Task<string?> AskStashMessageAsync(string title) =>
+        (await _window.ShowInputBoxAsync(new InputBoxOptions(title, GitStrings.StashMessagePrompt, null), CancellationToken.None))?.Trim();
 
     /// <summary>
     /// Applies or pops a stash. A stash that applied with conflicts stays in the list; that is reported instead of

@@ -591,6 +591,7 @@ public sealed class GitRepositoryPanelViewTests
         [
             (panel.StashCommand, GitCommands.STASH),
             (panel.StashIncludeUntrackedCommand, GitCommands.STASH_INCLUDE_UNTRACKED),
+            (panel.StashStagedCommand, GitCommands.STASH_STAGED),
             (panel.ClearStashesCommand, GitCommands.STASH_CLEAR)
         ];
         foreach ((ReactiveCommand<RxVoid, RxVoid> command, string _) in selected.Concat(always))
@@ -781,6 +782,11 @@ public sealed class GitRepositoryPanelViewTests
             Task.FromResult<IReadOnlyList<GitStashEntry>>(stashes);
 
         public Task PushAsync(string repoPath, string? message, bool includeUntracked, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task PushPathsAsync(string repoPath, string? message, IReadOnlyList<string> paths, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task PushStagedAsync(string repoPath, string? message, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task ApplyAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
 

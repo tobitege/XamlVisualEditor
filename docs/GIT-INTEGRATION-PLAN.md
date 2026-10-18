@@ -29,8 +29,8 @@ Planungsdokument des Forks; geht nicht upstream und liegt nur auf `xve-form-edit
 einem Commit je Phase.
 
 Arbeitsweise: Die Git-Integration wird komplett im Fork umgesetzt, auf dem PR-Branch `git-integration` (Basis
-`upstream/main`, Worktree `github\XamlVisualEditor-git`). Kein Abgleich mit dem TFVC-Arbeitsstand während der Arbeit;
-erst nach dem Upstream-Merge wird der Stand in einem Schritt übernommen. Jede Phase endet mit grünem Build, grünen
+`upstream/main`, Worktree `github\XamlVisualEditor-git`). Kein Abgleich mit dem TFVC-Arbeitsstand während der
+Arbeit; erst nach dem Upstream-Merge wird der Stand in einem Schritt übernommen. Jede Phase endet mit grünem Build, grünen
 Tests und einem Livetest per CDP. Testrepository: `xve-demo\GitDemo` mit lokalem Remote
 `xve-demo\GitDemo-remote.git`.
 

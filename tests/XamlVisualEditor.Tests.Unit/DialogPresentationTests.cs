@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
 using System.Reflection;
@@ -11,10 +12,13 @@ using Avalonia.LogicalTree;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using XamlVisualEditor.App;
 using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.Tests.Shared;
+using XamlVisualEditor.Workspace;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit;
@@ -221,6 +225,52 @@ public sealed class DialogPresentationTests
     }
 
     [AvaloniaFact]
+    public async Task Progress_offers_cancel_and_the_window_button_only_while_the_work_can_be_cancelled()
+    {
+        Window owner = new() { Width = 800, Height = 700 };
+        try
+        {
+            owner.Show();
+            AppDialogHost host = new(new MainWindowProvider { MainWindow = owner });
+            using CancellationTokenSource workDone = new();
+            using System.Reactive.Subjects.BehaviorSubject<bool> writing = new(false);
+            Task<bool?> result = host.ShowDialogAsync<bool?>(
+                ProgressDialogRequest.DialogId,
+                new ProgressDialogRequest("Checkout", "Running", "Stop git…") { CancelAvailable = writing },
+                workDone.Token);
+            Flush(owner);
+            ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
+            Button stop = Assert.Single(dialog.GetLogicalDescendants().OfType<Button>(), button => button.Name == "CancelButton");
+            Assert.False(stop.IsVisible);
+            CloseWithWindowButton(dialog);
+            Flush(owner);
+            Assert.False(result.IsCompleted);
+
+            // A change on another thread reaches the dialog on the UI thread.
+            await Task.Run(() => writing.OnNext(true));
+            Flush(owner);
+            Assert.True(stop.IsVisible);
+
+            await Task.Run(() => writing.OnNext(false));
+            Flush(owner);
+            Assert.False(stop.IsVisible);
+            CloseWithWindowButton(dialog);
+            Flush(owner);
+            Assert.False(result.IsCompleted);
+
+            writing.OnNext(true);
+            Flush(owner);
+            CloseWithWindowButton(dialog);
+            Flush(owner);
+            Assert.True(await result);
+        }
+        finally
+        {
+            owner.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task The_window_button_cancels_a_cancellable_progress_and_answers_no_to_a_destructive_question()
     {
         Window owner = new() { Width = 800, Height = 700 };
@@ -274,6 +324,53 @@ public sealed class DialogPresentationTests
         if (!(bool)callback.DynamicInvoke(reason)!)
         {
             window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_main_window_waits_for_a_writing_git_command_before_it_closes()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\ntouch .git/hook-started\nwhile [ ! -f .git/release ]; do sleep 0.1; done\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        GitService git = new(options: repository.ProcessOptions);
+        MainWindow window = new() { GitService = git };
+        window.Show();
+        Task switching = git.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => File.Exists(Path.Combine(repository.Path, ".git", "hook-started")));
+
+            window.Close();
+            Flush(window);
+
+            Assert.True(window.IsVisible);
+            Assert.IsType<ProgressDialog>(Assert.Single(window.OwnedWindows));
+        }
+        finally
+        {
+            File.WriteAllText(Path.Combine(repository.Path, ".git", "release"), "");
+        }
+
+        await switching;
+        await WaitUntilAsync(() => !window.IsVisible);
+    }
+
+    // Runs the jobs of the UI thread while it waits, so posted continuations run.
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        Stopwatch waited = Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), "The condition did not become true.");
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(20);
         }
     }
 

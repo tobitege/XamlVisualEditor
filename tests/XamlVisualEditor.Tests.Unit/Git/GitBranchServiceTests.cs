@@ -351,6 +351,26 @@ public sealed class GitBranchServiceTests
     }
 
     [Fact]
+    public async Task The_end_of_the_writes_waits_for_a_writing_command_whose_hook_runs()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 2; touch .git/hook-finished");
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.True(service.WhenWritesEnded().IsCompleted);
+        Task switching = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+
+        Task ended = service.WhenWritesEnded();
+        Assert.False(ended.IsCompleted);
+        await ended.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        await switching;
+        Assert.True(service.WhenWritesEnded().IsCompleted);
+    }
+
+    [Fact]
     public async Task A_stop_ends_a_writing_command_that_waits_for_another_one()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");
@@ -386,6 +406,24 @@ public sealed class GitBranchServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.DeleteAsync(repository.Path, "main", force: true, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void The_stop_scope_reports_whether_it_writes_on_subscribing_and_at_each_change()
+    {
+        GitProcessStop stop = new();
+        List<bool> values = new();
+        using IDisposable subscription = stop.Writing.Subscribe(values.Add);
+
+        IDisposable first = stop.BeginWrite();
+        IDisposable second = stop.BeginWrite();
+        first.Dispose();
+        first.Dispose();
+        Assert.True(stop.IsWriting);
+        second.Dispose();
+
+        Assert.Equal([false, true, false], values);
+        Assert.False(stop.IsWriting);
     }
 
     [Fact]

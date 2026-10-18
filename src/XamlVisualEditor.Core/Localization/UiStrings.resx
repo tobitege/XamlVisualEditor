@@ -1329,4 +1329,7 @@
   <data name="ToggleWatches" xml:space="preserve"><value>Toggle Watches</value></data>
   <data name="ToggleWatchesCommand" xml:space="preserve"><value>View: Toggle Watches</value></data>
   <data name="WorkspaceHasNoProjects" xml:space="preserve"><value>The workspace contains no projects.</value></data>
+  <data name="GitWritesClosingTitle" xml:space="preserve"><value>Closing</value></data>
+  <data name="GitWritesClosingMessage" xml:space="preserve"><value>Waiting for a git command to finish, so that it is not left half done.</value></data>
+  <data name="GitWritesCloseAnyway" xml:space="preserve"><value>Close Anyway</value></data>
 </root>

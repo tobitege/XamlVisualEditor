@@ -37,6 +37,13 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
     /// <remarks>Raised on the thread that ran git; an exception of a subscriber is logged and does not fail the command.</remarks>
     public event EventHandler<GitCommandLogEntry>? CommandCompleted;
 
+    /// <summary>
+    /// Returns a task that completes when no writing git command of this service waits for or runs git. A writing
+    /// command outlives the editor, because it is not stopped half way; one whose output pipe closed with the editor can
+    /// still fail when it writes, so the editor waits for it before it ends.
+    /// </summary>
+    public Task WhenWritesEnded() => _runner.WhenWritesEnded();
+
     public async Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default)
     {
         string? workingDirectory = ResolveWorkingDirectory(path);

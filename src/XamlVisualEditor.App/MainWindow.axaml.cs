@@ -17,6 +17,7 @@ using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Workspace;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.App;
@@ -37,6 +38,8 @@ public sealed partial class MainWindow : Window
     private IDisposable? _saveChangesHandler;
     private IDisposable? _saveConflictHandler;
     private bool _isConfirmingClose;
+    private bool _isWaitingForGit;
+    private bool _gitWritesWaited;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
     private IDisposable? _extensionManagerHandler;
@@ -94,6 +97,22 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            // A writing git command is not stopped half way and outlives the editor, but it can fail when it writes
+            // to the output the editor closed; the window waits for it, and after a while the user can close anyway.
+            if (!e.Cancel && GitService is { } git && !_gitWritesWaited && !git.WhenWritesEnded().IsCompleted)
+            {
+                e.Cancel = true;
+                if (_isWaitingForGit) return;
+                _isWaitingForGit = true;
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    await WaitForGitWritesAsync(git);
+                    _gitWritesWaited = true;
+                    Close();
+                });
+                return;
+            }
+
             // Closing the window takes the tabs out of the visual tree; they have to let go of their dockables
             // before, while they can still be found, or the layout save on shutdown logs a binding error per tab.
             if (!e.Cancel)
@@ -125,6 +144,35 @@ public sealed partial class MainWindow : Window
             RegisterInteractions(vm);
         }
     }
+
+    /// <summary>Gets or sets the git service whose writing commands the window waits for before it closes.</summary>
+    public GitService? GitService { get; set; }
+
+    /// <summary>
+    /// Shows a progress until the writing git commands ended; after <see cref="GitWriteCloseDelay"/> its button closes
+    /// the editor anyway, for a command that hangs, for example in a hook.
+    /// </summary>
+    private async Task WaitForGitWritesAsync(GitService git)
+    {
+        ProgressDialog dialog = new()
+        {
+            DataContext = new ProgressDialogViewModel(
+                UiStrings.GitWritesClosingTitle,
+                UiStrings.GitWritesClosingMessage,
+                UiStrings.GitWritesCloseAnyway,
+                GitWriteCloseDelay)
+        };
+        Task<bool?> shown = dialog.ShowDialog<bool?>(this);
+        if (await Task.WhenAny(git.WhenWritesEnded(), shown) != shown)
+        {
+            dialog.Close();
+        }
+
+        await shown;
+    }
+
+    /// <summary>Gets how long the window waits for the writing git commands before it offers to close anyway.</summary>
+    internal static TimeSpan GitWriteCloseDelay { get; set; } = TimeSpan.FromSeconds(15);
 
     private void RegisterInteractions(MainWindowViewModel vm)
     {

@@ -32,6 +32,9 @@ internal sealed class GitProcessRunner
     private readonly ILogger _logger;
     private readonly Lazy<GitExecutable> _executable;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _writeGates = new(FileSystemPathComparison.Comparer);
+    private readonly object _writesGate = new();
+    private int _writes;
+    private TaskCompletionSource? _writesEnded;
 
     public GitProcessRunner(GitProcessOptions options, GitExecutableLocator? locator = null, ILogger? logger = null)
     {
@@ -69,7 +72,13 @@ internal sealed class GitProcessRunner
         CancellationToken? waitCancellation = null)
     {
         SemaphoreSlim? writeGate = request.Access == GitCommandAccess.Write ? GetWriteGate(request.WorkingDirectory) : null;
-        if (writeGate is not null)
+        if (writeGate is null)
+        {
+            return await RunProcessAsync(request, ct).ConfigureAwait(false);
+        }
+
+        CountWrite(1);
+        try
         {
             Task wait = writeGate.WaitAsync(waitCancellation ?? ct);
             if (!wait.IsCompleted)
@@ -78,15 +87,40 @@ internal sealed class GitProcessRunner
             }
 
             await wait.ConfigureAwait(false);
-        }
-
-        try
-        {
-            return await RunProcessAsync(request, ct).ConfigureAwait(false);
+            try
+            {
+                return await RunProcessAsync(request, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                writeGate.Release();
+            }
         }
         finally
         {
-            writeGate?.Release();
+            CountWrite(-1);
+        }
+    }
+
+    /// <summary>Returns a task that completes when no writing command waits for or runs git.</summary>
+    public Task WhenWritesEnded()
+    {
+        lock (_writesGate)
+        {
+            return _writes == 0 ? Task.CompletedTask : (_writesEnded ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+    }
+
+    private void CountWrite(int change)
+    {
+        lock (_writesGate)
+        {
+            _writes += change;
+            if (_writes == 0)
+            {
+                _writesEnded?.TrySetResult();
+                _writesEnded = null;
+            }
         }
     }
 

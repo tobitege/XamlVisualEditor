@@ -126,7 +126,7 @@ public sealed class App : Application
             Log.Information("Creating the main window");
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
             Resources[TextEditorViewHost.RESOURCE_KEY] = Services.GetRequiredService<TextEditorViewHost>();
-            MainWindow mainWindow = new(mainVm);
+            MainWindow mainWindow = new(mainVm) { GitService = Services.GetRequiredService<IGitService>() as GitService };
             desktop.MainWindow = mainWindow;
 
             MainWindowProvider windowProvider = Services.GetRequiredService<MainWindowProvider>();

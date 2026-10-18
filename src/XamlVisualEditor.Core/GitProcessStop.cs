@@ -1,4 +1,6 @@
 using System;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Threading;
 
 namespace XamlVisualEditor.Core;
@@ -16,7 +18,9 @@ public sealed class GitProcessStop
 
     // Without a timer the source holds nothing that needs disposing, so a scope outlives any use of its token.
     private readonly CancellationTokenSource _stop = new();
-    private int _writing;
+    private readonly object _gate = new();
+    private readonly BehaviorSubject<bool> _writing = new(false);
+    private int _writers;
 
     public GitProcessStop()
     {
@@ -30,13 +34,23 @@ public sealed class GitProcessStop
     public CancellationToken Token { get; }
 
     /// <summary>Gets whether a writing git command of the scope waits for or runs git.</summary>
-    public bool IsWriting => Volatile.Read(ref _writing) > 0;
+    public bool IsWriting => _writing.Value;
+
+    /// <summary>
+    /// Gets <see cref="IsWriting"/>: the current value on subscribing, then every change, in order. Changes arrive on
+    /// the thread of the git command under a lock of the scope, so an observer only records or posts them.
+    /// </summary>
+    public IObservable<bool> Writing => Observable.Create<bool>(observer =>
+    {
+        // Under the lock the current value reaches a new observer before any later change.
+        lock (_gate)
+        {
+            return _writing.Subscribe(observer);
+        }
+    });
 
     /// <summary>Gets whether the scope was stopped.</summary>
     public bool IsStopped => _stop.IsCancellationRequested;
-
-    /// <summary>Raised on any thread when <see cref="IsWriting"/> changes.</summary>
-    public event EventHandler? WritingChanged;
 
     /// <summary>
     /// Makes this the scope of the current flow until the result is disposed, including the tasks started meanwhile.
@@ -54,19 +68,20 @@ public sealed class GitProcessStop
     /// <summary>Counts a writing git command until the result is disposed.</summary>
     public IDisposable BeginWrite()
     {
-        if (Interlocked.Increment(ref _writing) == 1)
-        {
-            WritingChanged?.Invoke(this, EventArgs.Empty);
-        }
-
+        CountWriter(1);
         return new WriteEnd(this);
     }
 
-    private void EndWrite()
+    // The lock keeps the changes in the order of the counts, so the last value an observer gets is the current one.
+    private void CountWriter(int change)
     {
-        if (Interlocked.Decrement(ref _writing) == 0)
+        lock (_gate)
         {
-            WritingChanged?.Invoke(this, EventArgs.Empty);
+            _writers += change;
+            if (_writers > 0 != _writing.Value)
+            {
+                _writing.OnNext(_writers > 0);
+            }
         }
     }
 
@@ -83,7 +98,7 @@ public sealed class GitProcessStop
         {
             if (Interlocked.Exchange(ref _ended, 1) == 0)
             {
-                scope.EndWrite();
+                scope.CountWriter(-1);
             }
         }
     }

@@ -3384,7 +3384,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
                 && await ConfirmShutdownAsync())
             {
-                desktop.Shutdown();
+                // Not Shutdown(), which closes the windows without asking them: the main window may wait for git.
+                desktop.TryShutdown();
             }
         });
 

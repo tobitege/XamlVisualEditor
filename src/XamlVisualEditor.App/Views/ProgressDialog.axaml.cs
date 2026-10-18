@@ -13,6 +13,7 @@ public sealed partial class ProgressDialog : Window
 {
     private IDisposable? _closeHandler;
     private IDisposable? _cancelTimer;
+    private IDisposable? _cancelAvailable;
 
     public ProgressDialog()
     {
@@ -40,12 +41,25 @@ public sealed partial class ProgressDialog : Window
         // The cancel delay counts from the moment the dialog shows.
         Opened += (_, _) =>
         {
-            if (DataContext is ProgressDialogViewModel { CanCancel: false } vm)
+            if (DataContext is not ProgressDialogViewModel vm)
+            {
+                return;
+            }
+
+            if (!vm.CanCancel)
             {
                 _cancelTimer = DispatcherTimer.RunOnce(vm.AllowCancel, vm.CancelDelay);
             }
+
+            // Posted in order, so the last value applied is the last one the work reported.
+            _cancelAvailable = vm.CancelAvailable?.Subscribe(available =>
+                Dispatcher.UIThread.Post(() => vm.SetCancelAvailable(available)));
         };
-        Closed += (_, _) => _cancelTimer?.Dispose();
+        Closed += (_, _) =>
+        {
+            _cancelTimer?.Dispose();
+            _cancelAvailable?.Dispose();
+        };
     }
 
     private void RegisterCloseHandler()

@@ -1329,4 +1329,7 @@
   <data name="ToggleWatches" xml:space="preserve"><value>Überwachung ein-/ausblenden</value></data>
   <data name="ToggleWatchesCommand" xml:space="preserve"><value>Ansicht: Überwachung ein-/ausblenden</value></data>
   <data name="WorkspaceHasNoProjects" xml:space="preserve"><value>Der Arbeitsbereich enthält keine Projekte.</value></data>
+  <data name="GitWritesClosingTitle" xml:space="preserve"><value>Beenden</value></data>
+  <data name="GitWritesClosingMessage" xml:space="preserve"><value>Ein git-Befehl läuft noch und wird abgewartet, damit er nicht halb fertig bleibt.</value></data>
+  <data name="GitWritesCloseAnyway" xml:space="preserve"><value>Trotzdem beenden</value></data>
 </root>

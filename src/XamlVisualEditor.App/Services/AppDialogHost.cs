@@ -35,7 +35,8 @@ public sealed class AppDialogHost : IDialogHost
                 throw new ArgumentException("Progress dialog requires a progress request.", nameof(input));
             return new ProgressDialog
             {
-                DataContext = new ProgressDialogViewModel(request.Title, request.Message, request.CancelText, request.CancelDelay)
+                DataContext = new ProgressDialogViewModel(request.Title, request.Message, request.CancelText, request.CancelDelay,
+                    request.CancelAvailable)
             };
         };
     }

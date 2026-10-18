@@ -417,10 +417,10 @@ internal sealed partial class GitCommandHandler
 
     /// <summary>
     /// Shows the progress of an operation with writing git commands until <paramref name="run"/> ends. Its stop button
-    /// shows after <see cref="StopDelay"/>; a stop the user confirms while a writing command runs stops it through
-    /// <paramref name="stop"/>, and a declined one shows the progress again, then with the stop button at once. The
-    /// progress and the question close when the operation ends; a progress that closes otherwise or cannot be shown
-    /// leaves git running.
+    /// shows after <see cref="StopDelay"/> and only while a writing command runs; a stop the user confirms while that
+    /// command runs stops it through <paramref name="stop"/>, and a declined one shows the progress again, then without
+    /// the wait. The progress and the question close when the operation ends; a progress that closes otherwise or
+    /// cannot be shown leaves git running.
     /// </summary>
     private async Task ShowStoppableProgressAsync(string title, string message, Task run, GitProcessStop stop)
     {
@@ -434,35 +434,27 @@ internal sealed partial class GitCommandHandler
         TimeSpan delay = StopDelay;
         while (!run.IsCompleted)
         {
-            if (await ShowProgressAsync(title, message, GitStrings.StopGitButton, delay, ended.Token) != true || run.IsCompleted)
+            if (await ShowProgressAsync(title, message, GitStrings.StopGitButton, delay, ended.Token, stop.Writing) != true
+                || run.IsCompleted)
             {
                 return;
             }
 
             delay = TimeSpan.Zero;
 
-            // Only a writing command can be stopped: without one, the progress shows again once one starts.
-            if (!stop.IsWriting)
-            {
-                await WhenWritingOrEndedAsync(run, stop);
-                continue;
-            }
-
             // The question is for the writing command that runs now: it closes when that command or the operation
-            // ends, so a confirmation never stops a later command.
+            // ends, so a confirmation never stops a later command. A source without a timer needs no disposing, so a
+            // change that arrives late can still cancel it; the change arrives under the lock of the scope, so the
+            // question closes on the thread pool.
             CancellationTokenSource question = CancellationTokenSource.CreateLinkedTokenSource(ended.Token);
-            void CloseQuestion(object? sender, EventArgs e)
+            using (stop.Writing.Subscribe(writing =>
+                   {
+                       if (!writing)
+                       {
+                           _ = question.CancelAsync();
+                       }
+                   }))
             {
-                if (!stop.IsWriting)
-                {
-                    question.Cancel();
-                }
-            }
-
-            stop.WritingChanged += CloseQuestion;
-            try
-            {
-                CloseQuestion(null, EventArgs.Empty);
                 if (await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true, question.Token)
                     && stop.IsWriting
                     && !run.IsCompleted)
@@ -471,36 +463,8 @@ internal sealed partial class GitCommandHandler
                     return;
                 }
             }
-            finally
-            {
-                stop.WritingChanged -= CloseQuestion;
-            }
 
             await Task.Yield();
-        }
-    }
-
-    /// <summary>Completes when a writing command of <paramref name="stop"/> runs or <paramref name="run"/> ended.</summary>
-    private static async Task WhenWritingOrEndedAsync(Task run, GitProcessStop stop)
-    {
-        TaskCompletionSource writing = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        void Started(object? sender, EventArgs e)
-        {
-            if (stop.IsWriting)
-            {
-                writing.TrySetResult();
-            }
-        }
-
-        stop.WritingChanged += Started;
-        try
-        {
-            Started(null, EventArgs.Empty);
-            await Task.WhenAny(writing.Task, run);
-        }
-        finally
-        {
-            stop.WritingChanged -= Started;
         }
     }
 
@@ -582,21 +546,22 @@ internal sealed partial class GitCommandHandler
 
     /// <summary>
     /// Shows the progress dialog until <paramref name="closeToken"/> is cancelled, with its cancel button after
-    /// <paramref name="cancelDelay"/>. Returns true when the user cancelled, otherwise null; a dialog that fails is
-    /// logged and counts as not cancelled.
+    /// <paramref name="cancelDelay"/> and while <paramref name="cancelAvailable"/>, if any, last said true. Returns
+    /// true when the user cancelled, otherwise null; a dialog that fails is logged and counts as not cancelled.
     /// </summary>
     private async Task<bool?> ShowProgressAsync(
         string title,
         string message,
         string? cancelText,
         TimeSpan cancelDelay,
-        CancellationToken closeToken)
+        CancellationToken closeToken,
+        IObservable<bool>? cancelAvailable = null)
     {
         try
         {
             return await _dialogHost.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest(title, message, cancelText) { CancelDelay = cancelDelay },
+                new ProgressDialogRequest(title, message, cancelText) { CancelDelay = cancelDelay, CancelAvailable = cancelAvailable },
                 closeToken);
         }
         catch (OperationCanceledException)

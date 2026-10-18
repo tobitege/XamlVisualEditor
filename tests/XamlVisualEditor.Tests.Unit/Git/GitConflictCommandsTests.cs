@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reactive.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -285,6 +286,8 @@ public sealed class GitConflictCommandsTests
         ProgressDialogRequest progress = Assert.Single(fixture.Dialogs.Progress);
         Assert.True(progress.CancelDelay > TimeSpan.Zero);
         Assert.Equal(GitStrings.StopGitButton, progress.CancelText);
+        // The stop shows only while a writing command runs, which none does once git ended.
+        Assert.False(await progress.CancelAvailable!.FirstAsync());
     }
 
     [Fact]

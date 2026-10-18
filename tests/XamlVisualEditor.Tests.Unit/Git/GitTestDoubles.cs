@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
@@ -273,6 +275,17 @@ internal sealed class GitDialogHost : IDialogHost
 
         switch (ProgressMode)
         {
+            // As in the editor, the cancel button shows only while the work can be cancelled.
+            case ProgressDialogMode.Cancel when ((ProgressDialogRequest)viewModel!).CancelAvailable is { } available:
+                try
+                {
+                    await available.FirstAsync(canCancel => canCancel).ToTask(cancellationToken);
+                    return (T?)(object?)true;
+                }
+                catch (OperationCanceledException)
+                {
+                    return default;
+                }
             case ProgressDialogMode.Cancel:
                 return (T?)(object?)true;
             case ProgressDialogMode.CompleteAtOnce:

@@ -126,7 +126,8 @@ public sealed class App : Application
             Log.Information("Creating the main window");
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
             Resources[TextEditorViewHost.RESOURCE_KEY] = Services.GetRequiredService<TextEditorViewHost>();
-            MainWindow mainWindow = new(mainVm);
+            GitService gitService = Services.GetRequiredService<GitService>();
+            MainWindow mainWindow = new(mainVm) { WhenGitWritesEnded = gitService.WhenWritesEnded };
             desktop.MainWindow = mainWindow;
 
             MainWindowProvider windowProvider = Services.GetRequiredService<MainWindowProvider>();
@@ -231,7 +232,8 @@ public sealed class App : Application
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
         services.AddSingleton<IDotNetCli, DotNetCliRunner>();
         services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();
-        services.AddSingleton<IGitService, GitService>();
+        services.AddSingleton<GitService>();
+        services.AddSingleton<IGitService>(provider => provider.GetRequiredService<GitService>());
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
         services.AddSingleton<IPtyProvider>(_ => PtyProviderFactory.CreateDefault());

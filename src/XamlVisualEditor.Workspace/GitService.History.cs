@@ -111,7 +111,7 @@ public sealed partial class GitService
         {
             GitProcessResult result = await RunGitAsync(
                 repoPath,
-                new[] { "rev-parse", "--verify", "--quiet", name },
+                new[] { "rev-parse", "--verify", "--quiet", "--end-of-options", name },
                 GitCommandAccess.Read,
                 ct,
                 allowNonZeroExitCode: true);
@@ -199,6 +199,27 @@ public sealed partial class GitService
             allowNonZeroExitCode: true);
         ThrowIfFailed(result, "for-each-ref");
         return GitRefParser.ParseTags(result.StandardOutput);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>git exits with code 1 and no output when the revisions have no common ancestor.</remarks>
+    public async Task<string?> GetMergeBaseAsync(string repoPath, string first, string second, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(first);
+        ArgumentException.ThrowIfNullOrWhiteSpace(second);
+        GitProcessResult result = await RunGitAsync(
+            repoPath,
+            new[] { "merge-base", "--end-of-options", first, second },
+            GitCommandAccess.Read,
+            ct,
+            allowNonZeroExitCode: true);
+        if (result.ExitCode == 1 && result.StandardError.Trim().Length == 0)
+        {
+            return null;
+        }
+
+        ThrowIfFailed(result, "merge-base");
+        return result.StandardOutput.Trim();
     }
 
     /// <summary>

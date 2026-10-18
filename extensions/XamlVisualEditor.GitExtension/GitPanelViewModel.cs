@@ -158,6 +158,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly GitSession _session;
     private readonly Func<string, IReadOnlyList<object?>?, System.Threading.Tasks.Task> _executeCommand;
+    private readonly Func<string, System.Threading.Tasks.Task>? _openFile;
     private readonly CompositeDisposable _disposables = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ObservableCollection<GitChangeEntryViewModel> _stagedItems = new();
@@ -306,10 +307,15 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     /// <summary>Creates the panel for a shared session; the session stays alive when the panel is disposed.</summary>
     /// <param name="session">The Git session whose status is shown.</param>
     /// <param name="executeCommand">Runs a Git command by id with arguments.</param>
-    public GitPanelViewModel(GitSession session, Func<string, IReadOnlyList<object?>?, System.Threading.Tasks.Task> executeCommand)
+    /// <param name="openFile">Opens a file by full path in the editor; null disables the Open button of a conflict.</param>
+    public GitPanelViewModel(
+        GitSession session,
+        Func<string, IReadOnlyList<object?>?, System.Threading.Tasks.Task> executeCommand,
+        Func<string, System.Threading.Tasks.Task>? openFile = null)
     {
         _session = session;
         _executeCommand = executeCommand;
+        _openFile = openFile;
 
         _stagedView = new DataGridCollectionView(_stagedItems);
         _unstagedView = new DataGridCollectionView(_unstagedItems);
@@ -373,11 +379,15 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             () => _executeCommand(GitCommands.UNSTAGE_ALL, null),
             this.WhenAnyValue(x => x.StagedCount).Select(count => count > 0)));
 
-        // Amending needs no staged changes: it can change the message only.
+        // Amending needs no staged changes: it can change the message only; a merge commit needs none either. git
+        // refuses to commit while conflicts are unresolved, and most operations commit their steps on Continue.
         IObservable<bool> canCommit = this.WhenAnyValue(x => x.CommitMessage, x => x.StagedCount, x => x.IsRepository, x => x.IsAmend,
-                (message, count, isRepo, isAmend) => isRepo && (count > 0 || isAmend) && !string.IsNullOrWhiteSpace(message))
+                x => x.IsMerging, x => x.ConflictCount, x => x.IsCommitAllowed,
+                (message, count, isRepo, isAmend, isMerging, conflicts, allowed) =>
+                    isRepo && allowed && conflicts == 0 && (count > 0 || isAmend || isMerging) && !string.IsNullOrWhiteSpace(message))
             .DistinctUntilChanged();
         CommitCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.COMMIT, null), canCommit));
+        InitializeConflicts();
 
         StageSelectionCommand = AddSelectionCommand(GitCommands.STAGE_SELECTION, GitPatchAction.Stage);
         UnstageSelectionCommand = AddSelectionCommand(GitCommands.UNSTAGE_SELECTION, GitPatchAction.Unstage);
@@ -389,6 +399,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             .Subscribe(change =>
             {
                 SelectedUnstagedChange = null;
+                SelectedConflict = null;
                 _ = LoadDiffAsync(change!);
             });
         _disposables.Add(stagedSelection);
@@ -398,6 +409,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             .Subscribe(change =>
             {
                 SelectedStagedChange = null;
+                SelectedConflict = null;
                 _ = LoadDiffAsync(change!);
             });
         _disposables.Add(unstagedSelection);
@@ -524,6 +536,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
             SelectedStagedChange = null;
             SelectedUnstagedChange = null;
             ClearChanges();
+            ApplyOperation(snapshot);
             return;
         }
 
@@ -538,13 +551,14 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
         AheadBy = status.AheadBy;
         BehindBy = status.BehindBy;
         IsRepository = true;
-        CanAmend = !status.IsUnborn && _session.Services.Patch is not null;
+        CanAmend = !status.IsUnborn && _session.Services.Patch is not null && snapshot.AllowsAmend;
         ErrorMessage = snapshot.ErrorMessage;
 
         ReplaceItems(_stagedItems, status, isStaged: true);
         ReplaceItems(_unstagedItems, status, isStaged: false);
         ApplyFilter();
         RestoreSelection(selectedPath, wasStaged);
+        ApplyOperation(snapshot);
     }
 
     /// <summary>
@@ -779,6 +793,7 @@ public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
     internal void ClearCommit()
     {
         IsAmend = false;
+        _preparedMessage = null;
         CommitMessage = string.Empty;
     }
 

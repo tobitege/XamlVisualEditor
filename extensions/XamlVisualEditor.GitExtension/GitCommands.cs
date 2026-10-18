@@ -91,6 +91,21 @@ public static class GitCommands
     /// <summary>Removes the stash with the commit id in argument 0, otherwise one picked from a list, after a confirmation.</summary>
     public const string STASH_DROP = "git.stashDrop";
 
+    /// <summary>
+    /// Opens a document tab with the files and diffs of the stash with the commit id in argument 0, otherwise of one
+    /// picked from a list; untracked files of the stash show as added.
+    /// </summary>
+    public const string STASH_SHOW = "git.stashShow";
+
+    /// <summary>
+    /// Creates a branch with an entered name at the commit the stash with the commit id in argument 0, otherwise one
+    /// picked from a list, was made on, switches to it, applies the stash and removes it.
+    /// </summary>
+    public const string STASH_BRANCH = "git.stashBranch";
+
+    /// <summary>Removes every stash after a confirmation.</summary>
+    public const string STASH_CLEAR = "git.stashClear";
+
     /// <summary>View id of the Git Repository panel with the branches.</summary>
     public const string REPOSITORY_VIEW_ID = "git.repository";
 
@@ -106,11 +121,116 @@ public static class GitCommands
     /// <summary>Deletes the local branch in argument 0, otherwise one picked from a list, after a confirmation.</summary>
     public const string DELETE_BRANCH = "git.deleteBranch";
 
+    /// <summary>Renames the local branch in argument 0, otherwise one picked from a list, to an entered name.</summary>
+    public const string RENAME_BRANCH = "git.renameBranch";
+
+    /// <summary>Adds a remote with an entered name and URL.</summary>
+    public const string ADD_REMOTE = "git.addRemote";
+
+    /// <summary>Renames the remote in argument 0, otherwise one picked from a list, to an entered name.</summary>
+    public const string RENAME_REMOTE = "git.renameRemote";
+
+    /// <summary>Changes the URL of the remote in argument 0, otherwise of one picked from a list, to an entered URL.</summary>
+    public const string SET_REMOTE_URL = "git.setRemoteUrl";
+
+    /// <summary>
+    /// Removes the remote in argument 0, otherwise one picked from a list, with its remote-tracking branches after a
+    /// confirmation.
+    /// </summary>
+    public const string REMOVE_REMOTE = "git.removeRemote";
+
     /// <summary>Merges the branch in argument 0 (full or short name), otherwise one picked from a list, into the current branch.</summary>
     public const string MERGE = "git.merge";
 
-    /// <summary>Aborts the merge in progress after a confirmation.</summary>
-    public const string ABORT_MERGE = "git.abortMerge";
+    /// <summary>Aborts the merge, rebase, cherry-pick, revert or patch application in progress after a confirmation.</summary>
+    public const string ABORT = "git.abort";
+
+    /// <summary>
+    /// Continues the rebase, cherry-pick, revert or patch application in progress; a merge is completed with
+    /// <see cref="COMMIT"/>.
+    /// </summary>
+    public const string CONTINUE = "git.continue";
+
+    /// <summary>
+    /// Skips the current step of the rebase, cherry-pick, revert or patch application in progress after a confirmation,
+    /// for example a step that became empty after its conflicts were resolved.
+    /// </summary>
+    public const string SKIP = "git.skip";
+
+    /// <summary>Applies the changes of the commit in argument 0 to the current branch as a new commit.</summary>
+    public const string CHERRY_PICK = "git.cherryPick";
+
+    /// <summary>Undoes the changes of the commit in argument 0 on the current branch with a new commit.</summary>
+    public const string REVERT = "git.revert";
+
+    /// <summary>
+    /// Creates a tag with an entered name at the commit in argument 0, otherwise at HEAD; an annotated tag with an
+    /// entered message, a lightweight tag without.
+    /// </summary>
+    public const string CREATE_TAG = "git.createTag";
+
+    /// <summary>Deletes the local tag in argument 0, otherwise one picked from a list, after a confirmation.</summary>
+    public const string DELETE_TAG = "git.deleteTag";
+
+    /// <summary>Pushes the tag in argument 0, otherwise one picked from a list, to a remote picked from a list.</summary>
+    public const string PUSH_TAG = "git.pushTag";
+
+    /// <summary>
+    /// Deletes the tag in argument 0, otherwise one picked from a list, on a remote picked from a list after a
+    /// confirmation; the local tag stays.
+    /// </summary>
+    public const string DELETE_REMOTE_TAG = "git.deleteRemoteTag";
+
+    /// <summary>
+    /// Rebases the current branch onto the branch in argument 0 (full or short name), otherwise onto one picked from a
+    /// list, after a confirmation.
+    /// </summary>
+    public const string REBASE = "git.rebase";
+
+    /// <summary>
+    /// Pushes the current branch to its upstream with <c>--force-with-lease</c> after a confirmation, which replaces the
+    /// branch on the remote only while it has no commits that the last fetch did not see.
+    /// </summary>
+    public const string FORCE_PUSH = "git.forcePush";
+
+    /// <summary>
+    /// Stashes the staged and unstaged changes of a file or folder, argument 0, otherwise of the active document, with
+    /// an entered message; untracked files among them are stashed too.
+    /// </summary>
+    public const string STASH_PATHS = "git.stashPaths";
+
+    /// <summary>Stashes only the staged changes with an entered message.</summary>
+    public const string STASH_STAGED = "git.stashStaged";
+
+    /// <summary>
+    /// Compares the current branch with the branch or tag in argument 0 (full or short name), otherwise with one picked
+    /// from a list, in a document tab: the files and diffs since both went their own way and the commits only one has.
+    /// </summary>
+    public const string COMPARE_BRANCHES = "git.compareBranches";
+
+    /// <summary>
+    /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
+    /// version of the current branch after a confirmation; a file that side deleted is deleted.
+    /// </summary>
+    public const string ACCEPT_OURS = "git.acceptOurs";
+
+    /// <summary>
+    /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
+    /// version of the merged commit after a confirmation; a file that side deleted is deleted.
+    /// </summary>
+    public const string ACCEPT_THEIRS = "git.acceptTheirs";
+
+    /// <summary>
+    /// Marks the conflicted files of argument 0 (a file or folder), otherwise of the active document, as resolved by
+    /// staging them; asks first when a saved file still contains conflict markers.
+    /// </summary>
+    public const string MARK_RESOLVED = "git.markResolved";
+
+    /// <summary>
+    /// Replaces the conflict block at the 1-based line in argument 1 of the file in argument 0, otherwise at the caret
+    /// of the active document, by the side picked from a list, in the editor buffer. A click on a conflict mark runs it.
+    /// </summary>
+    public const string RESOLVE_CONFLICT = "git.resolveConflict";
 
     /// <summary>Fetches the branches of all remotes.</summary>
     public const string FETCH = "git.fetch";
@@ -176,6 +296,9 @@ public static class GitCommands
     /// <summary>Context key: a file has an unresolved merge conflict.</summary>
     public const string HAS_CONFLICTS_CONTEXT_KEY = "git.hasConflicts";
 
+    /// <summary>Context key: a merge, rebase, cherry-pick, revert or patch application is in progress.</summary>
+    public const string OPERATION_IN_PROGRESS_CONTEXT_KEY = "git.operationInProgress";
+
     /// <summary>Context key: the working folder watcher is switched on.</summary>
     public const string AUTO_REFRESH_CONTEXT_KEY = GitSettingsStore.AUTO_REFRESH_KEY;
 
@@ -193,10 +316,15 @@ public static class GitCommands
     private const string SYNC_GROUP = "5_sync";
     private const string HISTORY_GROUP = "6_history";
     private const string STASH_GROUP = "7_stash";
+    private const string REMOTES_GROUP = "8_remotes";
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
     private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
     private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
-    private const string MERGING_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + IS_MERGING_CONTEXT_KEY;
+    // Stash and merge are refused during an operation: a stash would end a resolved merge without its merge commit.
+    private const string NO_OPERATION_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && !" + OPERATION_IN_PROGRESS_CONTEXT_KEY;
+    private const string OPERATION_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + OPERATION_IN_PROGRESS_CONTEXT_KEY;
+    private const string CONTINUE_WHEN = OPERATION_WHEN + " && !" + IS_MERGING_CONTEXT_KEY;
+    private const string CONFLICTS_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_CONFLICTS_CONTEXT_KEY;
 
     /// <summary>Registers the command handlers and their metadata.</summary>
     internal static void RegisterCommands(
@@ -271,19 +399,69 @@ public static class GitCommands
         Register(DISCARD_SELECTION, handler.DiscardSelectionAsync,
             new CommandMetadata(GitStrings.DiscardSelectionCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 320));
         Register(STASH, handler.StashAsync,
-            new CommandMetadata(GitStrings.StashCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 330));
+            new CommandMetadata(GitStrings.StashCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 330));
         Register(STASH_INCLUDE_UNTRACKED, handler.StashIncludeUntrackedAsync,
-            new CommandMetadata(GitStrings.StashIncludeUntrackedCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 340));
+            new CommandMetadata(GitStrings.StashIncludeUntrackedCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 340));
         Register(STASH_APPLY, handler.StashApplyAsync,
-            new CommandMetadata(GitStrings.StashApplyCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 350));
+            new CommandMetadata(GitStrings.StashApplyCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 350));
         Register(STASH_POP, handler.StashPopAsync,
-            new CommandMetadata(GitStrings.StashPopCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 360));
+            new CommandMetadata(GitStrings.StashPopCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 360));
         Register(STASH_DROP, handler.StashDropAsync,
             new CommandMetadata(GitStrings.StashDropCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 370));
         Register(MERGE, handler.MergeAsync,
-            new CommandMetadata(GitStrings.MergeCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 380));
-        Register(ABORT_MERGE, handler.AbortMergeAsync,
-            new CommandMetadata(GitStrings.AbortMergeCommand, CATEGORY, When: MERGING_WHEN, Priority: 390));
+            new CommandMetadata(GitStrings.MergeCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 380));
+        Register(ABORT, handler.AbortAsync,
+            new CommandMetadata(GitStrings.AbortCommand, CATEGORY, When: OPERATION_WHEN, Priority: 390));
+        Register(CONTINUE, handler.ContinueAsync,
+            new CommandMetadata(GitStrings.ContinueCommand, CATEGORY, When: CONTINUE_WHEN, Priority: 400));
+        Register(ACCEPT_OURS, handler.AcceptOursAsync,
+            new CommandMetadata(GitStrings.AcceptOursCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 410));
+        Register(ACCEPT_THEIRS, handler.AcceptTheirsAsync,
+            new CommandMetadata(GitStrings.AcceptTheirsCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 420));
+        Register(MARK_RESOLVED, handler.MarkResolvedAsync,
+            new CommandMetadata(GitStrings.MarkResolvedCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 430));
+        Register(RESOLVE_CONFLICT, handler.ResolveConflictAsync,
+            new CommandMetadata(GitStrings.ResolveConflictCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 440));
+        Register(RENAME_BRANCH, handler.RenameBranchAsync,
+            new CommandMetadata(GitStrings.RenameBranchCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 450));
+        Register(STASH_SHOW, handler.StashShowAsync,
+            new CommandMetadata(GitStrings.StashShowCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 460));
+        Register(STASH_BRANCH, handler.StashBranchAsync,
+            new CommandMetadata(GitStrings.StashBranchCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 470));
+        Register(STASH_CLEAR, handler.StashClearAsync,
+            new CommandMetadata(GitStrings.StashClearCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 480));
+        Register(ADD_REMOTE, handler.AddRemoteAsync,
+            new CommandMetadata(GitStrings.AddRemoteCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 490));
+        Register(RENAME_REMOTE, handler.RenameRemoteAsync,
+            new CommandMetadata(GitStrings.RenameRemoteCommand, CATEGORY, When: REMOTE_WHEN, Priority: 500));
+        Register(SET_REMOTE_URL, handler.SetRemoteUrlAsync,
+            new CommandMetadata(GitStrings.SetRemoteUrlCommand, CATEGORY, When: REMOTE_WHEN, Priority: 510));
+        Register(REMOVE_REMOTE, handler.RemoveRemoteAsync,
+            new CommandMetadata(GitStrings.RemoveRemoteCommand, CATEGORY, When: REMOTE_WHEN, Priority: 520));
+        Register(SKIP, handler.SkipAsync,
+            new CommandMetadata(GitStrings.SkipCommand, CATEGORY, When: CONTINUE_WHEN, Priority: 530));
+        Register(CHERRY_PICK, handler.CherryPickAsync,
+            new CommandMetadata(GitStrings.CherryPickCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 540));
+        Register(REVERT, handler.RevertAsync,
+            new CommandMetadata(GitStrings.RevertCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 550));
+        Register(CREATE_TAG, handler.CreateTagAsync,
+            new CommandMetadata(GitStrings.CreateTagCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 560));
+        Register(DELETE_TAG, handler.DeleteTagAsync,
+            new CommandMetadata(GitStrings.DeleteTagCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 570));
+        Register(PUSH_TAG, handler.PushTagAsync,
+            new CommandMetadata(GitStrings.PushTagCommand, CATEGORY, When: REMOTE_WHEN, Priority: 580));
+        Register(DELETE_REMOTE_TAG, handler.DeleteRemoteTagAsync,
+            new CommandMetadata(GitStrings.DeleteRemoteTagCommand, CATEGORY, When: REMOTE_WHEN, Priority: 590));
+        Register(REBASE, handler.RebaseAsync,
+            new CommandMetadata(GitStrings.RebaseCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 600));
+        Register(FORCE_PUSH, handler.ForcePushAsync,
+            new CommandMetadata(GitStrings.ForcePushCommand, CATEGORY, When: UPSTREAM_WHEN, Priority: 610));
+        Register(STASH_PATHS, handler.StashPathsAsync,
+            new CommandMetadata(GitStrings.StashPathsCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 620));
+        Register(STASH_STAGED, handler.StashStagedAsync,
+            new CommandMetadata(GitStrings.StashStagedCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 630));
+        Register(COMPARE_BRANCHES, handler.CompareBranchesAsync,
+            new CommandMetadata(GitStrings.CompareBranchesCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 640));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -329,32 +507,56 @@ public static class GitCommands
                 new ExtensionMenuContribution(TOGGLE_REPOSITORY_VIEW, GitStrings.RepositoryViewTitle, ExtensionMenuLocations.View, "views.left", 50),
                 ExtensionsItem(CHECKOUT, GitStrings.CheckoutCommand, BRANCHES_GROUP, 90),
                 ExtensionsItem(CREATE_BRANCH, GitStrings.CreateBranchCommand, BRANCHES_GROUP, 100),
+                ExtensionsItem(RENAME_BRANCH, GitStrings.RenameBranchCommand, BRANCHES_GROUP, 105),
                 ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
                 ExtensionsItem(MERGE, GitStrings.MergeCommand, BRANCHES_GROUP, 112),
-                ExtensionsItem(ABORT_MERGE, GitStrings.AbortMergeCommand, BRANCHES_GROUP, 114),
+                ExtensionsItem(REBASE, GitStrings.RebaseCommand, BRANCHES_GROUP, 113),
+                ExtensionsItem(CONTINUE, GitStrings.ContinueCommand, BRANCHES_GROUP, 114),
+                ExtensionsItem(SKIP, GitStrings.SkipCommand, BRANCHES_GROUP, 115),
+                ExtensionsItem(ABORT, GitStrings.AbortCommand, BRANCHES_GROUP, 116),
                 ExtensionsItem(FETCH, GitStrings.FetchCommand, SYNC_GROUP, 120),
                 ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
                 ExtensionsItem(PUSH, GitStrings.PushCommand, SYNC_GROUP, 140),
+                ExtensionsItem(FORCE_PUSH, GitStrings.ForcePushCommand, SYNC_GROUP, 145),
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
                 ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
+                ExtensionsItem(COMPARE_BRANCHES, GitStrings.CompareBranchesCommand, HISTORY_GROUP, 161),
+                ExtensionsItem(CREATE_TAG, GitStrings.CreateTagCommand, HISTORY_GROUP, 162),
+                ExtensionsItem(PUSH_TAG, GitStrings.PushTagCommand, HISTORY_GROUP, 164),
+                ExtensionsItem(DELETE_TAG, GitStrings.DeleteTagCommand, HISTORY_GROUP, 166),
+                ExtensionsItem(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, HISTORY_GROUP, 168),
                 ExtensionsItem(STASH, GitStrings.StashCommand, STASH_GROUP, 170),
                 ExtensionsItem(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, STASH_GROUP, 180),
+                ExtensionsItem(STASH_STAGED, GitStrings.StashStagedCommand, STASH_GROUP, 182),
                 ExtensionsItem(STASH_APPLY, GitStrings.StashApplyCommand, STASH_GROUP, 190),
                 ExtensionsItem(STASH_POP, GitStrings.StashPopCommand, STASH_GROUP, 200),
+                ExtensionsItem(STASH_SHOW, GitStrings.StashShowCommand, STASH_GROUP, 185),
+                ExtensionsItem(STASH_BRANCH, GitStrings.StashBranchCommand, STASH_GROUP, 205),
                 ExtensionsItem(STASH_DROP, GitStrings.StashDropCommand, STASH_GROUP, 210),
+                ExtensionsItem(STASH_CLEAR, GitStrings.StashClearCommand, STASH_GROUP, 215),
+                ExtensionsItem(ADD_REMOTE, GitStrings.AddRemoteCommand, REMOTES_GROUP, 220),
+                ExtensionsItem(RENAME_REMOTE, GitStrings.RenameRemoteCommand, REMOTES_GROUP, 230),
+                ExtensionsItem(SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, REMOTES_GROUP, 240),
+                ExtensionsItem(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTES_GROUP, 250),
                 ContextItem(ExtensionMenuLocations.EditorContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.EditorContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
+                ContextItem(ExtensionMenuLocations.EditorContext, STASH_PATHS, GitStrings.StashPathsCommand, 35),
                 ContextItem(ExtensionMenuLocations.EditorContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.EditorContext),
+                ContextItem(ExtensionMenuLocations.EditorContext, RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, 80),
+                .. ConflictItems(ExtensionMenuLocations.EditorContext),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, DISCARD, GitStrings.DiscardCommand, 30),
+                ContextItem(ExtensionMenuLocations.ExplorerContext, STASH_PATHS, GitStrings.StashPathsCommand, 35),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.ExplorerContext),
+                .. ConflictItems(ExtensionMenuLocations.ExplorerContext),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, UNSTAGE, GitStrings.UnstageCommand, 20),
+                ContextItem(ExtensionMenuLocations.DocumentTabContext, STASH_PATHS, GitStrings.StashPathsCommand, 35),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.DocumentTabContext)
             ]));
@@ -399,7 +601,32 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(STASH_POP, GitStrings.StashPopCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STASH_DROP, GitStrings.StashDropCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(MERGE, GitStrings.MergeCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(ABORT_MERGE, GitStrings.AbortMergeCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(CONTINUE, GitStrings.ContinueCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SKIP, GitStrings.SkipCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ABORT, GitStrings.AbortCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ACCEPT_OURS, GitStrings.AcceptOursCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(MARK_RESOLVED, GitStrings.MarkResolvedCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(RENAME_BRANCH, GitStrings.RenameBranchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_SHOW, GitStrings.StashShowCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_BRANCH, GitStrings.StashBranchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_CLEAR, GitStrings.StashClearCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ADD_REMOTE, GitStrings.AddRemoteCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(RENAME_REMOTE, GitStrings.RenameRemoteCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(CHERRY_PICK, GitStrings.CherryPickCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(REVERT, GitStrings.RevertCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(CREATE_TAG, GitStrings.CreateTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(DELETE_TAG, GitStrings.DeleteTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(PUSH_TAG, GitStrings.PushTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(REBASE, GitStrings.RebaseCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(FORCE_PUSH, GitStrings.ForcePushCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_PATHS, GitStrings.StashPathsCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_STAGED, GitStrings.StashStagedCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(COMPARE_BRANCHES, GitStrings.CompareBranchesCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.
@@ -408,6 +635,14 @@ public static class GitCommands
             ContextItem(location, COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, 50),
             ContextItem(location, COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, 60),
             ContextItem(location, BLAME, GitStrings.BlameCommand, 70)
+        ];
+
+        // The conflict commands of a file or folder, last.
+        static ExtensionMenuContribution[] ConflictItems(string location) =>
+        [
+            ContextItem(location, ACCEPT_OURS, GitStrings.AcceptOursCommand, 90),
+            ContextItem(location, ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, 100),
+            ContextItem(location, MARK_RESOLVED, GitStrings.MarkResolvedCommand, 110)
         ];
 
         static ExtensionMenuContribution ExtensionsItem(string commandId, string title, string submenuGroup, int priority) =>

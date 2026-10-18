@@ -3,7 +3,8 @@ namespace XamlVisualEditor.GitExtension;
 /// <summary>
 /// Fluent System Icons (20, regular) of the Git panel buttons. Path data is copied verbatim from @fluentui/svg-icons;
 /// refresh, add and undo are the same geometries as in the animation editor toolbar. <see cref="WholeFile"/> is a
-/// Material icon.
+/// Material icon, and <see cref="Rename"/>, <see cref="RemoteUrl"/>, <see cref="Skip"/>, <see cref="CherryPick"/>,
+/// <see cref="Merge"/> and <see cref="Rebase"/> are drawn for the Git panels.
 /// </summary>
 public static class GitIcons
 {
@@ -115,11 +116,103 @@ public static class GitIcons
     /// </summary>
     public const string ApplyStash = "M4.5 4h1.59c.2.58.76 1 1.41 1h3c.65 0 1.2-.42 1.41-1h1.59c.28 0 .5.22.5.5v1a.5.5 0 0 0 1 0v-1c0-.83-.67-1.5-1.5-1.5h-1.59c-.2-.58-.76-1-1.41-1h-3c-.65 0-1.2.42-1.41 1H4.5C3.67 3 3 3.67 3 4.5v12c0 .83.67 1.5 1.5 1.5h3a.5.5 0 0 0 0-1h-3a.5.5 0 0 1-.5-.5v-12c0-.28.22-.5.5-.5m3 0a.5.5 0 0 1 0-1h3a.5.5 0 0 1 0 1zm3 3C9.67 7 9 7.67 9 8.5v8c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-8c0-.83-.67-1.5-1.5-1.5zM10 8.5c0-.28.22-.5.5-.5h5c.28 0 .5.22.5.5v8a.5.5 0 0 1-.5.5h-5a.5.5 0 0 1-.5-.5z";
 
+    /// <summary>add_square_multiple_20_regular, the same geometry as <see cref="StageAll"/>; stashes the staged changes.</summary>
+    public const string StashStaged = StageAll;
+
     /// <summary>The same geometry as <see cref="Push"/>: an arrow up from a bar; applies a stash and removes it.</summary>
     public const string PopStash = Push;
 
     /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; removes a stash.</summary>
     public const string DropStash = DeleteBranch;
+
+    /// <summary>dismiss_20_regular, the same geometry as <see cref="ClearScope"/>; aborts the operation in progress.</summary>
+    public const string Abort = ClearScope;
+
+    /// <summary>checkmark_20_regular, the same geometry as <see cref="Commit"/>; continues the operation in progress.</summary>
+    public const string Continue = Commit;
+
+    /// <summary>
+    /// Two chevrons to the right, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; skips the current
+    /// step of the operation in progress.
+    /// </summary>
+    public const string Skip =
+        "M4.15 4.15a.5.5 0 0 1 .7 0l5.5 5.5a.5.5 0 0 1 0 .7l-5.5 5.5a.5.5 0 0 1-.7-.7L9.29 10 4.15 4.85a.5.5 0 0 1 0-.7zm6 0a.5.5 0 0 1 .7 0l5.5 5.5a.5.5 0 0 1 0 .7l-5.5 5.5a.5.5 0 0 1-.7-.7L15.29 10l-5.14-5.15a.5.5 0 0 1 0-.7z";
+
+    /// <summary>
+    /// Two cherries on their stems, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; cherry-picks a
+    /// commit.
+    /// </summary>
+    public const string CherryPick =
+        "M6.5 11.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5zm0 1a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3zm7-2a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5zm0 1a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3zM6.06 11.27l4.5-8.5.88.46-4.5 8.5zm6.96-.67-2.5-7.5.95-.32 2.5 7.5z";
+
+    /// <summary>arrow_undo_20_regular, the same geometry as <see cref="Discard"/>; reverts a commit.</summary>
+    public const string Revert = Discard;
+
+    /// <summary>
+    /// Two lines that join into one, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; merges a branch
+    /// into the current one.
+    /// </summary>
+    public const string Merge = "M9.5 10h1v8h-1zM3.6 2.3l.8-.6 6 8-.8.6zm12-.6.8.6-6 8-.8-.6z";
+
+    /// <summary>panel_right_20_regular, the same geometry as <see cref="ToggleDiff"/>: two panes side by side; compares branches.</summary>
+    public const string Compare = ToggleDiff;
+
+    /// <summary>
+    /// A base line, a branch line and an arrow from the one to the other, drawn for the Git panels in the 20 by 20 grid
+    /// of the Fluent icons; rebases the current branch onto another.
+    /// </summary>
+    public const string Rebase = "M4.5 2h1v16h-1zm10 7h1v9h-1zM7 4.5h5.3l-1.65-1.65.7-.7 2.85 2.85-2.85 2.85-.7-.7 1.65-1.65H7z";
+
+    /// <summary>eye_20_regular, the same geometry as <see cref="WatchWorkingFolder"/>; opens a conflicted file.</summary>
+    public const string OpenFile = WatchWorkingFolder;
+
+    /// <summary>chevron_up_20_regular, the same geometry as <see cref="PreviousHunk"/>: the upper side of a conflict block.</summary>
+    public const string AcceptOurs = PreviousHunk;
+
+    /// <summary>chevron_down_20_regular, the same geometry as <see cref="NextHunk"/>: the lower side of a conflict block.</summary>
+    public const string AcceptTheirs = NextHunk;
+
+    /// <summary>checkmark_20_regular, the same geometry as <see cref="Commit"/>; marks a conflicted file resolved.</summary>
+    public const string MarkResolved = Commit;
+
+    /// <summary>
+    /// A text cursor, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; renames a branch or a remote.
+    /// </summary>
+    public const string Rename = "M6.5 3h7a.5.5 0 0 1 0 1h-3v12h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3V4h-3a.5.5 0 0 1 0-1z";
+
+    /// <summary>
+    /// A globe of a ring, a meridian and the equator, drawn for the Git panels in the 20 by 20 grid of the Fluent icons;
+    /// changes the URL of a remote.
+    /// </summary>
+    public const string RemoteUrl =
+        "M10 2a8 8 0 1 1 0 16a8 8 0 1 1 0-16zm0 1a7 7 0 1 0 0 14a7 7 0 1 0 0-14zm0 .5a3 6.5 0 1 1 0 13a3 6.5 0 1 1 0-13zm0 1a2 5.5 0 1 0 0 11a2 5.5 0 1 0 0-11zM3 9.5h14v1H3z";
+
+    /// <summary>eye_20_regular, the same geometry as <see cref="WatchWorkingFolder"/>; shows the files of a stash.</summary>
+    public const string ShowStash = WatchWorkingFolder;
+
+    /// <summary>add_20_regular, the same geometry as <see cref="CreateBranch"/>; creates a branch from a stash.</summary>
+    public const string StashBranch = CreateBranch;
+
+    /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; removes every stash.</summary>
+    public const string ClearStashes = DeleteBranch;
+
+    /// <summary>add_20_regular, the same geometry as <see cref="Stage"/>; adds a remote.</summary>
+    public const string AddRemote = Stage;
+
+    /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; removes a remote.</summary>
+    public const string RemoveRemote = DeleteBranch;
+
+    /// <summary>tag_20_regular, the same geometry as <see cref="Tag"/>; creates a tag.</summary>
+    public const string CreateTag = Tag;
+
+    /// <summary>The same geometry as <see cref="Push"/>: an arrow up to a bar; pushes a tag.</summary>
+    public const string PushTag = Push;
+
+    /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; deletes a local tag.</summary>
+    public const string DeleteTag = DeleteBranch;
+
+    /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; deletes a tag on a remote.</summary>
+    public const string DeleteRemoteTag = DeleteBranch;
 
     /// <summary>tag_20_regular, path data of the Fluent UI System Icons asset SVG; marks the Tags tab and a tag.</summary>
     public const string Tag = "M14 7C14.5523 7 15 6.55228 15 6C15 5.44772 14.5523 5 14 5C13.4477 5 13 5.44772 13 6C13 6.55228 13.4477 7 14 7ZM11.1292 2.00004C10.5951 1.99654 10.0818 2.20681 9.7037 2.58399L3.02216 9.24852C2.23941 10.0293 2.2386 11.297 3.02036 12.0788L7.96875 17.0271C8.7498 17.8082 10.0161 17.8082 10.7972 17.0271L17.428 10.3963C17.8038 10.0205 18.0146 9.51063 18.0138 8.97917L18.0065 4.02911C18.0049 2.93081 17.1179 2.0393 16.0196 2.0321L11.1292 2.00004ZM10.4099 3.29199C10.599 3.1034 10.8556 2.99827 11.1227 3.00002L16.013 3.03208C16.5622 3.03568 17.0057 3.48143 17.0065 4.03058L17.0138 8.98065C17.0142 9.24637 16.9088 9.50133 16.7209 9.68923L10.0901 16.32C9.69955 16.7106 9.06638 16.7106 8.67586 16.32L3.72746 11.3716C3.33659 10.9808 3.33699 10.3469 3.72836 9.95653L10.4099 3.29199Z";

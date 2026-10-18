@@ -148,22 +148,32 @@ public sealed class GitRepositoryPanelViewTests
             }
 
             Assert.Equal(3, menus.Count);
-            Assert.Equal(new[] { false, true, false }, menus["main"].Select(item => item.IsEnabled));
-            Assert.Equal(new[] { true, true, true }, menus["feature"].Select(item => item.IsEnabled));
-            Assert.Equal(new[] { true, true, false }, menus["origin/main"].Select(item => item.IsEnabled));
+            // Switch, new branch, rename, merge into the current branch, rebase the current branch onto it, compare with
+            // the current branch, delete.
+            Assert.Equal(new[] { false, true, true, false, false, false, false }, menus["main"].Select(item => item.IsEnabled));
+            Assert.Equal(new[] { true, true, true, true, true, true, true }, menus["feature"].Select(item => item.IsEnabled));
+            Assert.Equal(new[] { true, true, false, true, true, true, false }, menus["origin/main"].Select(item => item.IsEnabled));
 
             GitBranchItemViewModel feature = panel.LocalGroup.Branches[0];
             GitBranchItemViewModel remote = panel.RemoteGroup.Branches[0];
             await panel.SwitchCommand.Execute(remote).ToTask();
             await panel.DeleteCommand.Execute(feature).ToTask();
             await panel.CreateBranchFromCommand.Execute(remote).ToTask();
+            await panel.RenameCommand.Execute(feature).ToTask();
+            await panel.MergeCommand.Execute(feature).ToTask();
+            await panel.RebaseCommand.Execute(remote).ToTask();
+            await panel.CompareCommand.Execute(feature).ToTask();
 
             Assert.Equal(
                 new (string, string?)[]
                 {
                     (GitCommands.CHECKOUT, "refs/remotes/origin/main"),
                     (GitCommands.DELETE_BRANCH, "refs/heads/feature"),
-                    (GitCommands.CREATE_BRANCH, "refs/remotes/origin/main")
+                    (GitCommands.CREATE_BRANCH, "refs/remotes/origin/main"),
+                    (GitCommands.RENAME_BRANCH, "refs/heads/feature"),
+                    (GitCommands.MERGE, "refs/heads/feature"),
+                    (GitCommands.REBASE, "refs/remotes/origin/main"),
+                    (GitCommands.COMPARE_BRANCHES, "refs/heads/feature")
                 },
                 fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
         }
@@ -329,15 +339,30 @@ public sealed class GitRepositoryPanelViewTests
         menu.Open(grid);
         window.Pump();
         MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-        Assert.Equal(2, items.Length);
+        Assert.Equal(
+            new ICommand[]
+            {
+                panel.ShowTagHistoryCommand, panel.CreateBranchFromTagCommand, panel.CompareTagCommand, panel.PushTagCommand,
+                panel.DeleteTagCommand, panel.DeleteRemoteTagCommand
+            },
+            items.Select(item => item.Command!));
         Assert.All(items, item => Assert.IsType<PathIcon>(item.Icon));
         Assert.All(items, item => Assert.True(item.IsEnabled));
         menu.Close();
         await panel.ShowTagHistoryCommand.Execute().ToTask();
         await panel.CreateBranchFromTagCommand.Execute().ToTask();
+        await panel.CompareTagCommand.Execute().ToTask();
+        await panel.PushTagCommand.Execute().ToTask();
+        await panel.DeleteTagCommand.Execute().ToTask();
+        await panel.DeleteRemoteTagCommand.Execute().ToTask();
 
+        // The history and a branch start at the full name, the tag commands take the tag name.
         Assert.Equal(
-            new (string, string?)[] { (GitCommands.SHOW_HISTORY, "refs/tags/v1.0"), (GitCommands.CREATE_BRANCH, "refs/tags/v1.0") },
+            new (string, string?)[]
+            {
+                (GitCommands.SHOW_HISTORY, "refs/tags/v1.0"), (GitCommands.CREATE_BRANCH, "refs/tags/v1.0"),
+                (GitCommands.COMPARE_BRANCHES, "refs/tags/v1.0"), (GitCommands.PUSH_TAG, "v1.0"), (GitCommands.DELETE_TAG, "v1.0"), (GitCommands.DELETE_REMOTE_TAG, "v1.0")
+            },
             fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
     }
 
@@ -560,14 +585,18 @@ public sealed class GitRepositoryPanelViewTests
         Assert.Equal(2, grid.GetVisualDescendants().OfType<DataGridRow>().Count(row => row.IsVisible));
         (ReactiveCommand<RxVoid, RxVoid> Command, string CommandId)[] selected =
         [
+            (panel.ShowStashCommand, GitCommands.STASH_SHOW),
             (panel.ApplyStashCommand, GitCommands.STASH_APPLY),
             (panel.PopStashCommand, GitCommands.STASH_POP),
+            (panel.StashBranchCommand, GitCommands.STASH_BRANCH),
             (panel.DropStashCommand, GitCommands.STASH_DROP)
         ];
         (ReactiveCommand<RxVoid, RxVoid> Command, string CommandId)[] always =
         [
             (panel.StashCommand, GitCommands.STASH),
-            (panel.StashIncludeUntrackedCommand, GitCommands.STASH_INCLUDE_UNTRACKED)
+            (panel.StashIncludeUntrackedCommand, GitCommands.STASH_INCLUDE_UNTRACKED),
+            (panel.StashStagedCommand, GitCommands.STASH_STAGED),
+            (panel.ClearStashesCommand, GitCommands.STASH_CLEAR)
         ];
         foreach ((ReactiveCommand<RxVoid, RxVoid> command, string _) in selected.Concat(always))
         {
@@ -605,6 +634,72 @@ public sealed class GitRepositoryPanelViewTests
         Assert.Equal(GitStrings.StashesUnavailable, withoutService.Panel.StashesMessage);
         Assert.Equal(GitStrings.NoStashes, withoutStashes.Panel.StashesMessage);
         Assert.Empty(withoutStashes.Panel.Stashes);
+        Assert.False(((ICommand)withoutStashes.Panel.ClearStashesCommand).CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task Remotes_tab_lists_the_remotes_without_passwords_and_its_buttons_pass_the_name_of_the_selected_remote()
+    {
+        RemoteList remotes = new(
+            new GitRemote("origin", "https://user:token@example.com/a.git", "https://user:token@example.com/a.git"),
+            new GitRemote("backup", "../backup.git", "https://example.com/push.git"));
+        using Fixture fixture = await Fixture.CreateAsync(remotes: remotes);
+        GitRepositoryPanelViewModel panel = fixture.Panel;
+        GitRepositoryPanelView view = new() { DataContext = panel };
+        using ThemedWindow window = ThemedWindow.Show(view, 900, 600);
+        view.FindControl<TabItem>("RemotesTab")!.IsSelected = true;
+        window.Pump();
+
+        Assert.Null(panel.RemotesMessage);
+        Assert.Equal(
+            new[] { ("origin", "https://***@example.com/a.git"), ("backup", "../backup.git") },
+            panel.Remotes.Select(remote => (remote.Name, remote.UrlText)));
+        Assert.Equal(string.Format(GitStrings.RemoteFetchUrlFormat, "https://***@example.com/a.git"), panel.Remotes[0].ToolTip);
+        Assert.Equal(
+            string.Format(GitStrings.RemoteFetchUrlFormat, "../backup.git") + Environment.NewLine
+            + string.Format(GitStrings.RemotePushUrlFormat, "https://example.com/push.git"),
+            panel.Remotes[1].ToolTip);
+        DataGrid grid = view.FindControl<DataGrid>("RemoteGrid")!;
+        Assert.Equal(2, grid.GetVisualDescendants().OfType<DataGridRow>().Count(row => row.IsVisible));
+        Assert.DoesNotContain(grid.GetVisualDescendants().OfType<TextBlock>(), text => text.Text?.Contains("token", StringComparison.Ordinal) == true);
+        (ReactiveCommand<RxVoid, RxVoid> Command, string CommandId)[] selected =
+        [
+            (panel.SetRemoteUrlCommand, GitCommands.SET_REMOTE_URL),
+            (panel.RenameRemoteCommand, GitCommands.RENAME_REMOTE),
+            (panel.RemoveRemoteCommand, GitCommands.REMOVE_REMOTE)
+        ];
+        foreach (ReactiveCommand<RxVoid, RxVoid> command in selected.Select(entry => entry.Command).Append(panel.AddRemoteCommand))
+        {
+            Button button = Assert.Single(view.GetVisualDescendants().OfType<Button>(), candidate => ReferenceEquals(candidate.Command, command));
+            PathIcon icon = Assert.Single(button.GetVisualDescendants().OfType<PathIcon>());
+            Assert.NotNull(icon.Data);
+            Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => !string.IsNullOrWhiteSpace(text.Text));
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
+            Assert.IsType<string>(ToolTip.GetTip(button));
+        }
+
+        Assert.All(selected, entry => Assert.False(((ICommand)entry.Command).CanExecute(null)));
+        grid.SelectedItem = panel.Remotes[1];
+        window.Pump();
+        foreach ((ReactiveCommand<RxVoid, RxVoid> command, string commandId) in selected)
+        {
+            await command.Execute().ToTask();
+            Assert.Equal((commandId, "backup"), (fixture.Executed[^1].CommandId, fixture.Executed[^1].Arguments?.Single() as string));
+        }
+
+        await panel.AddRemoteCommand.Execute().ToTask();
+        Assert.Equal((GitCommands.ADD_REMOTE, (IReadOnlyList<object?>?)null), fixture.Executed[^1]);
+    }
+
+    [AvaloniaFact]
+    public async Task Remotes_tab_says_when_there_are_no_remotes_or_the_service_cannot_list_them()
+    {
+        using Fixture withoutService = await Fixture.CreateAsync();
+        using Fixture withoutRemotes = await Fixture.CreateAsync(remotes: new RemoteList());
+
+        Assert.Equal(GitStrings.RemoteListUnavailable, withoutService.Panel.RemotesMessage);
+        Assert.Equal(GitStrings.NoRemote, withoutRemotes.Panel.RemotesMessage);
+        Assert.Empty(withoutRemotes.Panel.Remotes);
     }
 
     /// <summary>Shows the content with the Fluent theme, which templates the tab control and the tree.</summary>
@@ -633,10 +728,12 @@ public sealed class GitRepositoryPanelViewTests
 
     private sealed class Fixture : IDisposable
     {
-        private Fixture(BranchGitService git, IGitHistoryService? history, IGitStashService? stash)
+        private Fixture(BranchGitService git, IGitHistoryService? history, IGitStashService? stash, IGitRemoteService? remotes)
         {
             Git = git;
-            Session = new GitSession(new GitServiceSet(git) { Branches = git, History = history, Stash = stash }, new WorkspaceInfo());
+            Session = new GitSession(
+                new GitServiceSet(git) { Branches = git, History = history, Stash = stash, Remotes = remotes },
+                new WorkspaceInfo());
             Panel = new GitRepositoryPanelViewModel(Session, (commandId, arguments) =>
             {
                 Executed.Add((commandId, arguments));
@@ -663,10 +760,11 @@ public sealed class GitRepositoryPanelViewTests
             bool shown = true,
             bool detached = false,
             IGitHistoryService? history = null,
-            IGitStashService? stash = null)
+            IGitStashService? stash = null,
+            IGitRemoteService? remotes = null)
         {
             BranchGitService git = new(upstream, branchError) { IsDetached = detached };
-            Fixture fixture = new(git, history, stash);
+            Fixture fixture = new(git, history, stash, remotes);
             fixture.Panel.IsShown = shown;
             await fixture.Session.RefreshAsync();
             Dispatcher.UIThread.RunJobs();
@@ -689,11 +787,55 @@ public sealed class GitRepositoryPanelViewTests
 
         public Task PushAsync(string repoPath, string? message, bool includeUntracked, CancellationToken ct = default) => throw new NotSupportedException();
 
+        public Task PushPathsAsync(string repoPath, string? message, IReadOnlyList<string> paths, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task PushStagedAsync(string repoPath, string? message, CancellationToken ct = default) => throw new NotSupportedException();
+
         public Task ApplyAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<bool> PopAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<bool> DropAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<bool> BranchAsync(string repoPath, GitStashEntry stash, string branchName, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>A fixed list of remotes; changing them is not part of the panel.</summary>
+    private sealed class RemoteList(params GitRemote[] remotes) : IGitRemoteService
+    {
+        public Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<GitRemote>>(remotes);
+
+        public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<GitRemoteResult> FetchAsync(string repoPath, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<GitRemoteResult> PullAsync(string repoPath, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class WorkspaceInfo : IWorkspaceInfo
@@ -799,9 +941,12 @@ public sealed class GitRepositoryPanelViewTests
         public Task<GitBranchDeleteResult> DeleteAsync(string repoPath, string name, bool force, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<GitMergeResult> MergeAsync(string repoPath, string name, CancellationToken ct = default) =>
+        public Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task AbortMergeAsync(string repoPath, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task CreateTagAsync(string repoPath, string name, string revision, string? message, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task DeleteTagAsync(string repoPath, string name, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

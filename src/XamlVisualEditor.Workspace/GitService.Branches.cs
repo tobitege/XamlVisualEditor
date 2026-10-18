@@ -11,6 +11,7 @@ public sealed partial class GitService
 {
     private const string LOCAL_BRANCH_PREFIX = "refs/heads/";
     private const string REMOTE_BRANCH_PREFIX = "refs/remotes/";
+    private const string TAG_PREFIX = "refs/tags/";
 
     /// <summary>
     /// Environment of commands whose output or error text is parsed: git writes its messages untranslated, so the
@@ -42,23 +43,25 @@ public sealed partial class GitService
     public async Task SwitchAsync(string repoPath, string name, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        // The end of the options keeps a branch name that starts with "-", such as one of a remote named so outside
+        // the editor, from being read as an option.
         string[] args;
         if (name.StartsWith(LOCAL_BRANCH_PREFIX, StringComparison.Ordinal))
         {
-            args = new[] { "switch", name[LOCAL_BRANCH_PREFIX.Length..] };
+            args = new[] { "switch", "--end-of-options", name[LOCAL_BRANCH_PREFIX.Length..] };
         }
         else if (name.StartsWith(REMOTE_BRANCH_PREFIX, StringComparison.Ordinal))
         {
-            args = new[] { "switch", "--track", name[REMOTE_BRANCH_PREFIX.Length..] };
+            args = new[] { "switch", "--track", "--end-of-options", name[REMOTE_BRANCH_PREFIX.Length..] };
         }
         else if (!await ReferenceExistsAsync(repoPath, LOCAL_BRANCH_PREFIX + name, ct)
                  && await ReferenceExistsAsync(repoPath, REMOTE_BRANCH_PREFIX + name, ct))
         {
-            args = new[] { "switch", "--track", name };
+            args = new[] { "switch", "--track", "--end-of-options", name };
         }
         else
         {
-            args = new[] { "switch", name };
+            args = new[] { "switch", "--end-of-options", name };
         }
 
         await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
@@ -186,36 +189,34 @@ public sealed partial class GitService
     }
 
     /// <inheritdoc />
-    public async Task<GitMergeResult> MergeAsync(string repoPath, string name, CancellationToken ct = default)
+    /// <remarks><c>-m</c> without force refuses a new name that exists; git moves the branch's configuration along.</remarks>
+    public Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        GitProcessResult result = await RunGitAsync(
-            repoPath,
-            new[] { "merge", "--no-edit", "--", name },
-            GitCommandAccess.Write,
-            ct,
-            allowNonZeroExitCode: true,
-            environment: UntranslatedOutput);
-        if (result.ExitCode == 0)
-        {
-            return result.StandardOutput.Contains("Already up to date", StringComparison.Ordinal)
-                ? GitMergeResult.AlreadyUpToDate
-                : GitMergeResult.Merged;
-        }
-
-        // Exit code 1 also means a refused merge; only a MERGE_HEAD tells that the merge stopped with conflicts.
-        if (await GetOperationAsync(repoPath, ct) == GitRepositoryOperation.Merging)
-        {
-            return GitMergeResult.Conflicts;
-        }
-
-        ThrowIfFailed(result, "merge");
-        return GitMergeResult.Merged;
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+        string branch = name.StartsWith(LOCAL_BRANCH_PREFIX, StringComparison.Ordinal)
+            ? name[LOCAL_BRANCH_PREFIX.Length..]
+            : name;
+        return RunGitCheckedAsync(repoPath, new[] { "branch", "-m", "--", branch, newName }, standardInput: null, ct);
     }
 
     /// <inheritdoc />
-    public Task AbortMergeAsync(string repoPath, CancellationToken ct = default) =>
-        RunGitCheckedAsync(repoPath, new[] { "merge", "--abort" }, standardInput: null, ct);
+    public Task CreateTagAsync(string repoPath, string name, string revision, string? message, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(revision);
+        string[] args = string.IsNullOrEmpty(message)
+            ? new[] { "tag", "--", name, revision }
+            : new[] { "tag", "-a", "-m", message, "--", name, revision };
+        return RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+    }
+
+    /// <inheritdoc />
+    public Task DeleteTagAsync(string repoPath, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return RunGitCheckedAsync(repoPath, new[] { "tag", "-d", "--", name }, standardInput: null, ct);
+    }
 
     private async Task<bool> ReferenceExistsAsync(string repoPath, string reference, CancellationToken ct)
     {

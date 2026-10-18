@@ -76,16 +76,17 @@ internal static class GitCommandTarget
             || change.WorkTreeStatus == GitChangeKind.Untracked;
     }
 
-    /// <summary>Returns whether the working file differs from the index, including untracked files.</summary>
+    /// <summary>
+    /// Returns whether the working file differs from the index, including untracked files. A conflicted file is not a
+    /// working tree change: staging it would mark it resolved, which <see cref="GitCommands.MARK_RESOLVED"/> does after
+    /// checking for conflict markers.
+    /// </summary>
     public static bool HasWorkingTreeChange(GitFileChange change)
     {
-        return change.WorkTreeStatus != GitChangeKind.None || IsUntracked(change);
+        return !change.IsConflicted && (change.WorkTreeStatus != GitChangeKind.None || IsUntracked(change));
     }
 
-    /// <summary>
-    /// Returns whether the index differs from HEAD. A conflicted file is not staged: it belongs to the working tree
-    /// changes until staging it marks the conflict as resolved.
-    /// </summary>
+    /// <summary>Returns whether the index differs from HEAD. A conflicted file is not staged until it is resolved.</summary>
     public static bool HasStagedChange(GitFileChange change)
     {
         return change.IndexStatus != GitChangeKind.None && !IsUntracked(change) && !change.IsConflicted;
@@ -113,10 +114,19 @@ internal static class GitCommandTarget
     /// Returns the paths that stage the changes found below <paramref name="repositoryPath"/>: git's own paths of the
     /// changes, which match the index also when the path on disk differs in case, and for a folder the folder
     /// itself, so files that appeared below it after the last refresh are staged too; <c>.</c> for the repository
-    /// root.
+    /// root. With <paramref name="hasConflictsBelow"/>, only the paths of the changes.
     /// </summary>
-    public static IReadOnlyList<string> StagePathsOf(IReadOnlyList<GitFileChange> changes, string repositoryPath)
+    public static IReadOnlyList<string> StagePathsOf(
+        IReadOnlyList<GitFileChange> changes,
+        string repositoryPath,
+        bool hasConflictsBelow = false)
     {
+        // The folder pathspec would also stage the conflicted files below it, markers included.
+        if (hasConflictsBelow)
+        {
+            return PathsOf(changes);
+        }
+
         if (repositoryPath.Length == 0)
         {
             return [ToPathspec(repositoryPath)];

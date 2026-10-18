@@ -24,10 +24,24 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
 /// The dialog closes when the cancellation token passed to <see cref="IDialogHost.ShowDialogAsync{T}"/> is cancelled,
 /// which the caller does when its work ends; the dialog task then completes with null. The user can close it earlier
 /// with the cancel button or the window button; the dialog task then completes with true, and the caller cancels its
-/// work. Any other result, such as the immediate default of a host without main window, is no cancel.
+/// work. Any other result, such as the immediate default of a host without main window, is no cancel. With a
+/// <c>CancelDelay</c> the cancel button shows and the window button cancels only once the delay elapsed, for work whose
+/// cancel has a risk that a moment of patience avoids, and with <c>CancelAvailable</c> only while it last said true.
 /// </remarks>
 public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null)
 {
+    /// <summary>
+    /// Gets how long the shown dialog waits before its cancel button shows and its window button cancels; zero, the
+    /// default, allows the cancel at once.
+    /// </summary>
+    public TimeSpan CancelDelay { get; init; }
+
+    /// <summary>
+    /// Gets whether the work can be cancelled now, for work that only part of the time has something to cancel; its
+    /// values may arrive on any thread. Null, the default, allows the cancel all the time.
+    /// </summary>
+    public IObservable<bool>? CancelAvailable { get; init; }
+
     /// <summary>Identifier of the shared progress dialog.</summary>
     public const string DialogId = "xve.progress";
 }

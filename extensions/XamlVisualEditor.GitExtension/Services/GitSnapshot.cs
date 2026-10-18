@@ -101,8 +101,18 @@ public sealed record GitSnapshot
     /// <summary>Gets whether HEAD points to a commit instead of a branch.</summary>
     public bool IsDetached => Status?.IsDetached ?? false;
 
-    /// <summary>Gets the merge, rebase, cherry-pick or revert in progress.</summary>
+    /// <summary>Gets the merge, rebase, cherry-pick, revert or patch application in progress.</summary>
     public GitRepositoryOperation Operation => Status?.Operation ?? GitRepositoryOperation.None;
+
+    /// <summary>
+    /// Gets whether a commit fits the operation in progress: none runs, a merge waits for its commit, or a rebase
+    /// stopped at an edit step. The other operations commit each step themselves when they continue.
+    /// </summary>
+    public bool AllowsCommit =>
+        Operation is GitRepositoryOperation.None or GitRepositoryOperation.Merging || Status?.IsStoppedForEdit == true;
+
+    /// <summary>Gets whether amending HEAD fits the operation in progress: none runs, or a rebase stopped at an edit step.</summary>
+    public bool AllowsAmend => Operation == GitRepositoryOperation.None || Status?.IsStoppedForEdit == true;
 
     /// <summary>Gets the changed, staged, untracked and conflicted files.</summary>
     public IReadOnlyList<GitFileChange> Changes => Status?.Changes ?? Array.Empty<GitFileChange>();
@@ -110,21 +120,25 @@ public sealed record GitSnapshot
     /// <summary>Gets the number of entries in <see cref="Changes"/>.</summary>
     public int ChangeCount => Changes.Count;
 
-    /// <summary>Gets whether a file has an unresolved merge conflict.</summary>
-    public bool HasConflicts
+    /// <summary>Gets the number of files with an unresolved conflict.</summary>
+    public int ConflictCount
     {
         get
         {
             IReadOnlyList<GitFileChange> changes = Changes;
+            int count = 0;
             for (int i = 0; i < changes.Count; i++)
             {
                 if (changes[i].IsConflicted)
                 {
-                    return true;
+                    count++;
                 }
             }
 
-            return false;
+            return count;
         }
     }
+
+    /// <summary>Gets whether a file has an unresolved conflict.</summary>
+    public bool HasConflicts => ConflictCount > 0;
 }

@@ -96,6 +96,12 @@ public sealed partial class MainWindowViewModel
         return IsShutdownConfirmed;
     }
 
+    /// <summary>
+    /// Withdraws the confirmation of <see cref="ConfirmShutdownAsync"/> when the application stays open after all, so
+    /// documents modified from then on are asked about again.
+    /// </summary>
+    public void ResetShutdownConfirmation() => IsShutdownConfirmed = false;
+
     /// <summary>Opens the most recent workspace or folder from the recent list.</summary>
     public async Task<bool> RestoreLastWorkspaceAsync()
     {

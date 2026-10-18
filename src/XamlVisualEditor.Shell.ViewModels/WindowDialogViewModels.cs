@@ -136,17 +136,69 @@ public sealed class ProgressDialogViewModel : ReactiveObject
     public string Message { get; }
     public string CancelText { get; }
 
+    private bool _canCancel;
+    private bool _delayElapsed;
+    private bool _available;
+
+    /// <summary>
+    /// Gets whether the user can cancel: once <see cref="CancelDelay"/> elapsed, which the view reports through
+    /// <see cref="AllowCancel"/>, and while <see cref="CancelAvailable"/> last said true, which the view reports through
+    /// <see cref="SetCancelAvailable"/>. Otherwise the cancel button is hidden and the window button does nothing.
+    /// </summary>
+    public bool CanCancel
+    {
+        get => _canCancel;
+        private set => this.RaiseAndSetIfChanged(ref _canCancel, value);
+    }
+
+    /// <summary>Gets how long the shown dialog waits before the user can cancel.</summary>
+    public TimeSpan CancelDelay { get; }
+
+    /// <summary>Gets whether the work can be cancelled now; null when it can be all the time.</summary>
+    public IObservable<bool>? CancelAvailable { get; }
+
+    /// <summary>Lets the user cancel when the work can be cancelled; the view calls it once <see cref="CancelDelay"/> elapsed.</summary>
+    public void AllowCancel()
+    {
+        _delayElapsed = true;
+        CanCancel = _available;
+    }
+
+    /// <summary>Records the last value of <see cref="CancelAvailable"/>; the view calls it on the UI thread.</summary>
+    public void SetCancelAvailable(bool available)
+    {
+        _available = available;
+        CanCancel = _delayElapsed && available;
+    }
+
     public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
     public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
+    /// <summary>Creates the view model of a progress that the user can cancel at once.</summary>
     public ProgressDialogViewModel(string title, string message, string? cancelText = null)
+        : this(title, message, cancelText, TimeSpan.Zero)
+    {
+    }
+
+    /// <summary>
+    /// Creates the view model of a progress that the user can cancel once <paramref name="cancelDelay"/> elapsed and,
+    /// with <paramref name="cancelAvailable"/>, only while it last said true; until its first value the cancel waits.
+    /// </summary>
+    public ProgressDialogViewModel(string title, string message, string? cancelText, TimeSpan cancelDelay,
+        IObservable<bool>? cancelAvailable = null)
     {
         Title = title;
         Message = message;
         CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
-        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
-            await CloseInteraction.Handle(true));
+        CancelDelay = cancelDelay > TimeSpan.Zero ? cancelDelay : TimeSpan.Zero;
+        CancelAvailable = cancelAvailable;
+        _delayElapsed = CancelDelay == TimeSpan.Zero;
+        _available = cancelAvailable is null;
+        CanCancel = _delayElapsed && _available;
+        CancelCommand = ReactiveCommand.CreateFromTask(
+            async () => await CloseInteraction.Handle(true),
+            this.WhenAnyValue(x => x.CanCancel));
     }
 }
 

@@ -29,6 +29,52 @@ public sealed partial class GitService
     }
 
     /// <inheritdoc />
+    public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default)
+    {
+        ThrowIfOptionLike(name, nameof(name));
+        return RunRemoteCommandAsync(repoPath, "add", name, url, ct);
+    }
+
+    /// <inheritdoc />
+    public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default)
+    {
+        ThrowIfOptionLike(newName, nameof(newName));
+        return RunRemoteCommandAsync(repoPath, "rename", name, newName, ct);
+    }
+
+    // git accepts such a name, and a command that passes it without "--", in this or another program, reads it as an
+    // option, for example --upload-pack=<command> in git fetch.
+    private static void ThrowIfOptionLike(string name, string parameterName)
+    {
+        if (name.StartsWith('-'))
+        {
+            throw new ArgumentException("A remote name must not start with '-'.", parameterName);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default) =>
+        RunRemoteCommandAsync(repoPath, "remove", name, null, ct);
+
+    /// <inheritdoc />
+    public Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default) =>
+        RunRemoteCommandAsync(repoPath, "set-url", name, url, ct);
+
+    // The end of the options keeps a name or URL that starts with "-" from being read as an option.
+    private Task RunRemoteCommandAsync(string repoPath, string command, string name, string? value, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        List<string> args = new() { "remote", command, "--", name };
+        if (value is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(value);
+            args.Add(value);
+        }
+
+        return RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Each remote is fetched with <c>git fetch &lt;remote&gt;</c>, so its configured refspecs, tag following and the
     /// pruning of <c>fetch.prune</c>, <c>remote.&lt;name&gt;.prune</c> and <c>fetch.pruneTags</c> apply as on the
@@ -52,7 +98,8 @@ public sealed partial class GitService
                 continue;
             }
 
-            GitRemoteResult result = await RunNetworkCommandAsync(repoPath, new[] { "fetch", remote }, environment, ct);
+            // A remote name that starts with "-", which git accepts, must not become an option.
+            GitRemoteResult result = await RunNetworkCommandAsync(repoPath, new[] { "fetch", "--", remote }, environment, ct);
             if (result.Success)
             {
                 fetched.Add(remote);
@@ -356,8 +403,96 @@ public sealed partial class GitService
     {
         string[] args = setUpstreamRemote is null
             ? new[] { "push" }
-            : new[] { "push", "--set-upstream", setUpstreamRemote, "HEAD" };
+            : new[] { "push", "--set-upstream", "--", setUpstreamRemote, "HEAD" };
         return RunNetworkCommandAsync(repoPath, args, ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The refspec and the lease name the branch, its upstream and the expected commit, so neither the configuration nor
+    /// a branch checked out meanwhile decides what is replaced; a plain <c>--force-with-lease</c> would push every
+    /// branch that <c>push.default=matching</c> matches and compare with remote-tracking branches a fetch moved.
+    /// </remarks>
+    public async Task<GitRemoteResult> ForcePushAsync(
+        string repoPath,
+        string branch,
+        string expectedUpstreamSha,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(branch);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedUpstreamSha);
+        string? remote = await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct);
+        string? upstream = await ReadConfigAsync(repoPath, "branch." + branch + ".merge", ct);
+        // The remote "." is the repository itself: its upstream is a local branch, which a force push would rewrite.
+        if (remote is null or "." || upstream is null)
+        {
+            return GitRemoteResult.Failed(GitRemoteFailureKind.NoUpstream, $"The branch {branch} has no upstream branch on a remote.");
+        }
+
+        return await RunNetworkCommandAsync(
+            repoPath,
+            ["push", "--force-with-lease=" + upstream + ":" + expectedUpstreamSha, "--", remote, LOCAL_BRANCH_PREFIX + branch + ":" + upstream],
+            ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <c>@{push}</c> names the remote-tracking branch a plain <c>git push</c> of the branch updates, <c>@{upstream}</c>
+    /// the one <see cref="ForcePushAsync"/> replaces; when both are the same, the push of the branch went there. git
+    /// fails to resolve <c>@{push}</c> when <c>push.default=simple</c> and the names differ. Under
+    /// <c>push.default=matching</c> a push updates every branch of the same name, so the rejection can come from
+    /// another branch; no lease is given then.
+    /// </remarks>
+    public async Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(branch);
+        if (await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct) is null or "."
+            || string.Equals(await ReadConfigAsync(repoPath, "push.default", ct), "matching", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string? push = await ReadRevisionAsync(repoPath, ["--symbolic-full-name", branch + "@{push}"], ct);
+        string? upstream = await ReadRevisionAsync(repoPath, ["--symbolic-full-name", branch + "@{upstream}"], ct);
+        if (push is null || push != upstream)
+        {
+            return null;
+        }
+
+        return await ReadRevisionAsync(repoPath, ["--verify", "--quiet", upstream], ct);
+    }
+
+    /// <summary>Returns the output of <c>git rev-parse</c> with <paramref name="args"/>, or null when it fails.</summary>
+    private async Task<string?> ReadRevisionAsync(string repoPath, string[] args, CancellationToken ct)
+    {
+        GitProcessResult result = await RunGitAsync(repoPath, ["rev-parse", .. args], GitCommandAccess.Read, ct, allowNonZeroExitCode: true);
+        string value = result.StandardOutput.Trim();
+        return result.ExitCode == 0 && value.Length > 0 ? value : null;
+    }
+
+    /// <summary>Returns the value of a git configuration key, or null when it is not set.</summary>
+    private async Task<string?> ReadConfigAsync(string repoPath, string key, CancellationToken ct)
+    {
+        GitProcessResult result = await RunGitAsync(repoPath, ["config", "--get", key], GitCommandAccess.Read, ct, allowNonZeroExitCode: true);
+        string value = result.StandardOutput.Trim();
+        return result.ExitCode == 0 && value.Length > 0 ? value : null;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The full reference name keeps a branch of the same name from being pushed instead.</remarks>
+    public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return RunNetworkCommandAsync(repoPath, new[] { "push", "--", remote, TAG_PREFIX + name }, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return RunNetworkCommandAsync(repoPath, new[] { "push", "--", remote, ":" + TAG_PREFIX + name }, ct);
     }
 
     /// <summary>

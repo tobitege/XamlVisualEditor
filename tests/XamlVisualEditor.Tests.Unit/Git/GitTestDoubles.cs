@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
@@ -153,12 +155,36 @@ internal sealed class ScriptedRemoteService : IGitRemoteService
     public Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<GitRemote>>([new GitRemote("origin", "remote", "remote")]);
 
+    public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default) => throw new NotSupportedException();
+
+    public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default) => throw new NotSupportedException();
+
+    public Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default) => throw new NotSupportedException();
+
     public Task<GitRemoteResult> FetchAsync(string repoPath, CancellationToken ct = default) => RunAsync("fetch", ct);
 
     public Task<GitRemoteResult> PullAsync(string repoPath, CancellationToken ct = default) => RunAsync("pull", ct);
 
     public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
         RunAsync(setUpstreamRemote is null ? "push" : "push -u " + setUpstreamRemote, ct);
+
+    public Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default) =>
+        RunAsync("push --force-with-lease " + branch + " " + expectedUpstreamSha, ct);
+
+    /// <summary>Gets or sets the lease <see cref="GetForcePushLeaseAsync"/> returns; null offers no force push.</summary>
+    public string? ForcePushLease { get; set; }
+
+    public Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default) =>
+        Task.FromResult(ForcePushLease);
+
+    public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+        RunAsync("push " + remote + " tag " + name, ct);
+
+    public Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+        RunAsync("push " + remote + " delete tag " + name, ct);
 
     private async Task<GitRemoteResult> RunAsync(string operation, CancellationToken ct)
     {
@@ -227,16 +253,48 @@ internal sealed class GitDialogHost : IDialogHost
 
     public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory) => throw new NotSupportedException();
 
+    /// <summary>
+    /// Gets or sets an answer to questions that can wait, such as for the token that closes the question; it replaces
+    /// the callback of the constructor when set.
+    /// </summary>
+    public Func<object?, CancellationToken, Task<object?>>? RespondAsync { get; set; }
+
+    /// <summary>Gets or sets how a progress dialog ends, replacing <see cref="ProgressMode"/> when set.</summary>
+    public Func<ProgressDialogRequest, CancellationToken, Task<bool?>>? ProgressAsync { get; set; }
+
     public async Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
     {
-        Requests.Add((dialogId, viewModel));
+        lock (Requests)
+        {
+            Requests.Add((dialogId, viewModel));
+        }
+
         if (dialogId != ProgressDialogRequest.DialogId)
         {
-            return _respond(dialogId, viewModel) is T result ? result : default;
+            object? answer = RespondAsync is { } respondAsync
+                ? await respondAsync(viewModel, cancellationToken)
+                : _respond(dialogId, viewModel);
+            return answer is T result ? result : default;
+        }
+
+        if (ProgressAsync is { } progressAsync)
+        {
+            return (T?)(object?)await progressAsync((ProgressDialogRequest)viewModel!, cancellationToken);
         }
 
         switch (ProgressMode)
         {
+            // As in the editor, the cancel button shows only while the work can be cancelled.
+            case ProgressDialogMode.Cancel when ((ProgressDialogRequest)viewModel!).CancelAvailable is { } available:
+                try
+                {
+                    await available.FirstAsync(canCancel => canCancel).ToTask(cancellationToken);
+                    return (T?)(object?)true;
+                }
+                catch (OperationCanceledException)
+                {
+                    return default;
+                }
             case ProgressDialogMode.Cancel:
                 return (T?)(object?)true;
             case ProgressDialogMode.CompleteAtOnce:

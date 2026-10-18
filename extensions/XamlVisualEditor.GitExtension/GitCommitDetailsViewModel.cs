@@ -21,8 +21,14 @@ public sealed class GitCommitFileRowViewModel
 {
     /// <summary>Creates the row.</summary>
     public GitCommitFileRowViewModel(GitCommitFileChange change)
+        : this(change, null)
+    {
+    }
+
+    internal GitCommitFileRowViewModel(GitCommitFileChange change, GitCommitInfo? commit)
     {
         Change = change;
+        Commit = commit;
         ChangeText = FormatKind(change.Kind);
         DisplayPath = change.OldPath is { } oldPath && !string.Equals(oldPath, change.Path, StringComparison.Ordinal)
             ? string.Format(CultureInfo.CurrentCulture, GitStrings.RenamedFromFormat, change.Path, oldPath)
@@ -31,6 +37,9 @@ public sealed class GitCommitFileRowViewModel
 
     /// <summary>Gets the changed file.</summary>
     public GitCommitFileChange Change { get; }
+
+    /// <summary>Gets the commit whose diff shows the file, such as the untracked files of a stash; null for the shown commit.</summary>
+    internal GitCommitInfo? Commit { get; }
 
     /// <summary>Gets the repository-relative path after the commit.</summary>
     public string Path => Change.Path;
@@ -56,7 +65,8 @@ public sealed class GitCommitFileRowViewModel
 
 /// <summary>
 /// Details of the commit selected in the Git History panel: message, author, committer, parents, the changed files
-/// and the diff of the selected file. Merge commits are compared with their first parent.
+/// and the diff of the selected file. Merge commits are compared with their first parent. The details of a stash,
+/// see <see cref="ForStash"/>, list its untracked files as well.
 /// </summary>
 /// <remarks>
 /// A newer commit or file cancels the reading of the previous one. The first file is selected when the files of a
@@ -77,17 +87,30 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
     public const int MAX_DIFF_BYTE_COUNT = 4 * 1024 * 1024;
 
     private readonly GitSession _session;
-    private readonly Func<string, IReadOnlyList<object?>?, Task> _executeCommand;
+    private readonly Func<string, IReadOnlyList<object?>?, Task>? _executeCommand;
     private readonly CompositeDisposable _disposables = new();
+    private readonly bool _isStash;
+    private readonly ComparisonHeader? _comparison;
     private DetailsContext? _context;
 
     /// <summary>Creates the details for a shared session.</summary>
     /// <param name="session">The Git session whose repository the commits belong to.</param>
     /// <param name="executeCommand">Runs a Git command by id with arguments.</param>
     public GitCommitDetailsViewModel(GitSession session, Func<string, IReadOnlyList<object?>?, Task> executeCommand)
+        : this(session, executeCommand, isStash: false, comparison: null)
+    {
+    }
+
+    private GitCommitDetailsViewModel(
+        GitSession session,
+        Func<string, IReadOnlyList<object?>?, Task>? executeCommand,
+        bool isStash,
+        ComparisonHeader? comparison)
     {
         _session = session;
         _executeCommand = executeCommand;
+        _isStash = isStash;
+        _comparison = comparison;
 
         IObservable<bool> hasFile = this.WhenAnyValue(x => x.SelectedFile).Select(file => file is not null);
         // -1 means no hunk yet: the next change is the first hunk, and there is no previous one.
@@ -99,7 +122,10 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
             this.WhenAnyValue(x => x.CurrentHunkIndex, x => x.HunkCount, (index, count) => index < count - 1)));
         ToggleDiffCommand = AddCommand(ReactiveCommand.Create(() => { IsDiffVisible = !IsDiffVisible; }));
         CopyPathCommand = AddCommand(ReactiveCommand.CreateFromTask(CopyPathAsync, hasFile));
-        ShowFileHistoryCommand = AddCommand(ReactiveCommand.CreateFromTask(ShowFileHistoryAsync, hasFile));
+        // An untracked file of a stash has no history: its commit only holds the stashed untracked files.
+        ShowFileHistoryCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            ShowFileHistoryAsync,
+            this.WhenAnyValue(x => x.SelectedFile).Select(file => file is { Commit: null } && executeCommand is not null)));
 
         _disposables.Add(Observable.Switch(this.WhenAnyValue(x => x.Commit)
                 .DistinctUntilChanged(commit => commit?.Sha)
@@ -110,6 +136,37 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyDiff));
     }
+
+    /// <summary>
+    /// Creates the details of the stash commit <paramref name="stash"/>: its tracked changes against the commit the
+    /// stash was made on, and its untracked files as added files. Without <paramref name="executeCommand"/> the file
+    /// history is unavailable.
+    /// </summary>
+    public static GitCommitDetailsViewModel ForStash(
+        GitSession session,
+        Func<string, IReadOnlyList<object?>?, Task>? executeCommand,
+        GitCommitInfo stash) =>
+        new(session, executeCommand, isStash: true, comparison: null) { Commit = stash };
+
+    /// <summary>
+    /// Creates the details of a comparison: the files and diffs from <paramref name="mergeBase"/> to
+    /// <paramref name="tip"/>, which are the changes on the tip's side since both sides went their own way, under the
+    /// given header instead of the commit's.
+    /// </summary>
+    internal static GitCommitDetailsViewModel ForComparison(
+        GitSession session,
+        Func<string, IReadOnlyList<object?>?, Task>? executeCommand,
+        GitCommitInfo tip,
+        GitCommitInfo mergeBase,
+        string title,
+        string summary,
+        string message) =>
+        // The files of a commit are those against its first parent, so the merge base as the only parent gives the
+        // changes of the whole range.
+        new(session, executeCommand, isStash: false, new ComparisonHeader(title, summary, message))
+        {
+            Commit = tip with { ParentShas = [mergeBase.Sha], ParentShortShas = [mergeBase.ShortSha] }
+        };
 
     /// <summary>Gets or sets the shown commit; null shows none.</summary>
     [Reactive]
@@ -248,13 +305,16 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
 
     private Task ShowFileHistoryAsync()
     {
-        if (SelectedFile is not { } file || _context is not { } context)
+        if (SelectedFile is not { Commit: null } file || _context is not { } context || _executeCommand is null)
         {
             return Task.CompletedTask;
         }
 
+        // The history of a stashed file starts at the commit the stash was made on: the stash commit itself is a
+        // merge with the internal index commit.
         string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(context.RepositoryRoot, file.Path));
-        return _executeCommand(GitCommands.SHOW_FILE_HISTORY, [fullPath, context.Commit.Sha]);
+        string start = _isStash ? context.Commit.ParentShas[0] : context.Commit.Sha;
+        return _executeCommand(GitCommands.SHOW_FILE_HISTORY, [fullPath, start]);
     }
 
     /// <summary>Returns the details of <paramref name="commit"/>, read in the background after its header.</summary>
@@ -282,7 +342,16 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
                 try
                 {
                     GitCommitDetails details = await history.GetCommitAsync(repositoryRoot, commit, ct).ConfigureAwait(false);
-                    return new DetailsLoad(commit, repositoryRoot, details.Files, false, null);
+                    List<GitCommitFileRowViewModel> rows = details.Files.Select(file => new GitCommitFileRowViewModel(file)).ToList();
+                    // git stash push --include-untracked stores the untracked files in a third parent without parents.
+                    if (_isStash && commit.ParentShas.Count > 2)
+                    {
+                        GitCommitInfo untracked = await history.ResolveCommitAsync(repositoryRoot, commit.ParentShas[2], ct).ConfigureAwait(false);
+                        GitCommitDetails untrackedDetails = await history.GetCommitAsync(repositoryRoot, untracked, ct).ConfigureAwait(false);
+                        rows.AddRange(untrackedDetails.Files.Select(file => new GitCommitFileRowViewModel(file, untracked)));
+                    }
+
+                    return new DetailsLoad(commit, repositoryRoot, rows, false, null);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -318,9 +387,9 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
         }
 
         StatusMessage = load.Message;
-        foreach (GitCommitFileChange file in load.Files ?? Array.Empty<GitCommitFileChange>())
+        foreach (GitCommitFileRowViewModel file in load.Files ?? Array.Empty<GitCommitFileRowViewModel>())
         {
-            Files.Add(new GitCommitFileRowViewModel(file));
+            Files.Add(file);
         }
 
         FilesHeader = string.Format(CultureInfo.CurrentCulture, GitStrings.CommitFilesFormat, Files.Count);
@@ -334,6 +403,13 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
         if (commit is null)
         {
             Title = Summary = CommitterText = ParentsText = MergeText = MessageText = FilesHeader = null;
+            return;
+        }
+
+        if (_comparison is { } comparison)
+        {
+            (Title, Summary, MessageText) = (comparison.Title, comparison.Summary, comparison.Message);
+            CommitterText = ParentsText = MergeText = null;
             return;
         }
 
@@ -360,9 +436,11 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
                 CultureInfo.CurrentCulture,
                 GitStrings.ParentsFormat,
                 string.Join(", ", Enumerable.Range(0, commit.ParentShas.Count).Select(index => ShortParent(commit, index))));
-        MergeText = commit.IsMerge
-            ? string.Format(CultureInfo.CurrentCulture, GitStrings.MergeComparisonFormat, ShortParent(commit, 0))
-            : null;
+        MergeText = _isStash
+            ? string.Format(CultureInfo.CurrentCulture, GitStrings.StashComparisonFormat, ShortParent(commit, 0))
+            : commit.IsMerge
+                ? string.Format(CultureInfo.CurrentCulture, GitStrings.MergeComparisonFormat, ShortParent(commit, 0))
+                : null;
         MessageText = commit.Message;
     }
 
@@ -389,7 +467,7 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
             try
             {
                 GitDiff diff = await history
-                    .GetCommitFileDiffAsync(context.RepositoryRoot, context.Commit, file.Change, MAX_DIFF_LINE_COUNT, MAX_DIFF_BYTE_COUNT, ct)
+                    .GetCommitFileDiffAsync(context.RepositoryRoot, file.Commit ?? context.Commit, file.Change, MAX_DIFF_LINE_COUNT, MAX_DIFF_BYTE_COUNT, ct)
                     .ConfigureAwait(false);
                 return new DiffLoad(DiffLineBuilder.FromGitDiff(diff), diff.IsTruncated, null);
             }
@@ -421,20 +499,23 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
     /// <summary>The commit whose files are listed and the repository it belongs to.</summary>
     private sealed record DetailsContext(GitCommitInfo Commit, string RepositoryRoot);
 
+    /// <summary>The header of a comparison, shown instead of the header of its tip commit.</summary>
+    private sealed record ComparisonHeader(string Title, string Summary, string Message);
+
     /// <summary>
     /// A state of the details: the header of a commit while its files are read, the read files, or a failure.
     /// </summary>
     private sealed record DetailsLoad(
         GitCommitInfo? Commit,
         string? RepositoryRoot,
-        IReadOnlyList<GitCommitFileChange>? Files,
+        IReadOnlyList<GitCommitFileRowViewModel>? Files,
         bool IsLoading,
         string? Message)
     {
         public static DetailsLoad None { get; } = new(null, null, null, false, null);
 
         public static DetailsLoad Failed(GitCommitInfo commit, string? repositoryRoot, string message) =>
-            new(commit, repositoryRoot, Array.Empty<GitCommitFileChange>(), false, message);
+            new(commit, repositoryRoot, Array.Empty<GitCommitFileRowViewModel>(), false, message);
     }
 
     /// <summary>The lines of a diff and whether git had more output, or why it could not be read.</summary>

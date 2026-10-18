@@ -60,7 +60,30 @@ public sealed class GitStatusBarTests
 
         GitStatusBar.Update(item, snapshot with { Status = snapshot.Status! with { Operation = GitRepositoryOperation.Merging } });
 
-        Assert.Equal("main · 2 · " + GitStrings.StatusBarMerging, item.Text);
+        Assert.Equal("main · 2 · " + GitStrings.OperationMerging, item.Text);
+        Assert.Contains(GitStrings.OperationMerging, item.Tooltip);
+    }
+
+    [Theory]
+    [InlineData(GitRepositoryOperation.Rebasing)]
+    [InlineData(GitRepositoryOperation.CherryPicking)]
+    [InlineData(GitRepositoryOperation.Reverting)]
+    [InlineData(GitRepositoryOperation.ApplyingPatches)]
+    public void Every_operation_and_the_conflicts_are_shown(GitRepositoryOperation operation)
+    {
+        RecordingStatusBarItem item = new();
+        GitSnapshot snapshot = Snapshot("main", null, ahead: 0, behind: 0, changes: 1);
+        GitFileChange[] changes =
+        [
+            .. snapshot.Changes,
+            new GitFileChange { Path = "a.txt", ConflictKind = GitConflictKind.BothModified },
+            new GitFileChange { Path = "b.txt", ConflictKind = GitConflictKind.DeletedByThem }
+        ];
+
+        GitStatusBar.Update(item, snapshot with { Status = snapshot.Status! with { Operation = operation, Changes = changes } });
+
+        Assert.Equal("main · 3 · " + GitOperationNames.Get(operation) + " ⚠2", item.Text);
+        Assert.Contains(string.Format(GitStrings.ConflictCountFormat, 2), item.Tooltip);
     }
 
     [Fact]

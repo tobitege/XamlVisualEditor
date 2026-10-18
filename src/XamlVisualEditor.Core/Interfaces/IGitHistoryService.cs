@@ -46,4 +46,10 @@ public interface IGitHistoryService
 
     /// <summary>Returns the tags, newest first.</summary>
     Task<IReadOnlyList<GitTag>> GetTagsAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the full id of the best common ancestor of the revisions <paramref name="first"/> and
+    /// <paramref name="second"/>, from which both went their own way, or null when they have none.
+    /// </summary>
+    Task<string?> GetMergeBaseAsync(string repoPath, string first, string second, CancellationToken ct = default);
 }

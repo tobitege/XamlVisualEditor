@@ -26,6 +26,37 @@ public sealed class GitStashCommandsTests
     }
 
     [AvaloniaFact]
+    public async Task Stash_of_a_folder_stashes_its_changes_and_leaves_the_others_and_staged_stashes_only_the_index()
+    {
+        using GitPanelCommandFixture fixture = await CreateAsync(repository =>
+        {
+            repository.CommitFileIn(repository.Path, "src/b.txt", "b\n", "Add b");
+            repository.WriteFile("a.txt", "changed\n");
+            repository.WriteFile("src/b.txt", "changed\n");
+            repository.WriteFile("src/new.txt", "new\n");
+        });
+        fixture.Window.InputBoxResult = "src";
+
+        await fixture.ExecuteAsync(GitCommands.STASH_STAGED);
+        Assert.Equal([GitStrings.NothingStagedToStash], fixture.Window.Infos);
+        await fixture.ExecuteAsync(GitCommands.STASH_PATHS, Path.Combine(fixture.Repository.Path, "src"));
+
+        Assert.Equal("stash@{0}: On main: src\n", fixture.Repository.RunGit("stash", "list"));
+        Assert.Equal("b\n", fixture.Repository.ReadFile("src/b.txt"));
+        Assert.Null(fixture.Repository.ReadFile("src/new.txt"));
+        Assert.Equal("changed\n", fixture.Repository.ReadFile("a.txt"));
+
+        fixture.Repository.RunGit("add", "a.txt");
+        await fixture.Session.RefreshAsync();
+        fixture.Window.InputBoxResult = "index";
+        await fixture.ExecuteAsync(GitCommands.STASH_STAGED);
+
+        Assert.Equal("stash@{0}: On main: index", fixture.Repository.RunGit("stash", "list").Split('\n')[0]);
+        Assert.Equal(string.Empty, fixture.Repository.RunGit("status", "--porcelain").Trim());
+        Assert.Single(fixture.Window.Infos);
+    }
+
+    [AvaloniaFact]
     public async Task A_cancelled_message_stashes_nothing()
     {
         using GitPanelCommandFixture fixture = await CreateAsync(repository => repository.WriteFile("a.txt", "changed\n"));
@@ -108,7 +139,10 @@ public sealed class GitStashCommandsTests
         await fixture.ExecuteAsync(GitCommands.STASH_DROP, "0123456789012345678901234567890123456789");
 
         (IReadOnlyList<QuickPickItem> items, QuickPickOptions options) = Assert.Single(fixture.Window.QuickPicks);
-        Assert.Equal(GitStrings.StashPopCommand, options.Title);
+        // The title is the command without the ellipsis that marks it in the menus.
+        Assert.EndsWith("…", GitStrings.StashPopCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("…", options.Title, StringComparison.Ordinal);
+        Assert.StartsWith(options.Title, GitStrings.StashPopCommand, StringComparison.Ordinal);
         Assert.Equal(("stash@{0}", "On main: first"), (items[0].Label, items[0].Description));
         Assert.Equal("first\n", File.ReadAllText(Path.Combine(fixture.Repository.Path, "a.txt")));
         Assert.Equal(

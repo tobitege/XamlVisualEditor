@@ -16,6 +16,34 @@ public interface IGitRemoteService
     Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default);
 
     /// <summary>
+    /// Adds the remote <paramref name="name"/> with <paramref name="url"/> for fetch and push, without fetching it.
+    /// Throws <see cref="System.InvalidOperationException"/> with git's error output when git refuses the name, for
+    /// example because a remote of that name exists, and <see cref="System.ArgumentException"/> for a name that starts
+    /// with <c>-</c>, which git accepts but which other commands could read as an option.
+    /// </summary>
+    Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renames the remote <paramref name="name"/> to <paramref name="newName"/> with its remote-tracking branches and
+    /// the upstreams of the branches that track them. Throws <see cref="System.InvalidOperationException"/> with git's
+    /// error output when git fails, and <see cref="System.ArgumentException"/> for a new name that starts with <c>-</c>.
+    /// </summary>
+    Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes the remote <paramref name="name"/> with its remote-tracking branches; branches that tracked them lose
+    /// their upstream. Throws <see cref="System.InvalidOperationException"/> with git's error output when git fails.
+    /// </summary>
+    Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets the URL of the remote <paramref name="name"/> to <paramref name="url"/>. A remote without its own push URL
+    /// pushes to it as well. Throws <see cref="System.InvalidOperationException"/> with git's error output when git
+    /// fails.
+    /// </summary>
+    Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default);
+
+    /// <summary>
     /// Fetches every remote that a fetch of all remotes does not skip, one remote after the other, as configured for
     /// it: with its refspecs and with pruning only when <c>fetch.prune</c> or <c>remote.&lt;name&gt;.prune</c> asks
     /// for it. A failing remote does not stop the others: the result then fails with the failure of the first
@@ -41,4 +69,30 @@ public interface IGitRemoteService
     /// branch of the same name on that remote, which then becomes its upstream.
     /// </summary>
     Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pushes the local branch <paramref name="branch"/> to its upstream branch and replaces it, for example after an
+    /// amend or a rebase, but only while it still points to <paramref name="expectedUpstreamSha"/>, the commit the user
+    /// saw; otherwise the result reports <see cref="GitRemoteFailureKind.Rejected"/> and nothing changes. No other
+    /// branch is pushed, whatever <c>push.default</c> says, and a branch without upstream reports
+    /// <see cref="GitRemoteFailureKind.NoUpstream"/>.
+    /// </summary>
+    Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the commit the remote-tracking branch of <paramref name="branch"/>'s upstream points to, the lease of
+    /// <see cref="ForcePushAsync"/>, or null when a force push would replace something else than what a push of the
+    /// branch is rejected by: the branch has no upstream, its upstream is a local branch, its pushes go elsewhere, for
+    /// example by <c>push.default</c> or <c>pushRemote</c>, or the remote-tracking branch was never fetched.
+    /// </summary>
+    Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pushes the tag <paramref name="name"/> to <paramref name="remote"/>. A tag of that name on the remote that
+    /// points elsewhere is not replaced; the result reports <see cref="GitRemoteFailureKind.Rejected"/>.
+    /// </summary>
+    Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default);
+
+    /// <summary>Deletes the tag <paramref name="name"/> on <paramref name="remote"/>; the local tag stays.</summary>
+    Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default);
 }

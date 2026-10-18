@@ -27,6 +27,8 @@ public sealed class GitCommandsTests
     private const string REPOSITORY_WHEN = "git.isRepository";
     private const string REMOTE_WHEN = "git.hasRemote";
     private const string UPSTREAM_WHEN = "git.isRepository && git.hasUpstream";
+    private const string NO_OPERATION_WHEN = "git.isRepository && !git.operationInProgress";
+    private const string CONFLICTS_WHEN = "git.isRepository && git.hasConflicts";
 
     public static TheoryData<string, string, string?> CommandMetadataCases => new()
     {
@@ -62,13 +64,38 @@ public sealed class GitCommandsTests
         { GitCommands.STAGE_SELECTION, GitStrings.StageSelectionCommand, REPOSITORY_WHEN },
         { GitCommands.UNSTAGE_SELECTION, GitStrings.UnstageSelectionCommand, REPOSITORY_WHEN },
         { GitCommands.DISCARD_SELECTION, GitStrings.DiscardSelectionCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH, GitStrings.StashCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_APPLY, GitStrings.StashApplyCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_POP, GitStrings.StashPopCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH, GitStrings.StashCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_APPLY, GitStrings.StashApplyCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_POP, GitStrings.StashPopCommand, NO_OPERATION_WHEN },
         { GitCommands.STASH_DROP, GitStrings.StashDropCommand, REPOSITORY_WHEN },
-        { GitCommands.MERGE, GitStrings.MergeCommand, REPOSITORY_WHEN },
-        { GitCommands.ABORT_MERGE, GitStrings.AbortMergeCommand, "git.isRepository && git.isMerging" }
+        { GitCommands.MERGE, GitStrings.MergeCommand, NO_OPERATION_WHEN },
+        { GitCommands.ABORT, GitStrings.AbortCommand, "git.isRepository && git.operationInProgress" },
+        { GitCommands.CONTINUE, GitStrings.ContinueCommand, "git.isRepository && git.operationInProgress && !git.isMerging" },
+        { GitCommands.ACCEPT_OURS, GitStrings.AcceptOursCommand, CONFLICTS_WHEN },
+        { GitCommands.ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CONFLICTS_WHEN },
+        { GitCommands.MARK_RESOLVED, GitStrings.MarkResolvedCommand, CONFLICTS_WHEN },
+        { GitCommands.RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CONFLICTS_WHEN },
+        { GitCommands.RENAME_BRANCH, GitStrings.RenameBranchCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_SHOW, GitStrings.StashShowCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_BRANCH, GitStrings.StashBranchCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_CLEAR, GitStrings.StashClearCommand, REPOSITORY_WHEN },
+        { GitCommands.ADD_REMOTE, GitStrings.AddRemoteCommand, REPOSITORY_WHEN },
+        { GitCommands.RENAME_REMOTE, GitStrings.RenameRemoteCommand, REMOTE_WHEN },
+        { GitCommands.SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, REMOTE_WHEN },
+        { GitCommands.REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTE_WHEN },
+        { GitCommands.SKIP, GitStrings.SkipCommand, "git.isRepository && git.operationInProgress && !git.isMerging" },
+        { GitCommands.CHERRY_PICK, GitStrings.CherryPickCommand, NO_OPERATION_WHEN },
+        { GitCommands.REVERT, GitStrings.RevertCommand, NO_OPERATION_WHEN },
+        { GitCommands.CREATE_TAG, GitStrings.CreateTagCommand, REPOSITORY_WHEN },
+        { GitCommands.DELETE_TAG, GitStrings.DeleteTagCommand, REPOSITORY_WHEN },
+        { GitCommands.PUSH_TAG, GitStrings.PushTagCommand, REMOTE_WHEN },
+        { GitCommands.DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, REMOTE_WHEN },
+        { GitCommands.REBASE, GitStrings.RebaseCommand, NO_OPERATION_WHEN },
+        { GitCommands.FORCE_PUSH, GitStrings.ForcePushCommand, "git.isRepository && git.hasUpstream" },
+        { GitCommands.STASH_PATHS, GitStrings.StashPathsCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_STAGED, GitStrings.StashStagedCommand, NO_OPERATION_WHEN },
+        { GitCommands.COMPARE_BRANCHES, GitStrings.CompareBranchesCommand, REPOSITORY_WHEN }
     };
 
     [Theory]
@@ -95,7 +122,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(39, commandIds.Count);
+        Assert.Equal(64, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -130,10 +157,14 @@ public sealed class GitCommandsTests
             GitCommands.SHOW_CHANGES, GitCommands.REFRESH, GitCommands.SHOW_OUTPUT, GitCommands.TOGGLE_AUTO_REFRESH,
             GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.TOGGLE_CHANGE_MARKERS,
             GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.COMMIT_AMEND, GitCommands.INIT,
-            GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
-            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
-            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_APPLY, GitCommands.STASH_POP,
-            GitCommands.STASH_DROP, GitCommands.MERGE, GitCommands.ABORT_MERGE
+            GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.RENAME_BRANCH, GitCommands.DELETE_BRANCH,
+            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.FORCE_PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
+            GitCommands.REBASE, GitCommands.COMPARE_BRANCHES,
+            GitCommands.CREATE_TAG, GitCommands.PUSH_TAG, GitCommands.DELETE_TAG, GitCommands.DELETE_REMOTE_TAG,
+            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_STAGED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
+            GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,
+            GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.SKIP, GitCommands.ABORT,
+            GitCommands.ADD_REMOTE, GitCommands.RENAME_REMOTE, GitCommands.SET_REMOTE_URL, GitCommands.REMOVE_REMOTE
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -147,22 +178,29 @@ public sealed class GitCommandsTests
             },
             extensionsItems.Where(item => item.CheckedWhen is not null).Select(item => (item.CommandId, item.CheckedWhen!)));
 
-        string[] fileIds =
+        string[] explorerIds =
         [
-            GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD, GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD,
-            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
+            GitCommands.ACCEPT_OURS, GitCommands.ACCEPT_THEIRS, GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD,
+            GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD, GitCommands.MARK_RESOLVED, GitCommands.SHOW_FILE_HISTORY,
+            GitCommands.STAGE, GitCommands.STASH_PATHS, GitCommands.UNSTAGE
+        ];
+        string[] editorIds =
+        [
+            GitCommands.ACCEPT_OURS, GitCommands.ACCEPT_THEIRS, GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD,
+            GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD, GitCommands.MARK_RESOLVED, GitCommands.RESOLVE_CONFLICT,
+            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.STASH_PATHS, GitCommands.UNSTAGE
         ];
         string[] tabIds =
         [
             GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD, GitCommands.COMPARE_WITH_INDEX,
-            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
+            GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.STASH_PATHS, GitCommands.UNSTAGE
         ];
         ExtensionMenuContribution[] contextItems = items
             .Where(item => item.Location is ExtensionMenuLocations.EditorContext or ExtensionMenuLocations.ExplorerContext
                 or ExtensionMenuLocations.DocumentTabContext)
             .ToArray();
-        Assert.Equal(fileIds, ContextIds(ExtensionMenuLocations.EditorContext));
-        Assert.Equal(fileIds, ContextIds(ExtensionMenuLocations.ExplorerContext));
+        Assert.Equal(editorIds, ContextIds(ExtensionMenuLocations.EditorContext));
+        Assert.Equal(explorerIds, ContextIds(ExtensionMenuLocations.ExplorerContext));
         Assert.Equal(tabIds, ContextIds(ExtensionMenuLocations.DocumentTabContext));
         Assert.All(contextItems, item => Assert.Equal("Git", item.Submenu));
         Assert.Equal(items.Count, viewItems.Length + extensionsItems.Length + contextItems.Length);
@@ -832,8 +870,31 @@ public sealed class GitCommandsTests
                 string.Format(GitStrings.RemoteFailureFormat, GitStrings.PushRejectedHint, "! [rejected]        main -> main (non-fast-forward)")
             ],
             registration.Window.Errors);
+        // Without a lease, as when the push goes elsewhere than the upstream, no force push is offered.
+        Assert.Empty(registration.Dialogs.Confirmations);
         Assert.Empty(registration.Window.Infos);
         Assert.Equal(["fetch", "pull", "push"], remotes.Calls);
+    }
+
+    [Fact]
+    public async Task A_rejected_push_with_a_lease_asks_and_force_pushes_the_branch_with_that_lease_only_when_confirmed()
+    {
+        bool confirm = false;
+        ScriptedRemoteService remotes = new() { ForcePushLease = "0123456789abcdef0123456789abcdef01234567" };
+        // The plain push is rejected, the force push succeeds.
+        remotes.Respond = _ => remotes.Calls[^1].Contains("--force-with-lease", StringComparison.Ordinal)
+            ? GitRemoteResult.Succeeded(string.Empty)
+            : GitRemoteResult.Failed(GitRemoteFailureKind.Rejected, " ! [rejected]        main -> main (non-fast-forward)");
+        using Registration registration = await Registration.CreateAsync(remotes: remotes, upstream: "origin/main", respond: (_, _) => confirm);
+
+        await registration.Commands.ExecuteAsync(GitCommands.PUSH, null, CancellationToken.None);
+        confirm = true;
+        await registration.Commands.ExecuteAsync(GitCommands.PUSH, null, CancellationToken.None);
+
+        Assert.Equal(2, registration.Dialogs.Confirmations.Count());
+        Assert.All(registration.Dialogs.Confirmations, question => Assert.True(question.IsDestructive));
+        Assert.Equal(["push", "push", "push --force-with-lease main 0123456789abcdef0123456789abcdef01234567"], remotes.Calls);
+        Assert.Empty(registration.Window.Errors);
     }
 
     [Fact]
@@ -1056,6 +1117,20 @@ public sealed class GitCommandsTests
 
         Assert.True(remotes.WasCancelled);
         Assert.Equal([string.Format(GitStrings.PullSucceededFormat, "main", "origin/main")], registration.Window.Infos);
+        Assert.Empty(registration.Window.Errors);
+    }
+
+    [Fact]
+    public async Task A_sync_cancelled_after_its_pull_says_that_the_pull_happened_and_runs_no_push()
+    {
+        ScriptedRemoteService remotes = new() { Block = true, FinishWhenCancelled = true };
+        using Registration registration = await Registration.CreateAsync(remotes: remotes, upstream: "origin/main");
+        registration.Dialogs.ProgressMode = ProgressDialogMode.Cancel;
+
+        await registration.Commands.ExecuteAsync(GitCommands.SYNC, null, CancellationToken.None);
+
+        Assert.Equal(["pull"], remotes.Calls);
+        Assert.Equal([string.Format(GitStrings.SyncPushCancelledFormat, "main", "origin/main")], registration.Window.Infos);
         Assert.Empty(registration.Window.Errors);
     }
 

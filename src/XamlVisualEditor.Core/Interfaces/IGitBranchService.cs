@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
-/// Lists, switches, creates and deletes branches. Every method throws
+/// Lists, switches, creates, renames and deletes branches. Every method throws
 /// <see cref="System.InvalidOperationException"/> with git's error output when git fails.
 /// </summary>
 public interface IGitBranchService
@@ -48,11 +48,18 @@ public interface IGitBranchService
     Task<GitBranchDeleteResult> DeleteAsync(string repoPath, string name, bool force, CancellationToken ct = default);
 
     /// <summary>
-    /// Merges the branch <paramref name="name"/> into the current branch with the default merge message. A merge that
-    /// stops with conflicts returns <see cref="GitMergeResult.Conflicts"/> and leaves the repository in the merge.
+    /// Renames the local branch <paramref name="name"/> to <paramref name="newName"/>, with its upstream and its
+    /// other configuration; a remote branch keeps its name. A new name that another branch has fails.
     /// </summary>
-    Task<GitMergeResult> MergeAsync(string repoPath, string name, CancellationToken ct = default);
+    Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default);
 
-    /// <summary>Aborts the merge in progress and restores the state before the merge.</summary>
-    Task AbortMergeAsync(string repoPath, CancellationToken ct = default);
+    /// <summary>
+    /// Creates the tag <paramref name="name"/> at <paramref name="revision"/>: an annotated tag with
+    /// <paramref name="message"/>, a lightweight tag when it is null or empty. A name that is no valid tag name or that
+    /// a tag already has fails.
+    /// </summary>
+    Task CreateTagAsync(string repoPath, string name, string revision, string? message, CancellationToken ct = default);
+
+    /// <summary>Deletes the local tag <paramref name="name"/>; a remote keeps its tag of that name.</summary>
+    Task DeleteTagAsync(string repoPath, string name, CancellationToken ct = default);
 }

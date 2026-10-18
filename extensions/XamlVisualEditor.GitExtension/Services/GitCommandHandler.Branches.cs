@@ -56,6 +56,65 @@ internal sealed partial class GitCommandHandler
         }
     }
 
+    public async Task RenameBranchAsync(CommandContext context)
+    {
+        if (await LoadBranchesAsync() is not { } branches)
+        {
+            return;
+        }
+
+        GitBranch? target;
+        if (FirstStringArgument(context) is { } argument)
+        {
+            target = FindBranch(branches, argument);
+            if (target is null)
+            {
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.BranchNotFoundFormat, argument));
+                return;
+            }
+        }
+        else
+        {
+            // The current branch first, the one renamed most often.
+            GitBranch[] candidates = branches.Where(branch => !branch.IsRemote).OrderByDescending(branch => branch.IsCurrent).ToArray();
+            if (candidates.Length == 0)
+            {
+                await ShowInformationAsync(GitStrings.NoBranchToRename);
+                return;
+            }
+
+            target = await PickBranchAsync(candidates, GitStrings.RenameBranchPickTitle);
+            if (target is null)
+            {
+                return;
+            }
+        }
+
+        if (target.IsRemote)
+        {
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.CannotRenameRemoteFormat, target.Name));
+            return;
+        }
+
+        string name = target.Name;
+        string? newName = (await _window.ShowInputBoxAsync(
+            new InputBoxOptions(
+                DialogTitle(GitStrings.RenameBranchCommand),
+                string.Format(CultureInfo.CurrentCulture, GitStrings.RenameBranchPromptFormat, name),
+                name),
+            CancellationToken.None))?.Trim();
+        if (string.IsNullOrEmpty(newName) || string.Equals(newName, name, StringComparison.Ordinal) || !await IsValidBranchNameAsync(newName))
+        {
+            return;
+        }
+
+        await TryRunAsync<bool>(async (service, root, ct) =>
+        {
+            await service.RenameAsync(root, name, newName, ct);
+            return true;
+        });
+    }
+
     public async Task DeleteBranchAsync(CommandContext context)
     {
         if (await LoadBranchesAsync() is not { } branches)
@@ -258,9 +317,115 @@ internal sealed partial class GitCommandHandler
             GitStrings.PushCommand,
             string.Format(CultureInfo.CurrentCulture, GitStrings.PushProgressFormat, branch),
             (services, root, ct) => services.Remotes!.PushAsync(root, setUpstreamRemote, ct));
+
+        // After an amend or a rebase of a pushed branch only a force push gets through; it replaces commits on the
+        // remote, so the question starts with git's reason and pulling, which keeps them, and the default declines.
+        // It is offered only when it replaces the branch that rejected the push, and only the commit known before the
+        // question; otherwise the rejection shows as an error.
+        if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected }
+            && setUpstreamRemote is null
+            && await ReadForcePushLeaseAsync(branch) is { } lease)
+        {
+            if (await ConfirmAsync(
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        GitStrings.ForcePushAfterRejectPromptFormat,
+                        branch,
+                        upstream,
+                        GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message))),
+                    GitStrings.ForcePushConfirm,
+                    GitStrings.ForcePushCommand,
+                    isDestructive: true))
+            {
+                await RunForcePushAsync(branch, upstream!, lease);
+            }
+
+            return;
+        }
+
         await ReportRemoteResultAsync(
             result,
             string.Format(CultureInfo.CurrentCulture, GitStrings.PushSucceededFormat, branch, upstream));
+    }
+
+    public async Task ForcePushAsync(CommandContext context)
+    {
+        if (!await EnsureRemoteServiceAsync())
+        {
+            return;
+        }
+
+        GitSnapshot snapshot = _session.Current;
+        if (snapshot.IsDetached)
+        {
+            await ShowInformationAsync(GitStrings.DetachedHeadCannotPush);
+            return;
+        }
+
+        if (!await EnsureUpstreamAsync(snapshot))
+        {
+            return;
+        }
+
+        string branch = snapshot.BranchName;
+        string upstream = snapshot.UpstreamName!;
+        if (await ReadForcePushLeaseAsync(branch) is not { } lease)
+        {
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushUnavailableFormat, branch, upstream));
+            return;
+        }
+
+        if (await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushPromptFormat, branch, upstream),
+                GitStrings.ForcePushConfirm,
+                GitStrings.ForcePushCommand,
+                isDestructive: true))
+        {
+            await RunForcePushAsync(branch, upstream, lease);
+        }
+    }
+
+    /// <summary>
+    /// Returns the lease of a force push of <paramref name="branch"/>, see <see cref="IGitRemoteService.GetForcePushLeaseAsync"/>,
+    /// or null when a force push could replace something else than the push.
+    /// </summary>
+    private async Task<string?> ReadForcePushLeaseAsync(string branch)
+    {
+        try
+        {
+            return await _session.Services.Remotes!.GetForcePushLeaseAsync(_session.Current.RepositoryRoot!, branch, CancellationToken.None);
+        }
+        catch (InvalidOperationException exception)
+        {
+            _logger?.Error(exception.Message, exception);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Force pushes the confirmed <paramref name="branch"/> to its upstream, replacing only <paramref name="lease"/>,
+    /// the upstream commit the question was about.
+    /// </summary>
+    private async Task RunForcePushAsync(string branch, string upstream, string lease)
+    {
+        GitRemoteResult? result = await RunWithProgressAsync(
+            GitStrings.ForcePushCommand,
+            string.Format(CultureInfo.CurrentCulture, GitStrings.PushProgressFormat, branch),
+            (services, root, ct) => services.Remotes!.ForcePushAsync(root, branch, lease, ct));
+        if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected })
+        {
+            // The hint of a rejected push, to pull first, would hide that the lease protected the remote's new commits.
+            await ShowErrorAsync(
+                string.Format(
+                    CultureInfo.CurrentCulture,
+                    GitStrings.RemoteFailureFormat,
+                    GitStrings.ForcePushStaleHint,
+                    GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message))),
+                HasGitOutput(result));
+            return;
+        }
+
+        await ReportRemoteResultAsync(result, string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushedFormat, branch, upstream));
     }
 
     public async Task SyncAsync(CommandContext context)
@@ -283,8 +448,32 @@ internal sealed partial class GitCommandHandler
             {
                 IGitRemoteService remotes = services.Remotes!;
                 GitRemoteResult pull = await remotes.PullAsync(root, ct).ConfigureAwait(false);
-                return new SyncResult(pull, pull.Success ? await remotes.PushAsync(root, ct: ct).ConfigureAwait(false) : null);
+                if (!pull.Success)
+                {
+                    return new SyncResult(pull, null);
+                }
+
+                // The pull already changed the branch: a cancel from here on stops only the push, and the result says so.
+                try
+                {
+                    ct.ThrowIfCancellationRequested();
+                    return new SyncResult(pull, await remotes.PushAsync(root, ct: ct).ConfigureAwait(false));
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return new SyncResult(pull, null, PushCancelled: true);
+                }
             });
+        if (result is { PushCancelled: true })
+        {
+            await ShowInformationAsync(string.Format(
+                CultureInfo.CurrentCulture,
+                GitStrings.SyncPushCancelledFormat,
+                snapshot.BranchName,
+                snapshot.UpstreamName));
+            return;
+        }
+
         if (result?.Push is not { Success: false } push)
         {
             await ReportRemoteResultAsync(
@@ -304,30 +493,126 @@ internal sealed partial class GitCommandHandler
             HasGitOutput(push));
     }
 
+    /// <summary>Gets or sets how long a git command runs before <see cref="WatchAsync"/> shows a progress.</summary>
+    internal TimeSpan ProgressDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Gets or sets how long the progress of a writing git command shows before it offers to stop git; until then a
+    /// command that runs long is most likely working, not hanging.
+    /// </summary>
+    internal TimeSpan StopDelay { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Watches an operation of the session that shows no progress of its own: once it runs longer than
+    /// <see cref="ProgressDelay"/>, a progress shows until it ends, and after <see cref="StopDelay"/> it offers to stop
+    /// its writing git commands in <paramref name="stop"/>, which needs a confirmation.
+    /// </summary>
+    public Task WatchAsync(Task run, GitProcessStop stop) =>
+        WatchAsync(GitStrings.GitRunningTitle, GitStrings.GitRunningMessage, run, stop);
+
+    private async Task WatchAsync(string title, string message, Task run, GitProcessStop stop)
+    {
+        using CancellationTokenSource delayEnd = new();
+        Task first = await Task.WhenAny(run, Task.Delay(ProgressDelay, delayEnd.Token));
+        delayEnd.Cancel();
+        if (first != run)
+        {
+            await ShowStoppableProgressAsync(title, message, run, stop);
+        }
+    }
+
+    /// <summary>
+    /// Shows the progress of an operation with writing git commands until <paramref name="run"/> ends. Its stop button
+    /// shows after <see cref="StopDelay"/> and only while a writing command runs; a stop the user confirms while that
+    /// command runs stops it through <paramref name="stop"/>, and a declined one shows the progress again, then without
+    /// the wait. The progress and the question close when the operation ends; a progress that closes otherwise or
+    /// cannot be shown leaves git running.
+    /// </summary>
+    private async Task ShowStoppableProgressAsync(string title, string message, Task run, GitProcessStop stop)
+    {
+        // A source without a timer needs no disposing, so the end of the operation can cancel it at any time.
+        CancellationTokenSource ended = new();
+        _ = run.ContinueWith(
+            _ => ended.Cancel(),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        TimeSpan delay = StopDelay;
+        while (!run.IsCompleted)
+        {
+            if (await ShowProgressAsync(title, message, GitStrings.StopGitButton, delay, ended.Token, stop.Writing) != true
+                || run.IsCompleted)
+            {
+                return;
+            }
+
+            delay = TimeSpan.Zero;
+
+            // The question is for the writing command that runs now: it closes when that command or the operation
+            // ends, so a confirmation never stops a later command. A source without a timer needs no disposing, so a
+            // change that arrives late can still cancel it; the change arrives under the lock of the scope, so the
+            // question closes on the thread pool.
+            CancellationTokenSource question = CancellationTokenSource.CreateLinkedTokenSource(ended.Token);
+            using (stop.Writing.Subscribe(writing =>
+                   {
+                       if (!writing)
+                       {
+                           _ = question.CancelAsync();
+                       }
+                   }))
+            {
+                if (await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true, question.Token)
+                    && stop.IsWriting
+                    && !run.IsCompleted)
+                {
+                    stop.Stop();
+                    return;
+                }
+            }
+
+            await Task.Yield();
+        }
+    }
+
     /// <summary>
     /// Runs an operation through the session while the progress dialog is shown and returns its result. Only the
     /// cancel result of the dialog cancels the operation; a dialog that closes otherwise or cannot be shown leaves it
     /// running. The dialog closes when the operation ends. An operation that finished although it was cancelled
-    /// returns its result. Returns null when the operation was cancelled or failed with an exception, both of which
-    /// are reported.
+    /// returns its result. An operation that <paramref name="writes"/> is not cancelled: its progress offers to stop
+    /// git as <see cref="ShowStoppableProgressAsync"/> does. Returns null when the operation was cancelled or failed
+    /// with an exception, both of which are reported.
     /// </summary>
     private async Task<T?> RunWithProgressAsync<T>(
         string title,
         string message,
-        Func<GitServiceSet, string, CancellationToken, Task<T>> operation)
+        Func<GitServiceSet, string, CancellationToken, Task<T>> operation,
+        bool writes = false)
         where T : class
     {
         using CancellationTokenSource work = new();
-        using CancellationTokenSource closeDialog = new();
-        Task<T> run = _session.RunWithServicesAsync(operation, work.Token);
-        Task<bool?> dialog = ShowProgressAsync(title, message, closeDialog.Token);
-        if (await Task.WhenAny(run, dialog) == dialog && await dialog == true)
+        GitProcessStop stop = new();
+        Task<T> run = _session.RunWithServicesAsync(operation, work.Token, stop);
+        if (writes)
         {
-            work.Cancel();
+            await ShowStoppableProgressAsync(title, message, run, stop);
+        }
+        else
+        {
+            using CancellationTokenSource closeDialog = new();
+            Task<bool?> dialog = ShowProgressAsync(title, message, null, TimeSpan.Zero, closeDialog.Token);
+            if (await Task.WhenAny(run, dialog) == dialog && await dialog == true)
+            {
+                work.Cancel();
+            }
+
+            closeDialog.Cancel();
+            await dialog;
+
+            // A cancel does not stop a writing step that already runs, such as the fast-forward of a pull; when it
+            // does not end, the user can stop it as any writing command.
+            await WatchAsync(title, message, run, stop);
         }
 
-        closeDialog.Cancel();
-        await dialog;
         try
         {
             return await run;
@@ -350,7 +635,8 @@ internal sealed partial class GitCommandHandler
     private async Task<bool> RunWithProgressAsync(
         string title,
         string message,
-        Func<GitServiceSet, string, CancellationToken, Task> operation)
+        Func<GitServiceSet, string, CancellationToken, Task> operation,
+        bool writes = false)
     {
         object? completed = await RunWithProgressAsync<object>(
             title,
@@ -359,21 +645,29 @@ internal sealed partial class GitCommandHandler
             {
                 await operation(services, root, ct).ConfigureAwait(false);
                 return true;
-            });
+            },
+            writes);
         return completed is not null;
     }
 
     /// <summary>
-    /// Shows the progress dialog until <paramref name="closeToken"/> is cancelled. Returns true when the user
-    /// cancelled, otherwise null; a dialog that fails is logged and counts as not cancelled.
+    /// Shows the progress dialog until <paramref name="closeToken"/> is cancelled, with its cancel button after
+    /// <paramref name="cancelDelay"/> and while <paramref name="cancelAvailable"/>, if any, last said true. Returns
+    /// true when the user cancelled, otherwise null; a dialog that fails is logged and counts as not cancelled.
     /// </summary>
-    private async Task<bool?> ShowProgressAsync(string title, string message, CancellationToken closeToken)
+    private async Task<bool?> ShowProgressAsync(
+        string title,
+        string message,
+        string? cancelText,
+        TimeSpan cancelDelay,
+        CancellationToken closeToken,
+        IObservable<bool>? cancelAvailable = null)
     {
         try
         {
             return await _dialogHost.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest(title, message),
+                new ProgressDialogRequest(DialogTitle(title), message, cancelText) { CancelDelay = cancelDelay, CancelAvailable = cancelAvailable },
                 closeToken);
         }
         catch (OperationCanceledException)
@@ -425,7 +719,7 @@ internal sealed partial class GitCommandHandler
     /// </summary>
     private static string FormatRemoteFailure(GitRemoteResult result)
     {
-        string gitMessage = GitOutputLogger.MaskCredentials(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message));
+        string gitMessage = GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message));
         string? hint = result.FailureKind switch
         {
             GitRemoteFailureKind.Authentication => GitStrings.AuthenticationFailedHint,
@@ -543,19 +837,8 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // Checked before git runs, so an invalid name gets a plain message instead of git's error output.
-        bool? valid = await TryRunAsync<bool>(async (branches, root, ct) =>
-            await branches.IsValidBranchNameAsync(root, name, ct));
-        if (valid is null)
+        if (!await IsValidBranchNameAsync(name))
         {
-            return;
-        }
-
-        if (valid is false)
-        {
-            await ShowErrorAsync(
-                string.Format(CultureInfo.CurrentCulture, GitStrings.InvalidBranchNameFormat, name),
-                hasGitOutput: false);
             return;
         }
 
@@ -576,6 +859,24 @@ internal sealed partial class GitCommandHandler
             await branches.CreateAsync(root, name, startPoint, switchTo, ct);
             return true;
         });
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="name"/> is a valid branch name, after reporting why not. Checked before git runs,
+    /// so an invalid name gets a plain message instead of git's error output.
+    /// </summary>
+    private async Task<bool> IsValidBranchNameAsync(string name)
+    {
+        bool? valid = await TryRunAsync<bool>(async (branches, root, ct) =>
+            await branches.IsValidBranchNameAsync(root, name, ct));
+        if (valid is false)
+        {
+            await ShowErrorAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.InvalidBranchNameFormat, name),
+                hasGitOutput: false);
+        }
+
+        return valid is true;
     }
 
     private Task<GitBranchDeleteResult?> DeleteAsync(string name, bool force) =>
@@ -692,7 +993,7 @@ internal sealed partial class GitCommandHandler
                     : branch.IsRemote ? GitStrings.RemoteBranchDescription : null,
                 branch.Subject.Length == 0 ? null : branch.Subject))
             .ToArray();
-        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
+        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(DialogTitle(title), false), CancellationToken.None);
         int index = picked is null ? -1 : Array.IndexOf(items, picked);
         return index < 0 ? null : branches[index];
     }
@@ -700,13 +1001,29 @@ internal sealed partial class GitCommandHandler
     private Task<bool> ConfirmAsync(string message, string confirmText) =>
         ConfirmAsync(message, confirmText, GitStrings.DeleteBranchConfirmTitle, isDestructive: true);
 
-    private async Task<bool> ConfirmAsync(string message, string confirmText, string title, bool isDestructive)
+    /// <summary>
+    /// Asks the user; only an explicit confirmation is true. <paramref name="cancellationToken"/> closes the question
+    /// unanswered, which counts as declined.
+    /// </summary>
+    private async Task<bool> ConfirmAsync(
+        string message,
+        string confirmText,
+        string title,
+        bool isDestructive,
+        CancellationToken cancellationToken = default)
     {
-        bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
-            ConfirmationDialogRequest.DialogId,
-            new ConfirmationDialogRequest(title, message, confirmText, isDestructive),
-            CancellationToken.None);
-        return confirmed == true;
+        try
+        {
+            bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
+                ConfirmationDialogRequest.DialogId,
+                new ConfirmationDialogRequest(DialogTitle(title), message, confirmText, isDestructive),
+                cancellationToken);
+            return confirmed == true && !cancellationToken.IsCancellationRequested;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private static GitBranch? FindBranch(IReadOnlyList<GitBranch> branches, string name)
@@ -724,6 +1041,6 @@ internal sealed partial class GitCommandHandler
             ? argument
             : null;
 
-    /// <summary>The pull of a sync and the push that follows a successful pull.</summary>
-    private sealed record SyncResult(GitRemoteResult Pull, GitRemoteResult? Push);
+    /// <summary>The pull of a sync and the push that follows a successful pull, or that the user cancelled it.</summary>
+    private sealed record SyncResult(GitRemoteResult Pull, GitRemoteResult? Push, bool PushCancelled = false);
 }

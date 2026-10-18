@@ -268,7 +268,7 @@ public sealed class GitSession : IDisposable
             using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 _lifetime.Token);
-            await operation(_services.Service, repositoryRoot, linked.Token).ConfigureAwait(false);
+            await RunWatchedAsync(() => operation(_services.Service, repositoryRoot, linked.Token), null).ConfigureAwait(false);
         }
         finally
         {
@@ -277,14 +277,74 @@ public sealed class GitSession : IDisposable
     }
 
     /// <summary>
+    /// Gets or sets what watches a running operation: it gets the operation and the scope in which the user can stop
+    /// its writing git commands, shows a progress once the operation runs longer than a moment and lets the user stop
+    /// git that hangs, for example in a hook. Null runs operations without watching.
+    /// </summary>
+    public Func<Task, GitProcessStop, Task>? Watch { get; set; }
+
+    /// <summary>
+    /// Starts <paramref name="operation"/> in <paramref name="stop"/>, or in a scope of its own that
+    /// <see cref="Watch"/> gets, and waits for it; a stop is reported as <see cref="GitStoppedException"/>.
+    /// </summary>
+    private async Task<T> RunWatchedAsync<T>(Func<Task<T>> operation, GitProcessStop? stop)
+    {
+        GitProcessStop scope = stop ?? new GitProcessStop();
+        Task<T> run;
+        using (scope.Enter())
+        {
+            run = operation();
+        }
+
+        if (stop is null && Watch is { } watch)
+        {
+            // A watch that fails or is cancelled must not leave the operation running unobserved.
+            try
+            {
+                await watch(run, scope).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                if (exception is not OperationCanceledException)
+                {
+                    _logger?.Error(GitStrings.LogProgressDialogFailed, exception);
+                }
+            }
+        }
+
+        try
+        {
+            return await run.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (scope.IsStopped)
+        {
+            throw new GitStoppedException();
+        }
+    }
+
+    private Task RunWatchedAsync(Func<Task> operation, GitProcessStop? stop) =>
+        RunWatchedAsync<bool>(async () =>
+        {
+            await operation().ConfigureAwait(false);
+            return true;
+        }, stop);
+
+    /// <summary>
     /// Runs an operation with all git services on the repository of the current snapshot and refreshes the status
     /// afterwards, also when the operation failed or was cancelled. The operation may change branches, so the refresh
     /// increases <see cref="GitSnapshot.RefsVersion"/>. Exceptions of the operation are passed on after the refresh.
     /// </summary>
     /// <exception cref="InvalidOperationException">The workspace is not inside a repository.</exception>
+    /// <param name="operation">The operation.</param>
+    /// <param name="cancellationToken">Cancels the operation; a writing git command that started runs to its end.</param>
+    /// <param name="stop">
+    /// The scope in which the user can stop the writing git commands of the operation, for a caller that shows its own
+    /// progress; without it, <see cref="Watch"/> watches the operation.
+    /// </param>
     public async Task<T> RunWithServicesAsync<T>(
         Func<GitServiceSet, string, CancellationToken, Task<T>> operation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        GitProcessStop? stop = null)
     {
         string repositoryRoot = Current.RepositoryRoot
             ?? throw new InvalidOperationException(UiStrings.WorkspaceNotGitRepository);
@@ -293,7 +353,7 @@ public sealed class GitSession : IDisposable
             using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 _lifetime.Token);
-            return await operation(_services, repositoryRoot, linked.Token).ConfigureAwait(false);
+            return await RunWatchedAsync(() => operation(_services, repositoryRoot, linked.Token), stop).ConfigureAwait(false);
         }
         finally
         {

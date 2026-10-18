@@ -45,6 +45,205 @@ public sealed class GitRemoteServiceTests
     }
 
     [Fact]
+    public async Task Force_push_replaces_an_amended_commit_and_is_refused_when_the_remote_got_unfetched_commits()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remote = repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.True((await service.PushAsync(repository.Path, "origin", ct)).Success);
+        repository.RunGit("commit", "-q", "--amend", "-m", "Amended");
+
+        Assert.Equal(GitRemoteFailureKind.Rejected, (await service.PushAsync(repository.Path, ct: ct)).FailureKind);
+        GitRemoteResult forced = await service.ForcePushAsync(repository.Path, "main", Sha(repository, "origin/main"), ct);
+
+        Assert.True(forced.Success, forced.Message);
+        Assert.Equal(Sha(repository, "HEAD"), repository.RunGitIn(remote, "rev-parse", "main").Trim());
+
+        // Another user pushes a commit after the lease was read, and this repository even fetches it: the lease of
+        // the commit the question was about keeps it.
+        string lease = Sha(repository, "origin/main");
+        string clone = repository.CloneRemote("other");
+        repository.CommitFileIn(clone, "b.txt", "b\n", "Other");
+        repository.RunGitIn(clone, "push", "-q");
+        string theirs = repository.RunGitIn(remote, "rev-parse", "main").Trim();
+        repository.RunGit("fetch", "-q");
+        repository.RunGit("commit", "-q", "--amend", "-m", "Amended again");
+
+        GitRemoteResult refused = await service.ForcePushAsync(repository.Path, "main", lease, ct);
+
+        Assert.False(refused.Success);
+        Assert.Equal(GitRemoteFailureKind.Rejected, refused.FailureKind);
+        Assert.Equal(theirs, repository.RunGitIn(remote, "rev-parse", "main").Trim());
+    }
+
+    [Fact]
+    public async Task Force_push_pushes_only_the_named_branch_to_its_upstream_of_another_name()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remote = repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        repository.RunGit("push", "-q", "origin", "main", "main:shared", "main:topic-remote");
+        // The local topic tracks topic-remote, and shared is behind its remote-tracking branch after another push.
+        repository.RunGit("switch", "-q", "-c", "topic", "--track", "origin/topic-remote");
+        repository.RunGit("switch", "-q", "-c", "shared", "--track", "origin/shared");
+        string clone = repository.CloneRemote("other");
+        repository.RunGitIn(clone, "switch", "-q", "shared");
+        repository.CommitFileIn(clone, "b.txt", "b\n", "Colleague");
+        repository.RunGitIn(clone, "push", "-q", "origin", "shared");
+        repository.RunGit("fetch", "-q");
+        string colleague = repository.RunGitIn(remote, "rev-parse", "shared").Trim();
+        repository.RunGit("config", "push.default", "matching");
+        repository.RunGit("switch", "-q", "topic");
+        repository.RunGit("commit", "-q", "--amend", "-m", "Rewritten");
+
+        GitRemoteResult forced = await service.ForcePushAsync(repository.Path, "topic", Sha(repository, "origin/topic-remote"), ct);
+
+        Assert.True(forced.Success, forced.Message);
+        Assert.Equal(Sha(repository, "topic"), repository.RunGitIn(remote, "rev-parse", "topic-remote").Trim());
+        Assert.Equal(colleague, repository.RunGitIn(remote, "rev-parse", "shared").Trim());
+        Assert.False(repository.TryRunGitIn(remote, out _, "rev-parse", "--verify", "refs/heads/topic"));
+        Assert.Equal(
+            GitRemoteFailureKind.NoUpstream,
+            (await service.ForcePushAsync(repository.Path, "nothing", Sha(repository, "HEAD"), ct)).FailureKind);
+    }
+
+    [Fact]
+    public async Task A_force_push_lease_is_given_only_when_the_push_goes_to_the_fetched_upstream_on_a_remote()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        Assert.Equal(Sha(repository, "origin/main"), await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
+
+        // feature tracks origin/main, but push.default=current pushes it to origin/feature.
+        repository.RunGit("switch", "-q", "-c", "feature", "--track", "origin/main");
+        repository.RunGit("config", "push.default", "current");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "feature", ct));
+
+        // main pushes to another remote than its upstream.
+        repository.RunGit("remote", "add", "fork", repository.RemotePath!);
+        repository.RunGit("config", "branch.main.pushRemote", "fork");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
+        repository.RunGit("config", "--unset", "branch.main.pushRemote");
+
+        // A push under matching pushes every branch of the same name, so another one may have rejected it.
+        repository.RunGit("config", "push.default", "matching");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
+        repository.RunGit("config", "push.default", "current");
+
+        // The upstream of local is the local branch main.
+        repository.RunGit("switch", "-q", "-c", "local", "--track", "main");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "local", ct));
+
+        // The upstream of fresh was never fetched.
+        repository.RunGit("switch", "-q", "-c", "fresh");
+        repository.RunGit("config", "branch.fresh.remote", "origin");
+        repository.RunGit("config", "branch.fresh.merge", "refs/heads/fresh");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "fresh", ct));
+        Assert.Equal(
+            GitRemoteFailureKind.NoUpstream,
+            (await service.ForcePushAsync(repository.Path, "local", Sha(repository, "main"), ct)).FailureKind);
+    }
+
+    private static string Sha(GitTestRepository repository, string revision) => repository.RunGit("rev-parse", revision).Trim();
+
+    [Fact]
+    public async Task A_tag_is_pushed_rejected_when_the_remote_tag_differs_and_deleted_on_the_remote()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remote = repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.True((await service.PushAsync(repository.Path, "origin", ct)).Success);
+        // A branch of the tag's name does not take its place.
+        repository.RunGit("tag", "v1");
+        repository.RunGit("branch", "v1");
+
+        GitRemoteResult pushed = await service.PushTagAsync(repository.Path, "origin", "v1", ct);
+
+        Assert.True(pushed.Success, pushed.Message);
+        Assert.Equal(repository.RunGit("rev-parse", "refs/tags/v1").Trim(), repository.RunGitIn(remote, "rev-parse", "refs/tags/v1").Trim());
+        Assert.False(repository.TryRunGitIn(remote, out _, "rev-parse", "--verify", "refs/heads/v1"));
+
+        repository.CommitFileIn(repository.Path, "a.txt", "two\n", "Two");
+        repository.RunGit("tag", "-f", "v1", "HEAD");
+        GitRemoteResult rejected = await service.PushTagAsync(repository.Path, "origin", "v1", ct);
+
+        Assert.False(rejected.Success);
+        Assert.Equal(GitRemoteFailureKind.Rejected, rejected.FailureKind);
+
+        GitRemoteResult deleted = await service.DeleteRemoteTagAsync(repository.Path, "origin", "v1", ct);
+
+        Assert.True(deleted.Success, deleted.Message);
+        Assert.False(repository.TryRunGitIn(remote, out _, "rev-parse", "--verify", "refs/tags/v1"));
+        Assert.True(repository.TryRunGit(out _, "rev-parse", "--verify", "refs/tags/v1"));
+    }
+
+    [Fact]
+    public async Task Remotes_are_added_renamed_with_their_upstreams_changed_and_removed_with_their_branches()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remotePath = repository.AddBareRemote();
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.AddRemoteAsync(repository.Path, "backup", remotePath, ct);
+        await service.RenameRemoteAsync(repository.Path, "origin", "upstream", ct);
+        await service.SetRemoteUrlAsync(repository.Path, "backup", "https://example.com/repo.git", ct);
+
+        Assert.Equal("upstream/main", repository.RunGit("rev-parse", "--abbrev-ref", "main@{upstream}").Trim());
+        Assert.Equal(
+            [("backup", "https://example.com/repo.git"), ("upstream", remotePath)],
+            (await service.GetRemotesAsync(repository.Path, ct)).Select(remote => (remote.Name, remote.FetchUrl)).OrderBy(remote => remote.Name));
+
+        await service.RemoveRemoteAsync(repository.Path, "upstream", ct);
+
+        Assert.Equal("backup", Assert.Single(await service.GetRemotesAsync(repository.Path, ct)).Name);
+        Assert.Equal(string.Empty, repository.RunGit("branch", "-r").Trim());
+        Assert.False(repository.TryRunGit(out _, "rev-parse", "--abbrev-ref", "main@{upstream}"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddRemoteAsync(repository.Path, "backup", remotePath, ct));
+    }
+
+    [Fact]
+    public async Task An_option_like_remote_name_is_refused_and_one_made_elsewhere_is_fetched_as_a_name()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.RunGit("remote", "add", "origin", "../nowhere");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.AddRemoteAsync(repository.Path, "--upload-pack=echo", "../nowhere", ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RenameRemoteAsync(repository.Path, "origin", "-x", ct));
+        Assert.Equal("origin", repository.RunGit("remote").Trim());
+
+        // git itself accepts the name; the fetch must pass it as the remote, not as the option --upload-pack.
+        repository.RunGit("remote", "add", "--", "--upload-pack=echo", "../nowhere");
+        GitRemoteResult fetched = await service.FetchAsync(repository.Path, ct);
+
+        Assert.False(fetched.Success);
+        Assert.DoesNotContain("bad line length", fetched.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task An_option_like_url_is_stored_as_the_url()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.AddRemoteAsync(repository.Path, "odd", "--mirror=fetch", ct);
+
+        GitRemote remote = Assert.Single(await service.GetRemotesAsync(repository.Path, ct));
+        Assert.Equal(("odd", "--mirror=fetch"), (remote.Name, remote.FetchUrl));
+        Assert.False(repository.TryRunGit(out _, "config", "remote.odd.mirror"));
+    }
+
+    [Fact]
     public async Task Fetch_reports_the_commits_behind_and_pull_fast_forwards()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

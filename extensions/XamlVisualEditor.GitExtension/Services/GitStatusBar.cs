@@ -1,14 +1,14 @@
 using System.Globalization;
 using System.Text;
-using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.GitExtension.Localization;
 
 namespace XamlVisualEditor.GitExtension.Services;
 
 /// <summary>
-/// Shows the branch, the commits ahead of and behind the upstream and the number of changed files in the status
-/// bar, for example "main ↑1 ↓2 · 5". A click opens the Git Changes panel.
+/// Shows the branch, the commits ahead of and behind the upstream, the number of changed files, the operation in
+/// progress and the number of conflicts in the status bar, for example "main ↑1 ↓2 · 5 · Merging ⚠2". A click opens
+/// the Git Changes panel.
 /// </summary>
 internal static class GitStatusBar
 {
@@ -58,15 +58,23 @@ internal static class GitStatusBar
             text.Append(" · ").Append(snapshot.ChangeCount.ToString(CultureInfo.CurrentCulture));
         }
 
-        if (snapshot.Operation == GitRepositoryOperation.Merging)
+        if (GitOperationNames.Get(snapshot.Operation) is { } operation)
         {
-            text.Append(" · ").Append(GitStrings.StatusBarMerging);
+            text.Append(" · ").Append(operation);
+        }
+
+        if (snapshot.ConflictCount > 0)
+        {
+            text.Append(" ⚠").Append(snapshot.ConflictCount.ToString(CultureInfo.CurrentCulture));
         }
 
         return text.ToString();
     }
 
-    /// <summary>Formats the tooltip: branch, upstream with ahead and behind, changed files and the click hint.</summary>
+    /// <summary>
+    /// Formats the tooltip: branch, upstream with ahead and behind, changed files, the operation in progress with its
+    /// conflicts and the click hint.
+    /// </summary>
     public static string FormatTooltip(GitSnapshot snapshot)
     {
         CultureInfo culture = CultureInfo.CurrentCulture;
@@ -80,8 +88,20 @@ internal static class GitStatusBar
                 ? string.Format(culture, GitStrings.UpstreamGoneFormat, snapshot.UpstreamName)
                 : string.Format(culture, GitStrings.StatusBarUpstreamFormat, snapshot.UpstreamName, snapshot.AheadBy, snapshot.BehindBy);
         string changes = string.Format(culture, GitStrings.StatusBarChangesFormat, snapshot.ChangeCount);
-        return branch + Environment.NewLine + upstream + Environment.NewLine + changes + Environment.NewLine
-            + GitStrings.StatusBarClickHint;
+        StringBuilder tooltip = new(branch);
+        tooltip.Append(Environment.NewLine).Append(upstream).Append(Environment.NewLine).Append(changes);
+        if (GitOperationNames.Get(snapshot.Operation) is { } operation)
+        {
+            tooltip.Append(Environment.NewLine).Append(operation);
+        }
+
+        if (snapshot.ConflictCount > 0)
+        {
+            tooltip.Append(Environment.NewLine)
+                .Append(string.Format(culture, GitStrings.ConflictCountFormat, snapshot.ConflictCount));
+        }
+
+        return tooltip.Append(Environment.NewLine).Append(GitStrings.StatusBarClickHint).ToString();
     }
 
     private static string BranchOrHead(GitSnapshot snapshot)

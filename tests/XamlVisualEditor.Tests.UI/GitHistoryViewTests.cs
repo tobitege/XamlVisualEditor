@@ -133,14 +133,16 @@ public sealed class GitHistoryViewTests
         GitHistoryView view = new() { DataContext = history };
         using ThemedWindow window = ThemedWindow.Show(view);
 
-        foreach (string gridName in new[] { "CommitGrid", "FileGrid" })
+        // The commit menu copies the id, starts a branch, creates a tag, cherry-picks and reverts; the file menu copies
+        // the path and shows the file history.
+        foreach ((string gridName, int itemCount) in new[] { ("CommitGrid", 5), ("FileGrid", 2) })
         {
             DataGrid grid = Find<DataGrid>(view, gridName);
             ContextMenu menu = grid.ContextMenu!;
             menu.Open(grid);
             window.Pump();
             MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-            Assert.Equal(2, items.Length);
+            Assert.Equal(itemCount, items.Length);
             Assert.All(items, item => Assert.IsType<PathIcon>(item.Icon));
             Assert.All(items, item => Assert.True(item.IsEnabled));
             menu.Close();

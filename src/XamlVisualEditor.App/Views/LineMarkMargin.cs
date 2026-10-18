@@ -26,7 +26,8 @@ public sealed class LineMarkMargin : AbstractMargin, ICustomHitTest
     private const double TICK_HEIGHT = 4;
 
     // Indexed by TextEditorLineMarkKind.
-    private static readonly string[] BrushKeys = ["SourceControlAddedBrush", "SourceControlModifiedBrush", "SourceControlDeletedBrush"];
+    private static readonly string[] BrushKeys =
+        ["SourceControlAddedBrush", "SourceControlModifiedBrush", "SourceControlDeletedBrush", "SourceControlConflictedBrush"];
 
     private readonly TextEditorLineMarkRegistry _registry;
     private readonly Action<string, IReadOnlyList<object?>>? _executeCommand;

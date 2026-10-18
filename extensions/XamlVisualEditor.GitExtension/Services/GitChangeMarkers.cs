@@ -20,6 +20,8 @@ public sealed class GitChangeMarkers : IDisposable
     private readonly IScheduler _scheduler;
     private readonly IExtensionLogger? _logger;
     private readonly Dictionary<string, SerialDisposable> _files = new(FileSystemPathComparison.Comparer);
+    private long _syncsStarted;
+    private long _syncApplied;
     private bool _disposed;
 
     /// <summary>Creates the marks, switched on until <see cref="LoadAsync"/> reads the saved switch.</summary>
@@ -114,6 +116,9 @@ public sealed class GitChangeMarkers : IDisposable
             return;
         }
 
+        // Snapshots, the switch and document switches sync from different threads; a sync that read the open documents
+        // before a later one must not undo what the later one applied.
+        long sync = Interlocked.Increment(ref _syncsStarted);
         HashSet<string> open = _switch.IsEnabled
             ? _editor.GetOpenDocuments().Select(document => Path.GetFullPath(document.FilePath)).ToHashSet(FileSystemPathComparison.Comparer)
             : [];
@@ -121,10 +126,12 @@ public sealed class GitChangeMarkers : IDisposable
         List<(string Path, SerialDisposable File)> opened = new();
         lock (_gate)
         {
-            if (_disposed)
+            if (_disposed || sync < _syncApplied)
             {
                 return;
             }
+
+            _syncApplied = sync;
 
             foreach (string path in _files.Keys.Where(path => !open.Contains(path)).ToArray())
             {

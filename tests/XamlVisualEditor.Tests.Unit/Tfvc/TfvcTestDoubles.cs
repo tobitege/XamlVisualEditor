@@ -430,7 +430,17 @@ internal sealed class RecordingWindow : IWindow
         return Task.CompletedTask;
     }
 
-    public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult(InputBoxResult);
+    /// <summary>Gets the answers of the next input boxes, in order; once it is empty, <see cref="InputBoxResult"/> answers.</summary>
+    public Queue<string?> InputBoxResults { get; } = new();
+
+    /// <summary>Gets the options of the shown input boxes.</summary>
+    public List<InputBoxOptions> InputBoxes { get; } = new();
+
+    public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken)
+    {
+        InputBoxes.Add(options);
+        return Task.FromResult(InputBoxResults.Count > 0 ? InputBoxResults.Dequeue() : InputBoxResult);
+    }
 
     /// <summary>Gets or sets what the quick pick returns for its items; null cancels every quick pick.</summary>
     public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? QuickPick { get; set; }
@@ -584,7 +594,22 @@ internal sealed class FakeEditorDocument : IEditorDocument
         return Task.FromResult(Text);
     }
 
-    public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct) => Task.CompletedTask;
+    /// <summary>Gets every call of <see cref="ApplyEditsAsync"/>, which counts as one undo step each.</summary>
+    public List<IReadOnlyList<TextEdit>> AppliedEdits { get; } = new();
+
+    // Applies the edits from the last to the first, so the offsets of the earlier ones stay valid.
+    public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
+    {
+        AppliedEdits.Add(edits);
+        string text = Text;
+        foreach (TextEdit edit in edits.OrderByDescending(edit => edit.Offset))
+        {
+            text = text.Remove(edit.Offset, edit.Length).Insert(edit.Offset, edit.NewText);
+        }
+
+        Edit(text);
+        return Task.CompletedTask;
+    }
 
     public void Edit(string text)
     {
@@ -634,10 +659,12 @@ internal sealed class FakeEditorServices : IEditorServices
     public Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct)
         => OpenDocumentAsync(filePath, EditorDocumentOpenBehavior.AllowWorkspaceLoad, ct);
 
+    // Returns the open document of the file, if any; the fake opens no new documents.
     public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
     {
         OpenedFiles.Add(filePath);
-        return Task.FromResult<IEditorDocument?>(null);
+        return Task.FromResult(_documents.FirstOrDefault(document =>
+            string.Equals(Path.GetFullPath(document.FilePath), Path.GetFullPath(filePath), StringComparison.OrdinalIgnoreCase)));
     }
 
     public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct) => Task.FromResult(false);

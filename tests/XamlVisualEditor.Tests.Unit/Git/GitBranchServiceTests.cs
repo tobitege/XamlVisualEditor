@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -286,6 +288,117 @@ public sealed class GitBranchServiceTests
     }
 
     [Fact]
+    public async Task Rename_moves_the_branch_with_its_upstream_and_refuses_the_name_of_another_branch()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.AddBareRemote();
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        repository.RunGit("branch", "other");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.RenameAsync(repository.Path, "refs/heads/main", "renamed", ct);
+
+        Assert.Equal("renamed", CurrentBranch(repository));
+        Assert.Equal("origin/main", repository.RunGit("rev-parse", "--abbrev-ref", "renamed@{upstream}").Trim());
+        Assert.Equal(new[] { "other", "renamed" }, Branches(repository));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RenameAsync(repository.Path, "renamed", "other", ct));
+        Assert.Equal(new[] { "other", "renamed" }, Branches(repository));
+    }
+
+    [Fact]
+    public async Task A_switch_that_the_user_stops_ends_git_with_its_running_hook()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        // Without the stop, the hook would write its second marker after three seconds.
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 3; touch .git/hook-finished");
+        GitService service = new(options: repository.ProcessOptions);
+        GitProcessStop stop = new();
+        Task switching;
+        using (stop.Enter())
+        {
+            switching = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        }
+
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+        Assert.True(stop.IsWriting);
+        stop.Stop();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => switching);
+        Assert.False(stop.IsWriting);
+        await Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+    }
+
+    [Fact]
+    public async Task A_switch_cancelled_while_its_hook_runs_runs_to_its_end()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 2; touch .git/hook-finished");
+        GitService service = new(options: repository.ProcessOptions);
+        using CancellationTokenSource cancel = new();
+        Task switching = service.SwitchAsync(repository.Path, "other", cancel.Token);
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+        cancel.Cancel();
+
+        await switching;
+
+        Assert.Equal("other", CurrentBranch(repository));
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "index.lock")));
+    }
+
+    [Fact]
+    public async Task The_end_of_the_writes_waits_for_a_writing_command_whose_hook_runs()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 2; touch .git/hook-finished");
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.True(service.WhenWritesEnded().IsCompleted);
+        Task switching = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+
+        Task ended = service.WhenWritesEnded();
+        Assert.False(ended.IsCompleted);
+        await ended.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        await switching;
+        Assert.True(service.WhenWritesEnded().IsCompleted);
+    }
+
+    [Fact]
+    public async Task A_stop_ends_a_writing_command_that_waits_for_another_one()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 4; touch .git/hook-finished");
+        GitService service = new(options: repository.ProcessOptions);
+        Task first = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+        GitProcessStop stop = new();
+        Task waiting;
+        using (stop.Enter())
+        {
+            waiting = service.DeleteAsync(repository.Path, "main", force: true, CancellationToken.None);
+        }
+
+        // The scope counts the command synchronously, before it waits for the write gate.
+        Assert.True(stop.IsWriting);
+        Stopwatch stopped = Stopwatch.StartNew();
+        stop.Stop();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+        Assert.True(stopped.Elapsed < TimeSpan.FromSeconds(2), stopped.Elapsed.ToString());
+        await first;
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        Assert.Contains("main", Branches(repository));
+    }
+
+    [Fact]
     public async Task Deleting_the_current_branch_throws()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");
@@ -295,66 +408,71 @@ public sealed class GitBranchServiceTests
             () => service.DeleteAsync(repository.Path, "main", force: true, TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public void The_stop_scope_reports_whether_it_writes_on_subscribing_and_at_each_change()
+    {
+        GitProcessStop stop = new();
+        List<bool> values = new();
+        using IDisposable subscription = stop.Writing.Subscribe(values.Add);
+
+        IDisposable first = stop.BeginWrite();
+        IDisposable second = stop.BeginWrite();
+        first.Dispose();
+        first.Dispose();
+        Assert.True(stop.IsWriting);
+        second.Dispose();
+
+        Assert.Equal([false, true, false], values);
+        Assert.False(stop.IsWriting);
+    }
+
+    [Fact]
+    public async Task Tags_are_created_lightweight_or_annotated_at_a_revision_and_deleted()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string first = repository.RunGit("rev-parse", "HEAD").Trim();
+        repository.CommitFileIn(repository.Path, "a.txt", "two\n", "Two");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.CreateTagAsync(repository.Path, "light", first, message: "", ct);
+        await service.CreateTagAsync(repository.Path, "annotated", "HEAD", "Release\n\nNotes", ct);
+
+        Assert.Equal("commit", repository.RunGit("cat-file", "-t", "light").Trim());
+        Assert.Equal(first, repository.RunGit("rev-parse", "light").Trim());
+        Assert.Equal("tag", repository.RunGit("cat-file", "-t", "annotated").Trim());
+        Assert.Equal("Release\n\nNotes", repository.RunGit("tag", "-l", "--format=%(contents)", "annotated").Trim());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateTagAsync(repository.Path, "light", "HEAD", null, ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateTagAsync(repository.Path, "-f", "HEAD", null, ct));
+        Assert.Equal(first, repository.RunGit("rev-parse", "light").Trim());
+
+        await service.DeleteTagAsync(repository.Path, "light", ct);
+
+        Assert.Equal("annotated", repository.RunGit("tag", "-l").Trim());
+    }
+
+    private static async Task WaitForFileAsync(string path)
+    {
+        Stopwatch waited = Stopwatch.StartNew();
+        while (!File.Exists(path))
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), "The hook did not start: " + path);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+    }
+
+    private static void WritePostCheckoutHook(GitTestRepository repository, string command)
+    {
+        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\n" + command + "\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
     private static string CurrentBranch(GitTestRepository repository) =>
         repository.RunGit("rev-parse", "--abbrev-ref", "HEAD").Trim();
-
-    [Fact]
-    public async Task Merge_fast_forwards_and_reports_an_already_merged_branch()
-    {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        repository.RunGit("switch", "-q", "-c", "feature");
-        repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Feature");
-        repository.RunGit("switch", "-q", "main");
-        GitService service = new(options: repository.ProcessOptions);
-
-        GitMergeResult first = await service.MergeAsync(repository.Path, "feature", ct);
-        GitMergeResult second = await service.MergeAsync(repository.Path, "feature", ct);
-
-        Assert.Equal(GitMergeResult.Merged, first);
-        Assert.Equal(GitMergeResult.AlreadyUpToDate, second);
-        Assert.Equal(repository.RunGit("rev-parse", "feature"), repository.RunGit("rev-parse", "main"));
-        Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
-    }
-
-    [Fact]
-    public async Task Merge_with_conflicts_stops_in_the_merge_and_abort_restores_the_branch()
-    {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        repository.RunGit("switch", "-q", "-c", "feature");
-        repository.CommitFileIn(repository.Path, "a.txt", "feature\n", "Feature");
-        repository.RunGit("switch", "-q", "main");
-        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
-        string head = repository.RunGit("rev-parse", "HEAD");
-        GitService service = new(options: repository.ProcessOptions);
-
-        GitMergeResult result = await service.MergeAsync(repository.Path, "feature", ct);
-        GitRepositoryStatus merging = await service.GetStatusAsync(repository.Path, ct);
-        await service.AbortMergeAsync(repository.Path, ct);
-        GitRepositoryStatus aborted = await service.GetStatusAsync(repository.Path, ct);
-
-        Assert.Equal(GitMergeResult.Conflicts, result);
-        Assert.Equal(GitRepositoryOperation.Merging, merging.Operation);
-        Assert.Contains(merging.Changes, change => change.Path == "a.txt" && change.IsConflicted);
-        Assert.Equal(GitRepositoryOperation.None, aborted.Operation);
-        Assert.Empty(aborted.Changes);
-        Assert.Equal(head, repository.RunGit("rev-parse", "HEAD"));
-    }
-
-    [Fact]
-    public async Task Merge_of_an_unknown_branch_fails_with_the_message_of_git()
-    {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        GitService service = new(options: repository.ProcessOptions);
-
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.MergeAsync(repository.Path, "missing", ct));
-
-        Assert.Contains("missing", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
-    }
 
     private static string[] Branches(GitTestRepository repository) =>
         repository.RunGit("for-each-ref", "--format=%(refname:short)", "refs/heads")

@@ -149,8 +149,10 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
         IObservable<bool> hasSelection = this.WhenAnyValue(x => x.SelectedCommit).Select(row => row is not null);
         CopyCommitIdCommand = AddCommand(ReactiveCommand.CreateFromTask(CopyCommitIdAsync, hasSelection));
         CreateBranchFromCommitCommand = AddCommand(ReactiveCommand.CreateFromTask(
-            () => SelectedCommit is { } row ? _executeCommand(GitCommands.CREATE_BRANCH, [row.Sha]) : Task.CompletedTask,
-            hasSelection));
+            () => ExecuteForSelectedAsync(GitCommands.CREATE_BRANCH), hasSelection));
+        CreateTagCommand = AddCommand(ReactiveCommand.CreateFromTask(() => ExecuteForSelectedAsync(GitCommands.CREATE_TAG), hasSelection));
+        CherryPickCommand = AddCommand(ReactiveCommand.CreateFromTask(() => ExecuteForSelectedAsync(GitCommands.CHERRY_PICK), hasSelection));
+        RevertCommand = AddCommand(ReactiveCommand.CreateFromTask(() => ExecuteForSelectedAsync(GitCommands.REVERT), hasSelection));
 
         _disposables.Add(_session.Snapshots
             .WitnessOn(RxSchedulers.MainThreadScheduler)
@@ -257,6 +259,15 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at the selected commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> CreateBranchFromCommitCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.CREATE_TAG"/> at the selected commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CreateTagCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.CHERRY_PICK"/> for the selected commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CherryPickCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.REVERT"/> for the selected commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> RevertCommand { get; }
+
     /// <summary>
     /// Lists the commits of <paramref name="scope"/>; the message filter is cleared, the author filter stays. The
     /// first list of the scope selects the commit its revision names, when the revision is a listed full commit id.
@@ -285,6 +296,9 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
             Message = string.Format(CultureInfo.CurrentCulture, UiStrings.GitCommandFailed, error.Message)));
         return command;
     }
+
+    private Task ExecuteForSelectedAsync(string commandId) =>
+        SelectedCommit is { } row ? _executeCommand(commandId, [row.Sha]) : Task.CompletedTask;
 
     private void ApplyFilter() =>
         Publish(_requests.Value with { Author = Normalize(AuthorText), MessageText = Normalize(SearchText) });

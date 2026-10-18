@@ -32,6 +32,10 @@ internal sealed class GitProcessRunner
     private readonly ILogger _logger;
     private readonly Lazy<GitExecutable> _executable;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _writeGates = new(FileSystemPathComparison.Comparer);
+    private readonly AsyncLocal<SemaphoreSlim?> _heldGate = new();
+    private readonly object _writesGate = new();
+    private int _writes;
+    private TaskCompletionSource? _writesEnded;
 
     public GitProcessRunner(GitProcessOptions options, GitExecutableLocator? locator = null, ILogger? logger = null)
     {
@@ -69,24 +73,100 @@ internal sealed class GitProcessRunner
         CancellationToken? waitCancellation = null)
     {
         SemaphoreSlim? writeGate = request.Access == GitCommandAccess.Write ? GetWriteGate(request.WorkingDirectory) : null;
-        if (writeGate is not null)
-        {
-            Task wait = writeGate.WaitAsync(waitCancellation ?? ct);
-            if (!wait.IsCompleted)
-            {
-                _options.WriteGateWaitStarted?.Invoke(request.Arguments);
-            }
-
-            await wait.ConfigureAwait(false);
-        }
-
-        try
+        if (writeGate is null)
         {
             return await RunProcessAsync(request, ct).ConfigureAwait(false);
         }
+
+        // A command of RunWithWriteGateAsync runs under the gate its flow already holds.
+        bool held = _heldGate.Value == writeGate;
+        CountWrite(1);
+        try
+        {
+            if (!held)
+            {
+                Task wait = writeGate.WaitAsync(waitCancellation ?? ct);
+                if (!wait.IsCompleted)
+                {
+                    _options.WriteGateWaitStarted?.Invoke(request.Arguments);
+                }
+
+                await wait.ConfigureAwait(false);
+            }
+
+            try
+            {
+                return await RunProcessAsync(request, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (!held)
+                {
+                    writeGate.Release();
+                }
+            }
+        }
         finally
         {
-            writeGate?.Release();
+            CountWrite(-1);
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="action"/> while holding the write gate of <paramref name="workingDirectory"/>: the writing
+    /// commands it runs do not wait for the gate, and no other writing command runs between them, so a check of the
+    /// repository state still holds for the command it decides on.
+    /// </summary>
+    /// <param name="waitCancellation">Cancels the wait for the gate.</param>
+    public async Task<T> RunWithWriteGateAsync<T>(string workingDirectory, Func<Task<T>> action, CancellationToken waitCancellation)
+    {
+        SemaphoreSlim writeGate = GetWriteGate(workingDirectory);
+        if (_heldGate.Value == writeGate)
+        {
+            return await action().ConfigureAwait(false);
+        }
+
+        CountWrite(1);
+        try
+        {
+            await writeGate.WaitAsync(waitCancellation).ConfigureAwait(false);
+            // Set in this flow only: the action and the commands it starts see it, the caller does not.
+            _heldGate.Value = writeGate;
+            try
+            {
+                return await action().ConfigureAwait(false);
+            }
+            finally
+            {
+                _heldGate.Value = null;
+                writeGate.Release();
+            }
+        }
+        finally
+        {
+            CountWrite(-1);
+        }
+    }
+
+    /// <summary>Returns a task that completes when no writing command waits for or runs git.</summary>
+    public Task WhenWritesEnded()
+    {
+        lock (_writesGate)
+        {
+            return _writes == 0 ? Task.CompletedTask : (_writesEnded ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+    }
+
+    private void CountWrite(int change)
+    {
+        lock (_writesGate)
+        {
+            _writes += change;
+            if (_writes == 0)
+            {
+                _writesEnded?.TrySetResult();
+                _writesEnded = null;
+            }
         }
     }
 
@@ -120,7 +200,13 @@ internal sealed class GitProcessRunner
         // or a credential helper only after it read its configuration and the repository. Another wrapper, such as
         // a script on PATH, can start git before the assignment. Creating the process suspended would need
         // CreateProcess with own pipes instead of Process.
-        using GitProcessJob? job = OperatingSystem.IsWindows() ? GitProcessJob.TryAssign(process, _logger) : null;
+        // The editor ending does not kill a writing command (see GitService.RunGitAsync): its job, which only a stop
+        // uses, does not end its processes with the editor, and one without stop has no job. Every other command ends
+        // with the editor.
+        bool writes = request.Access == GitCommandAccess.Write;
+        using GitProcessJob? job = OperatingSystem.IsWindows() && (!writes || token.CanBeCanceled)
+            ? GitProcessJob.TryAssign(process, _logger, killOnClose: !writes)
+            : null;
 
         // Set only when cancellation or the timeout killed the running process; a process that ended on its own
         // keeps its result even when the token is cancelled afterwards.

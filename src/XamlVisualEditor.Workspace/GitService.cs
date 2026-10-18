@@ -37,6 +37,13 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
     /// <remarks>Raised on the thread that ran git; an exception of a subscriber is logged and does not fail the command.</remarks>
     public event EventHandler<GitCommandLogEntry>? CommandCompleted;
 
+    /// <summary>
+    /// Returns a task that completes when no writing git command of this service waits for or runs git. A writing
+    /// command outlives the editor, because it is not stopped half way; one whose output pipe closed with the editor can
+    /// still fail when it writes, so the editor waits for it before it ends.
+    /// </summary>
+    public Task WhenWritesEnded() => _runner.WhenWritesEnded();
+
     public async Task<string?> GetRepositoryRootAsync(string path, CancellationToken ct = default)
     {
         string? workingDirectory = ResolveWorkingDirectory(path);
@@ -65,8 +72,13 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         string[] args = { "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal" };
         GitProcessResult result = await RunGitAsync(repoPath, args, GitCommandAccess.Read, ct);
         ThrowIfFailed(result, args[0]);
-        GitRepositoryOperation operation = await GetOperationAsync(repoPath, ct);
-        return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation);
+        string? gitDirectory = await GetGitDirectoryAsync(repoPath, ct);
+        GitRepositoryOperation operation = gitDirectory is null ? GitRepositoryOperation.None : DetectOperation(gitDirectory);
+        return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation) with
+        {
+            IsStoppedForEdit = operation == GitRepositoryOperation.Rebasing && IsStoppedForEdit(gitDirectory!),
+            OperationStep = gitDirectory is null ? null : ReadOperationStep(gitDirectory, operation)
+        };
     }
 
     public async Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default)
@@ -140,7 +152,7 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
 
         // Standard input carries the message as UTF-8 bytes and has no command line length limit.
         await using Stream input = GitProcessRequest.Utf8Input(message);
-        await RunGitCheckedAsync(repoPath, new[] { "commit", "-F", "-" }, input, ct);
+        await RunGitCheckedAsync(repoPath, new[] { "commit", "-F", "-" }, input, ct, cancellable: true);
     }
 
     /// <summary>
@@ -151,9 +163,16 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         string workingDirectory,
         IReadOnlyList<string> args,
         Stream? standardInput,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool cancellable = false)
     {
-        GitProcessResult result = await RunGitAsync(workingDirectory, args, GitCommandAccess.Write, ct, standardInput: standardInput);
+        GitProcessResult result = await RunGitAsync(
+            workingDirectory,
+            args,
+            GitCommandAccess.Write,
+            ct,
+            standardInput: standardInput,
+            cancellable: cancellable);
         ThrowIfFailed(result, args[0]);
     }
 
@@ -231,6 +250,12 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
 
     internal static GitRepositoryOperation DetectOperation(string gitDirectory)
     {
+        // git am keeps its state in rebase-apply as the apply backend of rebase does, and marks it with this file.
+        if (File.Exists(Path.Combine(gitDirectory, "rebase-apply", "applying")))
+        {
+            return GitRepositoryOperation.ApplyingPatches;
+        }
+
         if (Directory.Exists(Path.Combine(gitDirectory, "rebase-merge"))
             || Directory.Exists(Path.Combine(gitDirectory, "rebase-apply")))
         {
@@ -247,9 +272,62 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
             return GitRepositoryOperation.CherryPicking;
         }
 
-        return File.Exists(Path.Combine(gitDirectory, "REVERT_HEAD"))
-            ? GitRepositoryOperation.Reverting
-            : GitRepositoryOperation.None;
+        if (File.Exists(Path.Combine(gitDirectory, "REVERT_HEAD")))
+        {
+            return GitRepositoryOperation.Reverting;
+        }
+
+        // A sequence of picks or reverts that stopped and whose step was committed has no CHERRY_PICK_HEAD or
+        // REVERT_HEAD; its remaining steps wait in the sequencer, the first of them names the kind.
+        string todo = Path.Combine(gitDirectory, "sequencer", "todo");
+        string? step = File.Exists(todo)
+            ? File.ReadLines(todo).Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0 && line[0] != '#')
+            : null;
+        return step switch
+        {
+            null => GitRepositoryOperation.None,
+            _ when step.StartsWith("revert ", StringComparison.Ordinal) => GitRepositoryOperation.Reverting,
+            _ => GitRepositoryOperation.CherryPicking
+        };
+    }
+
+    // git writes this file when a rebase stops at an edit step, and not when it stops for a conflict.
+    internal static bool IsStoppedForEdit(string gitDirectory) =>
+        File.Exists(Path.Combine(gitDirectory, "rebase-merge", "amend"));
+
+    /// <summary>
+    /// Returns the step of <paramref name="operation"/>, see <see cref="GitRepositoryStatus.OperationStep"/>: git counts
+    /// the steps of a rebase in rebase-merge/msgnum or rebase-apply/next and those of git am in rebase-apply/next, and
+    /// names the stopped commit of a cherry-pick or revert in CHERRY_PICK_HEAD or REVERT_HEAD.
+    /// </summary>
+    internal static string? ReadOperationStep(string gitDirectory, GitRepositoryOperation operation) =>
+        TryReadOperationStep(gitDirectory, operation, out string? step) ? step : null;
+
+    /// <summary>
+    /// Reads the step as <see cref="ReadOperationStep"/> does; returns false when git was rewriting its file, so an
+    /// unknown step never counts as the step the user confirmed.
+    /// </summary>
+    internal static bool TryReadOperationStep(string gitDirectory, GitRepositoryOperation operation, out string? step)
+    {
+        string[] files = operation switch
+        {
+            GitRepositoryOperation.Rebasing => [Path.Combine("rebase-merge", "msgnum"), Path.Combine("rebase-apply", "next")],
+            GitRepositoryOperation.ApplyingPatches => [Path.Combine("rebase-apply", "next")],
+            GitRepositoryOperation.CherryPicking => ["CHERRY_PICK_HEAD"],
+            GitRepositoryOperation.Reverting => ["REVERT_HEAD"],
+            _ => []
+        };
+        string? file = files.Select(name => Path.Combine(gitDirectory, name)).FirstOrDefault(File.Exists);
+        try
+        {
+            step = file is null ? null : File.ReadAllText(file).Trim();
+            return true;
+        }
+        catch (IOException)
+        {
+            step = null;
+            return false;
+        }
     }
 
     private static string? ResolveWorkingDirectory(string path)
@@ -315,11 +393,27 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         TimeSpan? timeout = null,
         CancellationToken? waitCancellation = null,
         int? maxOutputLines = null,
-        int? maxOutputBytes = null)
+        int? maxOutputBytes = null,
+        bool cancellable = false)
     {
         if (Interlocked.Exchange(ref _versionChecked, 1) == 0)
         {
             await WarnIfOutdatedAsync(workingDirectory, ct);
+        }
+
+        // A writing command stopped half way can leave index.lock behind and a half updated working tree, so once it
+        // runs, it is not stopped by cancelling, which stops only the wait for the other writing commands; only a stop
+        // the user confirmed in its scope ends the wait or the process (see GitProcessStop). A commit stays
+        // cancellable, because its hooks can hang and stopping git before it writes the commit changes nothing.
+        GitProcessStop? scope = access == GitCommandAccess.Write && !cancellable ? GitProcessStop.Current : null;
+        using IDisposable? writing = scope?.BeginWrite();
+        using CancellationTokenSource? waitStop = scope is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(waitCancellation ?? ct, scope.Token);
+        if (access == GitCommandAccess.Write && !cancellable)
+        {
+            waitCancellation = waitStop?.Token ?? waitCancellation ?? ct;
+            ct = scope?.Token ?? CancellationToken.None;
         }
 
         Action<IReadOnlyList<string>, int>? processStarted = _options.ProcessStarted;
@@ -356,7 +450,8 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
 
         if (!allowNonZeroExitCode && result.ExitCode != 0)
         {
-            _logger.LogWarning("git command failed: {Args} ({ExitCode})", string.Join(" ", args), result.ExitCode);
+            // An argument can be a URL with a token, such as the URL of git remote add.
+            _logger.LogWarning("git command failed: {Args} ({ExitCode})", GitUrlCredentials.Mask(string.Join(" ", args)), result.ExitCode);
         }
 
         return result;

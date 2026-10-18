@@ -140,6 +140,38 @@
                                                 <PathIcon Data="{x:Static vm:GitIcons.CreateBranch}" />
                                             </MenuItem.Icon>
                                         </MenuItem>
+                                        <MenuItem Header="{x:Static gloc:GitStrings.RenameBranchCommand}"
+                                                  Command="{CompiledBinding RenameCommand}"
+                                                  CommandParameter="{CompiledBinding .}"
+                                                  IsEnabled="{CompiledBinding CanRename}">
+                                            <MenuItem.Icon>
+                                                <PathIcon Data="{x:Static vm:GitIcons.Rename}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="{x:Static gloc:GitStrings.MergeIntoCurrentMenu}"
+                                                  Command="{CompiledBinding MergeCommand}"
+                                                  CommandParameter="{CompiledBinding .}"
+                                                  IsEnabled="{CompiledBinding CanSwitch}">
+                                            <MenuItem.Icon>
+                                                <PathIcon Data="{x:Static vm:GitIcons.Merge}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="{x:Static gloc:GitStrings.RebaseOntoMenu}"
+                                                  Command="{CompiledBinding RebaseCommand}"
+                                                  CommandParameter="{CompiledBinding .}"
+                                                  IsEnabled="{CompiledBinding CanSwitch}">
+                                            <MenuItem.Icon>
+                                                <PathIcon Data="{x:Static vm:GitIcons.Rebase}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="{x:Static gloc:GitStrings.CompareWithCurrentMenu}"
+                                                  Command="{CompiledBinding CompareCommand}"
+                                                  CommandParameter="{CompiledBinding .}"
+                                                  IsEnabled="{CompiledBinding CanSwitch}">
+                                            <MenuItem.Icon>
+                                                <PathIcon Data="{x:Static vm:GitIcons.Compare}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
                                         <Separator />
                                         <MenuItem Header="{x:Static gloc:GitStrings.DeleteBranchCommand}"
                                                   Command="{CompiledBinding DeleteCommand}"
@@ -166,6 +198,40 @@
             </TabItem>
             <TabItem Name="TagsTab" Header="{x:Static gloc:GitStrings.TagsTab}">
                 <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,4,0,2">
+                        <Button Classes="git-action" Command="{CompiledBinding CreateTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.CreateTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.CreateTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.CreateTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.CreateTagButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding PushTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.PushTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.PushTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.PushTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.PushTagButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding DeleteTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.DeleteTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.DeleteTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.DeleteTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.DeleteTagButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding DeleteRemoteTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.DeleteRemoteTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.DeleteRemoteTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.DeleteRemoteTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.DeleteRemoteTagButton}" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
                     <TextBlock DockPanel.Dock="Top"
                                Text="{CompiledBinding TagsMessage}"
                                TextWrapping="Wrap"
@@ -197,6 +263,27 @@
                                           Command="{CompiledBinding CreateBranchFromTagCommand}">
                                     <MenuItem.Icon>
                                         <PathIcon Data="{x:Static vm:GitIcons.CreateBranch}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.CompareWithCurrentMenu}" Command="{CompiledBinding CompareTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.Compare}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.PushTagCommand}" Command="{CompiledBinding PushTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.PushTag}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Header="{x:Static gloc:GitStrings.DeleteTagCommand}" Command="{CompiledBinding DeleteTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.DeleteTag}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.DeleteRemoteTagCommand}" Command="{CompiledBinding DeleteRemoteTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.DeleteRemoteTag}" />
                                     </MenuItem.Icon>
                                 </MenuItem>
                             </ContextMenu>
@@ -258,6 +345,22 @@
                                 <TextBlock Text="{x:Static gloc:GitStrings.StashIncludeUntrackedButton}" />
                             </StackPanel>
                         </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding StashStagedCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashStagedCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashStagedCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.StashStaged}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashStagedButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding ShowStashCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashShowCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashShowCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.ShowStash}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashShowButton}" />
+                            </StackPanel>
+                        </Button>
                         <Button Classes="git-action" Command="{CompiledBinding ApplyStashCommand}"
                                 ToolTip.Tip="{x:Static gloc:GitStrings.StashApplyCommand}" ToolTip.ShowOnDisabled="True"
                                 AutomationProperties.Name="{x:Static gloc:GitStrings.StashApplyCommand}">
@@ -274,12 +377,28 @@
                                 <TextBlock Text="{x:Static gloc:GitStrings.StashPopButton}" />
                             </StackPanel>
                         </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding StashBranchCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashBranchCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashBranchCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.StashBranch}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashBranchButton}" />
+                            </StackPanel>
+                        </Button>
                         <Button Classes="git-action" Command="{CompiledBinding DropStashCommand}"
                                 ToolTip.Tip="{x:Static gloc:GitStrings.StashDropCommand}" ToolTip.ShowOnDisabled="True"
                                 AutomationProperties.Name="{x:Static gloc:GitStrings.StashDropCommand}">
                             <StackPanel>
                                 <PathIcon Data="{x:Static vm:GitIcons.DropStash}" />
                                 <TextBlock Text="{x:Static gloc:GitStrings.StashDropButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding ClearStashesCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.StashClearCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.StashClearCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.ClearStashes}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.StashClearButton}" />
                             </StackPanel>
                         </Button>
                     </WrapPanel>
@@ -300,7 +419,38 @@
                                  GridLinesVisibility="None"
                                  IsReadOnly="True"
                                  AutomationProperties.Name="{x:Static gloc:GitStrings.StashesTab}"
-                                 behaviors:RightClickSelectBehavior.IsEnabled="True">
+                                 behaviors:RightClickSelectBehavior.IsEnabled="True"
+                                 behaviors:DoubleTapCommandBehavior.Command="{CompiledBinding ShowStashCommand}">
+                        <dg:DataGrid.ContextMenu>
+                            <ContextMenu x:DataType="vm:GitRepositoryPanelViewModel">
+                                <MenuItem Header="{x:Static gloc:GitStrings.StashShowCommand}" Command="{CompiledBinding ShowStashCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.ShowStash}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.StashApplyCommand}" Command="{CompiledBinding ApplyStashCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.ApplyStash}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.StashPopCommand}" Command="{CompiledBinding PopStashCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.PopStash}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.StashBranchCommand}" Command="{CompiledBinding StashBranchCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.StashBranch}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Header="{x:Static gloc:GitStrings.StashDropCommand}" Command="{CompiledBinding DropStashCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.DropStash}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </dg:DataGrid.ContextMenu>
                         <dg:DataGrid.Columns>
                             <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnStash}" Width="Auto"
                                                    x:DataType="vm:GitStashItemViewModel"
@@ -317,6 +467,100 @@
                                         <TextBlock Text="{CompiledBinding DateText}" Margin="12,0" VerticalAlignment="Center"
                                                    behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitDateSamples.Texts}"
                                                    behaviors:ColumnWidthSamples.WidestDigits="True" />
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
+                        </dg:DataGrid.Columns>
+                    </dg:DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Name="RemotesTab" Header="{x:Static gloc:GitStrings.RemotesTab}">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,4,0,2">
+                        <Button Classes="git-action" Command="{CompiledBinding AddRemoteCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.AddRemoteCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.AddRemoteCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.AddRemote}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.AddRemoteButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding SetRemoteUrlCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.SetRemoteUrlCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.SetRemoteUrlCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.RemoteUrl}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.SetRemoteUrlButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding RenameRemoteCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.RenameRemoteCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.RenameRemoteCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.Rename}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.RenameRemoteButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding RemoveRemoteCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.RemoveRemoteCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.RemoveRemoteCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.RemoveRemote}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.RemoveRemoteButton}" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="{CompiledBinding RemotesMessage}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,6"
+                               IsVisible="{CompiledBinding RemotesMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <dg:DataGrid Name="RemoteGrid"
+                                 Classes="explorer-compact"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 ItemsSource="{CompiledBinding Remotes}"
+                                 SelectedItem="{CompiledBinding SelectedRemote, Mode=TwoWay}"
+                                 IsEnabled="{CompiledBinding IsRepository}"
+                                 AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
+                                 CanUserSortColumns="True"
+                                 GridLinesVisibility="None"
+                                 IsReadOnly="True"
+                                 AutomationProperties.Name="{x:Static gloc:GitStrings.RemotesTab}"
+                                 behaviors:RightClickSelectBehavior.IsEnabled="True"
+                                 behaviors:DoubleTapCommandBehavior.Command="{CompiledBinding RenameRemoteCommand}">
+                        <dg:DataGrid.ContextMenu>
+                            <ContextMenu x:DataType="vm:GitRepositoryPanelViewModel">
+                                <MenuItem Header="{x:Static gloc:GitStrings.SetRemoteUrlCommand}" Command="{CompiledBinding SetRemoteUrlCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.RemoteUrl}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.RenameRemoteCommand}" Command="{CompiledBinding RenameRemoteCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.Rename}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Header="{x:Static gloc:GitStrings.RemoveRemoteCommand}" Command="{CompiledBinding RemoveRemoteCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.RemoveRemote}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </dg:DataGrid.ContextMenu>
+                        <!-- No star column, as in the other tabs: the URL is reached by scrolling to the side. -->
+                        <dg:DataGrid.Columns>
+                            <dg:DataGridTextColumn Header="{x:Static gloc:GitStrings.ColumnRemote}" Width="Auto"
+                                                   x:DataType="vm:GitRemoteItemViewModel"
+                                                   Binding="{CompiledBinding Name}" SortMemberPath="Name" />
+                            <dg:DataGridTemplateColumn Header="{x:Static gloc:GitStrings.ColumnUrl}" Width="Auto" SortMemberPath="UrlText"
+                                                       x:DataType="vm:GitRemoteItemViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding UrlText}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitRemoteItemViewModel">
+                                        <TextBlock Text="{CompiledBinding UrlText}" VerticalAlignment="Center" Background="Transparent"
+                                                   ToolTip.Tip="{CompiledBinding ToolTip}" />
                                     </DataTemplate>
                                 </dg:DataGridTemplateColumn.CellTemplate>
                             </dg:DataGridTemplateColumn>

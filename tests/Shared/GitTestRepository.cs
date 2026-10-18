@@ -89,6 +89,83 @@ internal sealed class GitTestRepository : IDisposable
         }
     }
 
+    /// <summary>
+    /// Creates a repository on <c>main</c> whose merge of branch <c>feature</c> stops with every kind of conflict:
+    /// content.txt and binary.dat (both modified, binary.dat without text), added.txt (both added), deleted-by-us.txt,
+    /// deleted-by-them.txt, renamed.txt (both deleted: main renamed it to renamed-main.txt, added by us, and feature to
+    /// renamed-feature.txt, added by them) and rename-deleted-feature.txt (deleted by us: main deleted rename-deleted.txt,
+    /// which feature renamed). clean.txt merges without conflict and local.txt holds an uncommitted edit of main
+    /// ("local\nlocal edit\n"). With <paramref name="startMerge"/> false, the merge is not started.
+    /// </summary>
+    public static GitTestRepository CreateConflict(bool startMerge = true)
+    {
+        GitTestRepository repository = Create();
+        try
+        {
+            repository.WriteFile("content.txt", "a\nb\nc\n");
+            repository.WriteFile("deleted-by-us.txt", "x\n");
+            repository.WriteFile("deleted-by-them.txt", "y\n");
+            repository.WriteFile("renamed.txt", "r1\nr2\nr3\nr4\nr5\n");
+            repository.WriteFile("rename-deleted.txt", "s1\ns2\ns3\ns4\n");
+            repository.WriteBinaryFile("binary.dat", "base");
+            repository.WriteFile("local.txt", "local\n");
+            repository.WriteFile("clean.txt", "k\n");
+            repository.RunGit("add", "-A");
+            repository.RunGit("commit", "-q", "-m", "base");
+
+            repository.RunGit("checkout", "-q", "-b", "feature");
+            repository.WriteFile("content.txt", "a\nFEATURE\nc\n");
+            repository.WriteFile("deleted-by-us.txt", "x2\n");
+            repository.RunGit("rm", "-q", "deleted-by-them.txt");
+            repository.RunGit("mv", "renamed.txt", "renamed-feature.txt");
+            repository.RunGit("mv", "rename-deleted.txt", "rename-deleted-feature.txt");
+            repository.WriteFile("added.txt", "feature add\n");
+            repository.WriteBinaryFile("binary.dat", "feature");
+            repository.WriteFile("clean.txt", "k2\n");
+            repository.RunGit("add", "-A");
+            repository.RunGit("commit", "-q", "-m", "feature");
+
+            repository.RunGit("checkout", "-q", "main");
+            repository.WriteFile("content.txt", "a\nMAIN\nc\n");
+            repository.RunGit("rm", "-q", "deleted-by-us.txt");
+            repository.WriteFile("deleted-by-them.txt", "y2\n");
+            repository.RunGit("mv", "renamed.txt", "renamed-main.txt");
+            repository.RunGit("rm", "-q", "rename-deleted.txt");
+            repository.WriteFile("added.txt", "main add\n");
+            repository.WriteBinaryFile("binary.dat", "main");
+            repository.RunGit("add", "-A");
+            repository.RunGit("commit", "-q", "-m", "main");
+
+            File.AppendAllText(System.IO.Path.Combine(repository.Path, "local.txt"), "local edit\n");
+            if (startMerge)
+            {
+                Assert.False(repository.TryRunGit(out string output, "merge", "--no-edit", "feature"), output);
+            }
+
+            return repository;
+        }
+        catch
+        {
+            repository.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Writes a file that git treats as binary: a NUL byte followed by <paramref name="text"/>.</summary>
+    public string WriteBinaryFile(string relativePath, string text)
+    {
+        string fullPath = WriteFile(relativePath, string.Empty);
+        File.WriteAllBytes(fullPath, [0, 1, .. Encoding.ASCII.GetBytes(text)]);
+        return fullPath;
+    }
+
+    /// <summary>Returns the content of a file below the working tree root, or null when it does not exist.</summary>
+    public string? ReadFile(string relativePath)
+    {
+        string fullPath = System.IO.Path.Combine(Path, relativePath);
+        return File.Exists(fullPath) ? File.ReadAllText(fullPath) : null;
+    }
+
     /// <summary>Creates an empty bare repository next to the working tree and adds it as remote <c>origin</c>.</summary>
     public string AddBareRemote()
     {

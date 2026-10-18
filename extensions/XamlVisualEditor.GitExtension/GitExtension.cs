@@ -47,13 +47,16 @@ public sealed class GitExtension : IXveExtension
             context.ContextKeys, logger);
         GitChangeMarkers changeMarkers = new(session, context.Editor, context.TextEditorView, settings,
             context.ContextKeys, logger);
+        GitConflictMarkers conflictMarkers = new(session, context.Editor, context.TextEditorView, logger);
 
         ICommands commands = context.Commands;
         Func<string, IReadOnlyList<object?>?, Task> executeCommand =
             (commandId, arguments) => commands.ExecuteAsync(commandId, arguments, CancellationToken.None);
 
         // Every panel has one view model, created when it is first shown and disposed with the extension.
-        Lazy<GitPanelViewModel> panel = new(() => new GitPanelViewModel(session, executeCommand));
+        IEditorServices? editor = context.Editor;
+        Func<string, Task> openFile = path => editor?.OpenDocumentAsync(path, CancellationToken.None) ?? Task.CompletedTask;
+        Lazy<GitPanelViewModel> panel = new(() => new GitPanelViewModel(session, executeCommand, openFile));
         Lazy<GitHistoryViewModel> historyPanel = new(() => new GitHistoryViewModel(session, executeCommand));
         GitCommandHandler handler = new(
             session,
@@ -68,6 +71,7 @@ public sealed class GitExtension : IXveExtension
             explorerDecorations,
             changeMarkers,
             executeCommand);
+        session.Watch = handler.WatchAsync;
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, GitStatusBar.PRIORITY);
         statusBarItem.CommandId = GitCommands.SHOW_CHANGES;
@@ -128,6 +132,7 @@ public sealed class GitExtension : IXveExtension
 
             explorerDecorations.Dispose();
             changeMarkers.Dispose();
+            conflictMarkers.Dispose();
             session.Dispose();
             statusBarItem.Dispose();
             outputChannel.Dispose();
@@ -149,6 +154,7 @@ public sealed class GitExtension : IXveExtension
             new KeyValuePair<string, bool>(GitCommands.HAS_REMOTE_CONTEXT_KEY, snapshot.IsRepository && snapshot.HasRemote),
             new KeyValuePair<string, bool>(GitCommands.HAS_UPSTREAM_CONTEXT_KEY, snapshot.HasUpstream),
             new KeyValuePair<string, bool>(GitCommands.IS_MERGING_CONTEXT_KEY, snapshot.Operation == GitRepositoryOperation.Merging),
+            new KeyValuePair<string, bool>(GitCommands.OPERATION_IN_PROGRESS_CONTEXT_KEY, snapshot.Operation != GitRepositoryOperation.None),
             new KeyValuePair<string, bool>(GitCommands.HAS_CONFLICTS_CONTEXT_KEY, snapshot.HasConflicts),
             new KeyValuePair<string, bool>(GitCommands.AUTO_REFRESH_CONTEXT_KEY, snapshot.IsWorkingTreeWatcherEnabled)
         ]);

@@ -389,7 +389,8 @@ that it does not contain, or that the user closed, opens from the view menu or t
     one file, given by its full path; an empty list removes them. It may be called from any thread. `Dispose()`
     removes all marks of the layer.
   - `TextEditorLineMark(int StartLine, int LineCount, TextEditorLineMarkKind Kind)` marks the 1-based lines
-    `StartLine` to `StartLine + LineCount - 1` in the theme colour of `Kind` (`Added`, `Modified`, `Deleted`); a
+    `StartLine` to `StartLine + LineCount - 1` in the theme colour of `Kind` (`Added`, `Modified`, `Deleted`, or
+    `Conflict` in `SourceControlConflictedBrush`); a
     `LineCount` of 0 marks the boundary above `StartLine`, for example where lines were removed. Marks of a file must
     not overlap.
 

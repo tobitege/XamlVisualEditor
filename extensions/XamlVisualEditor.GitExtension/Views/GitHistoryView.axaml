@@ -153,6 +153,22 @@
                                     <PathIcon Data="{x:Static vm:GitIcons.CreateBranch}" />
                                 </MenuItem.Icon>
                             </MenuItem>
+                            <MenuItem Header="{x:Static gloc:GitStrings.NewTagHere}" Command="{CompiledBinding CreateTagCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.CreateTag}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <Separator />
+                            <MenuItem Header="{x:Static gloc:GitStrings.CherryPickMenu}" Command="{CompiledBinding CherryPickCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.CherryPick}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="{x:Static gloc:GitStrings.RevertMenu}" Command="{CompiledBinding RevertCommand}">
+                                <MenuItem.Icon>
+                                    <PathIcon Data="{x:Static vm:GitIcons.Revert}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </dg:DataGrid.ContextMenu>
                     <dg:DataGrid.Columns>

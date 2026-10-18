@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 
@@ -10,7 +9,7 @@ namespace XamlVisualEditor.GitExtension.Services;
 /// Writes extension log messages to the host logger and to the "Git" output channel, and writes the git commands
 /// the extension ran to the channel. User names and passwords in URLs are masked.
 /// </summary>
-public sealed partial class GitOutputLogger : IExtensionLogger
+public sealed class GitOutputLogger : IExtensionLogger
 {
     private readonly IExtensionLogger _inner;
     private readonly IOutputChannel? _channel;
@@ -25,7 +24,7 @@ public sealed partial class GitOutputLogger : IExtensionLogger
     /// <inheritdoc />
     public void Info(string message)
     {
-        message = MaskCredentials(message);
+        message = GitUrlCredentials.Mask(message);
         _inner.Info(message);
         Append("INFO " + message);
     }
@@ -33,7 +32,7 @@ public sealed partial class GitOutputLogger : IExtensionLogger
     /// <inheritdoc />
     public void Warn(string message)
     {
-        message = MaskCredentials(message);
+        message = GitUrlCredentials.Mask(message);
         _inner.Warn(message);
         Append("WARN " + message);
     }
@@ -41,12 +40,12 @@ public sealed partial class GitOutputLogger : IExtensionLogger
     /// <inheritdoc />
     public void Error(string message, Exception? exception = null)
     {
-        message = MaskCredentials(message);
+        message = GitUrlCredentials.Mask(message);
         _inner.Error(message, exception);
         string line = "ERROR " + message;
         if (exception is not null)
         {
-            line += " " + exception.GetType().Name + ": " + MaskCredentials(exception.Message);
+            line += " " + exception.GetType().Name + ": " + GitUrlCredentials.Mask(exception.Message);
         }
 
         Append(line);
@@ -71,17 +70,11 @@ public sealed partial class GitOutputLogger : IExtensionLogger
             line.Append(" (exit code ").Append(entry.ExitCode.ToString(CultureInfo.InvariantCulture)).Append(')');
         }
 
-        Append(MaskCredentials(line.ToString()));
+        Append(GitUrlCredentials.Mask(line.ToString()));
         if (entry.ErrorOutput.Length > 0)
         {
-            Append(MaskCredentials(entry.ErrorOutput));
+            Append(GitUrlCredentials.Mask(entry.ErrorOutput));
         }
-    }
-
-    /// <summary>Replaces the user information of every URL in <paramref name="text"/> with <c>***</c>.</summary>
-    public static string MaskCredentials(string text)
-    {
-        return string.IsNullOrEmpty(text) ? text : UrlUserInfoPattern().Replace(text, "${scheme}***@");
     }
 
     private static string QuoteArgument(string argument)
@@ -109,7 +102,4 @@ public sealed partial class GitOutputLogger : IExtensionLogger
         {
         }
     }
-
-    [GeneratedRegex(@"(?<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)[^/@\s]+@", RegexOptions.CultureInvariant)]
-    private static partial Regex UrlUserInfoPattern();
 }

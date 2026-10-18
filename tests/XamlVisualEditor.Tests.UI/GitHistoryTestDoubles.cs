@@ -190,6 +190,9 @@ internal sealed class ScriptedHistoryGitService : IGitService, IGitHistoryServic
 
     public Task<IReadOnlyList<GitTag>> GetTagsAsync(string repoPath, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<GitTag>>(Tags.ToArray());
+
+    public Task<string?> GetMergeBaseAsync(string repoPath, string first, string second, CancellationToken ct = default) =>
+        throw new NotSupportedException();
 }
 
 /// <summary>A workspace that is always open at the same path.</summary>

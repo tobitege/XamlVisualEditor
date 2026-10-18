@@ -26,13 +26,13 @@
   <data name="NothingToStage" xml:space="preserve"><value>Es gibt keine Änderungen zum Stagen.</value></data>
   <data name="NothingToUnstage" xml:space="preserve"><value>Es gibt keine gestagten Änderungen.</value></data>
   <data name="NothingToCommit" xml:space="preserve"><value>Stage zuerst die Änderungen, die du committen willst.</value></data>
-  <data name="DiscardManyPromptFormat" xml:space="preserve"><value>Änderungen an {0} Dateien unter {1} verwerfen? Die Dateien werden auf ihren gestagten oder committeten Stand zurückgesetzt; gestagte Änderungen bleiben erhalten.</value></data>
+  <data name="DiscardManyPromptFormat" xml:space="preserve"><value>Änderungen an {0} Dateien unter {1} verwerfen? Die Dateien werden auf ihren gestagten oder committeten Stand zurückgesetzt. Gestagte Änderungen bleiben erhalten.</value></data>
   <data name="CommitInputTitle" xml:space="preserve"><value>Committen</value></data>
   <data name="CommitInputPrompt" xml:space="preserve"><value>Commit-Nachricht</value></data>
   <data name="InitNoWorkspace" xml:space="preserve"><value>Öffne zuerst einen Ordner oder Workspace.</value></data>
   <data name="InitUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann keine Repositorys anlegen.</value></data>
   <data name="InitializedFormat" xml:space="preserve"><value>Git-Repository in {0} angelegt.</value></data>
-  <data name="InitAlreadyRepositoryFormat" xml:space="preserve"><value>{0} gehört bereits zum Git-Repository in {1}; es wurde kein Repository angelegt.</value></data>
+  <data name="InitAlreadyRepositoryFormat" xml:space="preserve"><value>{0} gehört bereits zum Git-Repository in {1}. Es wurde kein Repository angelegt.</value></data>
   <data name="StatusBarBranchFormat" xml:space="preserve"><value>Branch {0}</value></data>
   <data name="StatusBarDetachedFormat" xml:space="preserve"><value>Detached HEAD bei {0}</value></data>
   <data name="StatusBarUpstreamFormat" xml:space="preserve"><value>Upstream {0}: {1} voraus, {2} zurück</value></data>
@@ -80,7 +80,7 @@
   <data name="DeleteBranchPickTitle" xml:space="preserve"><value>Branch löschen</value></data>
   <data name="NoBranchToDelete" xml:space="preserve"><value>Es gibt keinen anderen lokalen Branch, den du löschen kannst.</value></data>
   <data name="CannotDeleteCurrentFormat" xml:space="preserve"><value>{0} ist der aktuelle Branch und lässt sich nicht löschen. Wechsle zuerst zu einem anderen Branch.</value></data>
-  <data name="CannotDeleteRemoteFormat" xml:space="preserve"><value>{0} ist ein Remote-Branch; hier lassen sich nur lokale Branches löschen.</value></data>
+  <data name="CannotDeleteRemoteFormat" xml:space="preserve"><value>{0} ist ein Remote-Branch. Hier lassen sich nur lokale Branches löschen.</value></data>
   <data name="DeleteBranchConfirmTitle" xml:space="preserve"><value>Branch löschen</value></data>
   <data name="DeleteBranchPromptFormat" xml:space="preserve"><value>Lokalen Branch {0} löschen?</value></data>
   <data name="DeleteBranchConfirm" xml:space="preserve"><value>Löschen</value></data>
@@ -92,7 +92,7 @@
   <data name="PushProgressFormat" xml:space="preserve"><value>Push von {0} läuft …</value></data>
   <data name="SyncProgressFormat" xml:space="preserve"><value>{0} wird mit {1} synchronisiert …</value></data>
   <data name="FetchSucceeded" xml:space="preserve"><value>Abrufen abgeschlossen.</value></data>
-  <data name="PullUpToDateFormat" xml:space="preserve"><value>{0} war bereits auf dem Stand von {1}; es gab nichts zu pullen.</value></data>
+  <data name="PullUpToDateFormat" xml:space="preserve"><value>{0} war bereits auf dem Stand von {1}. Es gab nichts zu pullen.</value></data>
   <data name="PullFastForwardOneFormat" xml:space="preserve"><value>1 Commit von {1} in {0} gepullt.</value></data>
   <data name="PullFastForwardManyFormat" xml:space="preserve"><value>{2} Commits von {1} in {0} gepullt.</value></data>
   <data name="PullSucceededFormat" xml:space="preserve"><value>{1} in {0} gepullt.</value></data>
@@ -105,19 +105,19 @@
   <data name="NoRemote" xml:space="preserve"><value>Das Repository hat keinen Remote.</value></data>
   <data name="NoUpstream" xml:space="preserve"><value>Der aktuelle Branch hat keinen Upstream-Branch. Pushe ihn zuerst, dabei wird der Upstream gesetzt.</value></data>
   <data name="AuthenticationFailedHint" xml:space="preserve"><value>Anmeldung fehlgeschlagen. Richte einen Credential Helper ein (z. B. Git Credential Manager) oder lade deinen SSH-Schlüssel in den Agent.</value></data>
-  <data name="HostKeyHint" xml:space="preserve"><value>Der SSH-Host-Schlüssel des Servers ist unbekannt. Verbinde dich einmal im Terminal mit dem Server, z. B. mit ssh -T, prüfe den Schlüssel und bestätige ihn; der Editor akzeptiert Host-Schlüssel nicht von sich aus.</value></data>
+  <data name="HostKeyHint" xml:space="preserve"><value>Der SSH-Host-Schlüssel des Servers ist unbekannt. Verbinde dich einmal im Terminal mit dem Server, z. B. mit ssh -T, prüfe den Schlüssel und bestätige ihn. Der Editor akzeptiert Host-Schlüssel nicht von sich aus.</value></data>
   <data name="PushRejectedHint" xml:space="preserve"><value>Der Remote hat den Push abgelehnt. Meist hat er Commits, die deinem Branch noch fehlen: Pull zuerst und pushe dann erneut.</value></data>
   <data name="PullDivergedHint" xml:space="preserve"><value>Dein Branch und sein Upstream sind auseinandergelaufen, ein Fast-Forward ist nicht möglich. Führe Merge oder Rebase vorerst im Terminal aus.</value></data>
   <data name="TimeoutHint" xml:space="preserve"><value>Git ist nicht rechtzeitig fertig geworden und wurde beendet. Prüfe die Netzwerkverbindung und versuche es erneut.</value></data>
   <data name="RemoteFailureFormat" xml:space="preserve"><value>{0} Git meldet: {1}</value></data>
   <data name="CommitProgress" xml:space="preserve"><value>Commit läuft …</value></data>
   <data name="StatusBarStatusFailed" xml:space="preserve"><value>Git-Status fehlgeschlagen</value></data>
-  <data name="FetchPartlyFailedFormat" xml:space="preserve"><value>{0} abgerufen; die anderen Remotes sind fehlgeschlagen. {1}</value></data>
+  <data name="FetchPartlyFailedFormat" xml:space="preserve"><value>{0} abgerufen, die anderen Remotes sind fehlgeschlagen. {1}</value></data>
   <data name="SyncPushFailedFormat" xml:space="preserve"><value>Der Pull von {1} in {0} ist abgeschlossen, aber der Push ist fehlgeschlagen. {2}</value></data>
-  <data name="LogProgressDialogFailed" xml:space="preserve"><value>Der Fortschrittsdialog konnte nicht angezeigt werden; der Git-Befehl läuft ohne ihn weiter.</value></data>
+  <data name="LogProgressDialogFailed" xml:space="preserve"><value>Der Fortschrittsdialog konnte nicht angezeigt werden. Der Git-Befehl läuft ohne ihn weiter.</value></data>
   <data name="ForbiddenHint" xml:space="preserve"><value>Der Server hat die Anmeldung angenommen, verweigert aber den Zugriff auf das Repository. Prüfe deine Berechtigungen auf dem Remote.</value></data>
   <data name="NetworkHint" xml:space="preserve"><value>Der Server ist nicht erreichbar. Prüfe die Netzwerkverbindung und die Remote-URL.</value></data>
-  <data name="RemoteRejectedHint" xml:space="preserve"><value>Der Remote hat den Push verweigert, z. B. weil der Branch geschützt ist oder ein Server-Hook ihn abgelehnt hat. Ein Pull hilft nicht; pushe auf einen anderen Branch oder wende dich an den Besitzer des Repositorys.</value></data>
+  <data name="RemoteRejectedHint" xml:space="preserve"><value>Der Remote hat den Push verweigert, z. B. weil der Branch geschützt ist oder ein Server-Hook ihn abgelehnt hat. Ein Pull hilft nicht. Pushe auf einen anderen Branch oder wende dich an den Besitzer des Repositorys.</value></data>
   <data name="UpstreamGone" xml:space="preserve"><value>gelöscht</value></data>
   <data name="LocalBranchExistsTitleFormat" xml:space="preserve"><value>Der lokale Branch {0} folgt nicht {1}</value></data>
   <data name="SwitchToLocalBranchFormat" xml:space="preserve"><value>Zum lokalen Branch {0} wechseln</value></data>
@@ -165,7 +165,7 @@
   <data name="ColumnPath" xml:space="preserve"><value>Pfad</value></data>
   <data name="LoadCommitFailedFormat" xml:space="preserve"><value>Der Commit konnte nicht gelesen werden: {0}</value></data>
   <data name="LoadDiffFailedFormat" xml:space="preserve"><value>Der Diff konnte nicht gelesen werden: {0}</value></data>
-  <data name="DiffTooLargeFormat" xml:space="preserve"><value>Der Diff hat mehr als {1} Zeilen oder {2} MiB; die ersten {0} Zeilen werden angezeigt.</value><comment>{0} is the number of shown lines, {1} the line limit and {2} the size limit in MiB.</comment></data>
+  <data name="DiffTooLargeFormat" xml:space="preserve"><value>Der Diff hat mehr als {1} Zeilen oder {2} MiB. Die ersten {0} Zeilen werden angezeigt.</value><comment>{0} is the number of shown lines, {1} the line limit and {2} the size limit in MiB.</comment></data>
   <data name="PreviousChange" xml:space="preserve"><value>Vorherige Änderung</value></data>
   <data name="NextChange" xml:space="preserve"><value>Nächste Änderung</value></data>
   <data name="ToggleDiffPane" xml:space="preserve"><value>Diff ein-/ausblenden</value></data>
@@ -194,20 +194,20 @@
   <data name="CompareWithHeadCommand" xml:space="preserve"><value>Mit HEAD vergleichen</value></data>
   <data name="CompareWithIndexCommand" xml:space="preserve"><value>Mit Stage vergleichen</value></data>
   <data name="BlameCommand" xml:space="preserve"><value>Blame</value></data>
-  <data name="FileTargetRequired" xml:space="preserve"><value>Wähle eine Datei; Ordner lassen sich nicht vergleichen und nicht per Blame anzeigen.</value></data>
+  <data name="FileTargetRequired" xml:space="preserve"><value>Wähle eine Datei. Ordner lassen sich nicht vergleichen und nicht per Blame anzeigen.</value></data>
   <data name="CompareTitleFormat" xml:space="preserve"><value>{0} ({1})</value><comment>{0} ist der Dateiname, {1} HEAD oder der Name des Index.</comment></data>
   <data name="BlameTitleFormat" xml:space="preserve"><value>{0} (Blame)</value></data>
   <data name="IndexName" xml:space="preserve"><value>Stage</value></data>
   <data name="Comparing" xml:space="preserve"><value>Wird verglichen …</value></data>
   <data name="CompareNoVersionFormat" xml:space="preserve"><value>{0} hat keine Textfassung dieser Datei zum Vergleich: Die Datei ist neu, nicht versioniert, im Konflikt, binär, mit Git LFS gespeichert oder größer als 16 MiB.</value></data>
   <data name="CompareNoChanges" xml:space="preserve"><value>Die Datei hat keine Änderungen.</value></data>
-  <data name="CompareOnlyIgnoredBytesFormat" xml:space="preserve"><value>Keine Zeile weicht von {0} ab, aber Git meldet eine Änderung der gespeicherten Datei: Nur Zeilenenden, die Byte-Order-Mark oder der Zeilenumbruch am Ende unterscheiden sich; diese berücksichtigt der Vergleich nicht.</value></data>
+  <data name="CompareOnlyIgnoredBytesFormat" xml:space="preserve"><value>Keine Zeile weicht von {0} ab, aber Git meldet eine Änderung der gespeicherten Datei: Nur Zeilenenden, die Byte-Order-Mark oder der Zeilenumbruch am Ende unterscheiden sich. Diese berücksichtigt der Vergleich nicht.</value></data>
   <data name="WholeFile" xml:space="preserve"><value>Ganze Datei</value></data>
   <data name="CompareAgain" xml:space="preserve"><value>Erneut vergleichen</value></data>
   <data name="LogCompareFailed" xml:space="preserve"><value>Der Vergleich einer Datei mit ihrer Git-Fassung ist fehlgeschlagen.</value></data>
   <data name="BlameLoading" xml:space="preserve"><value>Blame wird gelesen …</value></data>
   <data name="LoadBlameFailedFormat" xml:space="preserve"><value>Blame konnte nicht gelesen werden: {0}</value></data>
-  <data name="BlameTruncated" xml:space="preserve"><value>Die Datei ist größer als 16 MiB; die letzten Zeilen fehlen.</value></data>
+  <data name="BlameTruncated" xml:space="preserve"><value>Die Datei ist größer als 16 MiB. Die letzten Zeilen fehlen.</value></data>
   <data name="BlameUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann kein Blame lesen.</value></data>
   <data name="Uncommitted" xml:space="preserve"><value>Nicht committet</value></data>
   <data name="RefreshBlame" xml:space="preserve"><value>Erneut lesen</value></data>
@@ -222,12 +222,12 @@
   <data name="DiscardSelectionPromptFormat" xml:space="preserve"><value>Ausgewählte Änderungen an {0} verwerfen? Sie werden nirgends gespeichert.</value></data>
   <data name="DiffChanged" xml:space="preserve"><value>Der Diff hat sich inzwischen geändert und wurde neu gelesen. Wähle die Zeilen erneut aus.</value></data>
   <data name="PatchMissingNewline" xml:space="preserve"><value>Die Auswahl würde die letzte Zeile der Datei, die keinen Zeilenumbruch hat, mit der nächsten Zeile verbinden. Wähle die entfernte und die hinzugefügte letzte Zeile zusammen aus.</value></data>
-  <data name="PatchMultipleFiles" xml:space="preserve"><value>Der Typ dieser Datei hat sich geändert; sie lässt sich nur als Ganzes stagen oder verwerfen.</value></data>
+  <data name="PatchMultipleFiles" xml:space="preserve"><value>Der Typ dieser Datei hat sich geändert. Sie lässt sich nur als Ganzes stagen oder verwerfen.</value></data>
   <data name="PatchUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann keine ausgewählten Zeilen stagen und keine Commits ändern.</value></data>
   <data name="CommitAmendCommand" xml:space="preserve"><value>Letzten Commit ändern …</value></data>
   <data name="AmendLabel" xml:space="preserve"><value>Letzten Commit ändern</value></data>
   <data name="AmendTooltip" xml:space="preserve"><value>Ersetzt den letzten Commit durch einen mit den gestagten Änderungen und dieser Nachricht. Beim Ankreuzen wird die Nachricht des letzten Commits eingetragen.</value></data>
-  <data name="AmendPushedPromptFormat" xml:space="preserve"><value>Der letzte Commit von {0} ist bereits in {1}. Wenn du ihn änderst, weicht {0} von {1} ab; der Branch braucht dann einen Force-Push, den diese Anwendung nicht anbietet. Trotzdem ändern?</value></data>
+  <data name="AmendPushedPromptFormat" xml:space="preserve"><value>Der letzte Commit von {0} ist bereits in {1}. Wenn du ihn änderst, weicht {0} von {1} ab, und der Branch braucht dann einen Force-Push, den diese Anwendung nicht anbietet. Trotzdem ändern?</value></data>
   <data name="AmendConfirm" xml:space="preserve"><value>Ändern</value></data>
   <data name="AmendProgress" xml:space="preserve"><value>Letzter Commit wird geändert …</value></data>
   <data name="StashesTab" xml:space="preserve"><value>Stashes</value></data>
@@ -248,20 +248,196 @@
   <data name="StashesUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann keine Änderungen stashen.</value></data>
   <data name="LoadStashesFailedFormat" xml:space="preserve"><value>Die Stashes konnten nicht gelesen werden: {0}</value></data>
   <data name="StashNotFoundFormat" xml:space="preserve"><value>Es gibt keinen Stash mit dem Commit {0}.</value></data>
-  <data name="StashMovedFormat" xml:space="preserve"><value>Die Stash-Liste hat sich inzwischen geändert, {0} bezeichnet jetzt einen anderen Stash; es wurde nichts geändert. Wähle den Stash erneut aus.</value></data>
+  <data name="StashMovedFormat" xml:space="preserve"><value>Die Stash-Liste hat sich inzwischen geändert, {0} bezeichnet jetzt einen anderen Stash. Es wurde nichts geändert. Wähle den Stash erneut aus.</value></data>
   <data name="StashConflicts" xml:space="preserve"><value>Der Stash wurde mit Konflikten angewendet und bleibt erhalten. Löse die Konflikte in den als Konflikt markierten Dateien.</value></data>
   <data name="StashDropPromptFormat" xml:space="preserve"><value>{0} ({1}) löschen? Seine Änderungen gehen verloren.</value></data>
   <data name="StashDropConfirm" xml:space="preserve"><value>Löschen</value></data>
-  <data name="MergeCommand" xml:space="preserve"><value>Branch mergen…</value></data>
-  <data name="AbortMergeCommand" xml:space="preserve"><value>Merge abbrechen…</value></data>
+  <data name="MergeCommand" xml:space="preserve"><value>Branch mergen …</value></data>
   <data name="MergePickTitle" xml:space="preserve"><value>In den aktuellen Branch mergen</value></data>
   <data name="NoBranchToMerge" xml:space="preserve"><value>Es gibt keinen anderen Branch zum Mergen.</value></data>
   <data name="MergedFormat" xml:space="preserve"><value>{0} wurde in {1} gemergt.</value></data>
   <data name="MergeUpToDateFormat" xml:space="preserve"><value>{0} ist bereits in {1} gemergt.</value></data>
-  <data name="MergeConflictsFormat" xml:space="preserve"><value>Der Merge von {0} hat mit Konflikten angehalten. Konflikte in den Dateien lösen, die Dateien stagen und committen, oder den Merge abbrechen.</value></data>
-  <data name="AbortMergeTitle" xml:space="preserve"><value>Merge abbrechen</value></data>
-  <data name="AbortMergePrompt" xml:space="preserve"><value>Merge abbrechen? Die Konfliktdateien kehren auf den Stand vor dem Merge zurück; andere Änderungen bleiben.</value></data>
-  <data name="AbortMergeConfirm" xml:space="preserve"><value>Abbrechen</value></data>
-  <data name="MergeAborted" xml:space="preserve"><value>Der Merge wurde abgebrochen.</value></data>
-  <data name="StatusBarMerging" xml:space="preserve"><value>Merge läuft</value></data>
+  <data name="MergeStoppedFormat" xml:space="preserve"><value>Der Merge von {0} hat angehalten. Die Konflikte im Panel „Git-Änderungen“ lösen und committen, oder den Merge abbrechen.</value></data>
+  <data name="MergeUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann nicht mergen.</value></data>
+  <data name="OperationMerging" xml:space="preserve"><value>Merge läuft</value></data>
+  <data name="OperationRebasing" xml:space="preserve"><value>Rebase läuft</value></data>
+  <data name="OperationCherryPicking" xml:space="preserve"><value>Cherry-Pick läuft</value></data>
+  <data name="OperationReverting" xml:space="preserve"><value>Revert läuft</value></data>
+  <data name="OperationApplyingPatches" xml:space="preserve"><value>Patches werden angewendet</value></data>
+  <data name="ConflictCountFormat" xml:space="preserve"><value>Konflikte: {0}</value></data>
+  <data name="ConflictsHeaderFormat" xml:space="preserve"><value>Konflikte ({0})</value></data>
+  <data name="MergeReadyToCommit" xml:space="preserve"><value>keine Konflikte offen, Commit schließt den Merge ab</value></data>
+  <data name="OperationReadyToContinue" xml:space="preserve"><value>keine Konflikte offen, Fortsetzen macht weiter</value></data>
+  <data name="AbortCommand" xml:space="preserve"><value>Vorgang abbrechen …</value></data>
+  <data name="AbortButton" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="AbortTitle" xml:space="preserve"><value>Vorgang abbrechen</value></data>
+  <data name="AbortConfirm" xml:space="preserve"><value>Vorgang abbrechen</value></data>
+  <data name="AbortPromptFormat" xml:space="preserve"><value>Den laufenden Vorgang abbrechen ({0})? Das Repository kehrt zum Stand vor dem Start zurück. Bereits erstellte Commits des Vorgangs, gelöste Konflikte und gestagte Änderungen gehen verloren. Andere nicht committete Änderungen bleiben erhalten.</value></data>
+  <data name="OperationAborted" xml:space="preserve"><value>Der Vorgang wurde abgebrochen.</value></data>
+  <data name="NoOperationInProgress" xml:space="preserve"><value>Es läuft kein Merge, Rebase, Cherry-Pick oder Revert und keine Patch-Anwendung.</value></data>
+  <data name="ContinueCommand" xml:space="preserve"><value>Vorgang fortsetzen</value></data>
+  <data name="ContinueButton" xml:space="preserve"><value>Fortsetzen</value></data>
+  <data name="ContinueProgress" xml:space="preserve"><value>Wird fortgesetzt …</value></data>
+  <data name="ContinueMergeWithCommit" xml:space="preserve"><value>Ein Merge wird mit Commit abgeschlossen.</value></data>
+  <data name="ContinueWithConflicts" xml:space="preserve"><value>Erst die Konflikte lösen, dann fortsetzen.</value></data>
+  <data name="AcceptOursCommand" xml:space="preserve"><value>Aktuelle Version übernehmen …</value></data>
+  <data name="AcceptTheirsCommand" xml:space="preserve"><value>Eingehende Version übernehmen …</value></data>
+  <data name="AcceptOursButton" xml:space="preserve"><value>Aktuelle</value></data>
+  <data name="AcceptTheirsButton" xml:space="preserve"><value>Eingehende</value></data>
+  <data name="AcceptOursPromptFormat" xml:space="preserve"><value>{0} mit der aktuellen Version aus HEAD lösen? Die Dateien im Arbeitsverzeichnis werden ersetzt, und eine Datei, die diese Seite gelöscht hat, wird gelöscht.</value></data>
+  <data name="AcceptTheirsPromptFormat" xml:space="preserve"><value>{0} mit der eingehenden Version lösen? Die Dateien im Arbeitsverzeichnis werden ersetzt, und eine Datei, die diese Seite gelöscht hat, wird gelöscht.</value></data>
+  <data name="FilesCountFormat" xml:space="preserve"><value>{0} Dateien</value></data>
+  <data name="ConflictsChanged" xml:space="preserve"><value>Die Konflikte haben sich inzwischen geändert, daher wurde nichts geändert. Versuche es erneut.</value></data>
+  <data name="NoConflictsFormat" xml:space="preserve"><value>{0} hat keine Konflikte.</value></data>
+  <data name="MarkResolvedCommand" xml:space="preserve"><value>Als gelöst markieren</value></data>
+  <data name="MarkResolvedWithMarkersPromptFormat" xml:space="preserve"><value>Diese Dateien enthalten noch Konfliktmarker:
+{0}
+Trotzdem als gelöst markieren?</value></data>
+  <data name="MarkResolvedUnsavedFormat" xml:space="preserve"><value>Speichere diese Dateien zuerst. Git markiert die gespeicherte Datei als gelöst, nicht den Text im Editor.
+{0}</value></data>
+  <data name="ResolveConflictCommand" xml:space="preserve"><value>Konflikt lösen …</value></data>
+  <data name="ResolveOursLabel" xml:space="preserve"><value>Aktuelle übernehmen</value></data>
+  <data name="ResolveTheirsLabel" xml:space="preserve"><value>Eingehende übernehmen</value></data>
+  <data name="ResolveBothLabel" xml:space="preserve"><value>Beide übernehmen</value></data>
+  <data name="NoConflictAtLine" xml:space="preserve"><value>In dieser Zeile steht kein Konfliktblock.</value></data>
+  <data name="ConflictBlockChanged" xml:space="preserve"><value>Der Konfliktblock hat sich inzwischen geändert, daher wurde nichts geändert.</value></data>
+  <data name="OpenConflictButton" xml:space="preserve"><value>Öffnen</value></data>
+  <data name="ConflictSelectedHint" xml:space="preserve"><value>Die Konfliktblöcke im Editor lösen, wo ein Klick auf die Markierung neben einem Block die Seiten anbietet, oder eine Seite für die ganze Datei übernehmen. Danach die Datei als gelöst markieren.</value></data>
+  <data name="ConflictBothModified" xml:space="preserve"><value>beide geändert</value></data>
+  <data name="ConflictBothAdded" xml:space="preserve"><value>beide hinzugefügt</value></data>
+  <data name="ConflictBothDeleted" xml:space="preserve"><value>beide gelöscht</value></data>
+  <data name="ConflictAddedByUs" xml:space="preserve"><value>von uns hinzugefügt</value></data>
+  <data name="ConflictAddedByThem" xml:space="preserve"><value>von ihnen hinzugefügt</value></data>
+  <data name="ConflictDeletedByUs" xml:space="preserve"><value>von uns gelöscht</value></data>
+  <data name="ConflictDeletedByThem" xml:space="preserve"><value>von ihnen gelöscht</value></data>
+  <data name="CommitWithConflicts" xml:space="preserve"><value>Löse vor dem Commit die Konflikte und markiere die Dateien als gelöst.</value></data>
+  <data name="AmendDuringOperation" xml:space="preserve"><value>Der letzte Commit kann nicht geändert werden, solange ein Vorgang läuft, außer bei einem Edit-Schritt eines Rebase.</value></data>
+  <data name="CommitDuringOperationFormat" xml:space="preserve"><value>Im laufenden Vorgang ({0}) ist kein Commit möglich. Fortsetzen committet den aktuellen Schritt und macht weiter.</value></data>
+  <data name="LogConflictBlocksFailed" xml:space="preserve"><value>Das Lesen der Konfliktblöcke eines Dokuments ist fehlgeschlagen.</value></data>
+  <data name="RefusedDuringOperationFormat" xml:space="preserve"><value>Das geht nicht, solange ein Vorgang läuft ({0}). Schließe ihn zuerst ab oder brich ihn ab.</value></data>
+  <data name="RenameBranchCommand" xml:space="preserve"><value>Branch umbenennen …</value></data>
+  <data name="RenameBranchPickTitle" xml:space="preserve"><value>Branch umbenennen</value></data>
+  <data name="RenameBranchPromptFormat" xml:space="preserve"><value>Neuer Name für {0}</value></data>
+  <data name="NoBranchToRename" xml:space="preserve"><value>Es gibt keinen lokalen Branch, den du umbenennen kannst.</value></data>
+  <data name="CannotRenameRemoteFormat" xml:space="preserve"><value>{0} ist ein Remote-Branch. Nur lokale Branches lassen sich umbenennen.</value></data>
+  <data name="StashShowCommand" xml:space="preserve"><value>Stash anzeigen …</value></data>
+  <data name="StashShowButton" xml:space="preserve"><value>Anzeigen</value></data>
+  <data name="StashTitleFormat" xml:space="preserve"><value>Stash {0}</value></data>
+  <data name="StashComparisonFormat" xml:space="preserve"><value>Verglichen mit {0}, dem Commit, auf dem der Stash entstand. Unversionierte Dateien erscheinen als hinzugefügt.</value></data>
+  <data name="StashBranchCommand" xml:space="preserve"><value>Branch aus Stash erstellen …</value></data>
+  <data name="StashBranchButton" xml:space="preserve"><value>Branch</value></data>
+  <data name="StashBranchPromptFormat" xml:space="preserve"><value>Name des neuen Branches für {0}. Er beginnt bei dem Commit, auf dem der Stash entstand. Dort wird der Stash angewendet und danach entfernt.</value></data>
+  <data name="StashClearCommand" xml:space="preserve"><value>Alle Stashes löschen …</value></data>
+  <data name="StashClearButton" xml:space="preserve"><value>Alle löschen</value></data>
+  <data name="StashClearConfirm" xml:space="preserve"><value>Alle löschen</value></data>
+  <data name="StashClearPromptFormat" xml:space="preserve"><value>Alle Stashes löschen ({0})? Ihre Änderungen gehen verloren.</value></data>
+  <data name="RemotesTab" xml:space="preserve"><value>Remotes</value></data>
+  <data name="ColumnRemote" xml:space="preserve"><value>Remote</value></data>
+  <data name="ColumnUrl" xml:space="preserve"><value>URL</value></data>
+  <data name="RemoteFetchUrlFormat" xml:space="preserve"><value>Fetch: {0}</value></data>
+  <data name="RemotePushUrlFormat" xml:space="preserve"><value>Push: {0}</value></data>
+  <data name="AddRemoteCommand" xml:space="preserve"><value>Remote hinzufügen …</value></data>
+  <data name="AddRemoteButton" xml:space="preserve"><value>Hinzufügen</value></data>
+  <data name="RenameRemoteCommand" xml:space="preserve"><value>Remote umbenennen …</value></data>
+  <data name="RenameRemoteButton" xml:space="preserve"><value>Umbenennen</value></data>
+  <data name="SetRemoteUrlCommand" xml:space="preserve"><value>Remote-URL ändern …</value></data>
+  <data name="SetRemoteUrlButton" xml:space="preserve"><value>URL ändern</value></data>
+  <data name="RemoveRemoteCommand" xml:space="preserve"><value>Remote entfernen …</value></data>
+  <data name="RemoveRemoteButton" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="RemoveRemoteConfirm" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="RemoveRemotePromptFormat" xml:space="preserve"><value>Den Remote {0} entfernen? Seine Remote-Tracking-Branches werden gelöscht, und die Branches, die ihnen folgen, verlieren ihren Upstream.</value></data>
+  <data name="RemoteNamePrompt" xml:space="preserve"><value>Name des neuen Remotes</value></data>
+  <data name="RemoteUrlPromptFormat" xml:space="preserve"><value>URL von {0}</value></data>
+  <data name="RenameRemotePromptFormat" xml:space="preserve"><value>Neuer Name für {0}</value></data>
+  <data name="RemoteNotFoundFormat" xml:space="preserve"><value>Der Remote {0} existiert nicht.</value></data>
+  <data name="LoadRemotesFailedFormat" xml:space="preserve"><value>Die Remotes konnten nicht gelesen werden: {0}</value></data>
+  <data name="InvalidRemoteNameFormat" xml:space="preserve"><value>{0} ist kein verwendbarer Remote-Name. Ein Remote-Name darf nicht mit „-“ beginnen.</value></data>
+  <data name="RemoteUrlKeepsPushUrlPromptFormat" xml:space="preserve"><value>URL von {0}. Seine eigene Push-URL {1} bleibt.</value></data>
+  <data name="RemoteListUnavailable" xml:space="preserve"><value>Der Git-Dienst dieser Anwendung kann Remotes nicht auflisten oder ändern.</value></data>
+  <data name="StashBranchStoppedFormat" xml:space="preserve"><value>Der Branch {0} wurde erstellt und ausgecheckt, aber {1} ließ sich dort nicht anwenden. Der Stash bleibt in der Liste.</value></data>
+  <data name="MergePromptFormat" xml:space="preserve"><value>{0} in {1} mergen?</value></data>
+  <data name="MergeConfirm" xml:space="preserve"><value>Mergen</value></data>
+  <data name="OperationChanged" xml:space="preserve"><value>Der laufende Vorgang hat sich geändert, während die Frage offen war. Es wurde nichts abgebrochen.</value></data>
+  <data name="StashesChangedFormat" xml:space="preserve"><value>Die Stashes haben sich geändert, während die Frage offen war. {0} der {1} bestätigten Stashes wurden gelöscht. Stashes, die seitdem angelegt wurden, bleiben erhalten.</value></data>
+  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Speichere oder schließe diese Dateien zuerst. Eine Seite zu übernehmen ersetzt sie, und der Editor hat ungespeicherte Änderungen daran.
+{0}</value></data>
+  <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} wurde in {0} gepullt. Der Push wurde abgebrochen.</value></data>
+  <data name="GitRunningTitle" xml:space="preserve"><value>Git</value></data>
+  <data name="GitRunningMessage" xml:space="preserve"><value>git läuft. Endet es nicht, etwa weil ein Hook wartet, lässt es sich nach kurzer Wartezeit stoppen.</value></data>
+  <data name="StopGitButton" xml:space="preserve"><value>git stoppen …</value></data>
+  <data name="StopGitConfirm" xml:space="preserve"><value>git stoppen</value></data>
+  <data name="StopGitPrompt" xml:space="preserve"><value>git läuft noch, möglicherweise in einem wartenden Hook. Jetzt zu stoppen kann den Befehl halb fertig zurücklassen: eine zurückgebliebene .git/index.lock und ein teilweise aktualisiertes Arbeitsverzeichnis. git trotzdem stoppen?</value></data>
+  <data name="GitStopped" xml:space="preserve"><value>git wurde gestoppt. Prüfe das Panel „Git-Änderungen“, der Befehl kann halb fertig sein. Eine zurückgebliebene .git/index.lock musst du vor dem nächsten git-Befehl löschen.</value></data>
+  <data name="RemoteUrlShowsCredentials" xml:space="preserve"><value>Das Feld zeigt die URL mit den enthaltenen Zugangsdaten.</value></data>
+  <data name="SkipCommand" xml:space="preserve"><value>Schritt überspringen …</value></data>
+  <data name="SkipButton" xml:space="preserve"><value>Überspringen</value></data>
+  <data name="SkipTitle" xml:space="preserve"><value>Schritt überspringen</value></data>
+  <data name="SkipConfirm" xml:space="preserve"><value>Schritt überspringen</value></data>
+  <data name="SkipPromptFormat" xml:space="preserve"><value>Den aktuellen Schritt des laufenden Vorgangs überspringen ({0})? Die Änderungen des Schritts gehen verloren, auch gelöste Konflikte. Andere nicht committete Änderungen bleiben erhalten.</value></data>
+  <data name="SkipRebasePromptFormat" xml:space="preserve"><value>Den aktuellen Schritt des laufenden Vorgangs überspringen ({0})? Die Änderungen des Schritts gehen verloren, auch gelöste Konflikte, und git verwirft dabei auch alle anderen nicht committeten Änderungen an versionierten Dateien.</value></data>
+  <data name="NoStepToSkip" xml:space="preserve"><value>Es läuft kein Rebase, Cherry-Pick oder Revert und keine Patch-Anwendung.</value></data>
+  <data name="OperationChangedNothingSkipped" xml:space="preserve"><value>Der laufende Vorgang hat sich geändert, während die Frage offen war. Es wurde nichts übersprungen.</value></data>
+  <data name="CherryPickCommand" xml:space="preserve"><value>Commit per Cherry-Pick übernehmen</value></data>
+  <data name="CherryPickMenu" xml:space="preserve"><value>Cherry-Pick</value></data>
+  <data name="CherryPickStopped" xml:space="preserve"><value>Der Cherry-Pick hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich ihn ab.</value></data>
+  <data name="RevertCommand" xml:space="preserve"><value>Commit per Revert rückgängig machen</value></data>
+  <data name="RevertMenu" xml:space="preserve"><value>Revert</value></data>
+  <data name="RevertStopped" xml:space="preserve"><value>Der Revert hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich ihn ab.</value></data>
+  <data name="PickCommitInHistory" xml:space="preserve"><value>Wähle einen Commit im Panel „Git-Verlauf“ und dort den Befehl im Kontextmenü.</value></data>
+  <data name="CreateTagCommand" xml:space="preserve"><value>Neues Tag …</value></data>
+  <data name="CreateTagButton" xml:space="preserve"><value>Neu</value></data>
+  <data name="CreateTagTitle" xml:space="preserve"><value>Neues Tag</value></data>
+  <data name="CreateTagPrompt" xml:space="preserve"><value>Name des neuen Tags</value></data>
+  <data name="TagMessagePromptFormat" xml:space="preserve"><value>Nachricht des Tags {0}; leer lassen für ein einfaches Tag ohne Nachricht</value></data>
+  <data name="NewTagHere" xml:space="preserve"><value>Neues Tag hier …</value></data>
+  <data name="DeleteTagCommand" xml:space="preserve"><value>Tag löschen …</value></data>
+  <data name="DeleteTagButton" xml:space="preserve"><value>Löschen</value></data>
+  <data name="DeleteTagConfirm" xml:space="preserve"><value>Löschen</value></data>
+  <data name="DeleteTagPromptFormat" xml:space="preserve"><value>Lokales Tag {0} löschen? Ein Remote behält sein Tag dieses Namens.</value></data>
+  <data name="PushTagCommand" xml:space="preserve"><value>Tag pushen …</value></data>
+  <data name="PushTagButton" xml:space="preserve"><value>Pushen</value></data>
+  <data name="PushTagProgressFormat" xml:space="preserve"><value>Push von Tag {0} nach {1} läuft …</value></data>
+  <data name="TagPushedFormat" xml:space="preserve"><value>Tag {0} nach {1} gepusht.</value></data>
+  <data name="TagRejectedHintFormat" xml:space="preserve"><value>{1} hat schon ein Tag {0}, das auf einen anderen Commit zeigt, und git ersetzt es nicht.</value></data>
+  <data name="DeleteRemoteTagCommand" xml:space="preserve"><value>Tag auf Remote löschen …</value></data>
+  <data name="DeleteRemoteTagButton" xml:space="preserve"><value>Auf Remote löschen</value></data>
+  <data name="DeleteRemoteTagPromptFormat" xml:space="preserve"><value>Tag {0} auf {1} löschen? Repositories, die es schon geholt haben, behalten es, und das lokale Tag bleibt.</value></data>
+  <data name="DeleteRemoteTagProgressFormat" xml:space="preserve"><value>Tag {0} auf {1} wird gelöscht …</value></data>
+  <data name="RemoteTagDeletedFormat" xml:space="preserve"><value>Tag {0} auf {1} gelöscht.</value></data>
+  <data name="TagNotFoundFormat" xml:space="preserve"><value>Das Tag {0} gibt es nicht.</value></data>
+  <data name="RebaseCommand" xml:space="preserve"><value>Aktuellen Branch rebasen …</value></data>
+  <data name="RebasePickTitle" xml:space="preserve"><value>Aktuellen Branch rebasen auf</value></data>
+  <data name="RebaseOntoMenu" xml:space="preserve"><value>Aktuellen Branch hierauf rebasen …</value></data>
+  <data name="MergeIntoCurrentMenu" xml:space="preserve"><value>In aktuellen Branch mergen</value></data>
+  <data name="NoBranchToRebase" xml:space="preserve"><value>Es gibt keinen anderen Branch, auf den sich rebasen lässt.</value></data>
+  <data name="RebasePromptFormat" xml:space="preserve"><value>{0} auf {1} rebasen? Die Commits von {0}, die {1} nicht hat, werden als neue Commits darauf neu angewendet. Ein schon gepushter Branch braucht danach einen Force Push.</value></data>
+  <data name="RebaseConfirm" xml:space="preserve"><value>Rebasen</value></data>
+  <data name="RebasedFormat" xml:space="preserve"><value>{0} auf {1} rebased.</value></data>
+  <data name="RebaseUpToDateFormat" xml:space="preserve"><value>{0} enthält {1} schon, es wurde nichts rebased.</value></data>
+  <data name="RebaseStoppedFormat" xml:space="preserve"><value>Der Rebase von {0} auf {1} hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich den Rebase ab.</value></data>
+  <data name="ForcePushCommand" xml:space="preserve"><value>Force Push …</value></data>
+  <data name="ForcePushConfirm" xml:space="preserve"><value>Force Push</value></data>
+  <data name="ForcePushPromptFormat" xml:space="preserve"><value>{0} per Force Push nach {1} pushen? Der Branch auf dem Remote wird ersetzt, und Commits dort, die {0} nicht hat, gehen für alle verloren. git verweigert es, wenn der Remote seit dem letzten Fetch Commits bekommen hat.</value></data>
+  <data name="ForcePushAfterRejectPromptFormat" xml:space="preserve"><value>Der Remote hat den Push von {0} abgelehnt: {2}
+
+Meist hat {1} Commits, die {0} noch nicht hat; hole sie zuerst per Pull, um sie zu behalten. Nur wenn du {0} umgeschrieben hast, zum Beispiel mit einem Amend oder Rebase, ersetzt ein Force Push die Commits auf dem Remote: Sie gehen für alle verloren, und git verweigert es, wenn der Remote seit dem letzten Fetch Commits bekommen hat. Force Push ausführen?</value></data>
+  <data name="ForcePushedFormat" xml:space="preserve"><value>{0} per Force Push nach {1} gepusht.</value></data>
+  <data name="ForcePushUnavailableFormat" xml:space="preserve"><value>{0} lässt sich nicht per Force Push nach {1} pushen: Ein Push von {0} geht an einen anderen Branch, sein Upstream ist ein lokaler Branch, oder {1} wurde noch nicht geholt.</value></data>
+  <data name="ForcePushStaleHint" xml:space="preserve"><value>Der Remote hat seit dem letzten Fetch Commits bekommen, deshalb hat git den Force Push verweigert und nichts geändert. Hole sie per Fetch, sieh dir die neuen Commits an und entscheide neu.</value></data>
+  <data name="StashPathsCommand" xml:space="preserve"><value>Änderungen dieser Datei oder dieses Ordners stashen …</value></data>
+  <data name="StashStagedCommand" xml:space="preserve"><value>Gestagte Änderungen stashen …</value></data>
+  <data name="StashStagedButton" xml:space="preserve"><value>Gestagte stashen</value></data>
+  <data name="NoChangesToStashFormat" xml:space="preserve"><value>{0} hat keine Änderungen zum Stashen.</value></data>
+  <data name="NothingStagedToStash" xml:space="preserve"><value>Es gibt keine gestagten Änderungen zum Stashen.</value></data>
+  <data name="CompareBranchesCommand" xml:space="preserve"><value>Mit aktuellem Branch vergleichen …</value></data>
+  <data name="CompareWithCurrentMenu" xml:space="preserve"><value>Mit aktuellem Branch vergleichen</value></data>
+  <data name="ComparePickTitle" xml:space="preserve"><value>Aktuellen Branch vergleichen mit</value></data>
+  <data name="TagDescription" xml:space="preserve"><value>Tag</value></data>
+  <data name="NothingToCompare" xml:space="preserve"><value>Es gibt keinen anderen Branch und kein Tag zum Vergleichen.</value></data>
+  <data name="CompareNoCommonCommitFormat" xml:space="preserve"><value>{0} und {1} haben keinen gemeinsamen Commit, von dem aus sich vergleichen lässt.</value></data>
+  <data name="BranchCompareTitleFormat" xml:space="preserve"><value>{0} verglichen mit {1}</value></data>
+  <data name="CompareSummaryFormat" xml:space="preserve"><value>Die Dateien zeigen, was {0} geändert hat, seit sich {0} und {1} bei {2} getrennt haben.</value></data>
+  <data name="CompareCommitsOnlyOnFormat" xml:space="preserve"><value>Commits auf {0}, die {1} nicht hat:</value></data>
+  <data name="CompareNoCommitsOnlyOnFormat" xml:space="preserve"><value>{0} hat keine Commits, die {1} nicht hat.</value></data>
+  <data name="CompareMoreCommits" xml:space="preserve"><value>… und weitere</value></data>
 </root>

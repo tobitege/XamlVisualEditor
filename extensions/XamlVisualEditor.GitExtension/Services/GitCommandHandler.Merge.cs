@@ -126,8 +126,10 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
+        // The step is checked again: the operation may have gone on elsewhere while the question was open.
         GitRepositoryOperation confirmed = snapshot.Operation;
-        bool? skipped = await TryRunMergeAsync<bool>(async (merge, root, ct) => await merge.SkipAsync(root, confirmed, ct));
+        string? step = snapshot.Status?.OperationStep;
+        bool? skipped = await TryRunMergeAsync<bool>(async (merge, root, ct) => await merge.SkipAsync(root, confirmed, step, ct));
         if (skipped == false)
         {
             await ShowInformationAsync(GitStrings.OperationChangedNothingSkipped);
@@ -204,6 +206,7 @@ internal sealed partial class GitCommandHandler
         }
 
         string current = CurrentBranchName();
+        string? branch = _session.Current.IsDetached ? null : current;
         if (!await ConfirmAsync(
                 string.Format(CultureInfo.CurrentCulture, GitStrings.RebasePromptFormat, current, target.Name),
                 GitStrings.RebaseConfirm,
@@ -213,9 +216,10 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
+        // The confirmed branch is rebased, also when another one was checked out while the question was open.
         string upstream = target.FullName;
         GitMergeResult? result = await TryRunMergeAsync<GitMergeResult>(async (merge, root, ct) =>
-            await merge.RebaseAsync(root, upstream, ct));
+            await merge.RebaseAsync(root, upstream, branch, ct));
         switch (result)
         {
             case GitMergeResult.Merged:
@@ -351,7 +355,7 @@ internal sealed partial class GitCommandHandler
         ];
         QuickPickItem? picked = await _window.ShowQuickPickAsync(
             choices.Select(choice => choice.Item).ToArray(),
-            new QuickPickOptions(GitStrings.ResolveConflictCommand, false),
+            new QuickPickOptions(DialogTitle(GitStrings.ResolveConflictCommand), false),
             CancellationToken.None);
         int index = Array.FindIndex(choices, choice => ReferenceEquals(choice.Item, picked));
         if (index < 0)

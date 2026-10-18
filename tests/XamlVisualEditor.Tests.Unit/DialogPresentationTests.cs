@@ -15,6 +15,7 @@ using Avalonia.VisualTree;
 using XamlVisualEditor.App;
 using XamlVisualEditor.App.Services;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Tests.Shared;
@@ -330,17 +331,9 @@ public sealed class DialogPresentationTests
     [AvaloniaFact]
     public async Task The_main_window_waits_for_a_writing_git_command_before_it_closes()
     {
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        repository.RunGit("branch", "other");
-        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
-        File.WriteAllText(hook, "#!/bin/sh\ntouch .git/hook-started\nwhile [ ! -f .git/release ]; do sleep 0.1; done\n");
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
-
+        using GitTestRepository repository = CreateRepositoryWithWaitingHook();
         GitService git = new(options: repository.ProcessOptions);
-        MainWindow window = new() { GitService = git };
+        MainWindow window = new() { WhenGitWritesEnded = git.WhenWritesEnded };
         window.Show();
         Task switching = git.SwitchAsync(repository.Path, "other", CancellationToken.None);
         try
@@ -360,6 +353,78 @@ public sealed class DialogPresentationTests
 
         await switching;
         await WaitUntilAsync(() => !window.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task The_main_window_closes_despite_a_hanging_git_command_only_after_a_confirmation()
+    {
+        using GitTestRepository repository = CreateRepositoryWithWaitingHook();
+        GitService git = new(options: repository.ProcessOptions);
+        MainWindow window = new() { WhenGitWritesEnded = git.WhenWritesEnded };
+        TimeSpan delay = MainWindow.GitWriteCloseDelay;
+        MainWindow.GitWriteCloseDelay = TimeSpan.FromMilliseconds(200);
+        window.Show();
+        Task switching = git.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => File.Exists(Path.Combine(repository.Path, ".git", "hook-started")));
+
+            // The window button of the progress asks, and the window button of the question keeps the editor open.
+            window.Close();
+            ProgressDialog progress = await WaitForOwnedAsync<ProgressDialog>(window);
+            await WaitUntilAsync(() => ((ProgressDialogViewModel)progress.DataContext!).CanCancel);
+            CloseWithWindowButton(progress);
+            ConfirmDialog question = await WaitForOwnedAsync<ConfirmDialog>(window);
+            Assert.Equal(UiStrings.GitWritesCloseAnywayPrompt, ((ConfirmDialogViewModel)question.DataContext!).Message);
+            CloseWithWindowButton(question);
+            await WaitUntilAsync(() => window.OwnedWindows.Count == 0);
+            Assert.True(window.IsVisible);
+
+            // The button of the progress asks again, and only the confirmation closes the editor while git runs. The
+            // window ignores a close until the declined wait has ended, which happens after the question closed.
+            await WaitUntilAsync(() =>
+            {
+                window.Close();
+                Flush(window);
+                return window.OwnedWindows.OfType<ProgressDialog>().Any();
+            });
+            progress = await WaitForOwnedAsync<ProgressDialog>(window);
+            await WaitUntilAsync(() => ((ProgressDialogViewModel)progress.DataContext!).CanCancel);
+            ((ProgressDialogViewModel)progress.DataContext!).CancelCommand.Execute().Subscribe();
+            question = await WaitForOwnedAsync<ConfirmDialog>(window);
+            ((ConfirmDialogViewModel)question.DataContext!).ConfirmCommand.Execute().Subscribe();
+            await WaitUntilAsync(() => !window.IsVisible);
+            Assert.False(switching.IsCompleted);
+        }
+        finally
+        {
+            MainWindow.GitWriteCloseDelay = delay;
+            File.WriteAllText(Path.Combine(repository.Path, ".git", "release"), "");
+        }
+
+        await switching;
+    }
+
+    /// <summary>Creates a repository whose checkout of the branch other waits in a hook for the file .git/release.</summary>
+    private static GitTestRepository CreateRepositoryWithWaitingHook()
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\ntouch .git/hook-started\nwhile [ ! -f .git/release ]; do sleep 0.1; done\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return repository;
+    }
+
+    private static async Task<T> WaitForOwnedAsync<T>(Window owner) where T : Window
+    {
+        await WaitUntilAsync(() => owner.OwnedWindows.OfType<T>().Any());
+        Flush(owner);
+        return owner.OwnedWindows.OfType<T>().Single();
     }
 
     // Runs the jobs of the UI thread while it waits, so posted continuations run.

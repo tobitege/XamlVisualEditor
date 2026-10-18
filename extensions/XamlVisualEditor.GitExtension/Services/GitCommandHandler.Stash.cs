@@ -47,8 +47,9 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // Exactly the listed files are stashed, never a file that changed after the last refresh; a rename with its old
-        // path, so the stash takes both halves of it.
+        // The listed changes are stashed with their paths: a file with the edits it got since the last refresh, an
+        // untracked folder with the files that appeared in it, and a rename with its old path, so the stash takes both
+        // halves of it.
         string[] paths = changes
             .SelectMany(change => change.OldPath is { } oldPath ? new[] { change.Path, oldPath } : [change.Path])
             .ToArray();
@@ -173,7 +174,7 @@ internal sealed partial class GitCommandHandler
 
         string? name = (await _window.ShowInputBoxAsync(
             new InputBoxOptions(
-                GitStrings.StashBranchCommand,
+                DialogTitle(GitStrings.StashBranchCommand),
                 string.Format(CultureInfo.CurrentCulture, GitStrings.StashBranchPromptFormat, stash.Name),
                 null),
             CancellationToken.None))?.Trim();
@@ -286,7 +287,7 @@ internal sealed partial class GitCommandHandler
 
     /// <summary>Returns the entered stash message without surrounding spaces, empty for git's message, or null when cancelled.</summary>
     private async Task<string?> AskStashMessageAsync(string title) =>
-        (await _window.ShowInputBoxAsync(new InputBoxOptions(title, GitStrings.StashMessagePrompt, null), CancellationToken.None))?.Trim();
+        (await _window.ShowInputBoxAsync(new InputBoxOptions(DialogTitle(title), GitStrings.StashMessagePrompt, null), CancellationToken.None))?.Trim();
 
     /// <summary>
     /// Applies or pops a stash. A stash that applied with conflicts stays in the list; that is reported instead of
@@ -365,7 +366,7 @@ internal sealed partial class GitCommandHandler
         QuickPickItem[] items = stashes
             .Select(stash => new QuickPickItem(stash.Name, stash.Message, GitStashItemViewModel.FormatDate(stash)))
             .ToArray();
-        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
+        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(DialogTitle(title), false), CancellationToken.None);
         int index = picked is null ? -1 : Array.IndexOf(items, picked);
         return index < 0 ? null : stashes[index];
     }

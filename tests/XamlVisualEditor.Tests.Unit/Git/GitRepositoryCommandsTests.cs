@@ -353,6 +353,37 @@ public sealed class GitRepositoryCommandsTests
     }
 
     [AvaloniaFact]
+    public async Task A_force_push_confirmed_after_the_remote_got_a_commit_replaces_nothing()
+    {
+        GitPanelCommandFixture? fixture = null;
+        string? colleague = null;
+        // A colleague pushes while the question is open, and a fetch even brings the commit in.
+        fixture = await CreateAsync(repository =>
+        {
+            repository.AddBareRemote();
+            repository.RunGit("push", "-q", "-u", "origin", "main");
+            repository.RunGit("commit", "-q", "--amend", "-m", "Amended");
+        }, (_, _) =>
+        {
+            GitTestRepository repository = fixture!.Repository;
+            string clone = repository.CloneRemote("other");
+            repository.CommitFileIn(clone, "b.txt", "b\n", "Colleague");
+            repository.RunGitIn(clone, "push", "-q");
+            colleague = repository.RunGitIn(repository.RemotePath!, "rev-parse", "main").Trim();
+            repository.RunGit("fetch", "-q");
+            return true;
+        });
+        using (fixture)
+        {
+            await fixture.ExecuteAsync(GitCommands.FORCE_PUSH);
+
+            Assert.Equal(colleague, fixture.Repository.RunGitIn(fixture.Repository.RemotePath!, "rev-parse", "main").Trim());
+            string error = Assert.Single(fixture.Window.Errors);
+            Assert.StartsWith(GitStrings.ForcePushStaleHint, error, StringComparison.Ordinal);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Compare_shows_the_files_since_the_branches_parted_and_the_commits_only_each_side_has()
     {
         using GitPanelCommandFixture fixture = await CreateAsync(repository =>

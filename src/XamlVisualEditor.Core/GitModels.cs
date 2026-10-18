@@ -53,6 +53,12 @@ public sealed record GitRepositoryStatus
     /// </summary>
     public bool IsStoppedForEdit { get; init; }
 
+    /// <summary>
+    /// Gets the step of the rebase, cherry-pick, revert or patch application in progress: the number of the step of a
+    /// rebase or patch application, or the commit a cherry-pick or revert stopped at; null without one.
+    /// </summary>
+    public string? OperationStep { get; init; }
+
     /// <inheritdoc />
     public bool Equals(GitRepositoryStatus? other)
     {
@@ -70,6 +76,7 @@ public sealed record GitRepositoryStatus
             && IsUnborn == other.IsUnborn
             && Operation == other.Operation
             && IsStoppedForEdit == other.IsStoppedForEdit
+            && OperationStep == other.OperationStep
             && Changes.SequenceEqual(other.Changes);
     }
 

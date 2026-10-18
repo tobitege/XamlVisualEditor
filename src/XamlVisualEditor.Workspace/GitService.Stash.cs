@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Workspace;
 
@@ -67,8 +69,26 @@ public sealed partial class GitService : IGitStashService
             args.AddRange(pathspecs);
         }
 
+        string? previousStash = await ReadNewestStashAsync(repoPath, ct);
         GitProcessResult result = await RunGitAsync(repoPath, args, GitCommandAccess.Write, ct, environment: PatternPathspecs);
+        // git can save the stash and then fail to remove its changes from the working tree, for example with
+        // --staged over overlapping unstaged changes; the message must not suggest that nothing was saved.
+        if (result.ExitCode != 0 && await ReadNewestStashAsync(repoPath, CancellationToken.None) is { } newest && newest != previousStash)
+        {
+            throw new InvalidOperationException(string.Format(
+                CultureInfo.CurrentCulture,
+                UiStrings.GitStashSavedChangesKeptFormat,
+                result.StandardError.Trim()));
+        }
+
         ThrowIfFailed(result, args[0]);
+    }
+
+    private async Task<string?> ReadNewestStashAsync(string repoPath, CancellationToken ct)
+    {
+        GitProcessResult result = await RunGitAsync(
+            repoPath, ["rev-parse", "-q", "--verify", "refs/stash"], GitCommandAccess.Read, ct, allowNonZeroExitCode: true);
+        return result.ExitCode == 0 ? result.StandardOutput.Trim() : null;
     }
 
     /// <inheritdoc />

@@ -1332,4 +1332,6 @@
   <data name="GitWritesClosingTitle" xml:space="preserve"><value>Closing</value></data>
   <data name="GitWritesClosingMessage" xml:space="preserve"><value>Waiting for a git command to finish, so that it is not left half done.</value></data>
   <data name="GitWritesCloseAnyway" xml:space="preserve"><value>Close Anyway</value></data>
+  <data name="GitWritesCloseAnywayPrompt" xml:space="preserve"><value>git is still running, possibly in a hook that waits. If the editor closes now, git can fail when it writes its output and leave the command half done. Close anyway?</value></data>
+  <data name="GitStashSavedChangesKeptFormat" xml:space="preserve"><value>git saved the stash but left its changes in the working tree: {0}</value></data>
 </root>

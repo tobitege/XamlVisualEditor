@@ -138,7 +138,7 @@ internal sealed partial class GitCommandHandler
         QuickPickItem[] items = remotes
             .Select(remote => new QuickPickItem(remote.Name, GitUrlCredentials.Mask(remote.FetchUrl), null))
             .ToArray();
-        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
+        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(DialogTitle(title), false), CancellationToken.None);
         int index = picked is null ? -1 : Array.IndexOf(items, picked);
         return index < 0 ? null : remotes[index];
     }
@@ -165,7 +165,7 @@ internal sealed partial class GitCommandHandler
     /// <summary>Returns the entered text without surrounding spaces, or null when it was cancelled or is empty.</summary>
     private async Task<string?> AskAsync(string title, string prompt, string? value)
     {
-        string? text = (await _window.ShowInputBoxAsync(new InputBoxOptions(title, prompt, value), CancellationToken.None))?.Trim();
+        string? text = (await _window.ShowInputBoxAsync(new InputBoxOptions(DialogTitle(title), prompt, value), CancellationToken.None))?.Trim();
         return string.IsNullOrEmpty(text) ? null : text;
     }
 

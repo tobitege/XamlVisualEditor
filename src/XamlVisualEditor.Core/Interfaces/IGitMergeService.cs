@@ -36,13 +36,14 @@ public interface IGitMergeService
     Task ContinueAsync(string repoPath, CancellationToken ct = default);
 
     /// <summary>
-    /// Skips the current step of the operation in progress when it is <paramref name="operation"/>, the rebase,
-    /// cherry-pick, revert or patch application the user confirmed, and continues with the next step; returns false and
-    /// changes nothing when another or no such operation is in progress. The changes of the skipped step are lost,
+    /// Skips the current step of the operation in progress when it is <paramref name="operation"/> at
+    /// <paramref name="step"/> (see <see cref="GitRepositoryStatus.OperationStep"/>), the rebase, cherry-pick, revert or
+    /// patch application step the user confirmed, and continues with the next step; returns false and changes nothing
+    /// when another or no such operation or another step is in progress. The changes of the skipped step are lost,
     /// including resolved conflicts; a rebase also discards every other uncommitted change of tracked files.
     /// </summary>
     /// <remarks>Cancelling stops only the wait for other git commands; a skip that started runs to its end.</remarks>
-    Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default);
+    Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, string? step, CancellationToken ct = default);
 
     /// <summary>
     /// Applies the changes of <paramref name="commit"/> to the current branch as a new commit with its message. Returns
@@ -60,13 +61,14 @@ public interface IGitMergeService
     Task<GitMergeResult> RevertAsync(string repoPath, string commit, CancellationToken ct = default);
 
     /// <summary>
-    /// Replays the commits of the current branch that <paramref name="upstream"/>, a branch, tag or commit, does not
-    /// have on top of it. Returns <see cref="GitMergeResult.AlreadyUpToDate"/> when the branch already contains it,
-    /// <see cref="GitMergeResult.Stopped"/> when a conflict stopped a step and the rebase is in progress, and throws when
-    /// git refuses before changing anything, for example because of uncommitted changes.
+    /// Replays the commits of <paramref name="branch"/>, after switching to it, or of HEAD when it is null, that
+    /// <paramref name="upstream"/>, a branch, tag or commit, does not have on top of it. Returns
+    /// <see cref="GitMergeResult.AlreadyUpToDate"/> when the branch already contains it, <see cref="GitMergeResult.Stopped"/>
+    /// when a conflict stopped a step and the rebase is in progress, and throws when git refuses before changing
+    /// anything, for example because of uncommitted changes or another operation in progress.
     /// </summary>
     /// <remarks>Cancelling stops only the wait for other git commands; a rebase that started runs to its end.</remarks>
-    Task<GitMergeResult> RebaseAsync(string repoPath, string upstream, CancellationToken ct = default);
+    Task<GitMergeResult> RebaseAsync(string repoPath, string upstream, string? branch, CancellationToken ct = default);
 
     /// <summary>
     /// Replaces each conflicted file of <paramref name="paths"/> by the version of <paramref name="side"/> and marks it

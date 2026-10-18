@@ -1,4 +1,5 @@
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Tests.Shared;
 using XamlVisualEditor.Workspace;
 using Xunit;
@@ -85,6 +86,25 @@ public sealed class GitStashServiceTests
         Assert.Equal("unstaged\n", repository.ReadFile("b.txt"));
         Assert.Equal("new\n", repository.ReadFile("new.txt"));
         Assert.Equal("a.txt", repository.RunGit("stash", "show", "--name-only").Trim());
+    }
+
+    [Fact]
+    public async Task A_staged_stash_that_git_saves_but_cannot_remove_says_so()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.WriteFile("a.txt", "staged\n");
+        repository.RunGit("add", "a.txt");
+        repository.WriteFile("a.txt", "staged and edited\n");
+        GitService service = new(options: repository.ProcessOptions);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.PushStagedAsync(repository.Path, "index", ct));
+
+        string prefix = UiStrings.GitStashSavedChangesKeptFormat.Split("{0}")[0];
+        Assert.StartsWith(prefix, error.Message, StringComparison.Ordinal);
+        Assert.Equal("On main: index", Assert.Single(await service.ListAsync(repository.Path, ct)).Message);
+        Assert.Equal("staged and edited\n", repository.ReadFile("a.txt"));
     }
 
     [Fact]

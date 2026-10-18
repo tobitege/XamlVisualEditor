@@ -156,7 +156,7 @@ internal sealed partial class GitCommandHandler
         QuickPickItem[] items = tags
             .Select(tag => new QuickPickItem(tag.Name, tag.TargetShortSha, tag.Subject.Length == 0 ? null : tag.Subject))
             .ToArray();
-        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
+        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(DialogTitle(title), false), CancellationToken.None);
         int index = picked is null ? -1 : Array.IndexOf(items, picked);
         return index < 0 ? null : tags[index];
     }

@@ -139,7 +139,8 @@ public sealed class GitStashCommandsTests
         await fixture.ExecuteAsync(GitCommands.STASH_DROP, "0123456789012345678901234567890123456789");
 
         (IReadOnlyList<QuickPickItem> items, QuickPickOptions options) = Assert.Single(fixture.Window.QuickPicks);
-        Assert.Equal(GitStrings.StashPopCommand, options.Title);
+        // The title is the command without the ellipsis that marks it in the menus.
+        Assert.Equal(GitStrings.StashPopCommand.TrimEnd('…').TrimEnd(), options.Title);
         Assert.Equal(("stash@{0}", "On main: first"), (items[0].Label, items[0].Description));
         Assert.Equal("first\n", File.ReadAllText(Path.Combine(fixture.Repository.Path, "a.txt")));
         Assert.Equal(

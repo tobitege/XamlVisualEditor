@@ -171,7 +171,8 @@ internal sealed class ScriptedRemoteService : IGitRemoteService
     public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
         RunAsync(setUpstreamRemote is null ? "push" : "push -u " + setUpstreamRemote, ct);
 
-    public Task<GitRemoteResult> ForcePushAsync(string repoPath, CancellationToken ct = default) => RunAsync("push --force-with-lease", ct);
+    public Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default) =>
+        RunAsync("push --force-with-lease " + branch + " " + expectedUpstreamSha, ct);
 
     public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
         RunAsync("push " + remote + " tag " + name, ct);

@@ -71,12 +71,13 @@ public interface IGitRemoteService
     Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Pushes the current branch to its upstream with <c>--force-with-lease</c>: the branch on the remote is replaced,
-    /// for example after an amend or a rebase, but only while it still points to the commit of its remote-tracking
-    /// branch; when the remote got other commits since the last fetch, the result reports
-    /// <see cref="GitRemoteFailureKind.Rejected"/> and nothing changes.
+    /// Pushes the local branch <paramref name="branch"/> to its upstream branch and replaces it, for example after an
+    /// amend or a rebase, but only while it still points to <paramref name="expectedUpstreamSha"/>, the commit the user
+    /// saw; otherwise the result reports <see cref="GitRemoteFailureKind.Rejected"/> and nothing changes. No other
+    /// branch is pushed, whatever <c>push.default</c> says, and a branch without upstream reports
+    /// <see cref="GitRemoteFailureKind.NoUpstream"/>.
     /// </summary>
-    Task<GitRemoteResult> ForcePushAsync(string repoPath, CancellationToken ct = default);
+    Task<GitRemoteResult> ForcePushAsync(string repoPath, string branch, string expectedUpstreamSha, CancellationToken ct = default);
 
     /// <summary>
     /// Pushes the tag <paramref name="name"/> to <paramref name="remote"/>. A tag of that name on the remote that

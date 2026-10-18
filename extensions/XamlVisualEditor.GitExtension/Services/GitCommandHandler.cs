@@ -426,6 +426,12 @@ internal sealed partial class GitCommandHandler
     private Task ShowInformationAsync(string message) =>
         _window.ShowInformationMessageAsync(message, CancellationToken.None);
 
+    /// <summary>
+    /// Returns the text of a menu command as the title of the dialog it opens: without the ellipsis that marks a
+    /// command which asks for more, as "Rename Branch…" and "Branch umbenennen …" do.
+    /// </summary>
+    private static string DialogTitle(string commandText) => commandText.TrimEnd('…').TrimEnd();
+
     private static void ClearCommitMessage(GitPanelViewModel panel)
     {
         if (Dispatcher.UIThread.CheckAccess())

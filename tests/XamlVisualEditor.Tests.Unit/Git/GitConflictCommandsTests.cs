@@ -536,6 +536,33 @@ public sealed class GitConflictCommandsTests
     }
 
     [Fact]
+    public async Task Skip_of_a_pick_step_that_went_on_while_the_question_was_open_skips_nothing()
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "a.txt", "two\n", "Two");
+        repository.CommitFileIn(repository.Path, "a.txt", "three\n", "Three");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
+        Assert.False(repository.TryRunGit(out _, "cherry-pick", "main..feature"));
+        // The pick goes on elsewhere while the question is open and stops at its next step.
+        using Fixture fixture = await Fixture.ForAsync(repository, (_, _) =>
+        {
+            repository.TryRunGit(out _, "cherry-pick", "--skip");
+            return true;
+        });
+        string stopped = repository.RunGit("rev-parse", "CHERRY_PICK_HEAD").Trim();
+
+        await fixture.ExecuteAsync(GitCommands.SKIP);
+
+        ConfirmationDialogRequest question = Assert.Single(fixture.Dialogs.Confirmations);
+        Assert.Equal(string.Format(GitStrings.SkipPromptFormat, GitStrings.OperationCherryPicking), question.Message);
+        Assert.Equal([GitStrings.OperationChangedNothingSkipped], fixture.Window.Infos);
+        Assert.NotEqual(stopped, repository.RunGit("rev-parse", "CHERRY_PICK_HEAD").Trim());
+        Assert.Equal(GitRepositoryOperation.CherryPicking, fixture.Session.Current.Operation);
+    }
+
+    [Fact]
     public async Task Skip_during_a_merge_is_refused_without_a_question()
     {
         using Fixture fixture = await Fixture.CreateAsync((_, _) => true);

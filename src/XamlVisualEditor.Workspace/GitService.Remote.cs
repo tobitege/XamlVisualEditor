@@ -408,8 +408,39 @@ public sealed partial class GitService
     }
 
     /// <inheritdoc />
-    public Task<GitRemoteResult> ForcePushAsync(string repoPath, CancellationToken ct = default) =>
-        RunNetworkCommandAsync(repoPath, new[] { "push", "--force-with-lease" }, ct);
+    /// <remarks>
+    /// The refspec and the lease name the branch, its upstream and the expected commit, so neither the configuration nor
+    /// a branch checked out meanwhile decides what is replaced; a plain <c>--force-with-lease</c> would push every
+    /// branch that <c>push.default=matching</c> matches and compare with remote-tracking branches a fetch moved.
+    /// </remarks>
+    public async Task<GitRemoteResult> ForcePushAsync(
+        string repoPath,
+        string branch,
+        string expectedUpstreamSha,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(branch);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedUpstreamSha);
+        string? remote = await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct);
+        string? upstream = await ReadConfigAsync(repoPath, "branch." + branch + ".merge", ct);
+        if (remote is null || upstream is null)
+        {
+            return GitRemoteResult.Failed(GitRemoteFailureKind.NoUpstream, $"The branch {branch} has no upstream branch.");
+        }
+
+        return await RunNetworkCommandAsync(
+            repoPath,
+            ["push", "--force-with-lease=" + upstream + ":" + expectedUpstreamSha, "--", remote, LOCAL_BRANCH_PREFIX + branch + ":" + upstream],
+            ct);
+    }
+
+    /// <summary>Returns the value of a git configuration key, or null when it is not set.</summary>
+    private async Task<string?> ReadConfigAsync(string repoPath, string key, CancellationToken ct)
+    {
+        GitProcessResult result = await RunGitAsync(repoPath, ["config", "--get", key], GitCommandAccess.Read, ct, allowNonZeroExitCode: true);
+        string value = result.StandardOutput.Trim();
+        return result.ExitCode == 0 && value.Length > 0 ? value : null;
+    }
 
     /// <inheritdoc />
     /// <remarks>The full reference name keeps a branch of the same name from being pushed instead.</remarks>

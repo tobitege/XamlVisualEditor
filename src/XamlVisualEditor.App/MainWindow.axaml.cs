@@ -17,7 +17,6 @@ using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
-using XamlVisualEditor.Workspace;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.App;
@@ -39,7 +38,7 @@ public sealed partial class MainWindow : Window
     private IDisposable? _saveConflictHandler;
     private bool _isConfirmingClose;
     private bool _isWaitingForGit;
-    private bool _gitWritesWaited;
+    private bool _closeDespiteGit;
     private IDisposable? _commandPaletteHandler;
     private IDisposable? _extensionPackageOpenHandler;
     private IDisposable? _extensionManagerHandler;
@@ -99,16 +98,28 @@ public sealed partial class MainWindow : Window
 
             // A writing git command is not stopped half way and outlives the editor, but it can fail when it writes
             // to the output the editor closed; the window waits for it, and after a while the user can close anyway.
-            if (!e.Cancel && GitService is { } git && !_gitWritesWaited && !git.WhenWritesEnded().IsCompleted)
+            if (!e.Cancel && WhenGitWritesEnded is { } whenWritesEnded && !_closeDespiteGit && !whenWritesEnded().IsCompleted)
             {
                 e.Cancel = true;
                 if (_isWaitingForGit) return;
                 _isWaitingForGit = true;
                 Dispatcher.UIThread.Post(async () =>
                 {
-                    await WaitForGitWritesAsync(git);
-                    _gitWritesWaited = true;
-                    Close();
+                    bool close;
+                    try
+                    {
+                        close = await WaitForGitWritesAsync(whenWritesEnded);
+                    }
+                    finally
+                    {
+                        _isWaitingForGit = false;
+                    }
+
+                    if (close)
+                    {
+                        _closeDespiteGit = true;
+                        Close();
+                    }
                 });
                 return;
             }
@@ -145,16 +156,21 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Gets or sets the git service whose writing commands the window waits for before it closes.</summary>
-    public GitService? GitService { get; set; }
+    /// <summary>
+    /// Gets or sets what returns a task that completes when no writing git command runs; the window waits for it before
+    /// it closes.
+    /// </summary>
+    public Func<Task>? WhenGitWritesEnded { get; set; }
 
     /// <summary>
-    /// Shows a progress until the writing git commands ended; after <see cref="GitWriteCloseDelay"/> its button closes
-    /// the editor anyway, for a command that hangs, for example in a hook.
+    /// Shows a progress until the writing git commands ended and returns true then. After
+    /// <see cref="GitWriteCloseDelay"/> its button, and as with any progress its window button and Escape, ask whether
+    /// to close anyway, for a command that hangs, for example in a hook; only a confirmation returns true, otherwise
+    /// the editor stays open.
     /// </summary>
-    private async Task WaitForGitWritesAsync(GitService git)
+    private async Task<bool> WaitForGitWritesAsync(Func<Task> whenWritesEnded)
     {
-        ProgressDialog dialog = new()
+        ProgressDialog progress = new()
         {
             DataContext = new ProgressDialogViewModel(
                 UiStrings.GitWritesClosingTitle,
@@ -162,13 +178,29 @@ public sealed partial class MainWindow : Window
                 UiStrings.GitWritesCloseAnyway,
                 GitWriteCloseDelay)
         };
-        Task<bool?> shown = dialog.ShowDialog<bool?>(this);
-        if (await Task.WhenAny(git.WhenWritesEnded(), shown) != shown)
+        Task<bool?> shown = progress.ShowDialog<bool?>(this);
+        Task ended = whenWritesEnded();
+        if (await Task.WhenAny(ended, shown) == ended)
         {
-            dialog.Close();
+            progress.Close();
+            await shown;
+            return true;
         }
 
-        await shown;
+        if (await shown != true)
+        {
+            return false;
+        }
+
+        ConfirmDialog question = new()
+        {
+            DataContext = new ConfirmDialogViewModel(
+                UiStrings.GitWritesClosingTitle,
+                UiStrings.GitWritesCloseAnywayPrompt,
+                UiStrings.GitWritesCloseAnyway,
+                isDestructive: true)
+        };
+        return await question.ShowDialog<bool>(this);
     }
 
     /// <summary>Gets how long the window waits for the writing git commands before it offers to close anyway.</summary>

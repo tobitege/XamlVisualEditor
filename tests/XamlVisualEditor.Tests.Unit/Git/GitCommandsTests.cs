@@ -866,15 +866,12 @@ public sealed class GitCommandsTests
         Assert.Equal(
             [
                 string.Format(GitStrings.RemoteFailureFormat, GitStrings.AuthenticationFailedHint, "fatal: Authentication failed for 'https://***@example.com/r.git/'"),
-                string.Format(GitStrings.RemoteFailureFormat, GitStrings.PullDivergedHint, "fatal: Not possible to fast-forward, aborting.")
+                string.Format(GitStrings.RemoteFailureFormat, GitStrings.PullDivergedHint, "fatal: Not possible to fast-forward, aborting."),
+                string.Format(GitStrings.RemoteFailureFormat, GitStrings.PushRejectedHint, "! [rejected]        main -> main (non-fast-forward)")
             ],
             registration.Window.Errors);
-        // A rejected push asks whether to force push, with git's line; the declined question pushes nothing more.
-        ConfirmationDialogRequest question = Assert.Single(registration.Dialogs.Confirmations);
-        Assert.True(question.IsDestructive);
-        Assert.Equal(
-            string.Format(GitStrings.ForcePushAfterRejectPromptFormat, "main", "origin/main", "! [rejected]        main -> main (non-fast-forward)"),
-            question.Message);
+        // Without a history service the commit of the upstream is unknown, so no force push is offered.
+        Assert.Empty(registration.Dialogs.Confirmations);
         Assert.Empty(registration.Window.Infos);
         Assert.Equal(["fetch", "pull", "push"], remotes.Calls);
     }

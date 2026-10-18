@@ -76,7 +76,8 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         GitRepositoryOperation operation = gitDirectory is null ? GitRepositoryOperation.None : DetectOperation(gitDirectory);
         return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation) with
         {
-            IsStoppedForEdit = operation == GitRepositoryOperation.Rebasing && IsStoppedForEdit(gitDirectory!)
+            IsStoppedForEdit = operation == GitRepositoryOperation.Rebasing && IsStoppedForEdit(gitDirectory!),
+            OperationStep = gitDirectory is null ? null : ReadOperationStep(gitDirectory, operation)
         };
     }
 
@@ -293,6 +294,33 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
     // git writes this file when a rebase stops at an edit step, and not when it stops for a conflict.
     internal static bool IsStoppedForEdit(string gitDirectory) =>
         File.Exists(Path.Combine(gitDirectory, "rebase-merge", "amend"));
+
+    /// <summary>
+    /// Returns the step of <paramref name="operation"/>, see <see cref="GitRepositoryStatus.OperationStep"/>: git counts
+    /// the steps of a rebase in rebase-merge/msgnum or rebase-apply/next and those of git am in rebase-apply/next, and
+    /// names the stopped commit of a cherry-pick or revert in CHERRY_PICK_HEAD or REVERT_HEAD.
+    /// </summary>
+    internal static string? ReadOperationStep(string gitDirectory, GitRepositoryOperation operation)
+    {
+        string[] files = operation switch
+        {
+            GitRepositoryOperation.Rebasing => [Path.Combine("rebase-merge", "msgnum"), Path.Combine("rebase-apply", "next")],
+            GitRepositoryOperation.ApplyingPatches => [Path.Combine("rebase-apply", "next")],
+            GitRepositoryOperation.CherryPicking => ["CHERRY_PICK_HEAD"],
+            GitRepositoryOperation.Reverting => ["REVERT_HEAD"],
+            _ => []
+        };
+        string? file = files.Select(name => Path.Combine(gitDirectory, name)).FirstOrDefault(File.Exists);
+        try
+        {
+            return file is null ? null : File.ReadAllText(file).Trim();
+        }
+        catch (IOException)
+        {
+            // git replaced the file meanwhile; the step is then unknown, which a confirmed step does not match.
+            return null;
+        }
+    }
 
     private static string? ResolveWorkingDirectory(string path)
     {

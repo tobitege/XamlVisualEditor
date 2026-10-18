@@ -12,29 +12,19 @@ namespace XamlVisualEditor.Workspace;
 public sealed partial class GitService : IGitMergeService
 {
     /// <inheritdoc />
-    /// <remarks>
-    /// git exits with code 1 both when the merge stopped and when the revision cannot be merged, so MERGE_HEAD decides.
-    /// Every other non-zero exit code means git refused before it changed anything.
-    /// </remarks>
     public async Task<GitMergeResult> MergeAsync(string repoPath, string revision, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(revision);
-        GitProcessResult result = await RunWorkingTreeCommandAsync(
-            repoPath, new[] { "merge", "--no-edit", "--", revision }, ct, UntranslatedOutput);
-        if (result.ExitCode == 0)
-        {
-            return result.StandardOutput.Contains("Already up to date", StringComparison.Ordinal)
-                ? GitMergeResult.AlreadyUpToDate
-                : GitMergeResult.Merged;
-        }
-
-        if (await GetOperationAsync(repoPath, CancellationToken.None) == GitRepositoryOperation.Merging)
+        (GitProcessResult result, bool stopped) = await RunStoppingCommandAsync(
+            repoPath, ["merge", "--no-edit", "--", revision], GitRepositoryOperation.Merging, ct);
+        if (stopped)
         {
             return GitMergeResult.Stopped;
         }
 
-        ThrowIfFailed(result, "merge");
-        return GitMergeResult.Merged;
+        return result.StandardOutput.Contains("Already up to date", StringComparison.Ordinal)
+            ? GitMergeResult.AlreadyUpToDate
+            : GitMergeResult.Merged;
     }
 
     /// <inheritdoc />
@@ -47,10 +37,17 @@ public sealed partial class GitService : IGitMergeService
 
     /// <inheritdoc />
     /// <remarks>A merge has no steps; git merge has no --skip.</remarks>
-    public Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default) =>
-        operation == GitRepositoryOperation.Merging
-            ? Task.FromResult(false)
-            : RunConfirmedOperationCommandAsync(repoPath, operation, "--skip", ct);
+    public async Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, string? step, CancellationToken ct = default)
+    {
+        if (operation == GitRepositoryOperation.Merging
+            || await GetGitDirectoryAsync(repoPath, ct) is not { } gitDirectory
+            || ReadOperationStep(gitDirectory, operation) != step)
+        {
+            return false;
+        }
+
+        return await RunConfirmedOperationCommandAsync(repoPath, operation, "--skip", ct);
+    }
 
     /// <inheritdoc />
     public Task<GitMergeResult> CherryPickAsync(string repoPath, string commit, CancellationToken ct = default) =>
@@ -61,33 +58,25 @@ public sealed partial class GitService : IGitMergeService
         ApplyCommitAsync(repoPath, "revert", commit, GitRepositoryOperation.Reverting, ct);
 
     /// <inheritdoc />
-    /// <remarks>As for a merge, the operation in progress tells a stopped rebase from a refused one.</remarks>
-    public async Task<GitMergeResult> RebaseAsync(string repoPath, string upstream, CancellationToken ct = default)
+    public async Task<GitMergeResult> RebaseAsync(string repoPath, string upstream, string? branch, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(upstream);
-        GitProcessResult result = await RunWorkingTreeCommandAsync(
-            repoPath, new[] { "rebase", "--end-of-options", upstream }, ct, UntranslatedOutput);
-        if (result.ExitCode == 0)
-        {
-            // git writes "Current branch main is up to date."
-            return result.StandardOutput.Contains("is up to date", StringComparison.Ordinal)
-                ? GitMergeResult.AlreadyUpToDate
-                : GitMergeResult.Merged;
-        }
-
-        if (await GetOperationAsync(repoPath, CancellationToken.None) == GitRepositoryOperation.Rebasing)
+        string[] args = branch is null
+            ? ["rebase", "--end-of-options", upstream]
+            : ["rebase", "--end-of-options", upstream, branch];
+        (GitProcessResult result, bool stopped) = await RunStoppingCommandAsync(repoPath, args, GitRepositoryOperation.Rebasing, ct);
+        if (stopped)
         {
             return GitMergeResult.Stopped;
         }
 
-        ThrowIfFailed(result, "rebase");
-        return GitMergeResult.Merged;
+        // git writes "Current branch main is up to date."
+        return result.StandardOutput.Contains("is up to date", StringComparison.Ordinal)
+            ? GitMergeResult.AlreadyUpToDate
+            : GitMergeResult.Merged;
     }
 
-    /// <summary>
-    /// Runs <c>git cherry-pick</c> or <c>git revert</c> of one commit. As for a merge, the exit code does not tell a
-    /// stop from a refusal, so the operation in progress decides.
-    /// </summary>
+    /// <summary>Runs <c>git cherry-pick</c> or <c>git revert</c> of one commit.</summary>
     private async Task<GitMergeResult> ApplyCommitAsync(
         string repoPath,
         string command,
@@ -96,20 +85,37 @@ public sealed partial class GitService : IGitMergeService
         CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commit);
-        GitProcessResult result = await RunWorkingTreeCommandAsync(
-            repoPath, new[] { command, "--no-edit", "--end-of-options", commit }, ct);
+        (_, bool stopped) = await RunStoppingCommandAsync(
+            repoPath, [command, "--no-edit", "--end-of-options", commit], stoppedOperation, ct);
+        return stopped ? GitMergeResult.Stopped : GitMergeResult.Merged;
+    }
+
+    /// <summary>
+    /// Runs a merge, rebase, cherry-pick or revert and tells whether it stopped with <paramref name="stoppedOperation"/>
+    /// in progress; throws with git's output when git refused. git exits with code 1 both when it stopped and when it
+    /// refused, so the operation decides, and only one that this command started: an operation in progress before
+    /// makes git refuse.
+    /// </summary>
+    private async Task<(GitProcessResult Result, bool Stopped)> RunStoppingCommandAsync(
+        string repoPath,
+        string[] args,
+        GitRepositoryOperation stoppedOperation,
+        CancellationToken ct)
+    {
+        bool wasInProgress = await GetOperationAsync(repoPath, ct) != GitRepositoryOperation.None;
+        GitProcessResult result = await RunWorkingTreeCommandAsync(repoPath, args, ct, UntranslatedOutput);
         if (result.ExitCode == 0)
         {
-            return GitMergeResult.Merged;
+            return (result, false);
         }
 
-        if (await GetOperationAsync(repoPath, CancellationToken.None) == stoppedOperation)
+        if (!wasInProgress && await GetOperationAsync(repoPath, CancellationToken.None) == stoppedOperation)
         {
-            return GitMergeResult.Stopped;
+            return (result, true);
         }
 
-        ThrowIfFailed(result, command);
-        return GitMergeResult.Merged;
+        ThrowIfFailed(result, args[0]);
+        return (result, false);
     }
 
     /// <summary>

@@ -55,24 +55,61 @@ public sealed class GitRemoteServiceTests
         repository.RunGit("commit", "-q", "--amend", "-m", "Amended");
 
         Assert.Equal(GitRemoteFailureKind.Rejected, (await service.PushAsync(repository.Path, ct: ct)).FailureKind);
-        GitRemoteResult forced = await service.ForcePushAsync(repository.Path, ct);
+        GitRemoteResult forced = await service.ForcePushAsync(repository.Path, "main", Sha(repository, "origin/main"), ct);
 
         Assert.True(forced.Success, forced.Message);
-        Assert.Equal(repository.RunGit("rev-parse", "HEAD").Trim(), repository.RunGitIn(remote, "rev-parse", "main").Trim());
+        Assert.Equal(Sha(repository, "HEAD"), repository.RunGitIn(remote, "rev-parse", "main").Trim());
 
-        // Another user pushes a commit that this repository did not fetch; the lease keeps it.
+        // Another user pushes a commit after the lease was read, and this repository even fetches it: the lease of
+        // the commit the question was about keeps it.
+        string lease = Sha(repository, "origin/main");
         string clone = repository.CloneRemote("other");
         repository.CommitFileIn(clone, "b.txt", "b\n", "Other");
         repository.RunGitIn(clone, "push", "-q");
         string theirs = repository.RunGitIn(remote, "rev-parse", "main").Trim();
+        repository.RunGit("fetch", "-q");
         repository.RunGit("commit", "-q", "--amend", "-m", "Amended again");
 
-        GitRemoteResult refused = await service.ForcePushAsync(repository.Path, ct);
+        GitRemoteResult refused = await service.ForcePushAsync(repository.Path, "main", lease, ct);
 
         Assert.False(refused.Success);
         Assert.Equal(GitRemoteFailureKind.Rejected, refused.FailureKind);
         Assert.Equal(theirs, repository.RunGitIn(remote, "rev-parse", "main").Trim());
     }
+
+    [Fact]
+    public async Task Force_push_pushes_only_the_named_branch_to_its_upstream_of_another_name()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remote = repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        repository.RunGit("push", "-q", "origin", "main", "main:shared", "main:topic-remote");
+        // The local topic tracks topic-remote, and shared is behind its remote-tracking branch after another push.
+        repository.RunGit("switch", "-q", "-c", "topic", "--track", "origin/topic-remote");
+        repository.RunGit("switch", "-q", "-c", "shared", "--track", "origin/shared");
+        string clone = repository.CloneRemote("other");
+        repository.RunGitIn(clone, "switch", "-q", "shared");
+        repository.CommitFileIn(clone, "b.txt", "b\n", "Colleague");
+        repository.RunGitIn(clone, "push", "-q", "origin", "shared");
+        repository.RunGit("fetch", "-q");
+        string colleague = repository.RunGitIn(remote, "rev-parse", "shared").Trim();
+        repository.RunGit("config", "push.default", "matching");
+        repository.RunGit("switch", "-q", "topic");
+        repository.RunGit("commit", "-q", "--amend", "-m", "Rewritten");
+
+        GitRemoteResult forced = await service.ForcePushAsync(repository.Path, "topic", Sha(repository, "origin/topic-remote"), ct);
+
+        Assert.True(forced.Success, forced.Message);
+        Assert.Equal(Sha(repository, "topic"), repository.RunGitIn(remote, "rev-parse", "topic-remote").Trim());
+        Assert.Equal(colleague, repository.RunGitIn(remote, "rev-parse", "shared").Trim());
+        Assert.False(repository.TryRunGitIn(remote, out _, "rev-parse", "--verify", "refs/heads/topic"));
+        Assert.Equal(
+            GitRemoteFailureKind.NoUpstream,
+            (await service.ForcePushAsync(repository.Path, "nothing", Sha(repository, "HEAD"), ct)).FailureKind);
+    }
+
+    private static string Sha(GitTestRepository repository, string revision) => repository.RunGit("rev-parse", revision).Trim();
 
     [Fact]
     public async Task A_tag_is_pushed_rejected_when_the_remote_tag_differs_and_deleted_on_the_remote()

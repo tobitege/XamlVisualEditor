@@ -99,7 +99,7 @@ internal sealed partial class GitCommandHandler
         string name = target.Name;
         string? newName = (await _window.ShowInputBoxAsync(
             new InputBoxOptions(
-                GitStrings.RenameBranchCommand,
+                DialogTitle(GitStrings.RenameBranchCommand),
                 string.Format(CultureInfo.CurrentCulture, GitStrings.RenameBranchPromptFormat, name),
                 name),
             CancellationToken.None))?.Trim();
@@ -320,7 +320,10 @@ internal sealed partial class GitCommandHandler
 
         // After an amend or a rebase of a pushed branch only a force push gets through; it replaces commits on the
         // remote, so the question starts with git's reason and pulling, which keeps them, and the default declines.
-        if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected } && setUpstreamRemote is null)
+        // The force push replaces only the upstream commit known before the question.
+        if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected }
+            && setUpstreamRemote is null
+            && await ReadUpstreamShaAsync(branch) is { } lease)
         {
             if (await ConfirmAsync(
                     string.Format(
@@ -333,7 +336,7 @@ internal sealed partial class GitCommandHandler
                     GitStrings.ForcePushCommand,
                     isDestructive: true))
             {
-                await RunForcePushAsync(branch, upstream!);
+                await RunForcePushAsync(branch, upstream!, lease);
             }
 
             return;
@@ -358,25 +361,57 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        if (!await EnsureUpstreamAsync(snapshot)
-            || !await ConfirmAsync(
-                string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushPromptFormat, snapshot.BranchName, snapshot.UpstreamName),
-                GitStrings.ForcePushConfirm,
-                GitStrings.ForcePushCommand,
-                isDestructive: true))
+        if (!await EnsureUpstreamAsync(snapshot))
         {
             return;
         }
 
-        await RunForcePushAsync(snapshot.BranchName, snapshot.UpstreamName!);
+        string branch = snapshot.BranchName;
+        string upstream = snapshot.UpstreamName!;
+        if (await ReadUpstreamShaAsync(branch) is not { } lease)
+        {
+            await ShowInformationAsync(GitStrings.NoUpstream);
+            return;
+        }
+
+        if (await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushPromptFormat, branch, upstream),
+                GitStrings.ForcePushConfirm,
+                GitStrings.ForcePushCommand,
+                isDestructive: true))
+        {
+            await RunForcePushAsync(branch, upstream, lease);
+        }
     }
 
-    private async Task RunForcePushAsync(string branch, string upstream)
+    /// <summary>Returns the commit the remote-tracking branch of <paramref name="branch"/>'s upstream points to, or null.</summary>
+    private async Task<string?> ReadUpstreamShaAsync(string branch)
+    {
+        if (_session.Services.History is not { } history || _session.Current.RepositoryRoot is not { } root)
+        {
+            return null;
+        }
+
+        try
+        {
+            return (await history.ResolveCommitAsync(root, branch + "@{upstream}", CancellationToken.None)).Sha;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Force pushes the confirmed <paramref name="branch"/> to its upstream, replacing only <paramref name="lease"/>,
+    /// the upstream commit the question was about.
+    /// </summary>
+    private async Task RunForcePushAsync(string branch, string upstream, string lease)
     {
         GitRemoteResult? result = await RunWithProgressAsync(
             GitStrings.ForcePushCommand,
             string.Format(CultureInfo.CurrentCulture, GitStrings.PushProgressFormat, branch),
-            (services, root, ct) => services.Remotes!.ForcePushAsync(root, ct));
+            (services, root, ct) => services.Remotes!.ForcePushAsync(root, branch, lease, ct));
         if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected })
         {
             // The hint of a rejected push, to pull first, would hide that the lease protected the remote's new commits.
@@ -632,7 +667,7 @@ internal sealed partial class GitCommandHandler
         {
             return await _dialogHost.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest(title, message, cancelText) { CancelDelay = cancelDelay, CancelAvailable = cancelAvailable },
+                new ProgressDialogRequest(DialogTitle(title), message, cancelText) { CancelDelay = cancelDelay, CancelAvailable = cancelAvailable },
                 closeToken);
         }
         catch (OperationCanceledException)
@@ -958,7 +993,7 @@ internal sealed partial class GitCommandHandler
                     : branch.IsRemote ? GitStrings.RemoteBranchDescription : null,
                 branch.Subject.Length == 0 ? null : branch.Subject))
             .ToArray();
-        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
+        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(DialogTitle(title), false), CancellationToken.None);
         int index = picked is null ? -1 : Array.IndexOf(items, picked);
         return index < 0 ? null : branches[index];
     }
@@ -981,7 +1016,7 @@ internal sealed partial class GitCommandHandler
         {
             bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
                 ConfirmationDialogRequest.DialogId,
-                new ConfirmationDialogRequest(title, message, confirmText, isDestructive),
+                new ConfirmationDialogRequest(DialogTitle(title), message, confirmText, isDestructive),
                 cancellationToken);
             return confirmed == true && !cancellationToken.IsCancellationRequested;
         }

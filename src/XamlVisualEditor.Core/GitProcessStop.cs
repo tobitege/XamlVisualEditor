@@ -10,18 +10,24 @@ namespace XamlVisualEditor.Core;
 /// example in a hook. The scope counts the writing commands that wait for or run git, so a caller offers the stop only
 /// while one of them runs and learns when the last one ended.
 /// </summary>
-public sealed class GitProcessStop : IDisposable
+public sealed class GitProcessStop
 {
     private static readonly AsyncLocal<GitProcessStop?> CurrentScope = new();
 
+    // Without a timer the source holds nothing that needs disposing, so a scope outlives any use of its token.
     private readonly CancellationTokenSource _stop = new();
     private int _writing;
+
+    public GitProcessStop()
+    {
+        Token = _stop.Token;
+    }
 
     /// <summary>Gets the scope of the current asynchronous flow; null outside a scope.</summary>
     public static GitProcessStop? Current => CurrentScope.Value;
 
     /// <summary>Gets the token that a stop cancels.</summary>
-    public CancellationToken Token => _stop.Token;
+    public CancellationToken Token { get; }
 
     /// <summary>Gets whether a writing git command of the scope waits for or runs git.</summary>
     public bool IsWriting => Volatile.Read(ref _writing) > 0;
@@ -55,9 +61,6 @@ public sealed class GitProcessStop : IDisposable
 
         return new WriteEnd(this);
     }
-
-    /// <inheritdoc />
-    public void Dispose() => _stop.Dispose();
 
     private void EndWrite()
     {

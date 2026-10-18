@@ -314,7 +314,7 @@ public sealed class GitBranchServiceTests
         // Without the stop, the hook would write its second marker after three seconds.
         WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 3; touch .git/hook-finished");
         GitService service = new(options: repository.ProcessOptions);
-        using GitProcessStop stop = new();
+        GitProcessStop stop = new();
         Task switching;
         using (stop.Enter())
         {
@@ -359,14 +359,14 @@ public sealed class GitBranchServiceTests
         GitService service = new(options: repository.ProcessOptions);
         Task first = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
         await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
-        using GitProcessStop stop = new();
+        GitProcessStop stop = new();
         Task waiting;
         using (stop.Enter())
         {
             waiting = service.DeleteAsync(repository.Path, "main", force: true, CancellationToken.None);
         }
 
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        // The scope counts the command synchronously, before it waits for the write gate.
         Assert.True(stop.IsWriting);
         Stopwatch stopped = Stopwatch.StartNew();
         stop.Stop();

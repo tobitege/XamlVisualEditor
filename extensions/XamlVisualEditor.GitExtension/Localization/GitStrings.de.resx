@@ -287,7 +287,7 @@
   <data name="AcceptOursPromptFormat" xml:space="preserve"><value>{0} mit der aktuellen Version aus HEAD lösen? Die Dateien im Arbeitsverzeichnis werden ersetzt, und eine Datei, die diese Seite gelöscht hat, wird gelöscht.</value></data>
   <data name="AcceptTheirsPromptFormat" xml:space="preserve"><value>{0} mit der eingehenden Version lösen? Die Dateien im Arbeitsverzeichnis werden ersetzt, und eine Datei, die diese Seite gelöscht hat, wird gelöscht.</value></data>
   <data name="FilesCountFormat" xml:space="preserve"><value>{0} Dateien</value></data>
-  <data name="ConflictsChanged" xml:space="preserve"><value>Die Konflikte haben sich inzwischen geändert, daher wurde nichts geändert. Bitte erneut versuchen.</value></data>
+  <data name="ConflictsChanged" xml:space="preserve"><value>Die Konflikte haben sich inzwischen geändert, daher wurde nichts geändert. Versuche es erneut.</value></data>
   <data name="NoConflictsFormat" xml:space="preserve"><value>{0} hat keine Konflikte.</value></data>
   <data name="MarkResolvedCommand" xml:space="preserve"><value>Als gelöst markieren</value></data>
   <data name="MarkResolvedWithMarkersPromptFormat" xml:space="preserve"><value>Diese Dateien enthalten noch Konfliktmarker:
@@ -358,7 +358,7 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="MergePromptFormat" xml:space="preserve"><value>{0} in {1} mergen?</value></data>
   <data name="MergeConfirm" xml:space="preserve"><value>Mergen</value></data>
   <data name="OperationChanged" xml:space="preserve"><value>Der laufende Vorgang hat sich geändert, während die Frage offen war. Es wurde nichts abgebrochen.</value></data>
-  <data name="StashesChangedFormat" xml:space="preserve"><value>Die Stashes haben sich geändert, während die Frage offen war. {0} der {1} bestätigten Stashes wurden gelöscht, seitdem angelegte Stashes bleiben erhalten.</value></data>
+  <data name="StashesChangedFormat" xml:space="preserve"><value>Die Stashes haben sich geändert, während die Frage offen war. {0} der {1} bestätigten Stashes wurden gelöscht. Stashes, die seitdem angelegt wurden, bleiben erhalten.</value></data>
   <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Speichere oder schließe diese Dateien zuerst. Eine Seite zu übernehmen ersetzt sie, und der Editor hat ungespeicherte Änderungen daran.
 {0}</value></data>
   <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} wurde in {0} gepullt. Der Push wurde abgebrochen.</value></data>

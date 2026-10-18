@@ -325,7 +325,11 @@ public sealed class GitConflictCommandsTests
         // The question would confirm, but only once something closes it.
         fixture.Dialogs.RespondAsync = async (_, ct) =>
         {
-            await Task.Delay(Timeout.Infinite, ct).ContinueWith(_ => { }, TaskScheduler.Default);
+            // A question that no longer closes fails the test instead of hanging the run.
+            using CancellationTokenSource limit = CancellationTokenSource.CreateLinkedTokenSource(ct, TestContext.Current.CancellationToken);
+            limit.CancelAfter(TimeSpan.FromSeconds(20));
+            await Task.Delay(Timeout.Infinite, limit.Token).ContinueWith(_ => { }, TaskScheduler.Default);
+            Assert.True(ct.IsCancellationRequested, "The stop question did not close when git ended.");
             return true;
         };
 
@@ -417,7 +421,7 @@ public sealed class GitConflictCommandsTests
         while (!File.Exists(path))
         {
             Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), "The hook did not start: " + path);
-            await Task.Delay(50);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
         }
     }
 

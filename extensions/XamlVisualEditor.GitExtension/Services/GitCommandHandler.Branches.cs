@@ -424,18 +424,10 @@ internal sealed partial class GitCommandHandler
     /// </summary>
     private async Task ShowStoppableProgressAsync(string title, string message, Task run, GitProcessStop stop)
     {
-        using CancellationTokenSource ended = new();
+        // A source without a timer needs no disposing, so the end of the operation can cancel it at any time.
+        CancellationTokenSource ended = new();
         _ = run.ContinueWith(
-            _ =>
-            {
-                try
-                {
-                    ended.Cancel();
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-            },
+            _ => ended.Cancel(),
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
@@ -447,16 +439,68 @@ internal sealed partial class GitCommandHandler
                 return;
             }
 
-            if (stop.IsWriting
-                && await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true, ended.Token)
-                && !run.IsCompleted)
+            delay = TimeSpan.Zero;
+
+            // Only a writing command can be stopped: without one, the progress shows again once one starts.
+            if (!stop.IsWriting)
             {
-                stop.Stop();
-                return;
+                await WhenWritingOrEndedAsync(run, stop);
+                continue;
             }
 
-            delay = TimeSpan.Zero;
+            // The question is for the writing command that runs now: it closes when that command or the operation
+            // ends, so a confirmation never stops a later command.
+            CancellationTokenSource question = CancellationTokenSource.CreateLinkedTokenSource(ended.Token);
+            void CloseQuestion(object? sender, EventArgs e)
+            {
+                if (!stop.IsWriting)
+                {
+                    question.Cancel();
+                }
+            }
+
+            stop.WritingChanged += CloseQuestion;
+            try
+            {
+                CloseQuestion(null, EventArgs.Empty);
+                if (await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true, question.Token)
+                    && stop.IsWriting
+                    && !run.IsCompleted)
+                {
+                    stop.Stop();
+                    return;
+                }
+            }
+            finally
+            {
+                stop.WritingChanged -= CloseQuestion;
+            }
+
             await Task.Yield();
+        }
+    }
+
+    /// <summary>Completes when a writing command of <paramref name="stop"/> runs or <paramref name="run"/> ended.</summary>
+    private static async Task WhenWritingOrEndedAsync(Task run, GitProcessStop stop)
+    {
+        TaskCompletionSource writing = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Started(object? sender, EventArgs e)
+        {
+            if (stop.IsWriting)
+            {
+                writing.TrySetResult();
+            }
+        }
+
+        stop.WritingChanged += Started;
+        try
+        {
+            Started(null, EventArgs.Empty);
+            await Task.WhenAny(writing.Task, run);
+        }
+        finally
+        {
+            stop.WritingChanged -= Started;
         }
     }
 
@@ -476,7 +520,7 @@ internal sealed partial class GitCommandHandler
         where T : class
     {
         using CancellationTokenSource work = new();
-        using GitProcessStop stop = new();
+        GitProcessStop stop = new();
         Task<T> run = _session.RunWithServicesAsync(operation, work.Token, stop);
         if (writes)
         {

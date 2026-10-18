@@ -289,8 +289,7 @@ public sealed class GitSession : IDisposable
     /// </summary>
     private async Task<T> RunWatchedAsync<T>(Func<Task<T>> operation, GitProcessStop? stop)
     {
-        using GitProcessStop ownStop = new();
-        GitProcessStop scope = stop ?? ownStop;
+        GitProcessStop scope = stop ?? new GitProcessStop();
         Task<T> run;
         using (scope.Enter())
         {
@@ -299,14 +298,17 @@ public sealed class GitSession : IDisposable
 
         if (stop is null && Watch is { } watch)
         {
-            // A watch that fails must not leave the operation running unobserved.
+            // A watch that fails or is cancelled must not leave the operation running unobserved.
             try
             {
-                await watch(run, ownStop).ConfigureAwait(false);
+                await watch(run, scope).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception)
             {
-                _logger?.Error(GitStrings.LogProgressDialogFailed, exception);
+                if (exception is not OperationCanceledException)
+                {
+                    _logger?.Error(GitStrings.LogProgressDialogFailed, exception);
+                }
             }
         }
 

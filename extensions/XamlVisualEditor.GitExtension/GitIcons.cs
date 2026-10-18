@@ -3,8 +3,8 @@ namespace XamlVisualEditor.GitExtension;
 /// <summary>
 /// Fluent System Icons (20, regular) of the Git panel buttons. Path data is copied verbatim from @fluentui/svg-icons;
 /// refresh, add and undo are the same geometries as in the animation editor toolbar. <see cref="WholeFile"/> is a
-/// Material icon, and <see cref="Rename"/>, <see cref="RemoteUrl"/>, <see cref="Skip"/> and <see cref="CherryPick"/> are
-/// drawn for the Git panels.
+/// Material icon, and <see cref="Rename"/>, <see cref="RemoteUrl"/>, <see cref="Skip"/>, <see cref="CherryPick"/>,
+/// <see cref="Merge"/> and <see cref="Rebase"/> are drawn for the Git panels.
 /// </summary>
 public static class GitIcons
 {
@@ -144,6 +144,18 @@ public static class GitIcons
 
     /// <summary>arrow_undo_20_regular, the same geometry as <see cref="Discard"/>; reverts a commit.</summary>
     public const string Revert = Discard;
+
+    /// <summary>
+    /// Two lines that join into one, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; merges a branch
+    /// into the current one.
+    /// </summary>
+    public const string Merge = "M9.5 10h1v8h-1zM3.6 2.3l.8-.6 6 8-.8.6zm12-.6.8.6-6 8-.8-.6z";
+
+    /// <summary>
+    /// A base line, a branch line and an arrow from the one to the other, drawn for the Git panels in the 20 by 20 grid
+    /// of the Fluent icons; rebases the current branch onto another.
+    /// </summary>
+    public const string Rebase = "M4.5 2h1v16h-1zm10 7h1v9h-1zM7 4.5h5.3l-1.65-1.65.7-.7 2.85 2.85-2.85 2.85-.7-.7 1.65-1.65H7z";
 
     /// <summary>eye_20_regular, the same geometry as <see cref="WatchWorkingFolder"/>; opens a conflicted file.</summary>
     public const string OpenFile = WatchWorkingFolder;

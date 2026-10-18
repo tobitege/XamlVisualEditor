@@ -294,6 +294,64 @@ public sealed class GitRepositoryCommandsTests
         Assert.Equal("v1", fixture.Repository.RunGit("tag", "-l").Trim());
     }
 
+    [AvaloniaFact]
+    public async Task Rebase_asks_first_and_replays_the_current_branch_onto_the_picked_one()
+    {
+        bool confirm = false;
+        using GitPanelCommandFixture fixture = await CreateAsync(repository =>
+        {
+            repository.RunGit("switch", "-q", "-c", "feature");
+            repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Add b");
+            repository.RunGit("switch", "-q", "main");
+            repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Add c");
+            repository.RunGit("switch", "-q", "feature");
+        }, (_, _) => confirm);
+        string head = fixture.Repository.RunGit("rev-parse", "HEAD");
+        fixture.Window.QuickPick = items => items.Single(item => item.Label == "main");
+
+        await fixture.ExecuteAsync(GitCommands.REBASE);
+
+        ConfirmationDialogRequest question = Assert.Single(fixture.Dialogs.Confirmations);
+        Assert.True(question.IsDestructive);
+        Assert.Equal(string.Format(GitStrings.RebasePromptFormat, "feature", "main"), question.Message);
+        Assert.Equal(head, fixture.Repository.RunGit("rev-parse", "HEAD"));
+
+        confirm = true;
+        await fixture.ExecuteAsync(GitCommands.REBASE, "main");
+
+        Assert.Equal([string.Format(GitStrings.RebasedFormat, "feature", "main")], fixture.Window.Infos);
+        Assert.Equal(fixture.Repository.RunGit("rev-parse", "main"), fixture.Repository.RunGit("rev-parse", "HEAD~1"));
+    }
+
+    [AvaloniaFact]
+    public async Task A_rejected_push_offers_a_force_push_that_runs_only_after_a_confirmation()
+    {
+        bool confirm = false;
+        using GitPanelCommandFixture fixture = await CreateAsync(repository =>
+        {
+            repository.AddBareRemote();
+            repository.RunGit("push", "-q", "-u", "origin", "main");
+            repository.RunGit("commit", "-q", "--amend", "-m", "Amended");
+        }, (_, _) => confirm);
+        string remoteHead = fixture.Repository.RunGitIn(fixture.Repository.RemotePath!, "rev-parse", "main");
+
+        await fixture.ExecuteAsync(GitCommands.PUSH);
+
+        ConfirmationDialogRequest question = Assert.Single(fixture.Dialogs.Confirmations);
+        Assert.True(question.IsDestructive);
+        string[] around = string.Format(GitStrings.ForcePushAfterRejectPromptFormat, "main", "origin/main", "\0").Split('\0');
+        Assert.StartsWith(around[0] + "! [rejected]", question.Message, StringComparison.Ordinal);
+        Assert.EndsWith(around[1], question.Message, StringComparison.Ordinal);
+        Assert.Equal(remoteHead, fixture.Repository.RunGitIn(fixture.Repository.RemotePath!, "rev-parse", "main"));
+        Assert.Empty(fixture.Window.Errors);
+
+        confirm = true;
+        await fixture.ExecuteAsync(GitCommands.PUSH);
+
+        Assert.Equal([string.Format(GitStrings.ForcePushedFormat, "main", "origin/main")], fixture.Window.Infos);
+        Assert.Equal(fixture.Repository.RunGit("rev-parse", "HEAD"), fixture.Repository.RunGitIn(fixture.Repository.RemotePath!, "rev-parse", "main"));
+    }
+
     // The panel reads its lists in the background and applies them on the UI thread, which runs while this waits.
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

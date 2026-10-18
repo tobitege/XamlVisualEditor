@@ -500,6 +500,47 @@ public sealed class GitMergeServiceTests
         Assert.Equal(GitRepositoryOperation.Merging, (await service.GetStatusAsync(repository.Path, ct)).Operation);
     }
 
+    [Fact]
+    public async Task Rebase_replays_the_branch_reports_a_contained_upstream_and_stops_on_a_conflict()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Add b");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Add c");
+        repository.RunGit("switch", "-q", "feature");
+        GitService service = new(options: repository.ProcessOptions);
+
+        Assert.Equal(GitMergeResult.Merged, await service.RebaseAsync(repository.Path, "refs/heads/main", ct));
+        Assert.Equal(repository.RunGit("rev-parse", "main"), repository.RunGit("rev-parse", "HEAD~1"));
+        Assert.Equal(GitMergeResult.AlreadyUpToDate, await service.RebaseAsync(repository.Path, "main", ct));
+
+        repository.CommitFileIn(repository.Path, "a.txt", "feature\n", "Feature");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
+        repository.RunGit("switch", "-q", "feature");
+        Assert.Equal(GitMergeResult.Stopped, await service.RebaseAsync(repository.Path, "main", ct));
+        Assert.Equal(GitRepositoryOperation.Rebasing, (await service.GetStatusAsync(repository.Path, ct)).Operation);
+    }
+
+    [Fact]
+    public async Task Rebase_refused_because_of_an_uncommitted_change_throws_and_keeps_the_change()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = CreateDivergedBranches();
+        repository.RunGit("switch", "-q", "feature");
+        string head = repository.RunGit("rev-parse", "HEAD");
+        repository.WriteFile("a.txt", "uncommitted\n");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RebaseAsync(repository.Path, "main", ct));
+
+        Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
+        Assert.Equal(head, repository.RunGit("rev-parse", "HEAD"));
+        Assert.Equal("uncommitted\n", repository.ReadFile("a.txt"));
+    }
+
     /// <summary>Creates <c>main</c> and <c>feature</c>, which both changed a.txt since they diverged.</summary>
     private static GitTestRepository CreateDivergedBranches()
     {

@@ -90,7 +90,9 @@ public sealed class GitCommandsTests
         { GitCommands.CREATE_TAG, GitStrings.CreateTagCommand, REPOSITORY_WHEN },
         { GitCommands.DELETE_TAG, GitStrings.DeleteTagCommand, REPOSITORY_WHEN },
         { GitCommands.PUSH_TAG, GitStrings.PushTagCommand, REMOTE_WHEN },
-        { GitCommands.DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, REMOTE_WHEN }
+        { GitCommands.DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, REMOTE_WHEN },
+        { GitCommands.REBASE, GitStrings.RebaseCommand, NO_OPERATION_WHEN },
+        { GitCommands.FORCE_PUSH, GitStrings.ForcePushCommand, "git.isRepository && git.hasUpstream" }
     };
 
     [Theory]
@@ -117,7 +119,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(59, commandIds.Count);
+        Assert.Equal(61, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -153,7 +155,8 @@ public sealed class GitCommandsTests
             GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.TOGGLE_CHANGE_MARKERS,
             GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.COMMIT_AMEND, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.RENAME_BRANCH, GitCommands.DELETE_BRANCH,
-            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
+            GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.FORCE_PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
+            GitCommands.REBASE,
             GitCommands.CREATE_TAG, GitCommands.PUSH_TAG, GitCommands.DELETE_TAG, GitCommands.DELETE_REMOTE_TAG,
             GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
             GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,
@@ -860,12 +863,17 @@ public sealed class GitCommandsTests
         Assert.Equal(
             [
                 string.Format(GitStrings.RemoteFailureFormat, GitStrings.AuthenticationFailedHint, "fatal: Authentication failed for 'https://***@example.com/r.git/'"),
-                string.Format(GitStrings.RemoteFailureFormat, GitStrings.PullDivergedHint, "fatal: Not possible to fast-forward, aborting."),
-                string.Format(GitStrings.RemoteFailureFormat, GitStrings.PushRejectedHint, "! [rejected]        main -> main (non-fast-forward)")
+                string.Format(GitStrings.RemoteFailureFormat, GitStrings.PullDivergedHint, "fatal: Not possible to fast-forward, aborting.")
             ],
             registration.Window.Errors);
         Assert.Empty(registration.Window.Infos);
         Assert.Equal(["fetch", "pull", "push"], remotes.Calls);
+        // A rejected push asks whether to force push, with git's line; the declined question pushes nothing more.
+        ConfirmationDialogRequest question = Assert.Single(registration.Dialogs.Confirmations);
+        Assert.True(question.IsDestructive);
+        Assert.Equal(
+            string.Format(GitStrings.ForcePushAfterRejectPromptFormat, "main", "origin/main", "! [rejected]        main -> main (non-fast-forward)"),
+            question.Message);
     }
 
     [Fact]

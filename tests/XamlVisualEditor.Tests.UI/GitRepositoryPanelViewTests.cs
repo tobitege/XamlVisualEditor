@@ -148,9 +148,10 @@ public sealed class GitRepositoryPanelViewTests
             }
 
             Assert.Equal(3, menus.Count);
-            Assert.Equal(new[] { false, true, true, false }, menus["main"].Select(item => item.IsEnabled));
-            Assert.Equal(new[] { true, true, true, true }, menus["feature"].Select(item => item.IsEnabled));
-            Assert.Equal(new[] { true, true, false, false }, menus["origin/main"].Select(item => item.IsEnabled));
+            // Switch, new branch, rename, merge into the current branch, rebase the current branch onto it, delete.
+            Assert.Equal(new[] { false, true, true, false, false, false }, menus["main"].Select(item => item.IsEnabled));
+            Assert.Equal(new[] { true, true, true, true, true, true }, menus["feature"].Select(item => item.IsEnabled));
+            Assert.Equal(new[] { true, true, false, true, true, false }, menus["origin/main"].Select(item => item.IsEnabled));
 
             GitBranchItemViewModel feature = panel.LocalGroup.Branches[0];
             GitBranchItemViewModel remote = panel.RemoteGroup.Branches[0];
@@ -158,6 +159,8 @@ public sealed class GitRepositoryPanelViewTests
             await panel.DeleteCommand.Execute(feature).ToTask();
             await panel.CreateBranchFromCommand.Execute(remote).ToTask();
             await panel.RenameCommand.Execute(feature).ToTask();
+            await panel.MergeCommand.Execute(feature).ToTask();
+            await panel.RebaseCommand.Execute(remote).ToTask();
 
             Assert.Equal(
                 new (string, string?)[]
@@ -165,7 +168,9 @@ public sealed class GitRepositoryPanelViewTests
                     (GitCommands.CHECKOUT, "refs/remotes/origin/main"),
                     (GitCommands.DELETE_BRANCH, "refs/heads/feature"),
                     (GitCommands.CREATE_BRANCH, "refs/remotes/origin/main"),
-                    (GitCommands.RENAME_BRANCH, "refs/heads/feature")
+                    (GitCommands.RENAME_BRANCH, "refs/heads/feature"),
+                    (GitCommands.MERGE, "refs/heads/feature"),
+                    (GitCommands.REBASE, "refs/remotes/origin/main")
                 },
                 fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
         }
@@ -809,6 +814,8 @@ public sealed class GitRepositoryPanelViewTests
 
         public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<GitRemoteResult> ForcePushAsync(string repoPath, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
             throw new NotSupportedException();

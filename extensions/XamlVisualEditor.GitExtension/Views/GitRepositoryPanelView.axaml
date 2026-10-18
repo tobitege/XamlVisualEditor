@@ -148,6 +148,22 @@
                                                 <PathIcon Data="{x:Static vm:GitIcons.Rename}" />
                                             </MenuItem.Icon>
                                         </MenuItem>
+                                        <MenuItem Header="{x:Static gloc:GitStrings.MergeIntoCurrentMenu}"
+                                                  Command="{CompiledBinding MergeCommand}"
+                                                  CommandParameter="{CompiledBinding .}"
+                                                  IsEnabled="{CompiledBinding CanSwitch}">
+                                            <MenuItem.Icon>
+                                                <PathIcon Data="{x:Static vm:GitIcons.Merge}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="{x:Static gloc:GitStrings.RebaseOntoMenu}"
+                                                  Command="{CompiledBinding RebaseCommand}"
+                                                  CommandParameter="{CompiledBinding .}"
+                                                  IsEnabled="{CompiledBinding CanSwitch}">
+                                            <MenuItem.Icon>
+                                                <PathIcon Data="{x:Static vm:GitIcons.Rebase}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
                                         <Separator />
                                         <MenuItem Header="{x:Static gloc:GitStrings.DeleteBranchCommand}"
                                                   Command="{CompiledBinding DeleteCommand}"

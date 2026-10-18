@@ -405,4 +405,22 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="DeleteRemoteTagProgressFormat" xml:space="preserve"><value>Tag {0} auf {1} wird gelöscht …</value></data>
   <data name="RemoteTagDeletedFormat" xml:space="preserve"><value>Tag {0} auf {1} gelöscht.</value></data>
   <data name="TagNotFoundFormat" xml:space="preserve"><value>Das Tag {0} gibt es nicht.</value></data>
+  <data name="RebaseCommand" xml:space="preserve"><value>Aktuellen Branch rebasen …</value></data>
+  <data name="RebasePickTitle" xml:space="preserve"><value>Aktuellen Branch rebasen auf</value></data>
+  <data name="RebaseOntoMenu" xml:space="preserve"><value>Aktuellen Branch hierauf rebasen …</value></data>
+  <data name="MergeIntoCurrentMenu" xml:space="preserve"><value>In aktuellen Branch mergen</value></data>
+  <data name="NoBranchToRebase" xml:space="preserve"><value>Es gibt keinen anderen Branch, auf den sich rebasen lässt.</value></data>
+  <data name="RebasePromptFormat" xml:space="preserve"><value>{0} auf {1} rebasen? Die Commits von {0}, die {1} nicht hat, werden als neue Commits darauf neu angewendet. Ein schon gepushter Branch braucht danach einen Force Push.</value></data>
+  <data name="RebaseConfirm" xml:space="preserve"><value>Rebasen</value></data>
+  <data name="RebasedFormat" xml:space="preserve"><value>{0} auf {1} rebased.</value></data>
+  <data name="RebaseUpToDateFormat" xml:space="preserve"><value>{0} enthält {1} schon, es wurde nichts rebased.</value></data>
+  <data name="RebaseStoppedFormat" xml:space="preserve"><value>Der Rebase von {0} auf {1} hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich den Rebase ab.</value></data>
+  <data name="ForcePushCommand" xml:space="preserve"><value>Force Push …</value></data>
+  <data name="ForcePushConfirm" xml:space="preserve"><value>Force Push</value></data>
+  <data name="ForcePushPromptFormat" xml:space="preserve"><value>{0} per Force Push nach {1} pushen? Der Branch auf dem Remote wird ersetzt, und Commits dort, die {0} nicht hat, gehen für alle verloren. git verweigert es, wenn der Remote seit dem letzten Fetch Commits bekommen hat.</value></data>
+  <data name="ForcePushAfterRejectPromptFormat" xml:space="preserve"><value>Der Remote hat den Push von {0} abgelehnt: {2}
+
+Meist hat {1} Commits, die {0} noch nicht hat; hole sie zuerst per Pull, um sie zu behalten. Nur wenn du {0} umgeschrieben hast, zum Beispiel mit einem Amend oder Rebase, ersetzt ein Force Push die Commits auf dem Remote: Sie gehen für alle verloren, und git verweigert es, wenn der Remote seit dem letzten Fetch Commits bekommen hat. Force Push ausführen?</value></data>
+  <data name="ForcePushedFormat" xml:space="preserve"><value>{0} per Force Push nach {1} gepusht.</value></data>
+  <data name="ForcePushStaleHint" xml:space="preserve"><value>Der Remote hat seit dem letzten Fetch Commits bekommen, deshalb hat git den Force Push verweigert und nichts geändert. Hole sie per Fetch, sieh dir die neuen Commits an und entscheide neu.</value></data>
 </root>

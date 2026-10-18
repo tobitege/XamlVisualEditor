@@ -317,9 +317,80 @@ internal sealed partial class GitCommandHandler
             GitStrings.PushCommand,
             string.Format(CultureInfo.CurrentCulture, GitStrings.PushProgressFormat, branch),
             (services, root, ct) => services.Remotes!.PushAsync(root, setUpstreamRemote, ct));
+
+        // After an amend or a rebase of a pushed branch only a force push gets through; it replaces commits on the
+        // remote, so the question starts with git's reason and pulling, which keeps them, and the default declines.
+        if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected } && setUpstreamRemote is null)
+        {
+            if (await ConfirmAsync(
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        GitStrings.ForcePushAfterRejectPromptFormat,
+                        branch,
+                        upstream,
+                        GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message))),
+                    GitStrings.ForcePushConfirm,
+                    GitStrings.ForcePushCommand,
+                    isDestructive: true))
+            {
+                await RunForcePushAsync(branch, upstream!);
+            }
+
+            return;
+        }
+
         await ReportRemoteResultAsync(
             result,
             string.Format(CultureInfo.CurrentCulture, GitStrings.PushSucceededFormat, branch, upstream));
+    }
+
+    public async Task ForcePushAsync(CommandContext context)
+    {
+        if (!await EnsureRemoteServiceAsync())
+        {
+            return;
+        }
+
+        GitSnapshot snapshot = _session.Current;
+        if (snapshot.IsDetached)
+        {
+            await ShowInformationAsync(GitStrings.DetachedHeadCannotPush);
+            return;
+        }
+
+        if (!await EnsureUpstreamAsync(snapshot)
+            || !await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushPromptFormat, snapshot.BranchName, snapshot.UpstreamName),
+                GitStrings.ForcePushConfirm,
+                GitStrings.ForcePushCommand,
+                isDestructive: true))
+        {
+            return;
+        }
+
+        await RunForcePushAsync(snapshot.BranchName, snapshot.UpstreamName!);
+    }
+
+    private async Task RunForcePushAsync(string branch, string upstream)
+    {
+        GitRemoteResult? result = await RunWithProgressAsync(
+            GitStrings.ForcePushCommand,
+            string.Format(CultureInfo.CurrentCulture, GitStrings.PushProgressFormat, branch),
+            (services, root, ct) => services.Remotes!.ForcePushAsync(root, ct));
+        if (result is { Success: false, FailureKind: GitRemoteFailureKind.Rejected })
+        {
+            // The hint of a rejected push, to pull first, would hide that the lease protected the remote's new commits.
+            await ShowErrorAsync(
+                string.Format(
+                    CultureInfo.CurrentCulture,
+                    GitStrings.RemoteFailureFormat,
+                    GitStrings.ForcePushStaleHint,
+                    GitUrlCredentials.Mask(GitRemoteErrorClassifier.SelectDecisiveLine(result.Message))),
+                HasGitOutput(result));
+            return;
+        }
+
+        await ReportRemoteResultAsync(result, string.Format(CultureInfo.CurrentCulture, GitStrings.ForcePushedFormat, branch, upstream));
     }
 
     public async Task SyncAsync(CommandContext context)

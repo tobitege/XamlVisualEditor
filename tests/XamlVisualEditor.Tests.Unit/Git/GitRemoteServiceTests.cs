@@ -45,6 +45,36 @@ public sealed class GitRemoteServiceTests
     }
 
     [Fact]
+    public async Task Force_push_replaces_an_amended_commit_and_is_refused_when_the_remote_got_unfetched_commits()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remote = repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.True((await service.PushAsync(repository.Path, "origin", ct)).Success);
+        repository.RunGit("commit", "-q", "--amend", "-m", "Amended");
+
+        Assert.Equal(GitRemoteFailureKind.Rejected, (await service.PushAsync(repository.Path, ct: ct)).FailureKind);
+        GitRemoteResult forced = await service.ForcePushAsync(repository.Path, ct);
+
+        Assert.True(forced.Success, forced.Message);
+        Assert.Equal(repository.RunGit("rev-parse", "HEAD").Trim(), repository.RunGitIn(remote, "rev-parse", "main").Trim());
+
+        // Another user pushes a commit that this repository did not fetch; the lease keeps it.
+        string clone = repository.CloneRemote("other");
+        repository.CommitFileIn(clone, "b.txt", "b\n", "Other");
+        repository.RunGitIn(clone, "push", "-q");
+        string theirs = repository.RunGitIn(remote, "rev-parse", "main").Trim();
+        repository.RunGit("commit", "-q", "--amend", "-m", "Amended again");
+
+        GitRemoteResult refused = await service.ForcePushAsync(repository.Path, ct);
+
+        Assert.False(refused.Success);
+        Assert.Equal(GitRemoteFailureKind.Rejected, refused.FailureKind);
+        Assert.Equal(theirs, repository.RunGitIn(remote, "rev-parse", "main").Trim());
+    }
+
+    [Fact]
     public async Task A_tag_is_pushed_rejected_when_the_remote_tag_differs_and_deleted_on_the_remote()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

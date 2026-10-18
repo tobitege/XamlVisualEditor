@@ -169,6 +169,68 @@ internal sealed partial class GitCommandHandler
         }
     }
 
+    // Rewriting the commits of the current branch cannot be undone in the editor, so it always asks.
+    public async Task RebaseAsync(CommandContext context)
+    {
+        if (!await EnsureMergeServiceAsync() || await RefuseDuringOperationAsync() || await LoadBranchesAsync() is not { } branches)
+        {
+            return;
+        }
+
+        GitBranch? target;
+        if (FirstStringArgument(context) is { } argument)
+        {
+            target = FindBranch(branches, argument);
+            if (target is null)
+            {
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.BranchNotFoundFormat, argument));
+                return;
+            }
+        }
+        else
+        {
+            GitBranch[] candidates = branches.Where(branch => !branch.IsCurrent).ToArray();
+            if (candidates.Length == 0)
+            {
+                await ShowInformationAsync(GitStrings.NoBranchToRebase);
+                return;
+            }
+
+            target = await PickBranchAsync(candidates, GitStrings.RebasePickTitle);
+            if (target is null)
+            {
+                return;
+            }
+        }
+
+        string current = CurrentBranchName();
+        if (!await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.RebasePromptFormat, current, target.Name),
+                GitStrings.RebaseConfirm,
+                GitStrings.RebaseCommand,
+                isDestructive: true))
+        {
+            return;
+        }
+
+        string upstream = target.FullName;
+        GitMergeResult? result = await TryRunMergeAsync<GitMergeResult>(async (merge, root, ct) =>
+            await merge.RebaseAsync(root, upstream, ct));
+        switch (result)
+        {
+            case GitMergeResult.Merged:
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.RebasedFormat, current, target.Name));
+                break;
+            case GitMergeResult.AlreadyUpToDate:
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.RebaseUpToDateFormat, current, target.Name));
+                break;
+            case GitMergeResult.Stopped:
+                await _viewHost.ShowAsync(GitCommands.CHANGES_VIEW_ID, CancellationToken.None);
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.RebaseStoppedFormat, current, target.Name));
+                break;
+        }
+    }
+
     private string CurrentBranchName() => _session.Current.BranchName is { Length: > 0 } branch ? branch : "HEAD";
 
     // A merge is completed by a commit; git's own merge --continue is that commit.

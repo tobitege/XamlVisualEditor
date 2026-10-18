@@ -60,6 +60,30 @@ public sealed partial class GitService : IGitMergeService
     public Task<GitMergeResult> RevertAsync(string repoPath, string commit, CancellationToken ct = default) =>
         ApplyCommitAsync(repoPath, "revert", commit, GitRepositoryOperation.Reverting, ct);
 
+    /// <inheritdoc />
+    /// <remarks>As for a merge, the operation in progress tells a stopped rebase from a refused one.</remarks>
+    public async Task<GitMergeResult> RebaseAsync(string repoPath, string upstream, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(upstream);
+        GitProcessResult result = await RunWorkingTreeCommandAsync(
+            repoPath, new[] { "rebase", "--end-of-options", upstream }, ct, UntranslatedOutput);
+        if (result.ExitCode == 0)
+        {
+            // git writes "Current branch main is up to date."
+            return result.StandardOutput.Contains("is up to date", StringComparison.Ordinal)
+                ? GitMergeResult.AlreadyUpToDate
+                : GitMergeResult.Merged;
+        }
+
+        if (await GetOperationAsync(repoPath, CancellationToken.None) == GitRepositoryOperation.Rebasing)
+        {
+            return GitMergeResult.Stopped;
+        }
+
+        ThrowIfFailed(result, "rebase");
+        return GitMergeResult.Merged;
+    }
+
     /// <summary>
     /// Runs <c>git cherry-pick</c> or <c>git revert</c> of one commit. As for a merge, the exit code does not tell a
     /// stop from a refusal, so the operation in progress decides.

@@ -182,6 +182,18 @@ public static class GitCommands
     public const string DELETE_REMOTE_TAG = "git.deleteRemoteTag";
 
     /// <summary>
+    /// Rebases the current branch onto the branch in argument 0 (full or short name), otherwise onto one picked from a
+    /// list, after a confirmation.
+    /// </summary>
+    public const string REBASE = "git.rebase";
+
+    /// <summary>
+    /// Pushes the current branch to its upstream with <c>--force-with-lease</c> after a confirmation, which replaces the
+    /// branch on the remote only while it has no commits that the last fetch did not see.
+    /// </summary>
+    public const string FORCE_PUSH = "git.forcePush";
+
+    /// <summary>
     /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
     /// version of the current branch after a confirmation; a file that side deleted is deleted.
     /// </summary>
@@ -425,6 +437,10 @@ public static class GitCommands
             new CommandMetadata(GitStrings.PushTagCommand, CATEGORY, When: REMOTE_WHEN, Priority: 580));
         Register(DELETE_REMOTE_TAG, handler.DeleteRemoteTagAsync,
             new CommandMetadata(GitStrings.DeleteRemoteTagCommand, CATEGORY, When: REMOTE_WHEN, Priority: 590));
+        Register(REBASE, handler.RebaseAsync,
+            new CommandMetadata(GitStrings.RebaseCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 600));
+        Register(FORCE_PUSH, handler.ForcePushAsync,
+            new CommandMetadata(GitStrings.ForcePushCommand, CATEGORY, When: UPSTREAM_WHEN, Priority: 610));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -473,12 +489,14 @@ public static class GitCommands
                 ExtensionsItem(RENAME_BRANCH, GitStrings.RenameBranchCommand, BRANCHES_GROUP, 105),
                 ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
                 ExtensionsItem(MERGE, GitStrings.MergeCommand, BRANCHES_GROUP, 112),
+                ExtensionsItem(REBASE, GitStrings.RebaseCommand, BRANCHES_GROUP, 113),
                 ExtensionsItem(CONTINUE, GitStrings.ContinueCommand, BRANCHES_GROUP, 114),
                 ExtensionsItem(SKIP, GitStrings.SkipCommand, BRANCHES_GROUP, 115),
                 ExtensionsItem(ABORT, GitStrings.AbortCommand, BRANCHES_GROUP, 116),
                 ExtensionsItem(FETCH, GitStrings.FetchCommand, SYNC_GROUP, 120),
                 ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
                 ExtensionsItem(PUSH, GitStrings.PushCommand, SYNC_GROUP, 140),
+                ExtensionsItem(FORCE_PUSH, GitStrings.ForcePushCommand, SYNC_GROUP, 145),
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
                 ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
@@ -577,7 +595,9 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(CREATE_TAG, GitStrings.CreateTagCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(DELETE_TAG, GitStrings.DeleteTagCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(PUSH_TAG, GitStrings.PushTagCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(REBASE, GitStrings.RebaseCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(FORCE_PUSH, GitStrings.ForcePushCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

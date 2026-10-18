@@ -51,6 +51,8 @@ public sealed class GitBranchItemViewModel
         DeleteCommand = panel.DeleteCommand;
         RenameCommand = panel.RenameCommand;
         CreateBranchFromCommand = panel.CreateBranchFromCommand;
+        MergeCommand = panel.MergeCommand;
+        RebaseCommand = panel.RebaseCommand;
         TrackingText = FormatTracking(branch);
         ToolTip = FormatToolTip(branch);
     }
@@ -93,6 +95,12 @@ public sealed class GitBranchItemViewModel
 
     /// <summary>Gets the command that creates a branch starting at this branch; its parameter is this item.</summary>
     public ICommand CreateBranchFromCommand { get; }
+
+    /// <summary>Gets the command that merges this branch into the current branch; its parameter is this item.</summary>
+    public ICommand MergeCommand { get; }
+
+    /// <summary>Gets the command that rebases the current branch onto this branch; its parameter is this item.</summary>
+    public ICommand RebaseCommand { get; }
 
     private static string FormatTracking(GitBranch branch)
     {
@@ -304,6 +312,10 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             item => _executeCommand(GitCommands.RENAME_BRANCH, [item.Branch.FullName])));
         CreateBranchFromCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
             item => _executeCommand(GitCommands.CREATE_BRANCH, [item.Branch.FullName])));
+        MergeCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
+            item => _executeCommand(GitCommands.MERGE, [item.Branch.FullName])));
+        RebaseCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
+            item => _executeCommand(GitCommands.REBASE, [item.Branch.FullName])));
         // A tag of a tree or a blob has no history, and no branch can start at it.
         IObservable<bool> hasCommitTag = this.WhenAnyValue(x => x.SelectedTag).Select(tag => tag is { IsCommit: true });
         ShowTagHistoryCommand = AddCommand(ReactiveCommand.CreateFromTask(
@@ -518,6 +530,12 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at a branch item.</summary>
     public ReactiveCommand<GitBranchItemViewModel, RxVoid> CreateBranchFromCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.MERGE"/> for a branch item.</summary>
+    public ReactiveCommand<GitBranchItemViewModel, RxVoid> MergeCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.REBASE"/> onto a branch item.</summary>
+    public ReactiveCommand<GitBranchItemViewModel, RxVoid> RebaseCommand { get; }
 
     /// <inheritdoc />
     public void Dispose()

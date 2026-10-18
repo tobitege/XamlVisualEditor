@@ -60,6 +60,15 @@ public interface IGitMergeService
     Task<GitMergeResult> RevertAsync(string repoPath, string commit, CancellationToken ct = default);
 
     /// <summary>
+    /// Replays the commits of the current branch that <paramref name="upstream"/>, a branch, tag or commit, does not
+    /// have on top of it. Returns <see cref="GitMergeResult.AlreadyUpToDate"/> when the branch already contains it,
+    /// <see cref="GitMergeResult.Stopped"/> when a conflict stopped a step and the rebase is in progress, and throws when
+    /// git refuses before changing anything, for example because of uncommitted changes.
+    /// </summary>
+    /// <remarks>Cancelling stops only the wait for other git commands; a rebase that started runs to its end.</remarks>
+    Task<GitMergeResult> RebaseAsync(string repoPath, string upstream, CancellationToken ct = default);
+
+    /// <summary>
     /// Replaces each conflicted file of <paramref name="paths"/> by the version of <paramref name="side"/> and marks it
     /// resolved; a file that side deleted is deleted. Returns false and changes nothing when one of the paths is no
     /// longer conflicted, because taking a side would then overwrite its resolution.

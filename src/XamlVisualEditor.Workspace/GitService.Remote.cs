@@ -408,6 +408,10 @@ public sealed partial class GitService
     }
 
     /// <inheritdoc />
+    public Task<GitRemoteResult> ForcePushAsync(string repoPath, CancellationToken ct = default) =>
+        RunNetworkCommandAsync(repoPath, new[] { "push", "--force-with-lease" }, ct);
+
+    /// <inheritdoc />
     /// <remarks>The full reference name keeps a branch of the same name from being pushed instead.</remarks>
     public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default)
     {

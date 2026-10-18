@@ -38,7 +38,65 @@ public sealed partial class GitService : IGitMergeService
     }
 
     /// <inheritdoc />
-    public async Task<bool> AbortAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default)
+    public Task<bool> AbortAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default) =>
+        RunConfirmedOperationCommandAsync(repoPath, operation, "--abort", ct);
+
+    /// <inheritdoc />
+    public async Task ContinueAsync(string repoPath, CancellationToken ct = default) =>
+        await RunOperationCommandAsync(repoPath, await GetOperationAsync(repoPath, ct), "--continue", ct);
+
+    /// <inheritdoc />
+    /// <remarks>A merge has no steps; git merge has no --skip.</remarks>
+    public Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default) =>
+        operation == GitRepositoryOperation.Merging
+            ? Task.FromResult(false)
+            : RunConfirmedOperationCommandAsync(repoPath, operation, "--skip", ct);
+
+    /// <inheritdoc />
+    public Task<GitMergeResult> CherryPickAsync(string repoPath, string commit, CancellationToken ct = default) =>
+        ApplyCommitAsync(repoPath, "cherry-pick", commit, GitRepositoryOperation.CherryPicking, ct);
+
+    /// <inheritdoc />
+    public Task<GitMergeResult> RevertAsync(string repoPath, string commit, CancellationToken ct = default) =>
+        ApplyCommitAsync(repoPath, "revert", commit, GitRepositoryOperation.Reverting, ct);
+
+    /// <summary>
+    /// Runs <c>git cherry-pick</c> or <c>git revert</c> of one commit. As for a merge, the exit code does not tell a
+    /// stop from a refusal, so the operation in progress decides.
+    /// </summary>
+    private async Task<GitMergeResult> ApplyCommitAsync(
+        string repoPath,
+        string command,
+        string commit,
+        GitRepositoryOperation stoppedOperation,
+        CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commit);
+        GitProcessResult result = await RunWorkingTreeCommandAsync(
+            repoPath, new[] { command, "--no-edit", "--end-of-options", commit }, ct);
+        if (result.ExitCode == 0)
+        {
+            return GitMergeResult.Merged;
+        }
+
+        if (await GetOperationAsync(repoPath, CancellationToken.None) == stoppedOperation)
+        {
+            return GitMergeResult.Stopped;
+        }
+
+        ThrowIfFailed(result, command);
+        return GitMergeResult.Merged;
+    }
+
+    /// <summary>
+    /// Runs <c>git &lt;operation&gt; &lt;option&gt;</c> when <paramref name="operation"/>, the one the user confirmed, is
+    /// in progress; returns false and runs nothing otherwise.
+    /// </summary>
+    private async Task<bool> RunConfirmedOperationCommandAsync(
+        string repoPath,
+        GitRepositoryOperation operation,
+        string option,
+        CancellationToken ct)
     {
         GitRepositoryOperation current = await GetOperationAsync(repoPath, ct);
         if (current != operation || current == GitRepositoryOperation.None)
@@ -46,13 +104,9 @@ public sealed partial class GitService : IGitMergeService
             return false;
         }
 
-        await RunOperationCommandAsync(repoPath, current, "--abort", ct);
+        await RunOperationCommandAsync(repoPath, current, option, ct);
         return true;
     }
-
-    /// <inheritdoc />
-    public async Task ContinueAsync(string repoPath, CancellationToken ct = default) =>
-        await RunOperationCommandAsync(repoPath, await GetOperationAsync(repoPath, ct), "--continue", ct);
 
     /// <inheritdoc />
     /// <remarks>

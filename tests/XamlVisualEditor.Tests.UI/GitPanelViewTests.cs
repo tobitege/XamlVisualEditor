@@ -456,7 +456,7 @@ public sealed class GitPanelViewTests
                 vm.RefreshCommand, vm.ToggleDiffCommand, vm.ToggleMonitoringCommand, vm.StageCommand,
                 vm.UnstageCommand, vm.DiscardCommand, vm.StageAllCommand, vm.UnstageAllCommand, vm.CommitCommand,
                 vm.StageSelectionCommand, vm.UnstageSelectionCommand, vm.DiscardSelectionCommand, vm.AbortCommand,
-                vm.ContinueCommand, vm.OpenConflictCommand, vm.AcceptOursCommand, vm.AcceptTheirsCommand,
+                vm.ContinueCommand, vm.SkipCommand, vm.OpenConflictCommand, vm.AcceptOursCommand, vm.AcceptTheirsCommand,
                 vm.MarkResolvedCommand
             ];
             Button[] buttons = view.GetVisualDescendants().OfType<Button>()

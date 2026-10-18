@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
-/// Merges commits, resolves conflicts by taking one side, and continues or aborts the merge, rebase, cherry-pick,
-/// revert or patch application in progress. The methods throw <see cref="System.InvalidOperationException"/> with
-/// git's output when git fails.
+/// Merges, cherry-picks and reverts commits, resolves conflicts by taking one side, and continues, skips a step of or
+/// aborts the merge, rebase, cherry-pick, revert or patch application in progress. The methods throw
+/// <see cref="System.InvalidOperationException"/> with git's output when git fails.
 /// </summary>
 public interface IGitMergeService
 {
@@ -34,6 +34,30 @@ public interface IGitMergeService
     /// </summary>
     /// <remarks>Cancelling stops only the wait for other git commands; a continue that started runs to its end.</remarks>
     Task ContinueAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Skips the current step of the operation in progress when it is <paramref name="operation"/>, the rebase,
+    /// cherry-pick, revert or patch application the user confirmed, and continues with the next step; returns false and
+    /// changes nothing when another or no such operation is in progress. The changes of the skipped step are lost,
+    /// including resolved conflicts; a rebase also discards every other uncommitted change of tracked files.
+    /// </summary>
+    /// <remarks>Cancelling stops only the wait for other git commands; a skip that started runs to its end.</remarks>
+    Task<bool> SkipAsync(string repoPath, GitRepositoryOperation operation, CancellationToken ct = default);
+
+    /// <summary>
+    /// Applies the changes of <paramref name="commit"/> to the current branch as a new commit with its message. Returns
+    /// <see cref="GitMergeResult.Stopped"/> when conflicts, an empty result or a hook stopped it, and the cherry-pick is
+    /// in progress; throws when git refuses before changing anything, for example because a local change is in the way.
+    /// </summary>
+    /// <remarks>Cancelling stops only the wait for other git commands; a cherry-pick that started runs to its end.</remarks>
+    Task<GitMergeResult> CherryPickAsync(string repoPath, string commit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Undoes the changes of <paramref name="commit"/> on the current branch with a new commit with git's revert
+    /// message. Returns and throws as <see cref="CherryPickAsync"/>.
+    /// </summary>
+    /// <remarks>Cancelling stops only the wait for other git commands; a revert that started runs to its end.</remarks>
+    Task<GitMergeResult> RevertAsync(string repoPath, string commit, CancellationToken ct = default);
 
     /// <summary>
     /// Replaces each conflicted file of <paramref name="paths"/> by the version of <paramref name="side"/> and marks it

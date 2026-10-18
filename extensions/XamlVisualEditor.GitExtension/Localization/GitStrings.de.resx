@@ -369,4 +369,19 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="StopGitPrompt" xml:space="preserve"><value>git läuft noch, möglicherweise in einem wartenden Hook. Jetzt zu stoppen kann den Befehl halb fertig zurücklassen: eine zurückgebliebene .git/index.lock und ein teilweise aktualisiertes Arbeitsverzeichnis. git trotzdem stoppen?</value></data>
   <data name="GitStopped" xml:space="preserve"><value>git wurde gestoppt. Prüfe das Panel „Git-Änderungen“, der Befehl kann halb fertig sein. Eine zurückgebliebene .git/index.lock musst du vor dem nächsten git-Befehl löschen.</value></data>
   <data name="RemoteUrlShowsCredentials" xml:space="preserve"><value>Das Feld zeigt die URL mit den enthaltenen Zugangsdaten.</value></data>
+  <data name="SkipCommand" xml:space="preserve"><value>Schritt überspringen …</value></data>
+  <data name="SkipButton" xml:space="preserve"><value>Überspringen</value></data>
+  <data name="SkipTitle" xml:space="preserve"><value>Schritt überspringen</value></data>
+  <data name="SkipConfirm" xml:space="preserve"><value>Schritt überspringen</value></data>
+  <data name="SkipPromptFormat" xml:space="preserve"><value>Den aktuellen Schritt des laufenden Vorgangs überspringen ({0})? Die Änderungen des Schritts gehen verloren, auch gelöste Konflikte. Andere nicht committete Änderungen bleiben erhalten.</value></data>
+  <data name="SkipRebasePromptFormat" xml:space="preserve"><value>Den aktuellen Schritt des laufenden Vorgangs überspringen ({0})? Die Änderungen des Schritts gehen verloren, auch gelöste Konflikte, und git verwirft dabei auch alle anderen nicht committeten Änderungen an versionierten Dateien.</value></data>
+  <data name="NoStepToSkip" xml:space="preserve"><value>Es läuft kein Rebase, Cherry-Pick oder Revert und keine Patch-Anwendung.</value></data>
+  <data name="OperationChangedNothingSkipped" xml:space="preserve"><value>Der laufende Vorgang hat sich geändert, während die Frage offen war. Es wurde nichts übersprungen.</value></data>
+  <data name="CherryPickCommand" xml:space="preserve"><value>Commit per Cherry-Pick übernehmen</value></data>
+  <data name="CherryPickMenu" xml:space="preserve"><value>Cherry-Pick</value></data>
+  <data name="CherryPickStopped" xml:space="preserve"><value>Der Cherry-Pick hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich ihn ab.</value></data>
+  <data name="RevertCommand" xml:space="preserve"><value>Commit per Revert rückgängig machen</value></data>
+  <data name="RevertMenu" xml:space="preserve"><value>Revert</value></data>
+  <data name="RevertStopped" xml:space="preserve"><value>Der Revert hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich ihn ab.</value></data>
+  <data name="PickCommitInHistory" xml:space="preserve"><value>Wähle einen Commit im Panel „Git-Verlauf“ und dort den Befehl im Kontextmenü.</value></data>
 </root>

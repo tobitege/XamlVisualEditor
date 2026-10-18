@@ -139,7 +139,7 @@
                        DockPanel.Dock="Right" />
         </DockPanel>
 
-        <!-- Operation in progress: what is left to do, continue and abort -->
+        <!-- Operation in progress: what is left to do, continue, skip and abort -->
         <Border Name="GitOperationBanner" Grid.Row="2" Margin="8,0,8,6" Padding="8,4"
                 BorderBrush="{DynamicResource SourceControlConflictedBrush}" BorderThickness="1"
                 IsVisible="{CompiledBinding IsOperationInProgress}">
@@ -150,6 +150,16 @@
                     <StackPanel>
                         <PathIcon Data="{x:Static vm:GitIcons.Abort}" />
                         <TextBlock Text="{x:Static gloc:GitStrings.AbortButton}" />
+                    </StackPanel>
+                </Button>
+                <!-- A merge has no steps to skip. -->
+                <Button Classes="git-action" Command="{CompiledBinding SkipCommand}" DockPanel.Dock="Right" Margin="6,0,0,0"
+                        IsVisible="{CompiledBinding !IsMerging}"
+                        ToolTip.Tip="{x:Static gloc:GitStrings.SkipCommand}"
+                        AutomationProperties.Name="{x:Static gloc:GitStrings.SkipCommand}">
+                    <StackPanel>
+                        <PathIcon Data="{x:Static vm:GitIcons.Skip}" />
+                        <TextBlock Text="{x:Static gloc:GitStrings.SkipButton}" />
                     </StackPanel>
                 </Button>
                 <!-- A merge is completed with Commit. -->

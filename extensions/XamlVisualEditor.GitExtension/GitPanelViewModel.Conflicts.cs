@@ -92,6 +92,9 @@ public sealed partial class GitPanelViewModel
     /// <summary>Runs <see cref="GitCommands.CONTINUE"/>; not for a merge, which <see cref="CommitCommand"/> completes.</summary>
     public ReactiveCommand<RxVoid, RxVoid> ContinueCommand { get; private set; }
 
+    /// <summary>Runs <see cref="GitCommands.SKIP"/>; not for a merge, which has no steps.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> SkipCommand { get; private set; }
+
     /// <summary>Opens the selected conflicted file in the editor.</summary>
     public ReactiveCommand<RxVoid, RxVoid> OpenConflictCommand { get; private set; }
 
@@ -104,8 +107,8 @@ public sealed partial class GitPanelViewModel
     /// <summary>Runs <see cref="GitCommands.MARK_RESOLVED"/> for the selected conflicted file.</summary>
     public ReactiveCommand<RxVoid, RxVoid> MarkResolvedCommand { get; private set; }
 
-    [MemberNotNull(nameof(AbortCommand), nameof(ContinueCommand), nameof(OpenConflictCommand), nameof(AcceptOursCommand),
-        nameof(AcceptTheirsCommand), nameof(MarkResolvedCommand))]
+    [MemberNotNull(nameof(AbortCommand), nameof(ContinueCommand), nameof(SkipCommand), nameof(OpenConflictCommand),
+        nameof(AcceptOursCommand), nameof(AcceptTheirsCommand), nameof(MarkResolvedCommand))]
     private void InitializeConflicts()
     {
         AbortCommand = AddCommand(ReactiveCommand.CreateFromTask(
@@ -115,6 +118,9 @@ public sealed partial class GitPanelViewModel
             () => _executeCommand(GitCommands.CONTINUE, null),
             this.WhenAnyValue(x => x.IsOperationInProgress, x => x.IsMerging, x => x.ConflictCount,
                 (inProgress, merging, conflicts) => inProgress && !merging && conflicts == 0)));
+        SkipCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => _executeCommand(GitCommands.SKIP, null),
+            this.WhenAnyValue(x => x.IsOperationInProgress, x => x.IsMerging, (inProgress, merging) => inProgress && !merging)));
         IObservable<bool> hasSelection = this.WhenAnyValue(x => x.SelectedConflict).Select(entry => entry is not null);
         OpenConflictCommand = AddCommand(ReactiveCommand.CreateFromTask(OpenConflictAsync, hasSelection));
         AcceptOursCommand = AddCommand(ReactiveCommand.CreateFromTask(

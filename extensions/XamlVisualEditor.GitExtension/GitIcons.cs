@@ -3,7 +3,8 @@ namespace XamlVisualEditor.GitExtension;
 /// <summary>
 /// Fluent System Icons (20, regular) of the Git panel buttons. Path data is copied verbatim from @fluentui/svg-icons;
 /// refresh, add and undo are the same geometries as in the animation editor toolbar. <see cref="WholeFile"/> is a
-/// Material icon, and <see cref="Rename"/> and <see cref="RemoteUrl"/> are drawn for the Git panels.
+/// Material icon, and <see cref="Rename"/>, <see cref="RemoteUrl"/>, <see cref="Skip"/> and <see cref="CherryPick"/> are
+/// drawn for the Git panels.
 /// </summary>
 public static class GitIcons
 {
@@ -126,6 +127,23 @@ public static class GitIcons
 
     /// <summary>checkmark_20_regular, the same geometry as <see cref="Commit"/>; continues the operation in progress.</summary>
     public const string Continue = Commit;
+
+    /// <summary>
+    /// Two chevrons to the right, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; skips the current
+    /// step of the operation in progress.
+    /// </summary>
+    public const string Skip =
+        "M4.15 4.15a.5.5 0 0 1 .7 0l5.5 5.5a.5.5 0 0 1 0 .7l-5.5 5.5a.5.5 0 0 1-.7-.7L9.29 10 4.15 4.85a.5.5 0 0 1 0-.7zm6 0a.5.5 0 0 1 .7 0l5.5 5.5a.5.5 0 0 1 0 .7l-5.5 5.5a.5.5 0 0 1-.7-.7L15.29 10l-5.14-5.15a.5.5 0 0 1 0-.7z";
+
+    /// <summary>
+    /// Two cherries on their stems, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; cherry-picks a
+    /// commit.
+    /// </summary>
+    public const string CherryPick =
+        "M6.5 11.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5zm0 1a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3zm7-2a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5zm0 1a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3zM6.06 11.27l4.5-8.5.88.46-4.5 8.5zm6.96-.67-2.5-7.5.95-.32 2.5 7.5z";
+
+    /// <summary>arrow_undo_20_regular, the same geometry as <see cref="Discard"/>; reverts a commit.</summary>
+    public const string Revert = Discard;
 
     /// <summary>eye_20_regular, the same geometry as <see cref="WatchWorkingFolder"/>; opens a conflicted file.</summary>
     public const string OpenFile = WatchWorkingFolder;

@@ -152,6 +152,18 @@ public static class GitCommands
     public const string CONTINUE = "git.continue";
 
     /// <summary>
+    /// Skips the current step of the rebase, cherry-pick, revert or patch application in progress after a confirmation,
+    /// for example a step that became empty after its conflicts were resolved.
+    /// </summary>
+    public const string SKIP = "git.skip";
+
+    /// <summary>Applies the changes of the commit in argument 0 to the current branch as a new commit.</summary>
+    public const string CHERRY_PICK = "git.cherryPick";
+
+    /// <summary>Undoes the changes of the commit in argument 0 on the current branch with a new commit.</summary>
+    public const string REVERT = "git.revert";
+
+    /// <summary>
     /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
     /// version of the current branch after a confirmation; a file that side deleted is deleted.
     /// </summary>
@@ -381,6 +393,12 @@ public static class GitCommands
             new CommandMetadata(GitStrings.SetRemoteUrlCommand, CATEGORY, When: REMOTE_WHEN, Priority: 510));
         Register(REMOVE_REMOTE, handler.RemoveRemoteAsync,
             new CommandMetadata(GitStrings.RemoveRemoteCommand, CATEGORY, When: REMOTE_WHEN, Priority: 520));
+        Register(SKIP, handler.SkipAsync,
+            new CommandMetadata(GitStrings.SkipCommand, CATEGORY, When: CONTINUE_WHEN, Priority: 530));
+        Register(CHERRY_PICK, handler.CherryPickAsync,
+            new CommandMetadata(GitStrings.CherryPickCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 540));
+        Register(REVERT, handler.RevertAsync,
+            new CommandMetadata(GitStrings.RevertCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 550));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -430,6 +448,7 @@ public static class GitCommands
                 ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
                 ExtensionsItem(MERGE, GitStrings.MergeCommand, BRANCHES_GROUP, 112),
                 ExtensionsItem(CONTINUE, GitStrings.ContinueCommand, BRANCHES_GROUP, 114),
+                ExtensionsItem(SKIP, GitStrings.SkipCommand, BRANCHES_GROUP, 115),
                 ExtensionsItem(ABORT, GitStrings.AbortCommand, BRANCHES_GROUP, 116),
                 ExtensionsItem(FETCH, GitStrings.FetchCommand, SYNC_GROUP, 120),
                 ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
@@ -509,6 +528,7 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(STASH_DROP, GitStrings.StashDropCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(MERGE, GitStrings.MergeCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(CONTINUE, GitStrings.ContinueCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SKIP, GitStrings.SkipCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(ABORT, GitStrings.AbortCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(ACCEPT_OURS, GitStrings.AcceptOursCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CATEGORY),
@@ -521,7 +541,9 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(ADD_REMOTE, GitStrings.AddRemoteCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(RENAME_REMOTE, GitStrings.RenameRemoteCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(CHERRY_PICK, GitStrings.CherryPickCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(REVERT, GitStrings.RevertCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

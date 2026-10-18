@@ -369,4 +369,19 @@ Mark them resolved anyway?</value></data>
   <data name="StopGitPrompt" xml:space="preserve"><value>git is still running, possibly in a hook that waits. Stopping it now can leave the command half done: a .git/index.lock left behind and a partly updated working tree. Stop git anyway?</value></data>
   <data name="GitStopped" xml:space="preserve"><value>git was stopped. Check the Git Changes panel, the command may be half done. A .git/index.lock that git left behind has to be deleted before the next git command.</value></data>
   <data name="RemoteUrlShowsCredentials" xml:space="preserve"><value>The field shows the URL with the credentials it contains.</value></data>
+  <data name="SkipCommand" xml:space="preserve"><value>Skip Step…</value></data>
+  <data name="SkipButton" xml:space="preserve"><value>Skip</value></data>
+  <data name="SkipTitle" xml:space="preserve"><value>Skip Step</value></data>
+  <data name="SkipConfirm" xml:space="preserve"><value>Skip step</value></data>
+  <data name="SkipPromptFormat" xml:space="preserve"><value>Skip the current step of the operation in progress ({0})? The changes of the step are lost, including resolved conflicts. Other uncommitted changes stay.</value></data>
+  <data name="SkipRebasePromptFormat" xml:space="preserve"><value>Skip the current step of the operation in progress ({0})? The changes of the step are lost, including resolved conflicts, and git also discards every other uncommitted change of tracked files.</value></data>
+  <data name="NoStepToSkip" xml:space="preserve"><value>No rebase, cherry-pick, revert or patch application is in progress.</value></data>
+  <data name="OperationChangedNothingSkipped" xml:space="preserve"><value>The operation in progress changed while the question was open. Nothing was skipped.</value></data>
+  <data name="CherryPickCommand" xml:space="preserve"><value>Cherry-Pick Commit</value></data>
+  <data name="CherryPickMenu" xml:space="preserve"><value>Cherry-Pick</value></data>
+  <data name="CherryPickStopped" xml:space="preserve"><value>The cherry-pick stopped. Resolve the conflicts in the Git Changes panel and continue, or skip or abort the cherry-pick.</value></data>
+  <data name="RevertCommand" xml:space="preserve"><value>Revert Commit</value></data>
+  <data name="RevertMenu" xml:space="preserve"><value>Revert</value></data>
+  <data name="RevertStopped" xml:space="preserve"><value>The revert stopped. Resolve the conflicts in the Git Changes panel and continue, or skip or abort the revert.</value></data>
+  <data name="PickCommitInHistory" xml:space="preserve"><value>Select a commit in the Git History panel and choose the command from its context menu.</value></data>
 </root>

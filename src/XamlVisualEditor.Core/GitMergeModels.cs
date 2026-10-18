@@ -1,9 +1,12 @@
 namespace XamlVisualEditor.Core;
 
-/// <summary>How <see cref="Interfaces.IGitMergeService.MergeAsync"/> ended.</summary>
+/// <summary>
+/// How <see cref="Interfaces.IGitMergeService.MergeAsync"/>, <see cref="Interfaces.IGitMergeService.CherryPickAsync"/>
+/// or <see cref="Interfaces.IGitMergeService.RevertAsync"/> ended.
+/// </summary>
 public enum GitMergeResult
 {
-    /// <summary>The merge created a merge commit or fast-forwarded the branch.</summary>
+    /// <summary>The merge created a merge commit or fast-forwarded the branch; a cherry-pick or revert created its commit.</summary>
     Merged,
 
     /// <summary>The revision was already merged into the current branch; nothing changed.</summary>
@@ -11,7 +14,8 @@ public enum GitMergeResult
 
     /// <summary>
     /// The merge stopped before its commit, because of conflicts or a failing <c>pre-merge-commit</c> hook; the merge
-    /// is in progress and waits to be committed or aborted.
+    /// is in progress and waits to be committed or aborted. A cherry-pick or revert stopped the same way, or because
+    /// its result is empty, and waits to be continued, skipped or aborted.
     /// </summary>
     Stopped
 }

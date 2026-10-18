@@ -97,6 +97,78 @@ internal sealed partial class GitCommandHandler
         }
     }
 
+    // A step that became empty after its conflicts were resolved cannot be continued, only skipped.
+    public async Task SkipAsync(CommandContext context)
+    {
+        GitSnapshot snapshot = _session.Current;
+        if (!await EnsureMergeServiceAsync())
+        {
+            return;
+        }
+
+        if (snapshot.Operation is GitRepositoryOperation.None or GitRepositoryOperation.Merging
+            || GitOperationNames.Get(snapshot.Operation) is not { } operation)
+        {
+            await ShowInformationAsync(GitStrings.NoStepToSkip);
+            return;
+        }
+
+        // git rebase --skip resets the whole working tree, the others only the files of the step.
+        string promptFormat = snapshot.Operation == GitRepositoryOperation.Rebasing
+            ? GitStrings.SkipRebasePromptFormat
+            : GitStrings.SkipPromptFormat;
+        if (!await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, promptFormat, operation),
+                GitStrings.SkipConfirm,
+                GitStrings.SkipTitle,
+                isDestructive: true))
+        {
+            return;
+        }
+
+        GitRepositoryOperation confirmed = snapshot.Operation;
+        bool? skipped = await TryRunMergeAsync<bool>(async (merge, root, ct) => await merge.SkipAsync(root, confirmed, ct));
+        if (skipped == false)
+        {
+            await ShowInformationAsync(GitStrings.OperationChangedNothingSkipped);
+        }
+    }
+
+    public Task CherryPickAsync(CommandContext context) =>
+        ApplyCommitAsync(context, GitStrings.CherryPickStopped, (merge, root, commit, ct) => merge.CherryPickAsync(root, commit, ct));
+
+    public Task RevertAsync(CommandContext context) =>
+        ApplyCommitAsync(context, GitStrings.RevertStopped, (merge, root, commit, ct) => merge.RevertAsync(root, commit, ct));
+
+    /// <summary>
+    /// Cherry-picks or reverts the commit in argument 0, which the History panel passes; without it, shows the panel to
+    /// pick one there.
+    /// </summary>
+    private async Task ApplyCommitAsync(
+        CommandContext context,
+        string stoppedMessage,
+        Func<IGitMergeService, string, string, CancellationToken, Task<GitMergeResult>> apply)
+    {
+        if (!await EnsureMergeServiceAsync() || await RefuseDuringOperationAsync())
+        {
+            return;
+        }
+
+        if (FirstStringArgument(context) is not { } commit)
+        {
+            await _viewHost.ShowAsync(GitCommands.HISTORY_VIEW_ID, CancellationToken.None);
+            await ShowInformationAsync(GitStrings.PickCommitInHistory);
+            return;
+        }
+
+        GitMergeResult? result = await TryRunMergeAsync<GitMergeResult>(async (merge, root, ct) => await apply(merge, root, commit, ct));
+        if (result == GitMergeResult.Stopped)
+        {
+            await _viewHost.ShowAsync(GitCommands.CHANGES_VIEW_ID, CancellationToken.None);
+            await ShowInformationAsync(stoppedMessage);
+        }
+    }
+
     private string CurrentBranchName() => _session.Current.BranchName is { Length: > 0 } branch ? branch : "HEAD";
 
     // A merge is completed by a commit; git's own merge --continue is that commit.

@@ -504,6 +504,70 @@ public sealed class GitConflictCommandsTests
         Assert.Equal(GitRepositoryOperation.Rebasing, fixture.Session.Current.Operation);
     }
 
+    [Fact]
+    public async Task Skip_of_a_rebase_step_warns_about_the_other_changes_and_only_a_confirmation_skips()
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "a.txt", "feature\n", "Feature");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
+        repository.RunGit("switch", "-q", "feature");
+        Assert.False(repository.TryRunGit(out _, "rebase", "main"));
+        bool confirm = false;
+        using Fixture fixture = await Fixture.ForAsync(repository, (_, _) => confirm);
+
+        await fixture.ExecuteAsync(GitCommands.SKIP);
+
+        ConfirmationDialogRequest question = Assert.Single(fixture.Dialogs.Confirmations);
+        Assert.True(question.IsDestructive);
+        Assert.Equal(string.Format(GitStrings.SkipRebasePromptFormat, GitStrings.OperationRebasing), question.Message);
+        Assert.Equal(GitRepositoryOperation.Rebasing, fixture.Session.Current.Operation);
+
+        confirm = true;
+        await fixture.ExecuteAsync(GitCommands.SKIP);
+
+        Assert.Equal(GitRepositoryOperation.None, fixture.Session.Current.Operation);
+        Assert.Equal(repository.RunGit("rev-parse", "main"), repository.RunGit("rev-parse", "HEAD"));
+        Assert.Empty(fixture.Window.Infos);
+    }
+
+    [Fact]
+    public async Task Skip_during_a_merge_is_refused_without_a_question()
+    {
+        using Fixture fixture = await Fixture.CreateAsync((_, _) => true);
+
+        await fixture.ExecuteAsync(GitCommands.SKIP);
+
+        Assert.Empty(fixture.Dialogs.Confirmations);
+        Assert.Equal([GitStrings.NoStepToSkip], fixture.Window.Infos);
+        Assert.Equal(GitRepositoryOperation.Merging, fixture.Session.Current.Operation);
+    }
+
+    [Fact]
+    public async Task Cherry_pick_without_a_commit_shows_the_history_and_one_that_stops_shows_the_changes()
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "a.txt", "feature\n", "Feature");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
+        using Fixture fixture = await Fixture.ForAsync(repository);
+
+        await fixture.ExecuteAsync(GitCommands.CHERRY_PICK);
+        await fixture.ExecuteAsync(GitCommands.CHERRY_PICK, repository.RunGit("rev-parse", "feature").Trim());
+
+        Assert.Equal([GitCommands.HISTORY_VIEW_ID, GitCommands.CHANGES_VIEW_ID], fixture.ViewHost.Shown);
+        Assert.Equal([GitStrings.PickCommitInHistory, GitStrings.CherryPickStopped], fixture.Window.Infos);
+        Assert.Equal(GitRepositoryOperation.CherryPicking, fixture.Session.Current.Operation);
+
+        await fixture.ExecuteAsync(GitCommands.REVERT, "HEAD");
+
+        Assert.Equal(
+            string.Format(GitStrings.RefusedDuringOperationFormat, GitStrings.OperationCherryPicking),
+            fixture.Window.Infos.Last());
+    }
+
     private sealed class Fixture : IDisposable
     {
         private Fixture(GitTestRepository repository, Func<string, object?, object?> respond)

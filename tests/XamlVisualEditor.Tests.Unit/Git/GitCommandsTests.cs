@@ -83,7 +83,10 @@ public sealed class GitCommandsTests
         { GitCommands.ADD_REMOTE, GitStrings.AddRemoteCommand, REPOSITORY_WHEN },
         { GitCommands.RENAME_REMOTE, GitStrings.RenameRemoteCommand, REMOTE_WHEN },
         { GitCommands.SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, REMOTE_WHEN },
-        { GitCommands.REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTE_WHEN }
+        { GitCommands.REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTE_WHEN },
+        { GitCommands.SKIP, GitStrings.SkipCommand, "git.isRepository && git.operationInProgress && !git.isMerging" },
+        { GitCommands.CHERRY_PICK, GitStrings.CherryPickCommand, NO_OPERATION_WHEN },
+        { GitCommands.REVERT, GitStrings.RevertCommand, NO_OPERATION_WHEN }
     };
 
     [Theory]
@@ -110,7 +113,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(52, commandIds.Count);
+        Assert.Equal(55, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -149,7 +152,7 @@ public sealed class GitCommandsTests
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
             GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
             GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,
-            GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.ABORT,
+            GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.SKIP, GitCommands.ABORT,
             GitCommands.ADD_REMOTE, GitCommands.RENAME_REMOTE, GitCommands.SET_REMOTE_URL, GitCommands.REMOVE_REMOTE
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();

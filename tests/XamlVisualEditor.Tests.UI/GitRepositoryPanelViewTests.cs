@@ -148,10 +148,11 @@ public sealed class GitRepositoryPanelViewTests
             }
 
             Assert.Equal(3, menus.Count);
-            // Switch, new branch, rename, merge into the current branch, rebase the current branch onto it, delete.
-            Assert.Equal(new[] { false, true, true, false, false, false }, menus["main"].Select(item => item.IsEnabled));
-            Assert.Equal(new[] { true, true, true, true, true, true }, menus["feature"].Select(item => item.IsEnabled));
-            Assert.Equal(new[] { true, true, false, true, true, false }, menus["origin/main"].Select(item => item.IsEnabled));
+            // Switch, new branch, rename, merge into the current branch, rebase the current branch onto it, compare with
+            // the current branch, delete.
+            Assert.Equal(new[] { false, true, true, false, false, false, false }, menus["main"].Select(item => item.IsEnabled));
+            Assert.Equal(new[] { true, true, true, true, true, true, true }, menus["feature"].Select(item => item.IsEnabled));
+            Assert.Equal(new[] { true, true, false, true, true, true, false }, menus["origin/main"].Select(item => item.IsEnabled));
 
             GitBranchItemViewModel feature = panel.LocalGroup.Branches[0];
             GitBranchItemViewModel remote = panel.RemoteGroup.Branches[0];
@@ -161,6 +162,7 @@ public sealed class GitRepositoryPanelViewTests
             await panel.RenameCommand.Execute(feature).ToTask();
             await panel.MergeCommand.Execute(feature).ToTask();
             await panel.RebaseCommand.Execute(remote).ToTask();
+            await panel.CompareCommand.Execute(feature).ToTask();
 
             Assert.Equal(
                 new (string, string?)[]
@@ -170,7 +172,8 @@ public sealed class GitRepositoryPanelViewTests
                     (GitCommands.CREATE_BRANCH, "refs/remotes/origin/main"),
                     (GitCommands.RENAME_BRANCH, "refs/heads/feature"),
                     (GitCommands.MERGE, "refs/heads/feature"),
-                    (GitCommands.REBASE, "refs/remotes/origin/main")
+                    (GitCommands.REBASE, "refs/remotes/origin/main"),
+                    (GitCommands.COMPARE_BRANCHES, "refs/heads/feature")
                 },
                 fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
         }
@@ -339,8 +342,8 @@ public sealed class GitRepositoryPanelViewTests
         Assert.Equal(
             new ICommand[]
             {
-                panel.ShowTagHistoryCommand, panel.CreateBranchFromTagCommand, panel.PushTagCommand, panel.DeleteTagCommand,
-                panel.DeleteRemoteTagCommand
+                panel.ShowTagHistoryCommand, panel.CreateBranchFromTagCommand, panel.CompareTagCommand, panel.PushTagCommand,
+                panel.DeleteTagCommand, panel.DeleteRemoteTagCommand
             },
             items.Select(item => item.Command!));
         Assert.All(items, item => Assert.IsType<PathIcon>(item.Icon));
@@ -348,6 +351,7 @@ public sealed class GitRepositoryPanelViewTests
         menu.Close();
         await panel.ShowTagHistoryCommand.Execute().ToTask();
         await panel.CreateBranchFromTagCommand.Execute().ToTask();
+        await panel.CompareTagCommand.Execute().ToTask();
         await panel.PushTagCommand.Execute().ToTask();
         await panel.DeleteTagCommand.Execute().ToTask();
         await panel.DeleteRemoteTagCommand.Execute().ToTask();
@@ -357,7 +361,7 @@ public sealed class GitRepositoryPanelViewTests
             new (string, string?)[]
             {
                 (GitCommands.SHOW_HISTORY, "refs/tags/v1.0"), (GitCommands.CREATE_BRANCH, "refs/tags/v1.0"),
-                (GitCommands.PUSH_TAG, "v1.0"), (GitCommands.DELETE_TAG, "v1.0"), (GitCommands.DELETE_REMOTE_TAG, "v1.0")
+                (GitCommands.COMPARE_BRANCHES, "refs/tags/v1.0"), (GitCommands.PUSH_TAG, "v1.0"), (GitCommands.DELETE_TAG, "v1.0"), (GitCommands.DELETE_REMOTE_TAG, "v1.0")
             },
             fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
     }

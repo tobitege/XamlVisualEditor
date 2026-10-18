@@ -428,4 +428,15 @@ Usually {1} has commits that {0} does not have yet; pull first to keep them. Onl
   <data name="StashStagedButton" xml:space="preserve"><value>Stash Staged</value></data>
   <data name="NoChangesToStashFormat" xml:space="preserve"><value>{0} has no changes to stash.</value></data>
   <data name="NothingStagedToStash" xml:space="preserve"><value>There are no staged changes to stash.</value></data>
+  <data name="CompareBranchesCommand" xml:space="preserve"><value>Compare with Current Branch…</value></data>
+  <data name="CompareWithCurrentMenu" xml:space="preserve"><value>Compare with Current Branch</value></data>
+  <data name="ComparePickTitle" xml:space="preserve"><value>Compare the current branch with</value></data>
+  <data name="TagDescription" xml:space="preserve"><value>tag</value></data>
+  <data name="NothingToCompare" xml:space="preserve"><value>There is no other branch or tag to compare with.</value></data>
+  <data name="CompareNoCommonCommitFormat" xml:space="preserve"><value>{0} and {1} have no common commit to compare from.</value></data>
+  <data name="BranchCompareTitleFormat" xml:space="preserve"><value>{0} compared with {1}</value></data>
+  <data name="CompareSummaryFormat" xml:space="preserve"><value>The files show what {0} changed since it and {1} went their own way at {2}.</value></data>
+  <data name="CompareCommitsOnlyOnFormat" xml:space="preserve"><value>Commits on {0} that {1} does not have:</value></data>
+  <data name="CompareNoCommitsOnlyOnFormat" xml:space="preserve"><value>{0} has no commits that {1} does not have.</value></data>
+  <data name="CompareMoreCommits" xml:space="preserve"><value>… and more</value></data>
 </root>

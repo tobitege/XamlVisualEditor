@@ -203,6 +203,12 @@ public static class GitCommands
     public const string STASH_STAGED = "git.stashStaged";
 
     /// <summary>
+    /// Compares the current branch with the branch or tag in argument 0 (full or short name), otherwise with one picked
+    /// from a list, in a document tab: the files and diffs since both went their own way and the commits only one has.
+    /// </summary>
+    public const string COMPARE_BRANCHES = "git.compareBranches";
+
+    /// <summary>
     /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
     /// version of the current branch after a confirmation; a file that side deleted is deleted.
     /// </summary>
@@ -454,6 +460,8 @@ public static class GitCommands
             new CommandMetadata(GitStrings.StashPathsCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 620));
         Register(STASH_STAGED, handler.StashStagedAsync,
             new CommandMetadata(GitStrings.StashStagedCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 630));
+        Register(COMPARE_BRANCHES, handler.CompareBranchesAsync,
+            new CommandMetadata(GitStrings.CompareBranchesCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 640));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -513,6 +521,7 @@ public static class GitCommands
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
                 ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
+                ExtensionsItem(COMPARE_BRANCHES, GitStrings.CompareBranchesCommand, HISTORY_GROUP, 161),
                 ExtensionsItem(CREATE_TAG, GitStrings.CreateTagCommand, HISTORY_GROUP, 162),
                 ExtensionsItem(PUSH_TAG, GitStrings.PushTagCommand, HISTORY_GROUP, 164),
                 ExtensionsItem(DELETE_TAG, GitStrings.DeleteTagCommand, HISTORY_GROUP, 166),
@@ -616,7 +625,8 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(REBASE, GitStrings.RebaseCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(FORCE_PUSH, GitStrings.ForcePushCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STASH_PATHS, GitStrings.StashPathsCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(STASH_STAGED, GitStrings.StashStagedCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(STASH_STAGED, GitStrings.StashStagedCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(COMPARE_BRANCHES, GitStrings.CompareBranchesCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

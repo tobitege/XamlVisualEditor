@@ -90,21 +90,27 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
     private readonly Func<string, IReadOnlyList<object?>?, Task>? _executeCommand;
     private readonly CompositeDisposable _disposables = new();
     private readonly bool _isStash;
+    private readonly ComparisonHeader? _comparison;
     private DetailsContext? _context;
 
     /// <summary>Creates the details for a shared session.</summary>
     /// <param name="session">The Git session whose repository the commits belong to.</param>
     /// <param name="executeCommand">Runs a Git command by id with arguments.</param>
     public GitCommitDetailsViewModel(GitSession session, Func<string, IReadOnlyList<object?>?, Task> executeCommand)
-        : this(session, executeCommand, isStash: false)
+        : this(session, executeCommand, isStash: false, comparison: null)
     {
     }
 
-    private GitCommitDetailsViewModel(GitSession session, Func<string, IReadOnlyList<object?>?, Task>? executeCommand, bool isStash)
+    private GitCommitDetailsViewModel(
+        GitSession session,
+        Func<string, IReadOnlyList<object?>?, Task>? executeCommand,
+        bool isStash,
+        ComparisonHeader? comparison)
     {
         _session = session;
         _executeCommand = executeCommand;
         _isStash = isStash;
+        _comparison = comparison;
 
         IObservable<bool> hasFile = this.WhenAnyValue(x => x.SelectedFile).Select(file => file is not null);
         // -1 means no hunk yet: the next change is the first hunk, and there is no previous one.
@@ -140,7 +146,27 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
         GitSession session,
         Func<string, IReadOnlyList<object?>?, Task>? executeCommand,
         GitCommitInfo stash) =>
-        new(session, executeCommand, isStash: true) { Commit = stash };
+        new(session, executeCommand, isStash: true, comparison: null) { Commit = stash };
+
+    /// <summary>
+    /// Creates the details of a comparison: the files and diffs from <paramref name="mergeBase"/> to
+    /// <paramref name="tip"/>, which are the changes on the tip's side since both sides went their own way, under the
+    /// given header instead of the commit's.
+    /// </summary>
+    internal static GitCommitDetailsViewModel ForComparison(
+        GitSession session,
+        Func<string, IReadOnlyList<object?>?, Task>? executeCommand,
+        GitCommitInfo tip,
+        GitCommitInfo mergeBase,
+        string title,
+        string summary,
+        string message) =>
+        // The files of a commit are those against its first parent, so the merge base as the only parent gives the
+        // changes of the whole range.
+        new(session, executeCommand, isStash: false, new ComparisonHeader(title, summary, message))
+        {
+            Commit = tip with { ParentShas = [mergeBase.Sha], ParentShortShas = [mergeBase.ShortSha] }
+        };
 
     /// <summary>Gets or sets the shown commit; null shows none.</summary>
     [Reactive]
@@ -380,6 +406,13 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
             return;
         }
 
+        if (_comparison is { } comparison)
+        {
+            (Title, Summary, MessageText) = (comparison.Title, comparison.Summary, comparison.Message);
+            CommitterText = ParentsText = MergeText = null;
+            return;
+        }
+
         string authorDate = commit.AuthorDate.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
         Title = commit.Subject;
         Summary = string.Format(
@@ -465,6 +498,9 @@ public sealed partial class GitCommitDetailsViewModel : ReactiveObject, IDisposa
 
     /// <summary>The commit whose files are listed and the repository it belongs to.</summary>
     private sealed record DetailsContext(GitCommitInfo Commit, string RepositoryRoot);
+
+    /// <summary>The header of a comparison, shown instead of the header of its tip commit.</summary>
+    private sealed record ComparisonHeader(string Title, string Summary, string Message);
 
     /// <summary>
     /// A state of the details: the header of a commit while its files are read, the read files, or a failure.

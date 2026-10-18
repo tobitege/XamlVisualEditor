@@ -461,6 +461,25 @@ public sealed class GitHistoryServiceTests
             (tag.TargetType, tag.TargetSha, tag.IsAnnotated, tag.IsCommit);
     }
 
+    [Fact]
+    public async Task The_merge_base_is_the_commit_where_two_branches_parted_and_null_without_one()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string parted = repository.RunGit("rev-parse", "HEAD").Trim();
+        repository.RunGit("switch", "-q", "-c", "feature");
+        repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Add b");
+        repository.RunGit("switch", "-q", "main");
+        repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Add c");
+        repository.RunGit("switch", "-q", "--orphan", "lone");
+        repository.RunGit("commit", "-q", "--allow-empty", "-m", "Lone");
+        GitService service = new(options: repository.ProcessOptions);
+
+        Assert.Equal(parted, await service.GetMergeBaseAsync(repository.Path, "main", "feature", ct));
+        Assert.Null(await service.GetMergeBaseAsync(repository.Path, "main", "lone", ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetMergeBaseAsync(repository.Path, "main", "missing", ct));
+    }
+
     private static async Task<GitCommitInfo> HeadAsync(GitService service, GitTestRepository repository) =>
         Assert.Single(await service.GetLogAsync(
             repository.Path,

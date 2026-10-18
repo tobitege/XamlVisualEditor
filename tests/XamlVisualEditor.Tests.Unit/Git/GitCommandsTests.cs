@@ -94,7 +94,8 @@ public sealed class GitCommandsTests
         { GitCommands.REBASE, GitStrings.RebaseCommand, NO_OPERATION_WHEN },
         { GitCommands.FORCE_PUSH, GitStrings.ForcePushCommand, "git.isRepository && git.hasUpstream" },
         { GitCommands.STASH_PATHS, GitStrings.StashPathsCommand, NO_OPERATION_WHEN },
-        { GitCommands.STASH_STAGED, GitStrings.StashStagedCommand, NO_OPERATION_WHEN }
+        { GitCommands.STASH_STAGED, GitStrings.StashStagedCommand, NO_OPERATION_WHEN },
+        { GitCommands.COMPARE_BRANCHES, GitStrings.CompareBranchesCommand, REPOSITORY_WHEN }
     };
 
     [Theory]
@@ -121,7 +122,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(63, commandIds.Count);
+        Assert.Equal(64, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -158,7 +159,7 @@ public sealed class GitCommandsTests
             GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.COMMIT_AMEND, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.RENAME_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.FORCE_PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
-            GitCommands.REBASE,
+            GitCommands.REBASE, GitCommands.COMPARE_BRANCHES,
             GitCommands.CREATE_TAG, GitCommands.PUSH_TAG, GitCommands.DELETE_TAG, GitCommands.DELETE_REMOTE_TAG,
             GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_STAGED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
             GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,

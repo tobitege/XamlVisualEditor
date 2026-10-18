@@ -201,6 +201,27 @@ public sealed partial class GitService
         return GitRefParser.ParseTags(result.StandardOutput);
     }
 
+    /// <inheritdoc />
+    /// <remarks>git exits with code 1 and no output when the revisions have no common ancestor.</remarks>
+    public async Task<string?> GetMergeBaseAsync(string repoPath, string first, string second, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(first);
+        ArgumentException.ThrowIfNullOrWhiteSpace(second);
+        GitProcessResult result = await RunGitAsync(
+            repoPath,
+            new[] { "merge-base", "--end-of-options", first, second },
+            GitCommandAccess.Read,
+            ct,
+            allowNonZeroExitCode: true);
+        if (result.ExitCode == 1 && result.StandardError.Trim().Length == 0)
+        {
+            return null;
+        }
+
+        ThrowIfFailed(result, "merge-base");
+        return result.StandardOutput.Trim();
+    }
+
     /// <summary>
     /// Adds the trees diff-tree compares for <paramref name="commit"/>: its first parent and the commit, or the commit
     /// alone with <c>--root</c> for a root commit.

@@ -53,6 +53,7 @@ public sealed class GitBranchItemViewModel
         CreateBranchFromCommand = panel.CreateBranchFromCommand;
         MergeCommand = panel.MergeCommand;
         RebaseCommand = panel.RebaseCommand;
+        CompareCommand = panel.CompareCommand;
         TrackingText = FormatTracking(branch);
         ToolTip = FormatToolTip(branch);
     }
@@ -101,6 +102,9 @@ public sealed class GitBranchItemViewModel
 
     /// <summary>Gets the command that rebases the current branch onto this branch; its parameter is this item.</summary>
     public ICommand RebaseCommand { get; }
+
+    /// <summary>Gets the command that compares the current branch with this branch; its parameter is this item.</summary>
+    public ICommand CompareCommand { get; }
 
     private static string FormatTracking(GitBranch branch)
     {
@@ -316,6 +320,8 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             item => _executeCommand(GitCommands.MERGE, [item.Branch.FullName])));
         RebaseCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
             item => _executeCommand(GitCommands.REBASE, [item.Branch.FullName])));
+        CompareCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
+            item => _executeCommand(GitCommands.COMPARE_BRANCHES, [item.Branch.FullName])));
         // A tag of a tree or a blob has no history, and no branch can start at it.
         IObservable<bool> hasCommitTag = this.WhenAnyValue(x => x.SelectedTag).Select(tag => tag is { IsCommit: true });
         ShowTagHistoryCommand = AddCommand(ReactiveCommand.CreateFromTask(
@@ -323,6 +329,9 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             hasCommitTag));
         CreateBranchFromTagCommand = AddCommand(ReactiveCommand.CreateFromTask(
             () => SelectedTag is { IsCommit: true } tag ? _executeCommand(GitCommands.CREATE_BRANCH, [tag.Tag.FullName]) : Task.CompletedTask,
+            hasCommitTag));
+        CompareTagCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => SelectedTag is { IsCommit: true } tag ? _executeCommand(GitCommands.COMPARE_BRANCHES, [tag.Tag.FullName]) : Task.CompletedTask,
             hasCommitTag));
         CreateTagCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.CREATE_TAG, null), isRepository));
         IObservable<bool> hasTag = this.WhenAnyValue(x => x.SelectedTag).Select(tag => tag is not null);
@@ -540,6 +549,12 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     /// <summary>Runs <see cref="GitCommands.REBASE"/> onto a branch item.</summary>
     public ReactiveCommand<GitBranchItemViewModel, RxVoid> RebaseCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.COMPARE_BRANCHES"/> with a branch item.</summary>
+    public ReactiveCommand<GitBranchItemViewModel, RxVoid> CompareCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.COMPARE_BRANCHES"/> with the selected tag, when it points to a commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CompareTagCommand { get; }
 
     /// <inheritdoc />
     public void Dispose()

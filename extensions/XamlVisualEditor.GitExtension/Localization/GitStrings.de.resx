@@ -428,4 +428,15 @@ Meist hat {1} Commits, die {0} noch nicht hat; hole sie zuerst per Pull, um sie 
   <data name="StashStagedButton" xml:space="preserve"><value>Gestagte stashen</value></data>
   <data name="NoChangesToStashFormat" xml:space="preserve"><value>{0} hat keine Änderungen zum Stashen.</value></data>
   <data name="NothingStagedToStash" xml:space="preserve"><value>Es gibt keine gestagten Änderungen zum Stashen.</value></data>
+  <data name="CompareBranchesCommand" xml:space="preserve"><value>Mit aktuellem Branch vergleichen …</value></data>
+  <data name="CompareWithCurrentMenu" xml:space="preserve"><value>Mit aktuellem Branch vergleichen</value></data>
+  <data name="ComparePickTitle" xml:space="preserve"><value>Aktuellen Branch vergleichen mit</value></data>
+  <data name="TagDescription" xml:space="preserve"><value>Tag</value></data>
+  <data name="NothingToCompare" xml:space="preserve"><value>Es gibt keinen anderen Branch und kein Tag zum Vergleichen.</value></data>
+  <data name="CompareNoCommonCommitFormat" xml:space="preserve"><value>{0} und {1} haben keinen gemeinsamen Commit, von dem aus sich vergleichen lässt.</value></data>
+  <data name="BranchCompareTitleFormat" xml:space="preserve"><value>{0} verglichen mit {1}</value></data>
+  <data name="CompareSummaryFormat" xml:space="preserve"><value>Die Dateien zeigen, was {0} geändert hat, seit sich {0} und {1} bei {2} getrennt haben.</value></data>
+  <data name="CompareCommitsOnlyOnFormat" xml:space="preserve"><value>Commits auf {0}, die {1} nicht hat:</value></data>
+  <data name="CompareNoCommitsOnlyOnFormat" xml:space="preserve"><value>{0} hat keine Commits, die {1} nicht hat.</value></data>
+  <data name="CompareMoreCommits" xml:space="preserve"><value>… und weitere</value></data>
 </root>

@@ -352,6 +352,40 @@ public sealed class GitRepositoryCommandsTests
         Assert.Equal(fixture.Repository.RunGit("rev-parse", "HEAD"), fixture.Repository.RunGitIn(fixture.Repository.RemotePath!, "rev-parse", "main"));
     }
 
+    [AvaloniaFact]
+    public async Task Compare_shows_the_files_since_the_branches_parted_and_the_commits_only_each_side_has()
+    {
+        using GitPanelCommandFixture fixture = await CreateAsync(repository =>
+        {
+            repository.RunGit("switch", "-q", "-c", "feature");
+            repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Add b");
+            repository.RunGit("switch", "-q", "main");
+            repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Add c");
+            repository.RunGit("switch", "-q", "feature");
+            repository.RunGit("tag", "v1", "main");
+        });
+        fixture.Window.QuickPick = items => items.Single(item => item.Label == "v1");
+
+        await fixture.ExecuteAsync(GitCommands.COMPARE_BRANCHES);
+
+        // The tag names main's commit, so the comparison is that of feature with main.
+        Assert.Equal(["main", "v1"], fixture.Window.QuickPicks[0].Items.Select(item => item.Label));
+        (string id, string title, _) = Assert.Single(fixture.ViewHost.ShownDocuments);
+        Assert.Equal(string.Format(GitStrings.BranchCompareTitleFormat, "feature", "v1"), title);
+        GitCommitDetailsViewModel details = Assert.IsType<GitCommitDetailsViewModel>(fixture.ViewHost.DocumentViewModels[id]);
+        await WaitUntilAsync(() => !details.IsLoading && details.Files.Count > 0);
+        Assert.Equal(["b.txt"], details.Files.Select(file => file.Path));
+        Assert.Equal(string.Format(GitStrings.BranchCompareTitleFormat, "feature", "v1"), details.Title);
+        string addB = fixture.Repository.RunGit("log", "-1", "--format=%h %s", "feature").Trim();
+        string addC = fixture.Repository.RunGit("log", "-1", "--format=%h %s", "main").Trim();
+        Assert.Equal(
+            string.Format(GitStrings.CompareCommitsOnlyOnFormat, "feature", "v1") + Environment.NewLine + addB
+            + Environment.NewLine + Environment.NewLine
+            + string.Format(GitStrings.CompareCommitsOnlyOnFormat, "v1", "feature") + Environment.NewLine + addC,
+            details.MessageText);
+        await WaitUntilAsync(() => details.DiffLines.Count > 0);
+    }
+
     // The panel reads its lists in the background and applies them on the UI thread, which runs while this waits.
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

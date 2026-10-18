@@ -154,6 +154,9 @@ public static class GitIcons
     /// </summary>
     public const string Merge = "M9.5 10h1v8h-1zM3.6 2.3l.8-.6 6 8-.8.6zm12-.6.8.6-6 8-.8-.6z";
 
+    /// <summary>panel_right_20_regular, the same geometry as <see cref="ToggleDiff"/>: two panes side by side; compares branches.</summary>
+    public const string Compare = ToggleDiff;
+
     /// <summary>
     /// A base line, a branch line and an arrow from the one to the other, drawn for the Git panels in the 20 by 20 grid
     /// of the Fluent icons; rebases the current branch onto another.

@@ -351,21 +351,22 @@ Mark them resolved anyway?</value></data>
   <data name="RenameRemotePromptFormat" xml:space="preserve"><value>New name for {0}</value></data>
   <data name="RemoteNotFoundFormat" xml:space="preserve"><value>The remote {0} does not exist.</value></data>
   <data name="LoadRemotesFailedFormat" xml:space="preserve"><value>Reading the remotes failed: {0}</value></data>
-  <data name="InvalidRemoteNameFormat" xml:space="preserve"><value>{0} is no usable remote name. A remote name must not start with "-".</value></data>
+  <data name="InvalidRemoteNameFormat" xml:space="preserve"><value>{0} is not a valid remote name. A remote name must not start with "-".</value></data>
   <data name="RemoteUrlKeepsPushUrlPromptFormat" xml:space="preserve"><value>URL of {0}. Its own push URL {1} stays.</value></data>
   <data name="RemoteListUnavailable" xml:space="preserve"><value>The git service of this application cannot list or change remotes.</value></data>
   <data name="StashBranchStoppedFormat" xml:space="preserve"><value>The branch {0} was created and checked out, but {1} could not be applied there. The stash stays in the list.</value></data>
   <data name="MergePromptFormat" xml:space="preserve"><value>Merge {0} into {1}?</value></data>
   <data name="MergeConfirm" xml:space="preserve"><value>Merge</value></data>
   <data name="OperationChanged" xml:space="preserve"><value>The operation in progress changed while the question was open. Nothing was aborted.</value></data>
-  <data name="StashesChanged" xml:space="preserve"><value>The stashes changed while the question was open. Nothing was cleared.</value></data>
-  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Save or close these files first. Taking a side replaces them, and the editor holds unsaved changes of them.
+  <data name="StashesChangedFormat" xml:space="preserve"><value>The stashes changed while the question was open. {0} of the {1} confirmed stashes were dropped, stashes made since then stay.</value></data>
+  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Save or close these files first. Taking a side replaces them, and the editor holds unsaved changes to them.
 {0}</value></data>
   <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} was pulled into {0}. The push was cancelled.</value></data>
   <data name="GitRunningTitle" xml:space="preserve"><value>Git</value></data>
   <data name="GitRunningMessage" xml:space="preserve"><value>git is running. If it does not end, for example because a hook waits, it can be stopped after a short wait.</value></data>
   <data name="StopGitButton" xml:space="preserve"><value>Stop git…</value></data>
   <data name="StopGitConfirm" xml:space="preserve"><value>Stop git</value></data>
-  <data name="StopGitPrompt" xml:space="preserve"><value>git is still running, possibly in a hook that waits. Stopping it now can leave the command half done: a .git\index.lock left behind and a partly updated working tree. Stop git anyway?</value></data>
-  <data name="GitStopped" xml:space="preserve"><value>git was stopped. Check the Git Changes panel, the command may be half done. A .git\index.lock that git left behind has to be deleted before the next git command.</value></data>
+  <data name="StopGitPrompt" xml:space="preserve"><value>git is still running, possibly in a hook that waits. Stopping it now can leave the command half done: a .git/index.lock left behind and a partly updated working tree. Stop git anyway?</value></data>
+  <data name="GitStopped" xml:space="preserve"><value>git was stopped. Check the Git Changes panel, the command may be half done. A .git/index.lock that git left behind has to be deleted before the next git command.</value></data>
+  <data name="RemoteUrlShowsCredentials" xml:space="preserve"><value>The field shows the URL with the credentials it contains.</value></data>
 </root>

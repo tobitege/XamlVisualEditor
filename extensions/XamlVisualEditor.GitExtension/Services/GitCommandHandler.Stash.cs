@@ -133,7 +133,8 @@ internal sealed partial class GitCommandHandler
                 await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashMovedFormat, stash.Name));
             }
         }
-        catch (InvalidOperationException) when (string.Equals(_session.Current.BranchName, name, StringComparison.Ordinal))
+        catch (InvalidOperationException exception) when (exception is not GitStoppedException
+            && string.Equals(_session.Current.BranchName, name, StringComparison.Ordinal))
         {
             await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashBranchStoppedFormat, name, stash.Name));
         }
@@ -176,21 +177,26 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // Only the confirmed stashes are cleared: a stash made while the question was open keeps the list as it is.
+        // Each confirmed stash is dropped at the top of the list after its commit id is checked there, so a stash made
+        // while the question was open, or meanwhile, is never dropped.
+        int dropped = 0;
         bool? cleared = await TryRunStashAsync(async (service, root, ct) =>
         {
-            IReadOnlyList<GitStashEntry> current = await service.ListAsync(root, ct);
-            if (!current.Select(stash => stash.ObjectId).SequenceEqual(stashes.Select(stash => stash.ObjectId), StringComparer.Ordinal))
+            foreach (GitStashEntry stash in stashes)
             {
-                return false;
+                if (!await service.DropAsync(root, stash with { Index = 0 }, ct))
+                {
+                    return false;
+                }
+
+                dropped++;
             }
 
-            await service.ClearAsync(root, ct);
             return true;
         });
         if (cleared == false)
         {
-            await ShowInformationAsync(GitStrings.StashesChanged);
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashesChangedFormat, dropped, stashes.Count));
         }
     }
 
@@ -250,7 +256,7 @@ internal sealed partial class GitCommandHandler
                 await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.StashMovedFormat, stash.Name));
             }
         }
-        catch (InvalidOperationException) when (!hadConflicts && _session.Current.HasConflicts)
+        catch (InvalidOperationException exception) when (exception is not GitStoppedException && !hadConflicts && _session.Current.HasConflicts)
         {
             await ShowInformationAsync(GitStrings.StashConflicts);
         }

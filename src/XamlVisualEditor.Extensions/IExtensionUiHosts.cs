@@ -28,8 +28,14 @@ public sealed record ConfirmationDialogRequest(string Title, string Message, str
 /// <c>CancelDelay</c> the cancel button shows and the window button cancels only once the delay elapsed, for work whose
 /// cancel has a risk that a moment of patience avoids.
 /// </remarks>
-public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null, TimeSpan CancelDelay = default)
+public sealed record ProgressDialogRequest(string Title, string Message, string? CancelText = null)
 {
+    /// <summary>
+    /// Gets how long the shown dialog waits before its cancel button shows and its window button cancels; zero, the
+    /// default, allows the cancel at once.
+    /// </summary>
+    public TimeSpan CancelDelay { get; init; }
+
     /// <summary>Identifier of the shared progress dialog.</summary>
     public const string DialogId = "xve.progress";
 }

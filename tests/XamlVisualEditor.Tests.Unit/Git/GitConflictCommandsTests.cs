@@ -290,31 +290,135 @@ public sealed class GitConflictCommandsTests
     [Fact]
     public async Task A_checkout_that_hangs_in_a_hook_is_stopped_only_after_a_confirmation()
     {
-        GitTestRepository repository = GitTestRepository.Create("a.txt");
-        repository.RunGit("branch", "other");
-        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
-        File.WriteAllText(hook, "#!/bin/sh\nsleep 60\n");
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
-
+        GitTestRepository repository = CreateWithHookedBranch("touch .git/hook-started; sleep 3; touch .git/hook-finished");
         // The first stop is declined, the progress shows again, and the second stop is confirmed.
         int questions = 0;
         using Fixture fixture = await Fixture.ForAsync(repository, (_, _) => ++questions == 2);
-        fixture.Handler.ProgressDelay = TimeSpan.Zero;
-        fixture.Handler.StopDelay = TimeSpan.Zero;
-        fixture.Session.Watch = fixture.Handler.WatchAsync;
-        fixture.Dialogs.ProgressMode = ProgressDialogMode.Cancel;
-        Stopwatch elapsed = Stopwatch.StartNew();
+        WatchAtOnce(fixture);
+        fixture.Dialogs.ProgressAsync = async (_, _) =>
+        {
+            await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+            return true;
+        };
 
         await fixture.ExecuteAsync(GitCommands.CHECKOUT, "other");
 
-        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(30), elapsed.Elapsed.ToString());
         Assert.Equal(2, questions);
         Assert.All(fixture.Dialogs.Confirmations, question => Assert.True(question.IsDestructive));
         Assert.Equal(2, fixture.Dialogs.Progress.Count());
         Assert.Contains(GitStrings.GitStopped, Assert.Single(fixture.Window.Errors));
+        await Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+    }
+
+    [Fact]
+    public async Task A_stop_question_that_is_open_when_git_ends_closes_and_stops_nothing()
+    {
+        GitTestRepository repository = CreateWithHookedBranch("touch .git/hook-started; sleep 2; touch .git/hook-finished");
+        using Fixture fixture = await Fixture.ForAsync(repository);
+        WatchAtOnce(fixture);
+        fixture.Dialogs.ProgressAsync = async (_, _) =>
+        {
+            await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+            return true;
+        };
+        // The question would confirm, but only once something closes it.
+        fixture.Dialogs.RespondAsync = async (_, ct) =>
+        {
+            await Task.Delay(Timeout.Infinite, ct).ContinueWith(_ => { }, TaskScheduler.Default);
+            return true;
+        };
+
+        await fixture.ExecuteAsync(GitCommands.CHECKOUT, "other");
+
+        Assert.Single(fixture.Dialogs.Confirmations);
+        Assert.Empty(fixture.Window.Errors);
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        Assert.Equal("other", fixture.Session.Current.BranchName);
+    }
+
+    [Fact]
+    public async Task A_watch_that_fails_still_waits_for_the_command()
+    {
+        GitTestRepository repository = CreateWithHookedBranch("sleep 1; touch .git/hook-finished");
+        using Fixture fixture = await Fixture.ForAsync(repository);
+        fixture.Session.Watch = (_, _) => throw new InvalidOperationException("The watch failed.");
+
+        await fixture.ExecuteAsync(GitCommands.CHECKOUT, "other");
+
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        Assert.Equal("other", fixture.Session.Current.BranchName);
+        Assert.Empty(fixture.Window.Errors);
+    }
+
+    [Fact]
+    public async Task A_pull_whose_fast_forward_hangs_after_its_cancel_can_be_stopped()
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.AddBareRemote();
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        string peer = repository.CloneRemote("peer");
+        repository.CommitFileIn(peer, "b.txt", "b\n", "Peer");
+        repository.RunGitIn(peer, "push", "-q");
+        WriteHook(repository, "post-merge", "touch .git/hook-started; sleep 3; touch .git/hook-finished");
+        using Fixture fixture = await Fixture.ForAsync(repository, (_, _) => true);
+        fixture.Handler.ProgressDelay = TimeSpan.Zero;
+        fixture.Handler.StopDelay = TimeSpan.Zero;
+        // The cancel comes while the hook after the fast-forward runs, which a cancel does not stop.
+        fixture.Dialogs.ProgressAsync = async (request, _) =>
+        {
+            if (request.CancelText is null)
+            {
+                await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+            }
+
+            return true;
+        };
+
+        await fixture.ExecuteAsync(GitCommands.PULL);
+
+        Assert.Equal([null, GitStrings.StopGitButton], fixture.Dialogs.Progress.Select(progress => progress.CancelText));
+        Assert.True(Assert.Single(fixture.Dialogs.Confirmations).IsDestructive);
+        Assert.Contains(GitStrings.GitStopped, Assert.Single(fixture.Window.Errors));
+        await Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+    }
+
+    /// <summary>Creates a repository with the branch other and a post-checkout hook that runs <paramref name="command"/>.</summary>
+    private static GitTestRepository CreateWithHookedBranch(string command)
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WriteHook(repository, "post-checkout", command);
+        return repository;
+    }
+
+    private static void WriteHook(GitTestRepository repository, string name, string command)
+    {
+        string hook = Path.Combine(repository.Path, ".git", "hooks", name);
+        File.WriteAllText(hook, "#!/bin/sh\n" + command + "\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    // The progress shows and offers the stop at once.
+    private static void WatchAtOnce(Fixture fixture)
+    {
+        fixture.Handler.ProgressDelay = TimeSpan.Zero;
+        fixture.Handler.StopDelay = TimeSpan.Zero;
+        fixture.Session.Watch = fixture.Handler.WatchAsync;
+    }
+
+    private static async Task WaitForFileAsync(string path)
+    {
+        Stopwatch waited = Stopwatch.StartNew();
+        while (!File.Exists(path))
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), "The hook did not start: " + path);
+            await Task.Delay(50);
+        }
     }
 
     [Fact]

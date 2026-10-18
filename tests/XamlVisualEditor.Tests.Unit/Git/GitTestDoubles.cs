@@ -236,12 +236,33 @@ internal sealed class GitDialogHost : IDialogHost
 
     public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory) => throw new NotSupportedException();
 
+    /// <summary>
+    /// Gets or sets an answer to questions that can wait, such as for the token that closes the question; it replaces
+    /// the callback of the constructor when set.
+    /// </summary>
+    public Func<object?, CancellationToken, Task<object?>>? RespondAsync { get; set; }
+
+    /// <summary>Gets or sets how a progress dialog ends, replacing <see cref="ProgressMode"/> when set.</summary>
+    public Func<ProgressDialogRequest, CancellationToken, Task<bool?>>? ProgressAsync { get; set; }
+
     public async Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
     {
-        Requests.Add((dialogId, viewModel));
+        lock (Requests)
+        {
+            Requests.Add((dialogId, viewModel));
+        }
+
         if (dialogId != ProgressDialogRequest.DialogId)
         {
-            return _respond(dialogId, viewModel) is T result ? result : default;
+            object? answer = RespondAsync is { } respondAsync
+                ? await respondAsync(viewModel, cancellationToken)
+                : _respond(dialogId, viewModel);
+            return answer is T result ? result : default;
+        }
+
+        if (ProgressAsync is { } progressAsync)
+        {
+            return (T?)(object?)await progressAsync((ProgressDialogRequest)viewModel!, cancellationToken);
         }
 
         switch (ProgressMode)

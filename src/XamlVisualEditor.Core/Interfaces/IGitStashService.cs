@@ -37,7 +37,4 @@ public interface IGitStashService
     /// nothing when the stash is no longer at its position in the list.
     /// </summary>
     Task<bool> BranchAsync(string repoPath, GitStashEntry stash, string branchName, CancellationToken ct = default);
-
-    /// <summary>Removes every stash.</summary>
-    Task ClearAsync(string repoPath, CancellationToken ct = default);
 }

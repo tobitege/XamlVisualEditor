@@ -7,13 +7,14 @@ public static partial class GitUrlCredentials
 {
     /// <summary>
     /// Replaces the user information of every URL in <paramref name="text"/> with <c>***</c>: the user and password
-    /// of <c>https://user:password@host</c> as well as a token written as <c>https://token@host</c>.
+    /// of <c>https://user:password@host</c> as well as a token written as <c>https://token@host</c>, up to the last
+    /// <c>@</c> of the host part, so a password with an unencoded <c>@</c> is hidden as a whole.
     /// </summary>
     public static string Mask(string text)
     {
         return string.IsNullOrEmpty(text) ? text : UrlUserInfoPattern().Replace(text, "${scheme}***@");
     }
 
-    [GeneratedRegex(@"(?<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)[^/@\s]+@", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)[^/?#\s]+@", RegexOptions.CultureInvariant)]
     private static partial Regex UrlUserInfoPattern();
 }

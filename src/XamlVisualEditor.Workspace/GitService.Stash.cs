@@ -74,10 +74,6 @@ public sealed partial class GitService : IGitStashService
         return RunOnVerifiedStashAsync(repoPath, ["branch", "--", branchName], stash, ct);
     }
 
-    /// <inheritdoc />
-    public Task ClearAsync(string repoPath, CancellationToken ct = default) =>
-        RunGitCheckedAsync(repoPath, new[] { "stash", "clear" }, standardInput: null, ct);
-
     private async Task<bool> RunOnVerifiedStashAsync(string repoPath, string[] command, GitStashEntry stash, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(stash);

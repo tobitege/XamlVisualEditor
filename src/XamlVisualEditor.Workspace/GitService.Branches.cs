@@ -42,23 +42,25 @@ public sealed partial class GitService
     public async Task SwitchAsync(string repoPath, string name, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        // The end of the options keeps a branch name that starts with "-", such as one of a remote named so outside
+        // the editor, from being read as an option.
         string[] args;
         if (name.StartsWith(LOCAL_BRANCH_PREFIX, StringComparison.Ordinal))
         {
-            args = new[] { "switch", name[LOCAL_BRANCH_PREFIX.Length..] };
+            args = new[] { "switch", "--end-of-options", name[LOCAL_BRANCH_PREFIX.Length..] };
         }
         else if (name.StartsWith(REMOTE_BRANCH_PREFIX, StringComparison.Ordinal))
         {
-            args = new[] { "switch", "--track", name[REMOTE_BRANCH_PREFIX.Length..] };
+            args = new[] { "switch", "--track", "--end-of-options", name[REMOTE_BRANCH_PREFIX.Length..] };
         }
         else if (!await ReferenceExistsAsync(repoPath, LOCAL_BRANCH_PREFIX + name, ct)
                  && await ReferenceExistsAsync(repoPath, REMOTE_BRANCH_PREFIX + name, ct))
         {
-            args = new[] { "switch", "--track", name };
+            args = new[] { "switch", "--track", "--end-of-options", name };
         }
         else
         {
-            args = new[] { "switch", name };
+            args = new[] { "switch", "--end-of-options", name };
         }
 
         await RunGitCheckedAsync(repoPath, args, standardInput: null, ct);

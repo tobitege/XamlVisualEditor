@@ -399,48 +399,64 @@ internal sealed partial class GitCommandHandler
     /// <summary>
     /// Watches an operation of the session that shows no progress of its own: once it runs longer than
     /// <see cref="ProgressDelay"/>, a progress shows until it ends, and after <see cref="StopDelay"/> it offers to stop
-    /// git through <paramref name="stop"/>, which needs a confirmation.
+    /// its writing git commands in <paramref name="stop"/>, which needs a confirmation.
     /// </summary>
-    public async Task WatchAsync(Task run, CancellationTokenSource stop)
+    public Task WatchAsync(Task run, GitProcessStop stop) =>
+        WatchAsync(GitStrings.GitRunningTitle, GitStrings.GitRunningMessage, run, stop);
+
+    private async Task WatchAsync(string title, string message, Task run, GitProcessStop stop)
     {
-        if (await Task.WhenAny(run, Task.Delay(ProgressDelay)) != run)
+        using CancellationTokenSource delayEnd = new();
+        Task first = await Task.WhenAny(run, Task.Delay(ProgressDelay, delayEnd.Token));
+        delayEnd.Cancel();
+        if (first != run)
         {
-            await ShowStoppableProgressAsync(GitStrings.GitRunningTitle, GitStrings.GitRunningMessage, run, stop);
+            await ShowStoppableProgressAsync(title, message, run, stop);
         }
     }
 
     /// <summary>
-    /// Shows the progress of a writing git command until <paramref name="run"/> ends. Its stop button shows after
-    /// <see cref="StopDelay"/>; a stop the user confirms stops git through <paramref name="stop"/>, and a declined one
-    /// shows the progress again, then with the stop button at once. A progress that closes otherwise or cannot be
-    /// shown leaves git running.
+    /// Shows the progress of an operation with writing git commands until <paramref name="run"/> ends. Its stop button
+    /// shows after <see cref="StopDelay"/>; a stop the user confirms while a writing command runs stops it through
+    /// <paramref name="stop"/>, and a declined one shows the progress again, then with the stop button at once. The
+    /// progress and the question close when the operation ends; a progress that closes otherwise or cannot be shown
+    /// leaves git running.
     /// </summary>
-    private async Task ShowStoppableProgressAsync(string title, string message, Task run, CancellationTokenSource stop)
+    private async Task ShowStoppableProgressAsync(string title, string message, Task run, GitProcessStop stop)
     {
+        using CancellationTokenSource ended = new();
+        _ = run.ContinueWith(
+            _ =>
+            {
+                try
+                {
+                    ended.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
         TimeSpan delay = StopDelay;
         while (!run.IsCompleted)
         {
-            using CancellationTokenSource closeDialog = new();
-            Task<bool?> dialog = ShowProgressAsync(title, message, GitStrings.StopGitButton, delay, closeDialog.Token);
-            if (await Task.WhenAny(run, dialog) == run)
-            {
-                closeDialog.Cancel();
-                await dialog;
-                return;
-            }
-
-            if (await dialog != true)
+            if (await ShowProgressAsync(title, message, GitStrings.StopGitButton, delay, ended.Token) != true || run.IsCompleted)
             {
                 return;
             }
 
-            if (await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true))
+            if (stop.IsWriting
+                && await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true, ended.Token)
+                && !run.IsCompleted)
             {
-                stop.Cancel();
+                stop.Stop();
                 return;
             }
 
             delay = TimeSpan.Zero;
+            await Task.Yield();
         }
     }
 
@@ -460,7 +476,7 @@ internal sealed partial class GitCommandHandler
         where T : class
     {
         using CancellationTokenSource work = new();
-        using CancellationTokenSource stop = new();
+        using GitProcessStop stop = new();
         Task<T> run = _session.RunWithServicesAsync(operation, work.Token, stop);
         if (writes)
         {
@@ -477,6 +493,10 @@ internal sealed partial class GitCommandHandler
 
             closeDialog.Cancel();
             await dialog;
+
+            // A cancel does not stop a writing step that already runs, such as the fast-forward of a pull; when it
+            // does not end, the user can stop it as any writing command.
+            await WatchAsync(title, message, run, stop);
         }
 
         try
@@ -532,7 +552,7 @@ internal sealed partial class GitCommandHandler
         {
             return await _dialogHost.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest(title, message, cancelText, cancelDelay),
+                new ProgressDialogRequest(title, message, cancelText) { CancelDelay = cancelDelay },
                 closeToken);
         }
         catch (OperationCanceledException)
@@ -866,13 +886,29 @@ internal sealed partial class GitCommandHandler
     private Task<bool> ConfirmAsync(string message, string confirmText) =>
         ConfirmAsync(message, confirmText, GitStrings.DeleteBranchConfirmTitle, isDestructive: true);
 
-    private async Task<bool> ConfirmAsync(string message, string confirmText, string title, bool isDestructive)
+    /// <summary>
+    /// Asks the user; only an explicit confirmation is true. <paramref name="cancellationToken"/> closes the question
+    /// unanswered, which counts as declined.
+    /// </summary>
+    private async Task<bool> ConfirmAsync(
+        string message,
+        string confirmText,
+        string title,
+        bool isDestructive,
+        CancellationToken cancellationToken = default)
     {
-        bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
-            ConfirmationDialogRequest.DialogId,
-            new ConfirmationDialogRequest(title, message, confirmText, isDestructive),
-            CancellationToken.None);
-        return confirmed == true;
+        try
+        {
+            bool? confirmed = await _dialogHost.ShowDialogAsync<bool>(
+                ConfirmationDialogRequest.DialogId,
+                new ConfirmationDialogRequest(title, message, confirmText, isDestructive),
+                cancellationToken);
+            return confirmed == true && !cancellationToken.IsCancellationRequested;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private static GitBranch? FindBranch(IReadOnlyList<GitBranch> branches, string name)

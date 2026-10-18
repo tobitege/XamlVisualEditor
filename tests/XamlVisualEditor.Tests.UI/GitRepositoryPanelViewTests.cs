@@ -771,8 +771,6 @@ public sealed class GitRepositoryPanelViewTests
 
         public Task<bool> BranchAsync(string repoPath, GitStashEntry stash, string branchName, CancellationToken ct = default) =>
             throw new NotSupportedException();
-
-        public Task ClearAsync(string repoPath, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     /// <summary>A fixed list of remotes; changing them is not part of the panel.</summary>

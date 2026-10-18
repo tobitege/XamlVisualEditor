@@ -16,6 +16,8 @@ public sealed class GitOutputLoggerTests
     [InlineData("https://example.com/repo.git", "https://example.com/repo.git")]
     [InlineData("git@github.com:owner/repo.git", "git@github.com:owner/repo.git")]
     [InlineData("https://example.com/a@b/repo.git", "https://example.com/a@b/repo.git")]
+    [InlineData("https://user:p@ss@example.com/repo.git", "https://***@example.com/repo.git")]
+    [InlineData("see https://a:b@x.org/r and https://y.org/s?u=v@w", "see https://***@x.org/r and https://y.org/s?u=v@w")]
     [InlineData("../remote.git", "../remote.git")]
     public void Mask_replaces_the_user_information_of_urls(string text, string expected)
     {

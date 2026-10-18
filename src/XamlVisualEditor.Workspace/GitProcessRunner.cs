@@ -120,10 +120,12 @@ internal sealed class GitProcessRunner
         // or a credential helper only after it read its configuration and the repository. Another wrapper, such as
         // a script on PATH, can start git before the assignment. Creating the process suspended would need
         // CreateProcess with own pipes instead of Process.
-        // A process that nothing can stop needs no job to be killed. A writing command finishes also when the editor
-        // ends (see GitService.RunGitAsync), so its job does not end its processes with the editor.
-        using GitProcessJob? job = OperatingSystem.IsWindows() && token.CanBeCanceled
-            ? GitProcessJob.TryAssign(process, _logger, killOnClose: request.Access != GitCommandAccess.Write)
+        // The editor ending does not kill a writing command (see GitService.RunGitAsync): its job, which only a stop
+        // uses, does not end its processes with the editor, and one without stop has no job. Every other command ends
+        // with the editor.
+        bool writes = request.Access == GitCommandAccess.Write;
+        using GitProcessJob? job = OperatingSystem.IsWindows() && (!writes || token.CanBeCanceled)
+            ? GitProcessJob.TryAssign(process, _logger, killOnClose: !writes)
             : null;
 
         // Set only when cancellation or the timeout killed the running process; a process that ended on its own

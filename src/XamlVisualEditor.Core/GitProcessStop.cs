@@ -4,31 +4,84 @@ using System.Threading;
 namespace XamlVisualEditor.Core;
 
 /// <summary>
-/// Lets the user stop the writing git commands started in a scope. A writing command otherwise runs to its end once it
-/// started, also when its cancellation token is cancelled or the editor closes, because a command stopped half way can
-/// leave <c>index.lock</c> behind and a half updated working tree; a stop accepts that risk for a command that hangs,
-/// for example in a hook.
+/// A scope in which the user can stop the writing git commands. A writing command otherwise is not stopped once it
+/// started, neither by its cancellation token nor by the editor ending, because a command stopped half way can leave
+/// <c>index.lock</c> behind and a half updated working tree; a stop accepts that risk for a command that hangs, for
+/// example in a hook. The scope counts the writing commands that wait for or run git, so a caller offers the stop only
+/// while one of them runs and learns when the last one ended.
 /// </summary>
-public static class GitProcessStop
+public sealed class GitProcessStop : IDisposable
 {
-    private static readonly AsyncLocal<CancellationToken> CurrentStop = new();
+    private static readonly AsyncLocal<GitProcessStop?> CurrentScope = new();
 
-    /// <summary>Gets the token that stops the writing git commands of the current scope; none outside a scope.</summary>
-    public static CancellationToken Current => CurrentStop.Value;
+    private readonly CancellationTokenSource _stop = new();
+    private int _writing;
+
+    /// <summary>Gets the scope of the current asynchronous flow; null outside a scope.</summary>
+    public static GitProcessStop? Current => CurrentScope.Value;
+
+    /// <summary>Gets the token that a stop cancels.</summary>
+    public CancellationToken Token => _stop.Token;
+
+    /// <summary>Gets whether a writing git command of the scope waits for or runs git.</summary>
+    public bool IsWriting => Volatile.Read(ref _writing) > 0;
+
+    /// <summary>Gets whether the scope was stopped.</summary>
+    public bool IsStopped => _stop.IsCancellationRequested;
+
+    /// <summary>Raised on any thread when <see cref="IsWriting"/> changes.</summary>
+    public event EventHandler? WritingChanged;
 
     /// <summary>
-    /// Lets <paramref name="stop"/> stop the writing git commands that are started until the result is disposed,
-    /// including those of the tasks started meanwhile.
+    /// Makes this the scope of the current flow until the result is disposed, including the tasks started meanwhile.
     /// </summary>
-    public static IDisposable Allow(CancellationToken stop)
+    public IDisposable Enter()
     {
-        CancellationToken previous = CurrentStop.Value;
-        CurrentStop.Value = stop;
-        return new Scope(previous);
+        GitProcessStop? previous = CurrentScope.Value;
+        CurrentScope.Value = this;
+        return new Restore(previous);
     }
 
-    private sealed class Scope(CancellationToken previous) : IDisposable
+    /// <summary>Stops the writing git commands of the scope that wait for or run git, and those that start later.</summary>
+    public void Stop() => _stop.Cancel();
+
+    /// <summary>Counts a writing git command until the result is disposed.</summary>
+    public IDisposable BeginWrite()
     {
-        public void Dispose() => CurrentStop.Value = previous;
+        if (Interlocked.Increment(ref _writing) == 1)
+        {
+            WritingChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        return new WriteEnd(this);
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _stop.Dispose();
+
+    private void EndWrite()
+    {
+        if (Interlocked.Decrement(ref _writing) == 0)
+        {
+            WritingChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private sealed class Restore(GitProcessStop? previous) : IDisposable
+    {
+        public void Dispose() => CurrentScope.Value = previous;
+    }
+
+    private sealed class WriteEnd(GitProcessStop scope) : IDisposable
+    {
+        private int _ended;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _ended, 1) == 0)
+            {
+                scope.EndWrite();
+            }
+        }
     }
 }

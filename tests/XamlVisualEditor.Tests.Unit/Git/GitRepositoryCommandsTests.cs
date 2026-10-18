@@ -72,6 +72,7 @@ public sealed class GitRepositoryCommandsTests
         await fixture.ExecuteAsync(GitCommands.RENAME_REMOTE);
 
         Assert.Equal("https://user:token@example.com/repo.git", fixture.Window.InputBoxes[^2].Value);
+        Assert.EndsWith(GitStrings.RemoteUrlShowsCredentials, fixture.Window.InputBoxes[^2].Prompt, StringComparison.Ordinal);
         Assert.Equal(("origin", "https://example.com/other.git"), (fixture.Window.QuickPicks[^1].Items[0].Label, fixture.Window.QuickPicks[^1].Items[0].Description));
         Assert.Equal("https://example.com/other.git", fixture.Repository.RunGit("remote", "get-url", "upstream").Trim());
         Assert.True(fixture.Session.Current.HasRemote);
@@ -235,7 +236,7 @@ public sealed class GitRepositoryCommandsTests
         {
             await fixture.ExecuteAsync(GitCommands.STASH_CLEAR);
 
-            Assert.Equal([GitStrings.StashesChanged], fixture.Window.Infos);
+            Assert.Equal([string.Format(GitStrings.StashesChangedFormat, 0, 1)], fixture.Window.Infos);
             Assert.Equal("2", fixture.Repository.RunGit("rev-list", "--walk-reflogs", "--count", "refs/stash").Trim());
         }
     }

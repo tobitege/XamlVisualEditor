@@ -293,7 +293,7 @@
   <data name="MarkResolvedWithMarkersPromptFormat" xml:space="preserve"><value>Diese Dateien enthalten noch Konfliktmarker:
 {0}
 Trotzdem als gelöst markieren?</value></data>
-  <data name="MarkResolvedUnsavedFormat" xml:space="preserve"><value>Diese Dateien zuerst speichern. Git markiert die gespeicherte Datei als gelöst, nicht den Text im Editor.
+  <data name="MarkResolvedUnsavedFormat" xml:space="preserve"><value>Speichere diese Dateien zuerst. Git markiert die gespeicherte Datei als gelöst, nicht den Text im Editor.
 {0}</value></data>
   <data name="ResolveConflictCommand" xml:space="preserve"><value>Konflikt lösen …</value></data>
   <data name="ResolveOursLabel" xml:space="preserve"><value>Aktuelle übernehmen</value></data>
@@ -310,11 +310,11 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="ConflictAddedByThem" xml:space="preserve"><value>von ihnen hinzugefügt</value></data>
   <data name="ConflictDeletedByUs" xml:space="preserve"><value>von uns gelöscht</value></data>
   <data name="ConflictDeletedByThem" xml:space="preserve"><value>von ihnen gelöscht</value></data>
-  <data name="CommitWithConflicts" xml:space="preserve"><value>Vor dem Commit die Konflikte lösen und die Dateien als gelöst markieren.</value></data>
+  <data name="CommitWithConflicts" xml:space="preserve"><value>Löse vor dem Commit die Konflikte und markiere die Dateien als gelöst.</value></data>
   <data name="AmendDuringOperation" xml:space="preserve"><value>Der letzte Commit kann nicht geändert werden, solange ein Vorgang läuft, außer bei einem Edit-Schritt eines Rebase.</value></data>
   <data name="CommitDuringOperationFormat" xml:space="preserve"><value>Im laufenden Vorgang ({0}) ist kein Commit möglich. Fortsetzen committet den aktuellen Schritt und macht weiter.</value></data>
   <data name="LogConflictBlocksFailed" xml:space="preserve"><value>Das Lesen der Konfliktblöcke eines Dokuments ist fehlgeschlagen.</value></data>
-  <data name="RefusedDuringOperationFormat" xml:space="preserve"><value>Das geht nicht, solange ein Vorgang läuft ({0}). Erst abschließen oder abbrechen.</value></data>
+  <data name="RefusedDuringOperationFormat" xml:space="preserve"><value>Das geht nicht, solange ein Vorgang läuft ({0}). Schließe ihn zuerst ab oder brich ihn ab.</value></data>
   <data name="RenameBranchCommand" xml:space="preserve"><value>Branch umbenennen …</value></data>
   <data name="RenameBranchPickTitle" xml:space="preserve"><value>Branch umbenennen</value></data>
   <data name="RenameBranchPromptFormat" xml:space="preserve"><value>Neuer Name für {0}</value></data>
@@ -358,14 +358,15 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="MergePromptFormat" xml:space="preserve"><value>{0} in {1} mergen?</value></data>
   <data name="MergeConfirm" xml:space="preserve"><value>Mergen</value></data>
   <data name="OperationChanged" xml:space="preserve"><value>Der laufende Vorgang hat sich geändert, während die Frage offen war. Es wurde nichts abgebrochen.</value></data>
-  <data name="StashesChanged" xml:space="preserve"><value>Die Stashes haben sich geändert, während die Frage offen war. Es wurde nichts gelöscht.</value></data>
-  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Diese Dateien zuerst speichern oder schließen. Eine Seite zu übernehmen ersetzt sie, und der Editor hat ungespeicherte Änderungen daran.
+  <data name="StashesChangedFormat" xml:space="preserve"><value>Die Stashes haben sich geändert, während die Frage offen war. {0} der {1} bestätigten Stashes wurden gelöscht, seitdem angelegte Stashes bleiben erhalten.</value></data>
+  <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Speichere oder schließe diese Dateien zuerst. Eine Seite zu übernehmen ersetzt sie, und der Editor hat ungespeicherte Änderungen daran.
 {0}</value></data>
   <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} wurde in {0} gepullt. Der Push wurde abgebrochen.</value></data>
   <data name="GitRunningTitle" xml:space="preserve"><value>Git</value></data>
   <data name="GitRunningMessage" xml:space="preserve"><value>git läuft. Endet es nicht, etwa weil ein Hook wartet, lässt es sich nach kurzer Wartezeit stoppen.</value></data>
   <data name="StopGitButton" xml:space="preserve"><value>git stoppen …</value></data>
   <data name="StopGitConfirm" xml:space="preserve"><value>git stoppen</value></data>
-  <data name="StopGitPrompt" xml:space="preserve"><value>git läuft noch, möglicherweise in einem wartenden Hook. Jetzt zu stoppen kann den Befehl halb fertig zurücklassen: eine zurückgebliebene .git\index.lock und ein teilweise aktualisiertes Arbeitsverzeichnis. git trotzdem stoppen?</value></data>
-  <data name="GitStopped" xml:space="preserve"><value>git wurde gestoppt. Bitte das Git-Änderungen-Panel prüfen, der Befehl kann halb fertig sein. Eine zurückgebliebene .git\index.lock muss vor dem nächsten git-Befehl gelöscht werden.</value></data>
+  <data name="StopGitPrompt" xml:space="preserve"><value>git läuft noch, möglicherweise in einem wartenden Hook. Jetzt zu stoppen kann den Befehl halb fertig zurücklassen: eine zurückgebliebene .git/index.lock und ein teilweise aktualisiertes Arbeitsverzeichnis. git trotzdem stoppen?</value></data>
+  <data name="GitStopped" xml:space="preserve"><value>git wurde gestoppt. Prüfe das Panel „Git-Änderungen“, der Befehl kann halb fertig sein. Eine zurückgebliebene .git/index.lock musst du vor dem nächsten git-Befehl löschen.</value></data>
+  <data name="RemoteUrlShowsCredentials" xml:space="preserve"><value>Das Feld zeigt die URL mit den enthaltenen Zugangsdaten.</value></data>
 </root>

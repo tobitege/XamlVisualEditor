@@ -189,7 +189,7 @@ public sealed class DialogPresentationTests
             using CancellationTokenSource workDone = new();
             Task<bool?> result = host.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest("Continue", "Continuing", "Stop git…", TimeSpan.FromMilliseconds(300)),
+                new ProgressDialogRequest("Continue", "Continuing", "Stop git…") { CancelDelay = TimeSpan.FromMilliseconds(300) },
                 workDone.Token);
             Flush(owner);
             ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));

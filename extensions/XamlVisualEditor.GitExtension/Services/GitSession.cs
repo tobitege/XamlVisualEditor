@@ -268,7 +268,7 @@ public sealed class GitSession : IDisposable
             using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 _lifetime.Token);
-            await RunWatchedAsync(stop => operation(_services.Service, repositoryRoot, linked.Token), null).ConfigureAwait(false);
+            await RunWatchedAsync(() => operation(_services.Service, repositoryRoot, linked.Token), null).ConfigureAwait(false);
         }
         finally
         {
@@ -277,46 +277,53 @@ public sealed class GitSession : IDisposable
     }
 
     /// <summary>
-    /// Gets or sets what watches a running operation: it gets the operation and the source that stops its writing git
-    /// commands, shows a progress once the operation runs longer than a moment and lets the user stop git that hangs,
-    /// for example in a hook. Null runs operations without watching.
+    /// Gets or sets what watches a running operation: it gets the operation and the scope in which the user can stop
+    /// its writing git commands, shows a progress once the operation runs longer than a moment and lets the user stop
+    /// git that hangs, for example in a hook. Null runs operations without watching.
     /// </summary>
-    public Func<Task, CancellationTokenSource, Task>? Watch { get; set; }
+    public Func<Task, GitProcessStop, Task>? Watch { get; set; }
 
     /// <summary>
-    /// Starts <paramref name="operation"/> in a scope where <paramref name="stop"/>, or a source of its own that
-    /// <see cref="Watch"/> gets, can stop its writing git commands, and reports a stop as
-    /// <see cref="InvalidOperationException"/>.
+    /// Starts <paramref name="operation"/> in <paramref name="stop"/>, or in a scope of its own that
+    /// <see cref="Watch"/> gets, and waits for it; a stop is reported as <see cref="GitStoppedException"/>.
     /// </summary>
-    private async Task<T> RunWatchedAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationTokenSource? stop)
+    private async Task<T> RunWatchedAsync<T>(Func<Task<T>> operation, GitProcessStop? stop)
     {
-        using CancellationTokenSource ownStop = new();
-        CancellationTokenSource stopSource = stop ?? ownStop;
+        using GitProcessStop ownStop = new();
+        GitProcessStop scope = stop ?? ownStop;
         Task<T> run;
-        using (GitProcessStop.Allow(stopSource.Token))
+        using (scope.Enter())
         {
-            run = operation(stopSource.Token);
+            run = operation();
         }
 
         if (stop is null && Watch is { } watch)
         {
-            await watch(run, ownStop).ConfigureAwait(false);
+            // A watch that fails must not leave the operation running unobserved.
+            try
+            {
+                await watch(run, ownStop).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger?.Error(GitStrings.LogProgressDialogFailed, exception);
+            }
         }
 
         try
         {
             return await run.ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (stopSource.IsCancellationRequested)
+        catch (OperationCanceledException) when (scope.IsStopped)
         {
-            throw new InvalidOperationException(GitStrings.GitStopped);
+            throw new GitStoppedException();
         }
     }
 
-    private Task RunWatchedAsync(Func<CancellationToken, Task> operation, CancellationTokenSource? stop) =>
-        RunWatchedAsync<bool>(async token =>
+    private Task RunWatchedAsync(Func<Task> operation, GitProcessStop? stop) =>
+        RunWatchedAsync<bool>(async () =>
         {
-            await operation(token).ConfigureAwait(false);
+            await operation().ConfigureAwait(false);
             return true;
         }, stop);
 
@@ -329,13 +336,13 @@ public sealed class GitSession : IDisposable
     /// <param name="operation">The operation.</param>
     /// <param name="cancellationToken">Cancels the operation; a writing git command that started runs to its end.</param>
     /// <param name="stop">
-    /// Stops the writing git commands of the operation, for a caller that shows its own progress; without it,
-    /// <see cref="Watch"/> watches the operation.
+    /// The scope in which the user can stop the writing git commands of the operation, for a caller that shows its own
+    /// progress; without it, <see cref="Watch"/> watches the operation.
     /// </param>
     public async Task<T> RunWithServicesAsync<T>(
         Func<GitServiceSet, string, CancellationToken, Task<T>> operation,
         CancellationToken cancellationToken = default,
-        CancellationTokenSource? stop = null)
+        GitProcessStop? stop = null)
     {
         string repositoryRoot = Current.RepositoryRoot
             ?? throw new InvalidOperationException(UiStrings.WorkspaceNotGitRepository);
@@ -344,7 +351,7 @@ public sealed class GitSession : IDisposable
             using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 _lifetime.Token);
-            return await RunWatchedAsync(_ => operation(_services, repositoryRoot, linked.Token), stop).ConfigureAwait(false);
+            return await RunWatchedAsync(() => operation(_services, repositoryRoot, linked.Token), stop).ConfigureAwait(false);
         }
         finally
         {

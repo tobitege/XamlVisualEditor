@@ -307,45 +307,75 @@ public sealed class GitBranchServiceTests
     }
 
     [Fact]
-    public async Task A_switch_that_the_user_stops_ends_git_with_its_hanging_hook()
+    public async Task A_switch_that_the_user_stops_ends_git_with_its_running_hook()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");
         repository.RunGit("branch", "other");
-        WritePostCheckoutHook(repository, "sleep 60");
+        // Without the stop, the hook would write its second marker after three seconds.
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 3; touch .git/hook-finished");
         GitService service = new(options: repository.ProcessOptions);
-        using CancellationTokenSource stop = new();
+        using GitProcessStop stop = new();
         Task switching;
-        using (GitProcessStop.Allow(stop.Token))
+        using (stop.Enter())
         {
             switching = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
         }
 
-        await Task.Delay(500, TestContext.Current.CancellationToken);
-        Stopwatch stopped = Stopwatch.StartNew();
-        stop.Cancel();
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+        Assert.True(stop.IsWriting);
+        stop.Stop();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => switching);
-        Assert.True(stopped.Elapsed < TimeSpan.FromSeconds(20), stopped.Elapsed.ToString());
+        Assert.False(stop.IsWriting);
+        await Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
     }
 
     [Fact]
-    public async Task A_switch_cancelled_while_git_runs_runs_to_its_end()
+    public async Task A_switch_cancelled_while_its_hook_runs_runs_to_its_end()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");
         repository.RunGit("branch", "other");
-        // The hook keeps git running after the checkout, long enough to cancel it.
-        WritePostCheckoutHook(repository, "sleep 2");
-
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 2; touch .git/hook-finished");
         GitService service = new(options: repository.ProcessOptions);
         using CancellationTokenSource cancel = new();
         Task switching = service.SwitchAsync(repository.Path, "other", cancel.Token);
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
         cancel.Cancel();
 
         await switching;
 
         Assert.Equal("other", CurrentBranch(repository));
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
         Assert.False(File.Exists(Path.Combine(repository.Path, ".git", "index.lock")));
+    }
+
+    [Fact]
+    public async Task A_stop_ends_a_writing_command_that_waits_for_another_one()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WritePostCheckoutHook(repository, "touch .git/hook-started; sleep 4; touch .git/hook-finished");
+        GitService service = new(options: repository.ProcessOptions);
+        Task first = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        await WaitForFileAsync(Path.Combine(repository.Path, ".git", "hook-started"));
+        using GitProcessStop stop = new();
+        Task waiting;
+        using (stop.Enter())
+        {
+            waiting = service.DeleteAsync(repository.Path, "main", force: true, CancellationToken.None);
+        }
+
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.True(stop.IsWriting);
+        Stopwatch stopped = Stopwatch.StartNew();
+        stop.Stop();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+        Assert.True(stopped.Elapsed < TimeSpan.FromSeconds(2), stopped.Elapsed.ToString());
+        await first;
+        Assert.True(File.Exists(Path.Combine(repository.Path, ".git", "hook-finished")));
+        Assert.Contains("main", Branches(repository));
     }
 
     [Fact]
@@ -356,6 +386,16 @@ public sealed class GitBranchServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.DeleteAsync(repository.Path, "main", force: true, TestContext.Current.CancellationToken));
+    }
+
+    private static async Task WaitForFileAsync(string path)
+    {
+        Stopwatch waited = Stopwatch.StartNew();
+        while (!File.Exists(path))
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), "The hook did not start: " + path);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
     }
 
     private static void WritePostCheckoutHook(GitTestRepository repository, string command)

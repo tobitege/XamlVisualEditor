@@ -62,6 +62,12 @@ internal sealed partial class GitCommandHandler
         string prompt = string.Equals(remote.PushUrl, remote.FetchUrl, StringComparison.Ordinal)
             ? string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlPromptFormat, remote.Name)
             : string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlKeepsPushUrlPromptFormat, remote.Name, GitUrlCredentials.Mask(remote.PushUrl));
+        // The field shows the URL as it is, to be edited; the prompt says when that shows credentials.
+        if (!string.Equals(GitUrlCredentials.Mask(remote.FetchUrl), remote.FetchUrl, StringComparison.Ordinal))
+        {
+            prompt += " " + GitStrings.RemoteUrlShowsCredentials;
+        }
+
         string? url = await AskAsync(GitStrings.SetRemoteUrlCommand, prompt, remote.FetchUrl);
         if (url is not null && !string.Equals(url, remote.FetchUrl, StringComparison.Ordinal))
         {

@@ -111,7 +111,7 @@ public sealed partial class GitService
         {
             GitProcessResult result = await RunGitAsync(
                 repoPath,
-                new[] { "rev-parse", "--verify", "--quiet", name },
+                new[] { "rev-parse", "--verify", "--quiet", "--end-of-options", name },
                 GitCommandAccess.Read,
                 ct,
                 allowNonZeroExitCode: true);

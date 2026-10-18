@@ -359,13 +359,18 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         }
 
         // A writing command stopped half way can leave index.lock behind and a half updated working tree, so once it
-        // runs, it is finished: cancelling stops only the wait for the other writing commands, and only a stop the
-        // user confirmed ends the process (see GitProcessStop). A commit stays cancellable, because its hooks can hang
-        // and stopping git before it writes the commit changes nothing.
+        // runs, it is not stopped by cancelling, which stops only the wait for the other writing commands; only a stop
+        // the user confirmed in its scope ends the wait or the process (see GitProcessStop). A commit stays
+        // cancellable, because its hooks can hang and stopping git before it writes the commit changes nothing.
+        GitProcessStop? scope = access == GitCommandAccess.Write && !cancellable ? GitProcessStop.Current : null;
+        using IDisposable? writing = scope?.BeginWrite();
+        using CancellationTokenSource? waitStop = scope is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(waitCancellation ?? ct, scope.Token);
         if (access == GitCommandAccess.Write && !cancellable)
         {
-            waitCancellation ??= ct;
-            ct = GitProcessStop.Current;
+            waitCancellation = waitStop?.Token ?? waitCancellation ?? ct;
+            ct = scope?.Token ?? CancellationToken.None;
         }
 
         Action<IReadOnlyList<string>, int>? processStarted = _options.ProcessStarted;

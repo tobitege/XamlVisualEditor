@@ -10,8 +10,8 @@ namespace XamlVisualEditor.Workspace;
 /// A Windows job object that holds a git process and every process it starts, also a process whose parent already
 /// ended, as with the processes a hook starts through the MSYS shell. Processes started by a process of the job
 /// belong to the job, because the job does not allow breaking away. While the job is open, its processes end when the
-/// editor ends (<c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>), except in the job of a writing command, which must run to
-/// its end and is only ended by <see cref="Terminate"/>. <see cref="Release"/> lifts that limit before it closes
+/// editor ends (<c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>), except in the job of a writing command, which the editor
+/// ending must not kill and only <see cref="Terminate"/> ends. <see cref="Release"/> lifts that limit before it closes
 /// the job, so processes that a finished git command leaves behind on purpose, such as the file system monitor
 /// daemon, keep running. Only for Windows.
 /// </summary>
@@ -24,11 +24,13 @@ internal sealed class GitProcessJob : IDisposable
     private readonly JobHandle _handle;
     private readonly ILogger _logger;
     private readonly object _sync = new();
+    private readonly bool _killOnClose;
 
-    private GitProcessJob(JobHandle handle, ILogger logger)
+    private GitProcessJob(JobHandle handle, ILogger logger, bool killOnClose)
     {
         _handle = handle;
         _logger = logger;
+        _killOnClose = killOnClose;
     }
 
     /// <summary>
@@ -38,7 +40,7 @@ internal sealed class GitProcessJob : IDisposable
     /// <param name="process">The started git process.</param>
     /// <param name="logger">Receives why the assignment failed.</param>
     /// <param name="killOnClose">
-    /// Whether the processes end when the editor ends; false for a writing command, which must run to its end.
+    /// Whether the processes end when the editor ends; false for a writing command, which the editor ending must not kill.
     /// </param>
     public static GitProcessJob? TryAssign(Process process, ILogger logger, bool killOnClose = true)
     {
@@ -63,7 +65,7 @@ internal sealed class GitProcessJob : IDisposable
             return null;
         }
 
-        return new GitProcessJob(handle, logger);
+        return new GitProcessJob(handle, logger, killOnClose);
     }
 
     /// <summary>Kills every process of the job; returns false when the job is closed or could not be terminated.</summary>
@@ -96,7 +98,7 @@ internal sealed class GitProcessJob : IDisposable
                 return;
             }
 
-            if (!SetLimitFlags(_handle, 0))
+            if (_killOnClose && !SetLimitFlags(_handle, 0))
             {
                 _logger.LogWarning(
                     "The kill-on-close limit of a git job could not be lifted (error {Error}); its remaining processes end now.",

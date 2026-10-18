@@ -136,22 +136,38 @@ public sealed class ProgressDialogViewModel : ReactiveObject
     public string Message { get; }
     public string CancelText { get; }
 
-    /// <summary>Gets whether the user can cancel; false hides the cancel button and ignores the window button.</summary>
-    public bool CanCancel { get; }
+    private bool _canCancel;
+
+    /// <summary>
+    /// Gets whether the user can cancel: from the start, or once the view called <see cref="AllowCancel"/> after
+    /// <see cref="CancelDelay"/>. Until then the cancel button is hidden and the window button does nothing.
+    /// </summary>
+    public bool CanCancel
+    {
+        get => _canCancel;
+        private set => this.RaiseAndSetIfChanged(ref _canCancel, value);
+    }
+
+    /// <summary>Gets how long the shown dialog waits before the user can cancel.</summary>
+    public TimeSpan CancelDelay { get; }
+
+    /// <summary>Lets the user cancel; the view calls it once <see cref="CancelDelay"/> elapsed.</summary>
+    public void AllowCancel() => CanCancel = true;
 
     public Interaction<bool, RxVoid> CloseInteraction { get; } = new();
 
     public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
 
-    public ProgressDialogViewModel(string title, string message, string? cancelText = null, bool canCancel = true)
+    public ProgressDialogViewModel(string title, string message, string? cancelText = null, TimeSpan cancelDelay = default)
     {
         Title = title;
         Message = message;
         CancelText = string.IsNullOrWhiteSpace(cancelText) ? UiStrings.Cancel : cancelText;
-        CanCancel = canCancel;
+        CancelDelay = cancelDelay > TimeSpan.Zero ? cancelDelay : TimeSpan.Zero;
+        CanCancel = CancelDelay == TimeSpan.Zero;
         CancelCommand = ReactiveCommand.CreateFromTask(
             async () => await CloseInteraction.Handle(true),
-            Observable.Return(canCancel));
+            this.WhenAnyValue(x => x.CanCancel));
     }
 }
 

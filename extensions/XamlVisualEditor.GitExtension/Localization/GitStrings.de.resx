@@ -362,4 +362,10 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Diese Dateien zuerst speichern oder schließen. Eine Seite zu übernehmen ersetzt sie, und der Editor hat ungespeicherte Änderungen daran.
 {0}</value></data>
   <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} wurde in {0} gepullt. Der Push wurde abgebrochen.</value></data>
+  <data name="GitRunningTitle" xml:space="preserve"><value>Git</value></data>
+  <data name="GitRunningMessage" xml:space="preserve"><value>git läuft. Endet es nicht, etwa weil ein Hook wartet, lässt es sich nach kurzer Wartezeit stoppen.</value></data>
+  <data name="StopGitButton" xml:space="preserve"><value>git stoppen …</value></data>
+  <data name="StopGitConfirm" xml:space="preserve"><value>git stoppen</value></data>
+  <data name="StopGitPrompt" xml:space="preserve"><value>git läuft noch, möglicherweise in einem wartenden Hook. Jetzt zu stoppen kann den Befehl halb fertig zurücklassen: eine zurückgebliebene .git\index.lock und ein teilweise aktualisiertes Arbeitsverzeichnis. git trotzdem stoppen?</value></data>
+  <data name="GitStopped" xml:space="preserve"><value>git wurde gestoppt. Bitte das Git-Änderungen-Panel prüfen, der Befehl kann halb fertig sein. Eine zurückgebliebene .git\index.lock muss vor dem nächsten git-Befehl gelöscht werden.</value></data>
 </root>

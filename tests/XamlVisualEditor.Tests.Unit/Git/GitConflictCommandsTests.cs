@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -280,8 +281,40 @@ public sealed class GitConflictCommandsTests
 
         Assert.Equal(GitRepositoryOperation.None, fixture.Session.Current.Operation);
         Assert.Equal("Orig|Feature", repository.RunGit("log", "-1", "--format=%an|%s").Trim());
-        // git continues to the end once it started, so the progress offers no cancel.
-        Assert.False(Assert.Single(fixture.Dialogs.Progress).CanCancel);
+        // git continues to the end once it started, so the progress offers to stop it only after a wait.
+        ProgressDialogRequest progress = Assert.Single(fixture.Dialogs.Progress);
+        Assert.True(progress.CancelDelay > TimeSpan.Zero);
+        Assert.Equal(GitStrings.StopGitButton, progress.CancelText);
+    }
+
+    [Fact]
+    public async Task A_checkout_that_hangs_in_a_hook_is_stopped_only_after_a_confirmation()
+    {
+        GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\nsleep 60\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        // The first stop is declined, the progress shows again, and the second stop is confirmed.
+        int questions = 0;
+        using Fixture fixture = await Fixture.ForAsync(repository, (_, _) => ++questions == 2);
+        fixture.Handler.ProgressDelay = TimeSpan.Zero;
+        fixture.Handler.StopDelay = TimeSpan.Zero;
+        fixture.Session.Watch = fixture.Handler.WatchAsync;
+        fixture.Dialogs.ProgressMode = ProgressDialogMode.Cancel;
+        Stopwatch elapsed = Stopwatch.StartNew();
+
+        await fixture.ExecuteAsync(GitCommands.CHECKOUT, "other");
+
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(30), elapsed.Elapsed.ToString());
+        Assert.Equal(2, questions);
+        Assert.All(fixture.Dialogs.Confirmations, question => Assert.True(question.IsDestructive));
+        Assert.Equal(2, fixture.Dialogs.Progress.Count());
+        Assert.Contains(GitStrings.GitStopped, Assert.Single(fixture.Window.Errors));
     }
 
     [Fact]
@@ -372,13 +405,16 @@ public sealed class GitConflictCommandsTests
             Session = new GitSession(
                 GitServiceSet.FromService(new GitService(options: repository.ProcessOptions)),
                 new FakeWorkspaceInfo { WorkspacePath = repository.Path });
-            GitCommandHandler handler = new(Session, ViewHost, Window, Dialogs, Editor, null, () => null, null);
+            Handler = new(Session, ViewHost, Window, Dialogs, Editor, null, () => null, null);
+            GitCommandHandler handler = Handler;
             GitCommands.RegisterCommands(Commands, new CommandMetadataRegistry(), handler, new List<IDisposable>());
         }
 
         public GitTestRepository Repository { get; }
 
         public GitSession Session { get; }
+
+        public GitCommandHandler Handler { get; }
 
         public GitDialogHost Dialogs { get; }
 

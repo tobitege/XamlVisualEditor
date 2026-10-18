@@ -12,14 +12,15 @@ namespace XamlVisualEditor.App.Views;
 public sealed partial class ProgressDialog : Window
 {
     private IDisposable? _closeHandler;
+    private IDisposable? _cancelTimer;
 
     public ProgressDialog()
     {
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += (_, _) => RegisterCloseHandler();
         Closed += (_, _) => _closeHandler?.Dispose();
-        // The window button cancels like the cancel button: the dialog closes with the result true. Work that cannot be
-        // cancelled keeps the dialog open until it ends.
+        // The window button cancels like the cancel button: the dialog closes with the result true. Before the cancel
+        // delay elapsed, it does nothing, as the hidden cancel button.
         Closing += (_, args) =>
         {
             if (args.CloseReason == WindowCloseReason.WindowClosing && !args.IsProgrammatic)
@@ -36,6 +37,15 @@ public sealed partial class ProgressDialog : Window
         Opened += (_, _) => Dispatcher.UIThread.Post(
             () => this.FindControl<ProgressBar>("Progress")!.IsIndeterminate = true,
             DispatcherPriority.Loaded);
+        // The cancel delay counts from the moment the dialog shows.
+        Opened += (_, _) =>
+        {
+            if (DataContext is ProgressDialogViewModel { CanCancel: false } vm)
+            {
+                _cancelTimer = DispatcherTimer.RunOnce(vm.AllowCancel, vm.CancelDelay);
+            }
+        };
+        Closed += (_, _) => _cancelTimer?.Dispose();
     }
 
     private void RegisterCloseHandler()

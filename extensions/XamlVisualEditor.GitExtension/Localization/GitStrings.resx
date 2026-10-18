@@ -362,4 +362,10 @@ Mark them resolved anyway?</value></data>
   <data name="TakeSideUnsavedFormat" xml:space="preserve"><value>Save or close these files first. Taking a side replaces them, and the editor holds unsaved changes of them.
 {0}</value></data>
   <data name="SyncPushCancelledFormat" xml:space="preserve"><value>{1} was pulled into {0}. The push was cancelled.</value></data>
+  <data name="GitRunningTitle" xml:space="preserve"><value>Git</value></data>
+  <data name="GitRunningMessage" xml:space="preserve"><value>git is running. If it does not end, for example because a hook waits, it can be stopped after a short wait.</value></data>
+  <data name="StopGitButton" xml:space="preserve"><value>Stop git…</value></data>
+  <data name="StopGitConfirm" xml:space="preserve"><value>Stop git</value></data>
+  <data name="StopGitPrompt" xml:space="preserve"><value>git is still running, possibly in a hook that waits. Stopping it now can leave the command half done: a .git\index.lock left behind and a partly updated working tree. Stop git anyway?</value></data>
+  <data name="GitStopped" xml:space="preserve"><value>git was stopped. Check the Git Changes panel, the command may be half done. A .git\index.lock that git left behind has to be deleted before the next git command.</value></data>
 </root>

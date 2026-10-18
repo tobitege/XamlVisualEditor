@@ -71,6 +71,7 @@ public sealed class GitExtension : IXveExtension
             explorerDecorations,
             changeMarkers,
             executeCommand);
+        session.Watch = handler.WatchAsync;
 
         IStatusBarItem statusBarItem = context.Window.CreateStatusBarItem(StatusBarAlignment.Left, GitStatusBar.PRIORITY);
         statusBarItem.CommandId = GitCommands.SHOW_CHANGES;

@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Reactive.Linq;
+using System.Reflection;
+using ReactiveUI;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -118,14 +120,14 @@ public sealed class DialogPresentationTests
     }
 
     [AvaloniaFact]
-    public async Task ProgressWithoutMainWindowCompletesAtOnceAndClosesWithItsToken()
+    public async Task DialogWithoutMainWindowCompletesAtOnceAndClosesWithItsToken()
     {
         AppDialogHost host = new(new MainWindowProvider());
         Window shown = new();
-        using IDisposable registration = host.RegisterDialog(ProgressDialogRequest.DialogId, _ => shown);
+        using IDisposable registration = host.RegisterDialog("test.unowned", _ => shown);
         using CancellationTokenSource workDone = new();
 
-        bool? result = await host.ShowDialogAsync<bool?>(ProgressDialogRequest.DialogId, null, workDone.Token);
+        bool? result = await host.ShowDialogAsync<bool?>("test.unowned", null, workDone.Token);
         Dispatcher.UIThread.RunJobs();
         Assert.Null(result);
         Assert.True(shown.IsVisible);
@@ -134,20 +136,6 @@ public sealed class DialogPresentationTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.False(shown.IsVisible);
-    }
-
-    [AvaloniaFact]
-    public async Task A_question_without_main_window_is_not_shown_and_answers_no()
-    {
-        AppDialogHost host = new(new MainWindowProvider());
-        Window question = new();
-        using IDisposable registration = host.RegisterDialog("test.question", _ => question);
-
-        bool? answer = await host.ShowDialogAsync<bool?>("test.question", null, CancellationToken.None);
-        Dispatcher.UIThread.RunJobs();
-
-        Assert.Null(answer);
-        Assert.False(question.IsVisible);
     }
 
     [AvaloniaFact]
@@ -191,7 +179,7 @@ public sealed class DialogPresentationTests
     }
 
     [AvaloniaFact]
-    public async Task Progress_that_cannot_be_cancelled_has_no_cancel_button_and_ignores_escape()
+    public async Task Progress_with_a_cancel_delay_offers_cancel_and_the_window_button_only_after_the_delay()
     {
         Window owner = new() { Width = 800, Height = 700 };
         try
@@ -201,25 +189,91 @@ public sealed class DialogPresentationTests
             using CancellationTokenSource workDone = new();
             Task<bool?> result = host.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest("Continue", "Continuing", CanCancel: false),
+                new ProgressDialogRequest("Continue", "Continuing", "Stop git…", TimeSpan.FromMilliseconds(300)),
                 workDone.Token);
             Flush(owner);
             ProgressDialog dialog = Assert.IsType<ProgressDialog>(Assert.Single(owner.OwnedWindows));
-            Assert.False(Assert.Single(dialog.GetLogicalDescendants().OfType<Button>(), button => button.Name == "CancelButton").IsVisible);
-            Assert.False(Assert.IsType<ProgressDialogViewModel>(dialog.DataContext).CancelCommand.CanExecute.FirstAsync().Wait());
+            Button stop = Assert.Single(dialog.GetLogicalDescendants().OfType<Button>(), button => button.Name == "CancelButton");
+            ProgressDialogViewModel viewModel = Assert.IsType<ProgressDialogViewModel>(dialog.DataContext);
+            Assert.False(stop.IsVisible);
+            Assert.False(viewModel.CancelCommand.CanExecute.FirstAsync().Wait());
 
             dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            Flush(owner);
+            CloseWithWindowButton(dialog);
             Flush(owner);
             Assert.True(dialog.IsVisible);
             Assert.False(result.IsCompleted);
 
-            workDone.Cancel();
+            // Once the delay elapsed, the button shows and the window button cancels.
+            await viewModel.WhenAnyValue(x => x.CanCancel).FirstAsync(canCancel => canCancel).Timeout(TimeSpan.FromSeconds(5));
             Flush(owner);
-            Assert.Null(await result);
+            Assert.True(stop.IsVisible);
+            Assert.Equal("Stop git…", stop.Content);
+            CloseWithWindowButton(dialog);
+            Flush(owner);
+            Assert.True(await result);
         }
         finally
         {
             owner.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_window_button_cancels_a_cancellable_progress_and_answers_no_to_a_destructive_question()
+    {
+        Window owner = new() { Width = 800, Height = 700 };
+        try
+        {
+            owner.Show();
+            AppDialogHost host = new(new MainWindowProvider { MainWindow = owner });
+            using CancellationTokenSource workDone = new();
+            Task<bool?> progress = host.ShowDialogAsync<bool?>(
+                ProgressDialogRequest.DialogId,
+                new ProgressDialogRequest("Fetch", "Fetching"),
+                workDone.Token);
+            Flush(owner);
+            CloseWithWindowButton(Assert.Single(owner.OwnedWindows));
+            Flush(owner);
+            Assert.True(await progress);
+
+            Task<bool?> answer = host.ShowDialogAsync<bool?>(
+                ConfirmationDialogRequest.DialogId,
+                new ConfirmationDialogRequest("Delete", "Delete it?", "Delete", IsDestructive: true),
+                CancellationToken.None);
+            Flush(owner);
+            CloseWithWindowButton(Assert.Single(owner.OwnedWindows));
+            Flush(owner);
+            Assert.NotEqual(true, await answer);
+        }
+        finally
+        {
+            owner.Close();
+        }
+    }
+
+    /// <summary>
+    /// Closes <paramref name="window"/> as its window button or Alt+F4 does: the platform asks the window through its
+    /// closing callback with the reason <see cref="WindowCloseReason.WindowClosing"/> and closes it unless the callback
+    /// cancels. Avalonia has no public way to raise that callback, so reflection reaches it; a programmatic
+    /// <see cref="Window.Close()"/> would take another path that the dialogs let through.
+    /// </summary>
+    private static void CloseWithWindowButton(Window window)
+    {
+        object platform = typeof(TopLevel)
+            .GetProperty("PlatformImpl", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+            .GetValue(window)!;
+        PropertyInfo closing = platform.GetType()
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .First(property => property.Name.EndsWith("Closing", StringComparison.Ordinal)
+                && property.PropertyType.Name.StartsWith("Func", StringComparison.Ordinal));
+        Delegate callback = (Delegate)closing.GetValue(platform)!;
+        object reason = Enum.Parse(callback.GetType().GetGenericArguments()[0], nameof(WindowCloseReason.WindowClosing));
+        // The platform closes the window when the callback does not cancel.
+        if (!(bool)callback.DynamicInvoke(reason)!)
+        {
+            window.Close();
         }
     }
 

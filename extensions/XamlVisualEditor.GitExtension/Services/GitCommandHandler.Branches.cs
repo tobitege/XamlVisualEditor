@@ -387,31 +387,98 @@ internal sealed partial class GitCommandHandler
             HasGitOutput(push));
     }
 
+    /// <summary>Gets or sets how long a git command runs before <see cref="WatchAsync"/> shows a progress.</summary>
+    internal TimeSpan ProgressDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Gets or sets how long the progress of a writing git command shows before it offers to stop git; until then a
+    /// command that runs long is most likely working, not hanging.
+    /// </summary>
+    internal TimeSpan StopDelay { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Watches an operation of the session that shows no progress of its own: once it runs longer than
+    /// <see cref="ProgressDelay"/>, a progress shows until it ends, and after <see cref="StopDelay"/> it offers to stop
+    /// git through <paramref name="stop"/>, which needs a confirmation.
+    /// </summary>
+    public async Task WatchAsync(Task run, CancellationTokenSource stop)
+    {
+        if (await Task.WhenAny(run, Task.Delay(ProgressDelay)) != run)
+        {
+            await ShowStoppableProgressAsync(GitStrings.GitRunningTitle, GitStrings.GitRunningMessage, run, stop);
+        }
+    }
+
+    /// <summary>
+    /// Shows the progress of a writing git command until <paramref name="run"/> ends. Its stop button shows after
+    /// <see cref="StopDelay"/>; a stop the user confirms stops git through <paramref name="stop"/>, and a declined one
+    /// shows the progress again, then with the stop button at once. A progress that closes otherwise or cannot be
+    /// shown leaves git running.
+    /// </summary>
+    private async Task ShowStoppableProgressAsync(string title, string message, Task run, CancellationTokenSource stop)
+    {
+        TimeSpan delay = StopDelay;
+        while (!run.IsCompleted)
+        {
+            using CancellationTokenSource closeDialog = new();
+            Task<bool?> dialog = ShowProgressAsync(title, message, GitStrings.StopGitButton, delay, closeDialog.Token);
+            if (await Task.WhenAny(run, dialog) == run)
+            {
+                closeDialog.Cancel();
+                await dialog;
+                return;
+            }
+
+            if (await dialog != true)
+            {
+                return;
+            }
+
+            if (await ConfirmAsync(GitStrings.StopGitPrompt, GitStrings.StopGitConfirm, title, isDestructive: true))
+            {
+                stop.Cancel();
+                return;
+            }
+
+            delay = TimeSpan.Zero;
+        }
+    }
+
     /// <summary>
     /// Runs an operation through the session while the progress dialog is shown and returns its result. Only the
     /// cancel result of the dialog cancels the operation; a dialog that closes otherwise or cannot be shown leaves it
     /// running. The dialog closes when the operation ends. An operation that finished although it was cancelled
-    /// returns its result. Returns null when the operation was cancelled or failed with an exception, both of which
-    /// are reported.
+    /// returns its result. An operation that <paramref name="writes"/> is not cancelled: its progress offers to stop
+    /// git as <see cref="ShowStoppableProgressAsync"/> does. Returns null when the operation was cancelled or failed
+    /// with an exception, both of which are reported.
     /// </summary>
     private async Task<T?> RunWithProgressAsync<T>(
         string title,
         string message,
         Func<GitServiceSet, string, CancellationToken, Task<T>> operation,
-        bool canCancel = true)
+        bool writes = false)
         where T : class
     {
         using CancellationTokenSource work = new();
-        using CancellationTokenSource closeDialog = new();
-        Task<T> run = _session.RunWithServicesAsync(operation, work.Token);
-        Task<bool?> dialog = ShowProgressAsync(title, message, canCancel, closeDialog.Token);
-        if (await Task.WhenAny(run, dialog) == dialog && await dialog == true)
+        using CancellationTokenSource stop = new();
+        Task<T> run = _session.RunWithServicesAsync(operation, work.Token, stop);
+        if (writes)
         {
-            work.Cancel();
+            await ShowStoppableProgressAsync(title, message, run, stop);
+        }
+        else
+        {
+            using CancellationTokenSource closeDialog = new();
+            Task<bool?> dialog = ShowProgressAsync(title, message, null, TimeSpan.Zero, closeDialog.Token);
+            if (await Task.WhenAny(run, dialog) == dialog && await dialog == true)
+            {
+                work.Cancel();
+            }
+
+            closeDialog.Cancel();
+            await dialog;
         }
 
-        closeDialog.Cancel();
-        await dialog;
         try
         {
             return await run;
@@ -435,7 +502,7 @@ internal sealed partial class GitCommandHandler
         string title,
         string message,
         Func<GitServiceSet, string, CancellationToken, Task> operation,
-        bool canCancel = true)
+        bool writes = false)
     {
         object? completed = await RunWithProgressAsync<object>(
             title,
@@ -445,21 +512,27 @@ internal sealed partial class GitCommandHandler
                 await operation(services, root, ct).ConfigureAwait(false);
                 return true;
             },
-            canCancel);
+            writes);
         return completed is not null;
     }
 
     /// <summary>
-    /// Shows the progress dialog until <paramref name="closeToken"/> is cancelled. Returns true when the user
-    /// cancelled, otherwise null; a dialog that fails is logged and counts as not cancelled.
+    /// Shows the progress dialog until <paramref name="closeToken"/> is cancelled, with its cancel button after
+    /// <paramref name="cancelDelay"/>. Returns true when the user cancelled, otherwise null; a dialog that fails is
+    /// logged and counts as not cancelled.
     /// </summary>
-    private async Task<bool?> ShowProgressAsync(string title, string message, bool canCancel, CancellationToken closeToken)
+    private async Task<bool?> ShowProgressAsync(
+        string title,
+        string message,
+        string? cancelText,
+        TimeSpan cancelDelay,
+        CancellationToken closeToken)
     {
         try
         {
             return await _dialogHost.ShowDialogAsync<bool?>(
                 ProgressDialogRequest.DialogId,
-                new ProgressDialogRequest(title, message, CanCancel: canCancel),
+                new ProgressDialogRequest(title, message, cancelText, cancelDelay),
                 closeToken);
         }
         catch (OperationCanceledException)

@@ -121,12 +121,12 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // git continues to the end once it started, so the dialog offers no cancel that would not stop it.
+        // git continues to the end once it started; a hook that hangs can be stopped after a wait and a confirmation.
         await RunWithProgressAsync(
             GitStrings.ContinueCommand,
             GitStrings.ContinueProgress,
             (services, root, ct) => services.Merge!.ContinueAsync(root, ct),
-            canCancel: false);
+            writes: true);
     }
 
     public Task AcceptOursAsync(CommandContext context) =>

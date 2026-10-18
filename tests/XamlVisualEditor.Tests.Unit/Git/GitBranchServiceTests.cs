@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -305,17 +307,34 @@ public sealed class GitBranchServiceTests
     }
 
     [Fact]
+    public async Task A_switch_that_the_user_stops_ends_git_with_its_hanging_hook()
+    {
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.RunGit("branch", "other");
+        WritePostCheckoutHook(repository, "sleep 60");
+        GitService service = new(options: repository.ProcessOptions);
+        using CancellationTokenSource stop = new();
+        Task switching;
+        using (GitProcessStop.Allow(stop.Token))
+        {
+            switching = service.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        }
+
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Stopwatch stopped = Stopwatch.StartNew();
+        stop.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => switching);
+        Assert.True(stopped.Elapsed < TimeSpan.FromSeconds(20), stopped.Elapsed.ToString());
+    }
+
+    [Fact]
     public async Task A_switch_cancelled_while_git_runs_runs_to_its_end()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");
         repository.RunGit("branch", "other");
         // The hook keeps git running after the checkout, long enough to cancel it.
-        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
-        File.WriteAllText(hook, "#!/bin/sh\nsleep 2\n");
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        WritePostCheckoutHook(repository, "sleep 2");
 
         GitService service = new(options: repository.ProcessOptions);
         using CancellationTokenSource cancel = new();
@@ -337,6 +356,16 @@ public sealed class GitBranchServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.DeleteAsync(repository.Path, "main", force: true, TestContext.Current.CancellationToken));
+    }
+
+    private static void WritePostCheckoutHook(GitTestRepository repository, string command)
+    {
+        string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\n" + command + "\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     private static string CurrentBranch(GitTestRepository repository) =>

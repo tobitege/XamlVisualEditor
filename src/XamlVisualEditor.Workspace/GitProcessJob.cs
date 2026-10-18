@@ -10,7 +10,8 @@ namespace XamlVisualEditor.Workspace;
 /// A Windows job object that holds a git process and every process it starts, also a process whose parent already
 /// ended, as with the processes a hook starts through the MSYS shell. Processes started by a process of the job
 /// belong to the job, because the job does not allow breaking away. While the job is open, its processes end when the
-/// editor ends (<c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>). <see cref="Release"/> lifts that limit before it closes
+/// editor ends (<c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>), except in the job of a writing command, which must run to
+/// its end and is only ended by <see cref="Terminate"/>. <see cref="Release"/> lifts that limit before it closes
 /// the job, so processes that a finished git command leaves behind on purpose, such as the file system monitor
 /// daemon, keep running. Only for Windows.
 /// </summary>
@@ -34,7 +35,12 @@ internal sealed class GitProcessJob : IDisposable
     /// Creates a job and assigns <paramref name="process"/> to it; returns null and logs why when that fails, for
     /// example because the process already ended.
     /// </summary>
-    public static GitProcessJob? TryAssign(Process process, ILogger logger)
+    /// <param name="process">The started git process.</param>
+    /// <param name="logger">Receives why the assignment failed.</param>
+    /// <param name="killOnClose">
+    /// Whether the processes end when the editor ends; false for a writing command, which must run to its end.
+    /// </param>
+    public static GitProcessJob? TryAssign(Process process, ILogger logger, bool killOnClose = true)
     {
         JobHandle handle = CreateJobObjectW(IntPtr.Zero, null);
         if (handle.IsInvalid)
@@ -45,7 +51,7 @@ internal sealed class GitProcessJob : IDisposable
             return null;
         }
 
-        if (!SetLimitFlags(handle, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+        if ((killOnClose && !SetLimitFlags(handle, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE))
             || !AssignProcessToJobObject(handle, process.SafeHandle))
         {
             int error = Marshal.GetLastPInvokeError();

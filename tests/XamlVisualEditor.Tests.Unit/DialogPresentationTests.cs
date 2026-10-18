@@ -405,13 +405,47 @@ public sealed class DialogPresentationTests
         await switching;
     }
 
-    /// <summary>Creates a repository whose checkout of the branch other waits in a hook for the file .git/release.</summary>
+    [AvaloniaFact]
+    public async Task A_close_question_that_is_open_when_git_ends_closes_and_the_editor_closes()
+    {
+        using GitTestRepository repository = CreateRepositoryWithWaitingHook();
+        GitService git = new(options: repository.ProcessOptions);
+        MainWindow window = new() { WhenGitWritesEnded = git.WhenWritesEnded };
+        TimeSpan delay = MainWindow.GitWriteCloseDelay;
+        MainWindow.GitWriteCloseDelay = TimeSpan.FromMilliseconds(200);
+        window.Show();
+        Task switching = git.SwitchAsync(repository.Path, "other", CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => File.Exists(Path.Combine(repository.Path, ".git", "hook-started")));
+            window.Close();
+            ProgressDialog progress = await WaitForOwnedAsync<ProgressDialog>(window);
+            await WaitUntilAsync(() => ((ProgressDialogViewModel)progress.DataContext!).CanCancel);
+            CloseWithWindowButton(progress);
+            await WaitForOwnedAsync<ConfirmDialog>(window);
+        }
+        finally
+        {
+            MainWindow.GitWriteCloseDelay = delay;
+            File.WriteAllText(Path.Combine(repository.Path, ".git", "release"), "");
+        }
+
+        await switching;
+        await WaitUntilAsync(() => !window.IsVisible);
+    }
+
+    /// <summary>
+    /// Creates a repository whose checkout of the branch other waits in a hook for the file .git/release, at most
+    /// 30 seconds, so a failed test leaves no git behind.
+    /// </summary>
     private static GitTestRepository CreateRepositoryWithWaitingHook()
     {
         GitTestRepository repository = GitTestRepository.Create("a.txt");
         repository.RunGit("branch", "other");
         string hook = Path.Combine(repository.Path, ".git", "hooks", "post-checkout");
-        File.WriteAllText(hook, "#!/bin/sh\ntouch .git/hook-started\nwhile [ ! -f .git/release ]; do sleep 0.1; done\n");
+        File.WriteAllText(
+            hook,
+            "#!/bin/sh\ntouch .git/hook-started\ni=0\nwhile [ ! -f .git/release ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done\n");
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

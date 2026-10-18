@@ -200,7 +200,16 @@ public sealed partial class MainWindow : Window
                 UiStrings.GitWritesCloseAnyway,
                 isDestructive: true)
         };
-        return await question.ShowDialog<bool>(this);
+        // The question is about git that still runs: when it ends, the question closes and the editor closes safely.
+        Task<bool> answer = question.ShowDialog<bool>(this);
+        if (await Task.WhenAny(ended, answer) == ended)
+        {
+            question.Close();
+            await answer;
+            return true;
+        }
+
+        return await answer;
     }
 
     /// <summary>Gets how long the window waits for the writing git commands before it offers to close anyway.</summary>

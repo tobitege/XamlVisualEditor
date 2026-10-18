@@ -388,6 +388,31 @@ public sealed class GitBranchServiceTests
             () => service.DeleteAsync(repository.Path, "main", force: true, TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task Tags_are_created_lightweight_or_annotated_at_a_revision_and_deleted()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string first = repository.RunGit("rev-parse", "HEAD").Trim();
+        repository.CommitFileIn(repository.Path, "a.txt", "two\n", "Two");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.CreateTagAsync(repository.Path, "light", first, message: "", ct);
+        await service.CreateTagAsync(repository.Path, "annotated", "HEAD", "Release\n\nNotes", ct);
+
+        Assert.Equal("commit", repository.RunGit("cat-file", "-t", "light").Trim());
+        Assert.Equal(first, repository.RunGit("rev-parse", "light").Trim());
+        Assert.Equal("tag", repository.RunGit("cat-file", "-t", "annotated").Trim());
+        Assert.Equal("Release\n\nNotes", repository.RunGit("tag", "-l", "--format=%(contents)", "annotated").Trim());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateTagAsync(repository.Path, "light", "HEAD", null, ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateTagAsync(repository.Path, "-f", "HEAD", null, ct));
+        Assert.Equal(first, repository.RunGit("rev-parse", "light").Trim());
+
+        await service.DeleteTagAsync(repository.Path, "light", ct);
+
+        Assert.Equal("annotated", repository.RunGit("tag", "-l").Trim());
+    }
+
     private static async Task WaitForFileAsync(string path)
     {
         Stopwatch waited = Stopwatch.StartNew();

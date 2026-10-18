@@ -52,4 +52,14 @@ public interface IGitBranchService
     /// other configuration; a remote branch keeps its name. A new name that another branch has fails.
     /// </summary>
     Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates the tag <paramref name="name"/> at <paramref name="revision"/>: an annotated tag with
+    /// <paramref name="message"/>, a lightweight tag when it is null or empty. A name that is no valid tag name or that
+    /// a tag already has fails.
+    /// </summary>
+    Task CreateTagAsync(string repoPath, string name, string revision, string? message, CancellationToken ct = default);
+
+    /// <summary>Deletes the local tag <paramref name="name"/>; a remote keeps its tag of that name.</summary>
+    Task DeleteTagAsync(string repoPath, string name, CancellationToken ct = default);
 }

@@ -86,7 +86,11 @@ public sealed class GitCommandsTests
         { GitCommands.REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTE_WHEN },
         { GitCommands.SKIP, GitStrings.SkipCommand, "git.isRepository && git.operationInProgress && !git.isMerging" },
         { GitCommands.CHERRY_PICK, GitStrings.CherryPickCommand, NO_OPERATION_WHEN },
-        { GitCommands.REVERT, GitStrings.RevertCommand, NO_OPERATION_WHEN }
+        { GitCommands.REVERT, GitStrings.RevertCommand, NO_OPERATION_WHEN },
+        { GitCommands.CREATE_TAG, GitStrings.CreateTagCommand, REPOSITORY_WHEN },
+        { GitCommands.DELETE_TAG, GitStrings.DeleteTagCommand, REPOSITORY_WHEN },
+        { GitCommands.PUSH_TAG, GitStrings.PushTagCommand, REMOTE_WHEN },
+        { GitCommands.DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, REMOTE_WHEN }
     };
 
     [Theory]
@@ -113,7 +117,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(55, commandIds.Count);
+        Assert.Equal(59, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -150,6 +154,7 @@ public sealed class GitCommandsTests
             GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.COMMIT_AMEND, GitCommands.INIT,
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.RENAME_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
+            GitCommands.CREATE_TAG, GitCommands.PUSH_TAG, GitCommands.DELETE_TAG, GitCommands.DELETE_REMOTE_TAG,
             GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
             GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,
             GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.SKIP, GitCommands.ABORT,

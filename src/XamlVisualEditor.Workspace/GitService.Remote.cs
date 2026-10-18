@@ -407,6 +407,23 @@ public sealed partial class GitService
         return RunNetworkCommandAsync(repoPath, args, ct);
     }
 
+    /// <inheritdoc />
+    /// <remarks>The full reference name keeps a branch of the same name from being pushed instead.</remarks>
+    public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return RunNetworkCommandAsync(repoPath, new[] { "push", "--", remote, TAG_PREFIX + name }, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return RunNetworkCommandAsync(repoPath, new[] { "push", "--", remote, ":" + TAG_PREFIX + name }, ct);
+    }
+
     /// <summary>
     /// Returns whether network commands set <see cref="BATCH_MODE_SSH_COMMAND"/>: only when the user configured no
     /// SSH program through <c>GIT_SSH</c>, <c>GIT_SSH_COMMAND</c> or <c>core.sshCommand</c>, so Plink, TortoisePlink

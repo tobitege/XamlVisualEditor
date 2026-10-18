@@ -169,6 +169,12 @@ internal sealed class ScriptedRemoteService : IGitRemoteService
     public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
         RunAsync(setUpstreamRemote is null ? "push" : "push -u " + setUpstreamRemote, ct);
 
+    public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+        RunAsync("push " + remote + " tag " + name, ct);
+
+    public Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+        RunAsync("push " + remote + " delete tag " + name, ct);
+
     private async Task<GitRemoteResult> RunAsync(string operation, CancellationToken ct)
     {
         lock (_gate)

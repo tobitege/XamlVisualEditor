@@ -331,15 +331,29 @@ public sealed class GitRepositoryPanelViewTests
         menu.Open(grid);
         window.Pump();
         MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-        Assert.Equal(2, items.Length);
+        Assert.Equal(
+            new ICommand[]
+            {
+                panel.ShowTagHistoryCommand, panel.CreateBranchFromTagCommand, panel.PushTagCommand, panel.DeleteTagCommand,
+                panel.DeleteRemoteTagCommand
+            },
+            items.Select(item => item.Command!));
         Assert.All(items, item => Assert.IsType<PathIcon>(item.Icon));
         Assert.All(items, item => Assert.True(item.IsEnabled));
         menu.Close();
         await panel.ShowTagHistoryCommand.Execute().ToTask();
         await panel.CreateBranchFromTagCommand.Execute().ToTask();
+        await panel.PushTagCommand.Execute().ToTask();
+        await panel.DeleteTagCommand.Execute().ToTask();
+        await panel.DeleteRemoteTagCommand.Execute().ToTask();
 
+        // The history and a branch start at the full name, the tag commands take the tag name.
         Assert.Equal(
-            new (string, string?)[] { (GitCommands.SHOW_HISTORY, "refs/tags/v1.0"), (GitCommands.CREATE_BRANCH, "refs/tags/v1.0") },
+            new (string, string?)[]
+            {
+                (GitCommands.SHOW_HISTORY, "refs/tags/v1.0"), (GitCommands.CREATE_BRANCH, "refs/tags/v1.0"),
+                (GitCommands.PUSH_TAG, "v1.0"), (GitCommands.DELETE_TAG, "v1.0"), (GitCommands.DELETE_REMOTE_TAG, "v1.0")
+            },
             fixture.Executed.Select(call => (call.CommandId, call.Arguments?.Single() as string)));
     }
 
@@ -795,6 +809,12 @@ public sealed class GitRepositoryPanelViewTests
 
         public Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class WorkspaceInfo : IWorkspaceInfo
@@ -902,5 +922,10 @@ public sealed class GitRepositoryPanelViewTests
 
         public Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task CreateTagAsync(string repoPath, string name, string revision, string? message, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task DeleteTagAsync(string repoPath, string name, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

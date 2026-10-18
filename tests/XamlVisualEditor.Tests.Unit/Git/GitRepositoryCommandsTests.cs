@@ -241,6 +241,59 @@ public sealed class GitRepositoryCommandsTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Tags_are_created_pushed_and_deleted_locally_and_on_the_remote_only_after_a_confirmation()
+    {
+        bool confirm = false;
+        using GitPanelCommandFixture fixture = await CreateAsync(repository => repository.AddBareRemote(), (_, _) => confirm);
+        string first = fixture.Repository.RunGit("rev-parse", "HEAD").Trim();
+        fixture.Repository.CommitFileIn(fixture.Repository.Path, "a.txt", "two\n", "Two");
+        fixture.Window.QuickPick = items => items[0];
+
+        // A cancelled message creates nothing, an empty one a lightweight tag.
+        fixture.Window.InputBoxResults.Enqueue("v1");
+        fixture.Window.InputBoxResults.Enqueue(null);
+        await fixture.ExecuteAsync(GitCommands.CREATE_TAG, first);
+        Assert.Equal(string.Empty, fixture.Repository.RunGit("tag", "-l").Trim());
+        fixture.Window.InputBoxResults.Enqueue("v1");
+        fixture.Window.InputBoxResults.Enqueue("");
+        await fixture.ExecuteAsync(GitCommands.CREATE_TAG, first);
+        fixture.Window.InputBoxResults.Enqueue("v2");
+        fixture.Window.InputBoxResults.Enqueue("Release two");
+        await fixture.ExecuteAsync(GitCommands.CREATE_TAG);
+
+        Assert.Equal(first, fixture.Repository.RunGit("rev-parse", "refs/tags/v1").Trim());
+        Assert.Equal("tag", fixture.Repository.RunGit("cat-file", "-t", "v2").Trim());
+        Assert.Equal(fixture.Repository.RunGit("rev-parse", "HEAD").Trim(), fixture.Repository.RunGit("rev-parse", "v2^{commit}").Trim());
+
+        await fixture.ExecuteAsync(GitCommands.PUSH_TAG, "v1");
+        Assert.Equal([string.Format(GitStrings.TagPushedFormat, "v1", "origin")], fixture.Window.Infos);
+        Assert.True(fixture.Repository.TryRunGitIn(fixture.Repository.RemotePath!, out _, "rev-parse", "--verify", "refs/tags/v1"));
+
+        await fixture.ExecuteAsync(GitCommands.DELETE_REMOTE_TAG, "v1");
+        await fixture.ExecuteAsync(GitCommands.DELETE_TAG, "v1");
+        Assert.True(fixture.Repository.TryRunGitIn(fixture.Repository.RemotePath!, out _, "rev-parse", "--verify", "refs/tags/v1"));
+        Assert.True(fixture.Repository.TryRunGit(out _, "rev-parse", "--verify", "refs/tags/v1"));
+
+        confirm = true;
+        await fixture.ExecuteAsync(GitCommands.DELETE_REMOTE_TAG, "v1");
+        fixture.Window.QuickPick = items => items.Single(item => item.Label == "v2");
+        await fixture.ExecuteAsync(GitCommands.DELETE_TAG);
+
+        ConfirmationDialogRequest[] questions = fixture.Dialogs.Confirmations.ToArray();
+        Assert.All(questions, question => Assert.True(question.IsDestructive));
+        Assert.Equal(
+            [
+                string.Format(GitStrings.DeleteRemoteTagPromptFormat, "v1", "origin"),
+                string.Format(GitStrings.DeleteTagPromptFormat, "v1"),
+                string.Format(GitStrings.DeleteRemoteTagPromptFormat, "v1", "origin"),
+                string.Format(GitStrings.DeleteTagPromptFormat, "v2")
+            ],
+            questions.Select(question => question.Message));
+        Assert.False(fixture.Repository.TryRunGitIn(fixture.Repository.RemotePath!, out _, "rev-parse", "--verify", "refs/tags/v1"));
+        Assert.Equal("v1", fixture.Repository.RunGit("tag", "-l").Trim());
+    }
+
     // The panel reads its lists in the background and applies them on the UI thread, which runs while this waits.
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

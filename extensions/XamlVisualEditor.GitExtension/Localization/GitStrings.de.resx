@@ -384,4 +384,25 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="RevertMenu" xml:space="preserve"><value>Revert</value></data>
   <data name="RevertStopped" xml:space="preserve"><value>Der Revert hat angehalten. Löse die Konflikte im Panel „Git-Änderungen“ und setze ihn fort, oder überspringe den Schritt oder brich ihn ab.</value></data>
   <data name="PickCommitInHistory" xml:space="preserve"><value>Wähle einen Commit im Panel „Git-Verlauf“ und dort den Befehl im Kontextmenü.</value></data>
+  <data name="CreateTagCommand" xml:space="preserve"><value>Neues Tag …</value></data>
+  <data name="CreateTagButton" xml:space="preserve"><value>Neu</value></data>
+  <data name="CreateTagTitle" xml:space="preserve"><value>Neues Tag</value></data>
+  <data name="CreateTagPrompt" xml:space="preserve"><value>Name des neuen Tags</value></data>
+  <data name="TagMessagePromptFormat" xml:space="preserve"><value>Nachricht des Tags {0}; leer lassen für ein einfaches Tag ohne Nachricht</value></data>
+  <data name="NewTagHere" xml:space="preserve"><value>Neues Tag hier …</value></data>
+  <data name="DeleteTagCommand" xml:space="preserve"><value>Tag löschen …</value></data>
+  <data name="DeleteTagButton" xml:space="preserve"><value>Löschen</value></data>
+  <data name="DeleteTagConfirm" xml:space="preserve"><value>Löschen</value></data>
+  <data name="DeleteTagPromptFormat" xml:space="preserve"><value>Lokales Tag {0} löschen? Ein Remote behält sein Tag dieses Namens.</value></data>
+  <data name="PushTagCommand" xml:space="preserve"><value>Tag pushen …</value></data>
+  <data name="PushTagButton" xml:space="preserve"><value>Pushen</value></data>
+  <data name="PushTagProgressFormat" xml:space="preserve"><value>Push von Tag {0} nach {1} läuft …</value></data>
+  <data name="TagPushedFormat" xml:space="preserve"><value>Tag {0} nach {1} gepusht.</value></data>
+  <data name="TagRejectedHintFormat" xml:space="preserve"><value>{1} hat schon ein Tag {0}, das auf einen anderen Commit zeigt, und git ersetzt es nicht.</value></data>
+  <data name="DeleteRemoteTagCommand" xml:space="preserve"><value>Tag auf Remote löschen …</value></data>
+  <data name="DeleteRemoteTagButton" xml:space="preserve"><value>Auf Remote löschen</value></data>
+  <data name="DeleteRemoteTagPromptFormat" xml:space="preserve"><value>Tag {0} auf {1} löschen? Repositories, die es schon geholt haben, behalten es, und das lokale Tag bleibt.</value></data>
+  <data name="DeleteRemoteTagProgressFormat" xml:space="preserve"><value>Tag {0} auf {1} wird gelöscht …</value></data>
+  <data name="RemoteTagDeletedFormat" xml:space="preserve"><value>Tag {0} auf {1} gelöscht.</value></data>
+  <data name="TagNotFoundFormat" xml:space="preserve"><value>Das Tag {0} gibt es nicht.</value></data>
 </root>

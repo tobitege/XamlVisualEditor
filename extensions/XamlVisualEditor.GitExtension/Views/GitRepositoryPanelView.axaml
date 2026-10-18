@@ -174,6 +174,40 @@
             </TabItem>
             <TabItem Name="TagsTab" Header="{x:Static gloc:GitStrings.TagsTab}">
                 <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,4,0,2">
+                        <Button Classes="git-action" Command="{CompiledBinding CreateTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.CreateTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.CreateTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.CreateTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.CreateTagButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding PushTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.PushTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.PushTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.PushTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.PushTagButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding DeleteTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.DeleteTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.DeleteTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.DeleteTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.DeleteTagButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding DeleteRemoteTagCommand}"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.DeleteRemoteTagCommand}" ToolTip.ShowOnDisabled="True"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.DeleteRemoteTagCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.DeleteRemoteTag}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.DeleteRemoteTagButton}" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
                     <TextBlock DockPanel.Dock="Top"
                                Text="{CompiledBinding TagsMessage}"
                                TextWrapping="Wrap"
@@ -205,6 +239,22 @@
                                           Command="{CompiledBinding CreateBranchFromTagCommand}">
                                     <MenuItem.Icon>
                                         <PathIcon Data="{x:Static vm:GitIcons.CreateBranch}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.PushTagCommand}" Command="{CompiledBinding PushTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.PushTag}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Header="{x:Static gloc:GitStrings.DeleteTagCommand}" Command="{CompiledBinding DeleteTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.DeleteTag}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{x:Static gloc:GitStrings.DeleteRemoteTagCommand}" Command="{CompiledBinding DeleteRemoteTagCommand}">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="{x:Static vm:GitIcons.DeleteRemoteTag}" />
                                     </MenuItem.Icon>
                                 </MenuItem>
                             </ContextMenu>

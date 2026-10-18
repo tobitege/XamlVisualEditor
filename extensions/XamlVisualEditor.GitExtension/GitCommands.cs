@@ -164,6 +164,24 @@ public static class GitCommands
     public const string REVERT = "git.revert";
 
     /// <summary>
+    /// Creates a tag with an entered name at the commit in argument 0, otherwise at HEAD; an annotated tag with an
+    /// entered message, a lightweight tag without.
+    /// </summary>
+    public const string CREATE_TAG = "git.createTag";
+
+    /// <summary>Deletes the local tag in argument 0, otherwise one picked from a list, after a confirmation.</summary>
+    public const string DELETE_TAG = "git.deleteTag";
+
+    /// <summary>Pushes the tag in argument 0, otherwise one picked from a list, to a remote picked from a list.</summary>
+    public const string PUSH_TAG = "git.pushTag";
+
+    /// <summary>
+    /// Deletes the tag in argument 0, otherwise one picked from a list, on a remote picked from a list after a
+    /// confirmation; the local tag stays.
+    /// </summary>
+    public const string DELETE_REMOTE_TAG = "git.deleteRemoteTag";
+
+    /// <summary>
     /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
     /// version of the current branch after a confirmation; a file that side deleted is deleted.
     /// </summary>
@@ -399,6 +417,14 @@ public static class GitCommands
             new CommandMetadata(GitStrings.CherryPickCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 540));
         Register(REVERT, handler.RevertAsync,
             new CommandMetadata(GitStrings.RevertCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 550));
+        Register(CREATE_TAG, handler.CreateTagAsync,
+            new CommandMetadata(GitStrings.CreateTagCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 560));
+        Register(DELETE_TAG, handler.DeleteTagAsync,
+            new CommandMetadata(GitStrings.DeleteTagCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 570));
+        Register(PUSH_TAG, handler.PushTagAsync,
+            new CommandMetadata(GitStrings.PushTagCommand, CATEGORY, When: REMOTE_WHEN, Priority: 580));
+        Register(DELETE_REMOTE_TAG, handler.DeleteRemoteTagAsync,
+            new CommandMetadata(GitStrings.DeleteRemoteTagCommand, CATEGORY, When: REMOTE_WHEN, Priority: 590));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -456,6 +482,10 @@ public static class GitCommands
                 ExtensionsItem(SYNC, GitStrings.SyncCommand, SYNC_GROUP, 150),
                 new ExtensionMenuContribution(TOGGLE_HISTORY_VIEW, GitStrings.HistoryViewTitle, ExtensionMenuLocations.View, "views.bottom", 55),
                 ExtensionsItem(SHOW_HISTORY, GitStrings.ShowHistoryCommand, HISTORY_GROUP, 160),
+                ExtensionsItem(CREATE_TAG, GitStrings.CreateTagCommand, HISTORY_GROUP, 162),
+                ExtensionsItem(PUSH_TAG, GitStrings.PushTagCommand, HISTORY_GROUP, 164),
+                ExtensionsItem(DELETE_TAG, GitStrings.DeleteTagCommand, HISTORY_GROUP, 166),
+                ExtensionsItem(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, HISTORY_GROUP, 168),
                 ExtensionsItem(STASH, GitStrings.StashCommand, STASH_GROUP, 170),
                 ExtensionsItem(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, STASH_GROUP, 180),
                 ExtensionsItem(STASH_APPLY, GitStrings.StashApplyCommand, STASH_GROUP, 190),
@@ -543,7 +573,11 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(CHERRY_PICK, GitStrings.CherryPickCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(REVERT, GitStrings.RevertCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(REVERT, GitStrings.RevertCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(CREATE_TAG, GitStrings.CreateTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(DELETE_TAG, GitStrings.DeleteTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(PUSH_TAG, GitStrings.PushTagCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(DELETE_REMOTE_TAG, GitStrings.DeleteRemoteTagCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

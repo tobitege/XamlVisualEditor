@@ -106,14 +106,18 @@ internal sealed partial class GitCommandHandler
     }
 
     /// <summary>Returns the remote named in argument 0, or one picked from a list; null after reporting why there is none.</summary>
-    private async Task<GitRemote?> PickRemoteAsync(CommandContext context, string title)
+    private Task<GitRemote?> PickRemoteAsync(CommandContext context, string title) =>
+        PickRemoteAsync(FirstStringArgument(context), title);
+
+    /// <summary>Returns the remote <paramref name="name"/>, or without a name one picked from a list; null after reporting why there is none.</summary>
+    private async Task<GitRemote?> PickRemoteAsync(string? name, string title)
     {
         if (await LoadRemotesAsync() is not { } remotes)
         {
             return null;
         }
 
-        if (FirstStringArgument(context) is { } name)
+        if (name is not null)
         {
             GitRemote? match = remotes.FirstOrDefault(remote => string.Equals(remote.Name, name, StringComparison.Ordinal));
             if (match is null)

@@ -11,6 +11,7 @@ public sealed partial class GitService
 {
     private const string LOCAL_BRANCH_PREFIX = "refs/heads/";
     private const string REMOTE_BRANCH_PREFIX = "refs/remotes/";
+    private const string TAG_PREFIX = "refs/tags/";
 
     /// <summary>
     /// Environment of commands whose output or error text is parsed: git writes its messages untranslated, so the
@@ -197,6 +198,24 @@ public sealed partial class GitService
             ? name[LOCAL_BRANCH_PREFIX.Length..]
             : name;
         return RunGitCheckedAsync(repoPath, new[] { "branch", "-m", "--", branch, newName }, standardInput: null, ct);
+    }
+
+    /// <inheritdoc />
+    public Task CreateTagAsync(string repoPath, string name, string revision, string? message, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(revision);
+        string[] args = string.IsNullOrEmpty(message)
+            ? new[] { "tag", "--", name, revision }
+            : new[] { "tag", "-a", "-m", message, "--", name, revision };
+        return RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+    }
+
+    /// <inheritdoc />
+    public Task DeleteTagAsync(string repoPath, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return RunGitCheckedAsync(repoPath, new[] { "tag", "-d", "--", name }, standardInput: null, ct);
     }
 
     private async Task<bool> ReferenceExistsAsync(string repoPath, string reference, CancellationToken ct)

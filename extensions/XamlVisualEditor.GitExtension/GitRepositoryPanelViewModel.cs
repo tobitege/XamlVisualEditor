@@ -312,6 +312,14 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         CreateBranchFromTagCommand = AddCommand(ReactiveCommand.CreateFromTask(
             () => SelectedTag is { IsCommit: true } tag ? _executeCommand(GitCommands.CREATE_BRANCH, [tag.Tag.FullName]) : Task.CompletedTask,
             hasCommitTag));
+        CreateTagCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.CREATE_TAG, null), isRepository));
+        IObservable<bool> hasTag = this.WhenAnyValue(x => x.SelectedTag).Select(tag => tag is not null);
+        IObservable<bool> hasTagAndRemote = this.WhenAnyValue(x => x.SelectedTag, x => x.HasRemote, (tag, remote) => tag is not null && remote);
+        DeleteTagCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedTagAsync(GitCommands.DELETE_TAG), hasTag));
+        PushTagCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedTagAsync(GitCommands.PUSH_TAG), hasTagAndRemote));
+        DeleteRemoteTagCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => RunForSelectedTagAsync(GitCommands.DELETE_REMOTE_TAG),
+            hasTagAndRemote));
 
         StashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.STASH, null), isRepository));
         StashIncludeUntrackedCommand = AddCommand(ReactiveCommand.CreateFromTask(
@@ -390,6 +398,18 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     /// <summary>Runs <see cref="GitCommands.SHOW_HISTORY"/> starting at the selected tag, when it points to a commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> ShowTagHistoryCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.CREATE_TAG"/> at HEAD.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CreateTagCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.DELETE_TAG"/> for the selected tag.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> DeleteTagCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.PUSH_TAG"/> for the selected tag.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> PushTagCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.DELETE_REMOTE_TAG"/> for the selected tag.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> DeleteRemoteTagCommand { get; }
 
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at the selected tag, when it points to a commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> CreateBranchFromTagCommand { get; }
@@ -529,6 +549,9 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     private Task RunForSelectedRemoteAsync(string commandId) =>
         SelectedRemote is { } remote ? _executeCommand(commandId, [remote.Name]) : Task.CompletedTask;
+
+    private Task RunForSelectedTagAsync(string commandId) =>
+        SelectedTag is { } tag ? _executeCommand(commandId, [tag.Name]) : Task.CompletedTask;
 
     /// <summary>Applies the loads of <paramref name="load"/> while the panel is shown and an idle state otherwise.</summary>
     private void LoadWhileShown<T>(Func<GitSnapshot, IObservable<ListLoad<T>>> load, Action<ListLoad<T>> apply)

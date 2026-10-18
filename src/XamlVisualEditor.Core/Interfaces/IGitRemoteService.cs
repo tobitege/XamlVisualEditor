@@ -69,4 +69,13 @@ public interface IGitRemoteService
     /// branch of the same name on that remote, which then becomes its upstream.
     /// </summary>
     Task<GitRemoteResult> PushAsync(string repoPath, string? setUpstreamRemote = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pushes the tag <paramref name="name"/> to <paramref name="remote"/>. A tag of that name on the remote that
+    /// points elsewhere is not replaced; the result reports <see cref="GitRemoteFailureKind.Rejected"/>.
+    /// </summary>
+    Task<GitRemoteResult> PushTagAsync(string repoPath, string remote, string name, CancellationToken ct = default);
+
+    /// <summary>Deletes the tag <paramref name="name"/> on <paramref name="remote"/>; the local tag stays.</summary>
+    Task<GitRemoteResult> DeleteRemoteTagAsync(string repoPath, string remote, string name, CancellationToken ct = default);
 }

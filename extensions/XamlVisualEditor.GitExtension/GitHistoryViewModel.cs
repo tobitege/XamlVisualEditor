@@ -150,6 +150,7 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
         CopyCommitIdCommand = AddCommand(ReactiveCommand.CreateFromTask(CopyCommitIdAsync, hasSelection));
         CreateBranchFromCommitCommand = AddCommand(ReactiveCommand.CreateFromTask(
             () => ExecuteForSelectedAsync(GitCommands.CREATE_BRANCH), hasSelection));
+        CreateTagCommand = AddCommand(ReactiveCommand.CreateFromTask(() => ExecuteForSelectedAsync(GitCommands.CREATE_TAG), hasSelection));
         CherryPickCommand = AddCommand(ReactiveCommand.CreateFromTask(() => ExecuteForSelectedAsync(GitCommands.CHERRY_PICK), hasSelection));
         RevertCommand = AddCommand(ReactiveCommand.CreateFromTask(() => ExecuteForSelectedAsync(GitCommands.REVERT), hasSelection));
 
@@ -257,6 +258,9 @@ public sealed partial class GitHistoryViewModel : ReactiveObject, IDisposable
 
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at the selected commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> CreateBranchFromCommitCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.CREATE_TAG"/> at the selected commit.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CreateTagCommand { get; }
 
     /// <summary>Runs <see cref="GitCommands.CHERRY_PICK"/> for the selected commit.</summary>
     public ReactiveCommand<RxVoid, RxVoid> CherryPickCommand { get; }

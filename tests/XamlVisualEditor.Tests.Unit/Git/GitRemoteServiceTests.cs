@@ -45,6 +45,38 @@ public sealed class GitRemoteServiceTests
     }
 
     [Fact]
+    public async Task A_tag_is_pushed_rejected_when_the_remote_tag_differs_and_deleted_on_the_remote()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remote = repository.AddBareRemote();
+        GitService service = new(options: repository.ProcessOptions);
+        Assert.True((await service.PushAsync(repository.Path, "origin", ct)).Success);
+        // A branch of the tag's name does not take its place.
+        repository.RunGit("tag", "v1");
+        repository.RunGit("branch", "v1");
+
+        GitRemoteResult pushed = await service.PushTagAsync(repository.Path, "origin", "v1", ct);
+
+        Assert.True(pushed.Success, pushed.Message);
+        Assert.Equal(repository.RunGit("rev-parse", "refs/tags/v1").Trim(), repository.RunGitIn(remote, "rev-parse", "refs/tags/v1").Trim());
+        Assert.False(repository.TryRunGitIn(remote, out _, "rev-parse", "--verify", "refs/heads/v1"));
+
+        repository.CommitFileIn(repository.Path, "a.txt", "two\n", "Two");
+        repository.RunGit("tag", "-f", "v1", "HEAD");
+        GitRemoteResult rejected = await service.PushTagAsync(repository.Path, "origin", "v1", ct);
+
+        Assert.False(rejected.Success);
+        Assert.Equal(GitRemoteFailureKind.Rejected, rejected.FailureKind);
+
+        GitRemoteResult deleted = await service.DeleteRemoteTagAsync(repository.Path, "origin", "v1", ct);
+
+        Assert.True(deleted.Success, deleted.Message);
+        Assert.False(repository.TryRunGitIn(remote, out _, "rev-parse", "--verify", "refs/tags/v1"));
+        Assert.True(repository.TryRunGit(out _, "rev-parse", "--verify", "refs/tags/v1"));
+    }
+
+    [Fact]
     public async Task Remotes_are_added_renamed_with_their_upstreams_changed_and_removed_with_their_branches()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

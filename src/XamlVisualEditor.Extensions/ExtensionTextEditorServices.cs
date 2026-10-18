@@ -179,7 +179,10 @@ public enum TextEditorLineMarkKind
 {
     Added,
     Modified,
-    Deleted
+    Deleted,
+
+    /// <summary>A block of conflict markers that waits to be resolved.</summary>
+    Conflict
 }
 
 /// <summary>

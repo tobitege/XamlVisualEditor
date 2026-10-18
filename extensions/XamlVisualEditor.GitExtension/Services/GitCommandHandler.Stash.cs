@@ -8,13 +8,25 @@ namespace XamlVisualEditor.GitExtension.Services;
 
 internal sealed partial class GitCommandHandler
 {
-    public Task StashAsync(CommandContext context) => PushStashAsync(includeUntracked: false);
+    public async Task StashAsync(CommandContext context)
+    {
+        if (!await RefuseDuringOperationAsync())
+        {
+            await PushStashAsync(includeUntracked: false);
+        }
+    }
 
-    public Task StashIncludeUntrackedAsync(CommandContext context) => PushStashAsync(includeUntracked: true);
+    public async Task StashIncludeUntrackedAsync(CommandContext context)
+    {
+        if (!await RefuseDuringOperationAsync())
+        {
+            await PushStashAsync(includeUntracked: true);
+        }
+    }
 
     public async Task StashApplyAsync(CommandContext context)
     {
-        if (await PickStashAsync(context, GitStrings.StashApplyCommand) is { } stash)
+        if (!await RefuseDuringOperationAsync() && await PickStashAsync(context, GitStrings.StashApplyCommand) is { } stash)
         {
             await ApplyStashAsync(stash, pop: false);
         }
@@ -22,10 +34,25 @@ internal sealed partial class GitCommandHandler
 
     public async Task StashPopAsync(CommandContext context)
     {
-        if (await PickStashAsync(context, GitStrings.StashPopCommand) is { } stash)
+        if (!await RefuseDuringOperationAsync() && await PickStashAsync(context, GitStrings.StashPopCommand) is { } stash)
         {
             await ApplyStashAsync(stash, pop: true);
         }
+    }
+
+    /// <summary>
+    /// Reports and returns true while an operation is in progress. The When clause hides the commands then, but the
+    /// panels and command arguments run them directly; a stash would end a resolved merge without its merge commit.
+    /// </summary>
+    private async Task<bool> RefuseDuringOperationAsync()
+    {
+        if (GitOperationNames.Get(_session.Current.Operation) is not { } operation)
+        {
+            return false;
+        }
+
+        await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.RefusedDuringOperationFormat, operation));
+        return true;
     }
 
     public async Task StashDropAsync(CommandContext context)

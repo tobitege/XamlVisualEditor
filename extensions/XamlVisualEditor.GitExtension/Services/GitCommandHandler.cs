@@ -162,13 +162,20 @@ internal sealed partial class GitCommandHandler
     }
 
     // Git's paths of the changes are staged, because git matches the paths exactly also on a file system that ignores
-    // case; a folder target is added for files that appeared below it after the last refresh.
+    // case; a folder target is added for files that appeared below it after the last refresh, unless conflicted files
+    // lie below it.
     public Task StageAsync(CommandContext context) =>
         RunOnTargetAsync(
             context,
             GitCommandTarget.HasWorkingTreeChange,
             GitStrings.NoChangesToStageFormat,
-            (git, root, target, changes, ct) => git.StageAsync(root, GitCommandTarget.StagePathsOf(changes, target), ct));
+            (git, root, target, changes, ct) => git.StageAsync(
+                root,
+                GitCommandTarget.StagePathsOf(changes, target, HasConflictsBelow(target)),
+                ct));
+
+    private bool HasConflictsBelow(string repositoryPath) =>
+        GitCommandTarget.FindChanges(_session.Current.Changes, repositoryPath, change => change.IsConflicted).Count > 0;
 
     // The staged files are unstaged one by one: git reset of a folder would also reset conflicted files to HEAD.
     public Task UnstageAsync(CommandContext context) =>
@@ -214,13 +221,18 @@ internal sealed partial class GitCommandHandler
 
     public async Task StageAllAsync(CommandContext context)
     {
-        if (GitCommandTarget.FindChanges(_session.Current.Changes, string.Empty, GitCommandTarget.HasWorkingTreeChange).Count == 0)
+        IReadOnlyList<GitFileChange> changes = GitCommandTarget.FindChanges(
+            _session.Current.Changes,
+            string.Empty,
+            GitCommandTarget.HasWorkingTreeChange);
+        if (changes.Count == 0)
         {
             await ShowInformationAsync(GitStrings.NothingToStage);
             return;
         }
 
-        await RunGitAsync((git, root, ct) => git.StageAsync(root, [GitCommandTarget.ToPathspec(string.Empty)], ct));
+        IReadOnlyList<string> paths = GitCommandTarget.StagePathsOf(changes, string.Empty, HasConflictsBelow(string.Empty));
+        await RunGitAsync((git, root, ct) => git.StageAsync(root, paths, ct));
     }
 
     public async Task UnstageAllAsync(CommandContext context)
@@ -248,10 +260,36 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // Amending needs no staged changes: it can change the message only.
+        // git refuses to commit with unresolved conflicts. A commit in the middle of a rebase, a patch application or a
+        // sequence of picks would take the step's place with the wrong author or leave the operation stuck.
+        if (snapshot.HasConflicts)
+        {
+            await ShowInformationAsync(GitStrings.CommitWithConflicts);
+            return;
+        }
+
+        if (!snapshot.AllowsCommit)
+        {
+            await ShowInformationAsync(string.Format(
+                CultureInfo.CurrentCulture,
+                GitStrings.CommitDuringOperationFormat,
+                GitOperationNames.Get(snapshot.Operation)));
+            return;
+        }
+
         GitPanelViewModel? panel = _panel();
         bool amend = panel?.IsAmend == true;
-        if (!amend && GitCommandTarget.FindChanges(snapshot.Changes, string.Empty, GitCommandTarget.HasStagedChange).Count == 0)
+        if (amend && !snapshot.AllowsAmend)
+        {
+            await ShowInformationAsync(GitStrings.AmendDuringOperation);
+            return;
+        }
+
+        // Amending needs no staged changes: it can change the message only. A merge commit needs none either, for
+        // example after taking the current branch's side of every conflict.
+        if (!amend
+            && snapshot.Operation != GitRepositoryOperation.Merging
+            && GitCommandTarget.FindChanges(snapshot.Changes, string.Empty, GitCommandTarget.HasStagedChange).Count == 0)
         {
             await ShowInformationAsync(GitStrings.NothingToCommit);
             return;
@@ -261,8 +299,9 @@ internal sealed partial class GitCommandHandler
         bool fromPanel = !string.IsNullOrWhiteSpace(message);
         if (!fromPanel)
         {
+            string? prepared = snapshot.Operation == GitRepositoryOperation.Merging ? await ReadPreparedMessageAsync() : null;
             message = (await _window.ShowInputBoxAsync(
-                new InputBoxOptions(GitStrings.CommitInputTitle, GitStrings.CommitInputPrompt, null),
+                new InputBoxOptions(GitStrings.CommitInputTitle, GitStrings.CommitInputPrompt, prepared),
                 CancellationToken.None))?.Trim();
         }
 

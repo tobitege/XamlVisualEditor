@@ -31,7 +31,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" ColumnDefinitions="*">
         <!-- Header -->
         <DockPanel Grid.Row="0" Margin="8,6" LastChildFill="False">
             <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left"
@@ -139,8 +139,36 @@
                        DockPanel.Dock="Right" />
         </DockPanel>
 
+        <!-- Operation in progress: what is left to do, continue and abort -->
+        <Border Name="GitOperationBanner" Grid.Row="2" Margin="8,0,8,6" Padding="8,4"
+                BorderBrush="{DynamicResource SourceControlConflictedBrush}" BorderThickness="1"
+                IsVisible="{CompiledBinding IsOperationInProgress}">
+            <DockPanel LastChildFill="True">
+                <Button Classes="git-action" Command="{CompiledBinding AbortCommand}" DockPanel.Dock="Right" Margin="6,0,0,0"
+                        ToolTip.Tip="{x:Static gloc:GitStrings.AbortCommand}"
+                        AutomationProperties.Name="{x:Static gloc:GitStrings.AbortCommand}">
+                    <StackPanel>
+                        <PathIcon Data="{x:Static vm:GitIcons.Abort}" />
+                        <TextBlock Text="{x:Static gloc:GitStrings.AbortButton}" />
+                    </StackPanel>
+                </Button>
+                <!-- A merge is completed with Commit. -->
+                <Button Classes="git-action" Command="{CompiledBinding ContinueCommand}" DockPanel.Dock="Right"
+                        IsVisible="{CompiledBinding !IsMerging}"
+                        ToolTip.Tip="{x:Static gloc:GitStrings.ContinueCommand}" ToolTip.ShowOnDisabled="True"
+                        AutomationProperties.Name="{x:Static gloc:GitStrings.ContinueCommand}">
+                    <StackPanel>
+                        <PathIcon Data="{x:Static vm:GitIcons.Continue}" />
+                        <TextBlock Text="{x:Static gloc:GitStrings.ContinueButton}" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="{CompiledBinding OperationSummary}" FontWeight="SemiBold"
+                           VerticalAlignment="Center" TextWrapping="Wrap" />
+            </DockPanel>
+        </Border>
+
         <!-- Main content -->
-        <Grid Name="GitContentGrid" Grid.Row="2" RowDefinitions="*" Margin="8"
+        <Grid Name="GitContentGrid" Grid.Row="3" RowDefinitions="*" Margin="8"
               IsEnabled="{CompiledBinding IsRepository}"
               views:GitDiffPaneBehavior.IsOpen="{CompiledBinding IsDiffVisible}">
             <Grid.ColumnDefinitions>
@@ -174,6 +202,74 @@
                                   AutomationProperties.Name="{x:Static gloc:GitStrings.AmendLabel}" />
                     </DockPanel>
                 </StackPanel>
+
+                <!-- Conflicted files are listed here and not as changes; staging one marks it resolved. -->
+                <DockPanel Name="GitConflictPane" DockPanel.Dock="Top" Margin="0,0,0,8"
+                           IsVisible="{CompiledBinding HasConflicts}">
+                    <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4"
+                               Text="{CompiledBinding ConflictCount, StringFormat={x:Static gloc:GitStrings.ConflictsHeaderFormat}}" />
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                        <Button Classes="git-action" Command="{CompiledBinding OpenConflictCommand}" Margin="0,0,4,4"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.OpenConflictButton}"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.OpenConflictButton}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.OpenFile}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.OpenConflictButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding AcceptOursCommand}" Margin="0,0,4,4"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.AcceptOursCommand}"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.AcceptOursCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.AcceptOurs}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.AcceptOursButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding AcceptTheirsCommand}" Margin="0,0,4,4"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.AcceptTheirsCommand}"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.AcceptTheirsCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.AcceptTheirs}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.AcceptTheirsButton}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="git-action" Command="{CompiledBinding MarkResolvedCommand}" Margin="0,0,4,4"
+                                ToolTip.Tip="{x:Static gloc:GitStrings.MarkResolvedCommand}"
+                                AutomationProperties.Name="{x:Static gloc:GitStrings.MarkResolvedCommand}">
+                            <StackPanel>
+                                <PathIcon Data="{x:Static vm:GitIcons.MarkResolved}" />
+                                <TextBlock Text="{x:Static gloc:GitStrings.MarkResolvedCommand}" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                    <dg:DataGrid Name="GitConflictGrid" MaxHeight="160"
+                                 ItemsSource="{CompiledBinding ConflictItems}"
+                                 SelectedItem="{CompiledBinding SelectedConflict, Mode=TwoWay}"
+                                 AutoGenerateColumns="False"
+                                 CanUserResizeColumns="True"
+                                 GridLinesVisibility="None"
+                                 IsReadOnly="True">
+                        <dg:DataGrid.Columns>
+                            <dg:DataGridTextColumn Header="{x:Static loc:UiStrings.Path}"
+                                                   Width="*"
+                                                   x:DataType="vm:GitConflictEntryViewModel"
+                                                   Binding="{CompiledBinding Path}" />
+                            <!-- Fits every kind text, as the status columns of the other lists do. -->
+                            <dg:DataGridTemplateColumn Header="{x:Static loc:UiStrings.Status}"
+                                                       Width="Auto"
+                                                       SortMemberPath="KindLabel"
+                                                       x:DataType="vm:GitConflictEntryViewModel"
+                                                       ClipboardContentBinding="{CompiledBinding KindLabel}">
+                                <dg:DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:GitConflictEntryViewModel">
+                                        <TextBlock Text="{CompiledBinding KindLabel}" Margin="12,0" VerticalAlignment="Center"
+                                                   behaviors:ColumnWidthSamples.Texts="{x:Static vm:GitConflictEntryViewModel.KindLabels}" />
+                                    </DataTemplate>
+                                </dg:DataGridTemplateColumn.CellTemplate>
+                            </dg:DataGridTemplateColumn>
+                        </dg:DataGrid.Columns>
+                    </dg:DataGrid>
+                </DockPanel>
 
                 <TabControl>
                 <TabItem Header="{CompiledBinding StagedCount, StringFormat={x:Static loc:UiStrings.StagedCountFormat}}">
@@ -279,15 +375,21 @@
                 </WrapPanel>
                 <!-- The whole diff is shown, so the hunk at the cursor is never cut off. -->
                 <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" Padding="4">
-                    <controls:UnifiedDiffEditor Name="GitDiffEditor"
-                                                MaxLineCount="{x:Static sys:Int32.MaxValue}"
-                                                DiffLines="{CompiledBinding DiffLines}"
-                                                CurrentHunkIndex="{CompiledBinding CurrentHunkIndex, Mode=TwoWay}"
-                                                SelectedLineRange="{CompiledBinding SelectedDiffRange, Mode=OneWayToSource}"
-                                                FontFamily="Cascadia Code, Consolas, Menlo, monospace"
-                                                FontSize="14"
-                                                HorizontalScrollBarVisibility="Auto"
-                                                VerticalScrollBarVisibility="Auto" />
+                    <Panel>
+                        <controls:UnifiedDiffEditor Name="GitDiffEditor"
+                                                    MaxLineCount="{x:Static sys:Int32.MaxValue}"
+                                                    DiffLines="{CompiledBinding DiffLines}"
+                                                    CurrentHunkIndex="{CompiledBinding CurrentHunkIndex, Mode=TwoWay}"
+                                                    SelectedLineRange="{CompiledBinding SelectedDiffRange, Mode=OneWayToSource}"
+                                                    FontFamily="Cascadia Code, Consolas, Menlo, monospace"
+                                                    FontSize="14"
+                                                    HorizontalScrollBarVisibility="Auto"
+                                                    VerticalScrollBarVisibility="Auto" />
+                        <!-- git shows no usable diff of an unmerged file. -->
+                        <TextBlock Name="GitConflictHint" Text="{x:Static gloc:GitStrings.ConflictSelectedHint}"
+                                   TextWrapping="Wrap" Margin="8"
+                                   IsVisible="{CompiledBinding SelectedConflict, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    </Panel>
                 </Border>
             </DockPanel>
         </Grid>

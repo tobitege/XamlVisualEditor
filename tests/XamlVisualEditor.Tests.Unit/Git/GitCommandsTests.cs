@@ -27,6 +27,8 @@ public sealed class GitCommandsTests
     private const string REPOSITORY_WHEN = "git.isRepository";
     private const string REMOTE_WHEN = "git.hasRemote";
     private const string UPSTREAM_WHEN = "git.isRepository && git.hasUpstream";
+    private const string NO_OPERATION_WHEN = "git.isRepository && !git.operationInProgress";
+    private const string CONFLICTS_WHEN = "git.isRepository && git.hasConflicts";
 
     public static TheoryData<string, string, string?> CommandMetadataCases => new()
     {
@@ -62,13 +64,18 @@ public sealed class GitCommandsTests
         { GitCommands.STAGE_SELECTION, GitStrings.StageSelectionCommand, REPOSITORY_WHEN },
         { GitCommands.UNSTAGE_SELECTION, GitStrings.UnstageSelectionCommand, REPOSITORY_WHEN },
         { GitCommands.DISCARD_SELECTION, GitStrings.DiscardSelectionCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH, GitStrings.StashCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_APPLY, GitStrings.StashApplyCommand, REPOSITORY_WHEN },
-        { GitCommands.STASH_POP, GitStrings.StashPopCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH, GitStrings.StashCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_APPLY, GitStrings.StashApplyCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_POP, GitStrings.StashPopCommand, NO_OPERATION_WHEN },
         { GitCommands.STASH_DROP, GitStrings.StashDropCommand, REPOSITORY_WHEN },
-        { GitCommands.MERGE, GitStrings.MergeCommand, REPOSITORY_WHEN },
-        { GitCommands.ABORT_MERGE, GitStrings.AbortMergeCommand, "git.isRepository && git.isMerging" }
+        { GitCommands.MERGE, GitStrings.MergeCommand, NO_OPERATION_WHEN },
+        { GitCommands.ABORT, GitStrings.AbortCommand, "git.isRepository && git.operationInProgress" },
+        { GitCommands.CONTINUE, GitStrings.ContinueCommand, "git.isRepository && git.operationInProgress && !git.isMerging" },
+        { GitCommands.ACCEPT_OURS, GitStrings.AcceptOursCommand, CONFLICTS_WHEN },
+        { GitCommands.ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CONFLICTS_WHEN },
+        { GitCommands.MARK_RESOLVED, GitStrings.MarkResolvedCommand, CONFLICTS_WHEN },
+        { GitCommands.RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CONFLICTS_WHEN }
     };
 
     [Theory]
@@ -95,7 +102,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(39, commandIds.Count);
+        Assert.Equal(44, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -133,7 +140,7 @@ public sealed class GitCommandsTests
             GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
             GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_APPLY, GitCommands.STASH_POP,
-            GitCommands.STASH_DROP, GitCommands.MERGE, GitCommands.ABORT_MERGE
+            GitCommands.STASH_DROP, GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.ABORT
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -147,9 +154,16 @@ public sealed class GitCommandsTests
             },
             extensionsItems.Where(item => item.CheckedWhen is not null).Select(item => (item.CommandId, item.CheckedWhen!)));
 
-        string[] fileIds =
+        string[] explorerIds =
         [
-            GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD, GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD,
+            GitCommands.ACCEPT_OURS, GitCommands.ACCEPT_THEIRS, GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD,
+            GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD, GitCommands.MARK_RESOLVED, GitCommands.SHOW_FILE_HISTORY,
+            GitCommands.STAGE, GitCommands.UNSTAGE
+        ];
+        string[] editorIds =
+        [
+            GitCommands.ACCEPT_OURS, GitCommands.ACCEPT_THEIRS, GitCommands.BLAME, GitCommands.COMPARE_WITH_HEAD,
+            GitCommands.COMPARE_WITH_INDEX, GitCommands.DISCARD, GitCommands.MARK_RESOLVED, GitCommands.RESOLVE_CONFLICT,
             GitCommands.SHOW_FILE_HISTORY, GitCommands.STAGE, GitCommands.UNSTAGE
         ];
         string[] tabIds =
@@ -161,8 +175,8 @@ public sealed class GitCommandsTests
             .Where(item => item.Location is ExtensionMenuLocations.EditorContext or ExtensionMenuLocations.ExplorerContext
                 or ExtensionMenuLocations.DocumentTabContext)
             .ToArray();
-        Assert.Equal(fileIds, ContextIds(ExtensionMenuLocations.EditorContext));
-        Assert.Equal(fileIds, ContextIds(ExtensionMenuLocations.ExplorerContext));
+        Assert.Equal(editorIds, ContextIds(ExtensionMenuLocations.EditorContext));
+        Assert.Equal(explorerIds, ContextIds(ExtensionMenuLocations.ExplorerContext));
         Assert.Equal(tabIds, ContextIds(ExtensionMenuLocations.DocumentTabContext));
         Assert.All(contextItems, item => Assert.Equal("Git", item.Submenu));
         Assert.Equal(items.Count, viewItems.Length + extensionsItems.Length + contextItems.Length);

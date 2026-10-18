@@ -584,7 +584,22 @@ internal sealed class FakeEditorDocument : IEditorDocument
         return Task.FromResult(Text);
     }
 
-    public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct) => Task.CompletedTask;
+    /// <summary>Gets every call of <see cref="ApplyEditsAsync"/>, which counts as one undo step each.</summary>
+    public List<IReadOnlyList<TextEdit>> AppliedEdits { get; } = new();
+
+    // Applies the edits from the last to the first, so the offsets of the earlier ones stay valid.
+    public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
+    {
+        AppliedEdits.Add(edits);
+        string text = Text;
+        foreach (TextEdit edit in edits.OrderByDescending(edit => edit.Offset))
+        {
+            text = text.Remove(edit.Offset, edit.Length).Insert(edit.Offset, edit.NewText);
+        }
+
+        Edit(text);
+        return Task.CompletedTask;
+    }
 
     public void Edit(string text)
     {
@@ -634,10 +649,12 @@ internal sealed class FakeEditorServices : IEditorServices
     public Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct)
         => OpenDocumentAsync(filePath, EditorDocumentOpenBehavior.AllowWorkspaceLoad, ct);
 
+    // Returns the open document of the file, if any; the fake opens no new documents.
     public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
     {
         OpenedFiles.Add(filePath);
-        return Task.FromResult<IEditorDocument?>(null);
+        return Task.FromResult(_documents.FirstOrDefault(document =>
+            string.Equals(Path.GetFullPath(document.FilePath), Path.GetFullPath(filePath), StringComparison.OrdinalIgnoreCase)));
     }
 
     public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct) => Task.FromResult(false);

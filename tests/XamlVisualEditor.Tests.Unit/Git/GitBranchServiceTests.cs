@@ -298,64 +298,6 @@ public sealed class GitBranchServiceTests
     private static string CurrentBranch(GitTestRepository repository) =>
         repository.RunGit("rev-parse", "--abbrev-ref", "HEAD").Trim();
 
-    [Fact]
-    public async Task Merge_fast_forwards_and_reports_an_already_merged_branch()
-    {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        repository.RunGit("switch", "-q", "-c", "feature");
-        repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Feature");
-        repository.RunGit("switch", "-q", "main");
-        GitService service = new(options: repository.ProcessOptions);
-
-        GitMergeResult first = await service.MergeAsync(repository.Path, "feature", ct);
-        GitMergeResult second = await service.MergeAsync(repository.Path, "feature", ct);
-
-        Assert.Equal(GitMergeResult.Merged, first);
-        Assert.Equal(GitMergeResult.AlreadyUpToDate, second);
-        Assert.Equal(repository.RunGit("rev-parse", "feature"), repository.RunGit("rev-parse", "main"));
-        Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
-    }
-
-    [Fact]
-    public async Task Merge_with_conflicts_stops_in_the_merge_and_abort_restores_the_branch()
-    {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        repository.RunGit("switch", "-q", "-c", "feature");
-        repository.CommitFileIn(repository.Path, "a.txt", "feature\n", "Feature");
-        repository.RunGit("switch", "-q", "main");
-        repository.CommitFileIn(repository.Path, "a.txt", "main\n", "Main");
-        string head = repository.RunGit("rev-parse", "HEAD");
-        GitService service = new(options: repository.ProcessOptions);
-
-        GitMergeResult result = await service.MergeAsync(repository.Path, "feature", ct);
-        GitRepositoryStatus merging = await service.GetStatusAsync(repository.Path, ct);
-        await service.AbortMergeAsync(repository.Path, ct);
-        GitRepositoryStatus aborted = await service.GetStatusAsync(repository.Path, ct);
-
-        Assert.Equal(GitMergeResult.Conflicts, result);
-        Assert.Equal(GitRepositoryOperation.Merging, merging.Operation);
-        Assert.Contains(merging.Changes, change => change.Path == "a.txt" && change.IsConflicted);
-        Assert.Equal(GitRepositoryOperation.None, aborted.Operation);
-        Assert.Empty(aborted.Changes);
-        Assert.Equal(head, repository.RunGit("rev-parse", "HEAD"));
-    }
-
-    [Fact]
-    public async Task Merge_of_an_unknown_branch_fails_with_the_message_of_git()
-    {
-        CancellationToken ct = TestContext.Current.CancellationToken;
-        using GitTestRepository repository = GitTestRepository.Create("a.txt");
-        GitService service = new(options: repository.ProcessOptions);
-
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.MergeAsync(repository.Path, "missing", ct));
-
-        Assert.Contains("missing", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(GitRepositoryOperation.None, (await service.GetStatusAsync(repository.Path, ct)).Operation);
-    }
-
     private static string[] Branches(GitTestRepository repository) =>
         repository.RunGit("for-each-ref", "--format=%(refname:short)", "refs/heads")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

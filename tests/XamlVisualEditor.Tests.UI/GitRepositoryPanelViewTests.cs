@@ -798,10 +798,5 @@ public sealed class GitRepositoryPanelViewTests
 
         public Task<GitBranchDeleteResult> DeleteAsync(string repoPath, string name, bool force, CancellationToken ct = default) =>
             throw new NotSupportedException();
-
-        public Task<GitMergeResult> MergeAsync(string repoPath, string name, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task AbortMergeAsync(string repoPath, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

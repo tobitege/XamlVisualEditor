@@ -41,6 +41,9 @@ public sealed class GitServiceSet
     /// <summary>Gets the stash service, or null.</summary>
     public IGitStashService? Stash { get; init; }
 
+    /// <summary>Gets the merge, conflict resolution, continue and abort service, or null.</summary>
+    public IGitMergeService? Merge { get; init; }
+
     /// <summary>
     /// Creates a set whose optional capabilities are the interfaces <paramref name="service"/> implements.
     /// </summary>
@@ -55,7 +58,8 @@ public sealed class GitServiceSet
             History = service as IGitHistoryService,
             Content = service as IGitContentService,
             Patch = service as IGitPatchService,
-            Stash = service as IGitStashService
+            Stash = service as IGitStashService,
+            Merge = service as IGitMergeService
         };
     }
 }

@@ -44,8 +44,14 @@ public sealed record GitRepositoryStatus
     /// <summary>Gets whether the current branch has no commit yet.</summary>
     public bool IsUnborn { get; init; }
 
-    /// <summary>Gets the merge, rebase, cherry-pick or revert that is in progress.</summary>
+    /// <summary>Gets the merge, rebase, cherry-pick, revert or patch application that is in progress.</summary>
     public GitRepositoryOperation Operation { get; init; }
+
+    /// <summary>
+    /// Gets whether a rebase stopped at an edit step, where new commits and amending the stopped commit are part of
+    /// the rebase.
+    /// </summary>
+    public bool IsStoppedForEdit { get; init; }
 
     /// <inheritdoc />
     public bool Equals(GitRepositoryStatus? other)
@@ -63,6 +69,7 @@ public sealed record GitRepositoryStatus
             && IsDetached == other.IsDetached
             && IsUnborn == other.IsUnborn
             && Operation == other.Operation
+            && IsStoppedForEdit == other.IsStoppedForEdit
             && Changes.SequenceEqual(other.Changes);
     }
 
@@ -82,7 +89,10 @@ public enum GitRepositoryOperation
     Merging,
     Rebasing,
     CherryPicking,
-    Reverting
+    Reverting,
+
+    /// <summary>Patches from a mailbox are applied, as <c>git am</c> does.</summary>
+    ApplyingPatches
 }
 
 /// <summary>

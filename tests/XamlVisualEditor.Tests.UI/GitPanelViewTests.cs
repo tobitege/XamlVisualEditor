@@ -10,6 +10,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -85,8 +86,9 @@ public sealed class GitPanelViewTests
         Assert.False(vm.IsGitMonitoringEnabled);
         Assert.Equal(1, gitService.StatusCalls);
         Assert.Equal(new[] { "a.cs", "b.cs" }, vm.StagedItems.Select(item => item.Path));
-        // The conflicted file is only in the working tree list, where staging marks it as resolved.
-        Assert.Equal(new[] { "c.cs", "conflict.cs", "new.txt" }, vm.UnstagedItems.Select(item => item.Path));
+        // The conflicted file is only in the Conflicts list, where Mark Resolved stages it.
+        Assert.Equal(new[] { "c.cs", "new.txt" }, vm.UnstagedItems.Select(item => item.Path));
+        Assert.Equal(new[] { "conflict.cs" }, vm.ConflictItems.Select(item => item.Path));
     }
 
     [AvaloniaFact]
@@ -143,17 +145,13 @@ public sealed class GitPanelViewTests
     }
 
     [AvaloniaFact]
-    public async Task Discard_is_disabled_for_untracked_and_conflicted_files()
+    public async Task Discard_is_disabled_for_untracked_files()
     {
         ControlledGitService gitService = new(CreateStatus(), blockFirstStatus: false);
         using PanelFixture panel = await PanelFixture.CreateAsync(gitService);
         GitPanelViewModel vm = panel.ViewModel;
 
         vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "new.txt");
-        Assert.False(((ICommand)vm.DiscardCommand).CanExecute(null));
-        Assert.True(((ICommand)vm.StageCommand).CanExecute(null));
-
-        vm.SelectedUnstagedChange = Assert.Single(vm.UnstagedItems, item => item.Path == "conflict.cs");
         Assert.False(((ICommand)vm.DiscardCommand).CanExecute(null));
         Assert.True(((ICommand)vm.StageCommand).CanExecute(null));
 
@@ -457,7 +455,9 @@ public sealed class GitPanelViewTests
             [
                 vm.RefreshCommand, vm.ToggleDiffCommand, vm.ToggleMonitoringCommand, vm.StageCommand,
                 vm.UnstageCommand, vm.DiscardCommand, vm.StageAllCommand, vm.UnstageAllCommand, vm.CommitCommand,
-                vm.StageSelectionCommand, vm.UnstageSelectionCommand, vm.DiscardSelectionCommand
+                vm.StageSelectionCommand, vm.UnstageSelectionCommand, vm.DiscardSelectionCommand, vm.AbortCommand,
+                vm.ContinueCommand, vm.OpenConflictCommand, vm.AcceptOursCommand, vm.AcceptTheirsCommand,
+                vm.MarkResolvedCommand
             ];
             Button[] buttons = view.GetVisualDescendants().OfType<Button>()
                 .Where(button => button.Command is not null)
@@ -467,10 +467,11 @@ public sealed class GitPanelViewTests
             foreach (ICommand command in commands)
             {
                 Button button = Assert.Single(buttons, candidate => ReferenceEquals(candidate.Command, command));
-                PathIcon icon = Assert.Single(button.GetVisualDescendants().OfType<PathIcon>());
+                // The content is read from the logical tree: a button of a hidden banner or list has no template yet.
+                PathIcon icon = Assert.Single(button.GetLogicalDescendants().OfType<PathIcon>());
                 Assert.NotNull(icon.Data);
                 Assert.False(icon.IsSet(TemplatedControl.ForegroundProperty));
-                Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => !string.IsNullOrWhiteSpace(text.Text));
+                Assert.Contains(button.GetLogicalDescendants().OfType<TextBlock>(), text => !string.IsNullOrWhiteSpace(text.Text));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
                 Assert.IsType<string>(ToolTip.GetTip(button));
             }

@@ -65,8 +65,12 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         string[] args = { "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal" };
         GitProcessResult result = await RunGitAsync(repoPath, args, GitCommandAccess.Read, ct);
         ThrowIfFailed(result, args[0]);
-        GitRepositoryOperation operation = await GetOperationAsync(repoPath, ct);
-        return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation);
+        string? gitDirectory = await GetGitDirectoryAsync(repoPath, ct);
+        GitRepositoryOperation operation = gitDirectory is null ? GitRepositoryOperation.None : DetectOperation(gitDirectory);
+        return GitStatusParser.ParsePorcelainV2(repoPath, result.StandardOutput, operation) with
+        {
+            IsStoppedForEdit = operation == GitRepositoryOperation.Rebasing && IsStoppedForEdit(gitDirectory!)
+        };
     }
 
     public async Task<GitDiff> GetDiffAsync(string repoPath, GitDiffRequest request, CancellationToken ct = default)
@@ -231,6 +235,12 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
 
     internal static GitRepositoryOperation DetectOperation(string gitDirectory)
     {
+        // git am keeps its state in rebase-apply as the apply backend of rebase does, and marks it with this file.
+        if (File.Exists(Path.Combine(gitDirectory, "rebase-apply", "applying")))
+        {
+            return GitRepositoryOperation.ApplyingPatches;
+        }
+
         if (Directory.Exists(Path.Combine(gitDirectory, "rebase-merge"))
             || Directory.Exists(Path.Combine(gitDirectory, "rebase-apply")))
         {
@@ -247,10 +257,28 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
             return GitRepositoryOperation.CherryPicking;
         }
 
-        return File.Exists(Path.Combine(gitDirectory, "REVERT_HEAD"))
-            ? GitRepositoryOperation.Reverting
-            : GitRepositoryOperation.None;
+        if (File.Exists(Path.Combine(gitDirectory, "REVERT_HEAD")))
+        {
+            return GitRepositoryOperation.Reverting;
+        }
+
+        // A sequence of picks or reverts that stopped and whose step was committed has no CHERRY_PICK_HEAD or
+        // REVERT_HEAD; its remaining steps wait in the sequencer, the first of them names the kind.
+        string todo = Path.Combine(gitDirectory, "sequencer", "todo");
+        string? step = File.Exists(todo)
+            ? File.ReadLines(todo).Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0 && line[0] != '#')
+            : null;
+        return step switch
+        {
+            null => GitRepositoryOperation.None,
+            _ when step.StartsWith("revert ", StringComparison.Ordinal) => GitRepositoryOperation.Reverting,
+            _ => GitRepositoryOperation.CherryPicking
+        };
     }
+
+    // git writes this file when a rebase stops at an edit step, and not when it stops for a conflict.
+    internal static bool IsStoppedForEdit(string gitDirectory) =>
+        File.Exists(Path.Combine(gitDirectory, "rebase-merge", "amend"));
 
     private static string? ResolveWorkingDirectory(string path)
     {

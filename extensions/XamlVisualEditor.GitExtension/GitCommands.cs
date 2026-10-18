@@ -109,8 +109,38 @@ public static class GitCommands
     /// <summary>Merges the branch in argument 0 (full or short name), otherwise one picked from a list, into the current branch.</summary>
     public const string MERGE = "git.merge";
 
-    /// <summary>Aborts the merge in progress after a confirmation.</summary>
-    public const string ABORT_MERGE = "git.abortMerge";
+    /// <summary>Aborts the merge, rebase, cherry-pick, revert or patch application in progress after a confirmation.</summary>
+    public const string ABORT = "git.abort";
+
+    /// <summary>
+    /// Continues the rebase, cherry-pick, revert or patch application in progress; a merge is completed with
+    /// <see cref="COMMIT"/>.
+    /// </summary>
+    public const string CONTINUE = "git.continue";
+
+    /// <summary>
+    /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
+    /// version of the current branch after a confirmation; a file that side deleted is deleted.
+    /// </summary>
+    public const string ACCEPT_OURS = "git.acceptOurs";
+
+    /// <summary>
+    /// Resolves the conflicted files of argument 0 (a file or folder), otherwise of the active document, with the
+    /// version of the merged commit after a confirmation; a file that side deleted is deleted.
+    /// </summary>
+    public const string ACCEPT_THEIRS = "git.acceptTheirs";
+
+    /// <summary>
+    /// Marks the conflicted files of argument 0 (a file or folder), otherwise of the active document, as resolved by
+    /// staging them; asks first when a saved file still contains conflict markers.
+    /// </summary>
+    public const string MARK_RESOLVED = "git.markResolved";
+
+    /// <summary>
+    /// Replaces the conflict block at the 1-based line in argument 1 of the file in argument 0, otherwise at the caret
+    /// of the active document, by the side picked from a list, in the editor buffer. A click on a conflict mark runs it.
+    /// </summary>
+    public const string RESOLVE_CONFLICT = "git.resolveConflict";
 
     /// <summary>Fetches the branches of all remotes.</summary>
     public const string FETCH = "git.fetch";
@@ -176,6 +206,9 @@ public static class GitCommands
     /// <summary>Context key: a file has an unresolved merge conflict.</summary>
     public const string HAS_CONFLICTS_CONTEXT_KEY = "git.hasConflicts";
 
+    /// <summary>Context key: a merge, rebase, cherry-pick, revert or patch application is in progress.</summary>
+    public const string OPERATION_IN_PROGRESS_CONTEXT_KEY = "git.operationInProgress";
+
     /// <summary>Context key: the working folder watcher is switched on.</summary>
     public const string AUTO_REFRESH_CONTEXT_KEY = GitSettingsStore.AUTO_REFRESH_KEY;
 
@@ -196,7 +229,11 @@ public static class GitCommands
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
     private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
     private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
-    private const string MERGING_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + IS_MERGING_CONTEXT_KEY;
+    // Stash and merge are refused during an operation: a stash would end a resolved merge without its merge commit.
+    private const string NO_OPERATION_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && !" + OPERATION_IN_PROGRESS_CONTEXT_KEY;
+    private const string OPERATION_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + OPERATION_IN_PROGRESS_CONTEXT_KEY;
+    private const string CONTINUE_WHEN = OPERATION_WHEN + " && !" + IS_MERGING_CONTEXT_KEY;
+    private const string CONFLICTS_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_CONFLICTS_CONTEXT_KEY;
 
     /// <summary>Registers the command handlers and their metadata.</summary>
     internal static void RegisterCommands(
@@ -271,19 +308,29 @@ public static class GitCommands
         Register(DISCARD_SELECTION, handler.DiscardSelectionAsync,
             new CommandMetadata(GitStrings.DiscardSelectionCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 320));
         Register(STASH, handler.StashAsync,
-            new CommandMetadata(GitStrings.StashCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 330));
+            new CommandMetadata(GitStrings.StashCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 330));
         Register(STASH_INCLUDE_UNTRACKED, handler.StashIncludeUntrackedAsync,
-            new CommandMetadata(GitStrings.StashIncludeUntrackedCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 340));
+            new CommandMetadata(GitStrings.StashIncludeUntrackedCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 340));
         Register(STASH_APPLY, handler.StashApplyAsync,
-            new CommandMetadata(GitStrings.StashApplyCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 350));
+            new CommandMetadata(GitStrings.StashApplyCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 350));
         Register(STASH_POP, handler.StashPopAsync,
-            new CommandMetadata(GitStrings.StashPopCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 360));
+            new CommandMetadata(GitStrings.StashPopCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 360));
         Register(STASH_DROP, handler.StashDropAsync,
             new CommandMetadata(GitStrings.StashDropCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 370));
         Register(MERGE, handler.MergeAsync,
-            new CommandMetadata(GitStrings.MergeCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 380));
-        Register(ABORT_MERGE, handler.AbortMergeAsync,
-            new CommandMetadata(GitStrings.AbortMergeCommand, CATEGORY, When: MERGING_WHEN, Priority: 390));
+            new CommandMetadata(GitStrings.MergeCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 380));
+        Register(ABORT, handler.AbortAsync,
+            new CommandMetadata(GitStrings.AbortCommand, CATEGORY, When: OPERATION_WHEN, Priority: 390));
+        Register(CONTINUE, handler.ContinueAsync,
+            new CommandMetadata(GitStrings.ContinueCommand, CATEGORY, When: CONTINUE_WHEN, Priority: 400));
+        Register(ACCEPT_OURS, handler.AcceptOursAsync,
+            new CommandMetadata(GitStrings.AcceptOursCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 410));
+        Register(ACCEPT_THEIRS, handler.AcceptTheirsAsync,
+            new CommandMetadata(GitStrings.AcceptTheirsCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 420));
+        Register(MARK_RESOLVED, handler.MarkResolvedAsync,
+            new CommandMetadata(GitStrings.MarkResolvedCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 430));
+        Register(RESOLVE_CONFLICT, handler.ResolveConflictAsync,
+            new CommandMetadata(GitStrings.ResolveConflictCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 440));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -331,7 +378,8 @@ public static class GitCommands
                 ExtensionsItem(CREATE_BRANCH, GitStrings.CreateBranchCommand, BRANCHES_GROUP, 100),
                 ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
                 ExtensionsItem(MERGE, GitStrings.MergeCommand, BRANCHES_GROUP, 112),
-                ExtensionsItem(ABORT_MERGE, GitStrings.AbortMergeCommand, BRANCHES_GROUP, 114),
+                ExtensionsItem(CONTINUE, GitStrings.ContinueCommand, BRANCHES_GROUP, 114),
+                ExtensionsItem(ABORT, GitStrings.AbortCommand, BRANCHES_GROUP, 116),
                 ExtensionsItem(FETCH, GitStrings.FetchCommand, SYNC_GROUP, 120),
                 ExtensionsItem(PULL, GitStrings.PullCommand, SYNC_GROUP, 130),
                 ExtensionsItem(PUSH, GitStrings.PushCommand, SYNC_GROUP, 140),
@@ -348,11 +396,14 @@ public static class GitCommands
                 ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
                 ContextItem(ExtensionMenuLocations.EditorContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.EditorContext),
+                ContextItem(ExtensionMenuLocations.EditorContext, RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, 80),
+                .. ConflictItems(ExtensionMenuLocations.EditorContext),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, DISCARD, GitStrings.DiscardCommand, 30),
                 ContextItem(ExtensionMenuLocations.ExplorerContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
                 .. FileDocumentItems(ExtensionMenuLocations.ExplorerContext),
+                .. ConflictItems(ExtensionMenuLocations.ExplorerContext),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.DocumentTabContext, SHOW_FILE_HISTORY, GitStrings.ShowFileHistoryCommand, 40),
@@ -399,7 +450,12 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(STASH_POP, GitStrings.StashPopCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(STASH_DROP, GitStrings.StashDropCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(MERGE, GitStrings.MergeCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(ABORT_MERGE, GitStrings.AbortMergeCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(CONTINUE, GitStrings.ContinueCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ABORT, GitStrings.AbortCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ACCEPT_OURS, GitStrings.AcceptOursCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(MARK_RESOLVED, GitStrings.MarkResolvedCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.
@@ -408,6 +464,14 @@ public static class GitCommands
             ContextItem(location, COMPARE_WITH_HEAD, GitStrings.CompareWithHeadCommand, 50),
             ContextItem(location, COMPARE_WITH_INDEX, GitStrings.CompareWithIndexCommand, 60),
             ContextItem(location, BLAME, GitStrings.BlameCommand, 70)
+        ];
+
+        // The conflict commands of a file or folder, last.
+        static ExtensionMenuContribution[] ConflictItems(string location) =>
+        [
+            ContextItem(location, ACCEPT_OURS, GitStrings.AcceptOursCommand, 90),
+            ContextItem(location, ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, 100),
+            ContextItem(location, MARK_RESOLVED, GitStrings.MarkResolvedCommand, 110)
         ];
 
         static ExtensionMenuContribution ExtensionsItem(string commandId, string title, string submenuGroup, int priority) =>

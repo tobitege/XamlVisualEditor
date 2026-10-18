@@ -130,6 +130,11 @@ public sealed class GitRemoteServiceTests
         Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
         repository.RunGit("config", "--unset", "branch.main.pushRemote");
 
+        // A push under matching pushes every branch of the same name, so another one may have rejected it.
+        repository.RunGit("config", "push.default", "matching");
+        Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "main", ct));
+        repository.RunGit("config", "push.default", "current");
+
         // The upstream of local is the local branch main.
         repository.RunGit("switch", "-q", "-c", "local", "--track", "main");
         Assert.Null(await service.GetForcePushLeaseAsync(repository.Path, "local", ct));

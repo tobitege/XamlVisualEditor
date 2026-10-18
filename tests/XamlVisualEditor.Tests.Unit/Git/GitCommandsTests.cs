@@ -877,6 +877,27 @@ public sealed class GitCommandsTests
     }
 
     [Fact]
+    public async Task A_rejected_push_with_a_lease_asks_and_force_pushes_the_branch_with_that_lease_only_when_confirmed()
+    {
+        bool confirm = false;
+        ScriptedRemoteService remotes = new() { ForcePushLease = "0123456789abcdef0123456789abcdef01234567" };
+        // The plain push is rejected, the force push succeeds.
+        remotes.Respond = _ => remotes.Calls[^1].Contains("--force-with-lease", StringComparison.Ordinal)
+            ? GitRemoteResult.Succeeded(string.Empty)
+            : GitRemoteResult.Failed(GitRemoteFailureKind.Rejected, " ! [rejected]        main -> main (non-fast-forward)");
+        using Registration registration = await Registration.CreateAsync(remotes: remotes, upstream: "origin/main", respond: (_, _) => confirm);
+
+        await registration.Commands.ExecuteAsync(GitCommands.PUSH, null, CancellationToken.None);
+        confirm = true;
+        await registration.Commands.ExecuteAsync(GitCommands.PUSH, null, CancellationToken.None);
+
+        Assert.Equal(2, registration.Dialogs.Confirmations.Count());
+        Assert.All(registration.Dialogs.Confirmations, question => Assert.True(question.IsDestructive));
+        Assert.Equal(["push", "push", "push --force-with-lease main 0123456789abcdef0123456789abcdef01234567"], remotes.Calls);
+        Assert.Empty(registration.Window.Errors);
+    }
+
+    [Fact]
     public async Task Failure_messages_point_to_the_git_output_channel_when_git_wrote_output()
     {
         const string timeout = "git fetch did not finish within 00:10:00.";

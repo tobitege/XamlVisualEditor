@@ -600,6 +600,18 @@ public sealed class GitMergeServiceTests
     }
 
     [Fact]
+    public async Task A_merge_of_an_annotated_tag_that_stops_reports_the_stop()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = CreateDivergedBranches();
+        repository.RunGit("tag", "-a", "-m", "Feature release", "vfeature", "feature");
+        GitService service = new(options: repository.ProcessOptions);
+
+        Assert.Equal(GitMergeResult.Stopped, await service.MergeAsync(repository.Path, "vfeature", ct));
+        Assert.Equal(GitRepositoryOperation.Merging, (await service.GetStatusAsync(repository.Path, ct)).Operation);
+    }
+
+    [Fact]
     public async Task Rebase_of_a_named_branch_rebases_it_although_another_one_is_checked_out()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

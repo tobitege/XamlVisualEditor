@@ -324,6 +324,26 @@ public sealed class GitRepositoryCommandsTests
     }
 
     [AvaloniaFact]
+    public async Task Rebase_of_a_detached_head_rebases_the_confirmed_commit()
+    {
+        using GitPanelCommandFixture fixture = await CreateAsync(repository =>
+        {
+            repository.RunGit("switch", "-q", "-c", "feature");
+            repository.CommitFileIn(repository.Path, "b.txt", "b\n", "Add b");
+            repository.RunGit("switch", "-q", "main");
+            repository.CommitFileIn(repository.Path, "c.txt", "c\n", "Add c");
+            repository.RunGit("switch", "-q", "--detach", "feature");
+        }, (_, _) => true);
+
+        await fixture.ExecuteAsync(GitCommands.REBASE, "main");
+
+        Assert.Equal(string.Empty, fixture.Repository.RunGit("branch", "--show-current").Trim());
+        Assert.Equal(fixture.Repository.RunGit("rev-parse", "main"), fixture.Repository.RunGit("rev-parse", "HEAD~1"));
+        Assert.Equal("Add b", fixture.Repository.RunGit("log", "-1", "--format=%s").Trim());
+        Assert.Empty(fixture.Window.Errors);
+    }
+
+    [AvaloniaFact]
     public async Task A_rejected_push_offers_a_force_push_that_runs_only_after_a_confirmation()
     {
         bool confirm = false;

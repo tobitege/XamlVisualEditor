@@ -99,7 +99,7 @@ public sealed partial class GitService : IGitMergeService
         CancellationToken ct) =>
         RunUnderWriteGateAsync(repoPath, async () =>
         {
-            string? targetId = await TryResolveCommitIdAsync(repoPath, target, ct);
+            string[] targetIds = await ResolveTargetIdsAsync(repoPath, target, ct);
             GitProcessResult result = await RunWorkingTreeCommandAsync(repoPath, args, ct, environment);
             if (result.ExitCode == 0)
             {
@@ -107,10 +107,10 @@ public sealed partial class GitService : IGitMergeService
             }
 
             if (result.ExitCode == 1
-                && targetId is not null
                 && await GetGitDirectoryAsync(repoPath, CancellationToken.None) is { } gitDirectory
                 && DetectOperation(gitDirectory) == stoppedOperation
-                && ReadOperationTarget(gitDirectory, stoppedOperation) == targetId)
+                && ReadOperationTarget(gitDirectory, stoppedOperation) is { } operationTarget
+                && targetIds.Contains(operationTarget))
             {
                 return (result, true);
             }
@@ -119,17 +119,20 @@ public sealed partial class GitService : IGitMergeService
             return (result, false);
         }, ct);
 
-    /// <summary>Returns the full id of the commit <paramref name="revision"/> names, or null when it names none.</summary>
-    private async Task<string?> TryResolveCommitIdAsync(string repoPath, string revision, CancellationToken ct)
+    /// <summary>
+    /// Returns the ids git can write for <paramref name="revision"/> into the state of an operation: the object it names,
+    /// which MERGE_HEAD holds for an annotated tag, and the commit it peels to; empty when it names none.
+    /// </summary>
+    private async Task<string[]> ResolveTargetIdsAsync(string repoPath, string revision, CancellationToken ct)
     {
-        try
+        if (revision.StartsWith('-'))
         {
-            return (await ResolveCommitAsync(repoPath, revision, ct)).Sha;
+            return [];
         }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
+
+        string? objectId = await ReadRevisionAsync(repoPath, ["--verify", "--quiet", revision], ct);
+        string? commitId = await ReadRevisionAsync(repoPath, ["--verify", "--quiet", revision + "^{commit}"], ct);
+        return new[] { objectId, commitId }.OfType<string>().ToArray();
     }
 
     /// <summary>
@@ -178,7 +181,10 @@ public sealed partial class GitService : IGitMergeService
             }
 
             GitRepositoryOperation current = DetectOperation(gitDirectory);
-            if (current != operation || current == GitRepositoryOperation.None || !isConfirmedStep(ReadOperationStep(gitDirectory, current)))
+            if (current != operation
+                || current == GitRepositoryOperation.None
+                || !TryReadOperationStep(gitDirectory, current, out string? step)
+                || !isConfirmedStep(step))
             {
                 return false;
             }
@@ -189,8 +195,9 @@ public sealed partial class GitService : IGitMergeService
 
     /// <summary>
     /// Runs <paramref name="action"/> with the write gate of the repository held, see
-    /// <see cref="GitProcessRunner.RunWithWriteGateAsync"/>. As for a writing command, <paramref name="ct"/> cancels only
-    /// the wait for the gate, and a stop of the <see cref="GitProcessStop"/> scope ends it.
+    /// <see cref="GitProcessRunner.RunWithWriteGateAsync"/>. <paramref name="ct"/> and a stop of the
+    /// <see cref="GitProcessStop"/> scope cancel the wait for the gate; the action decides how its own commands take
+    /// <paramref name="ct"/>, and its writing commands, as any, run to their end once started.
     /// </summary>
     private async Task<T> RunUnderWriteGateAsync<T>(string repoPath, Func<Task<T>> action, CancellationToken ct)
     {

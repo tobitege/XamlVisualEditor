@@ -438,13 +438,16 @@ public sealed partial class GitService
     /// <inheritdoc />
     /// <remarks>
     /// <c>@{push}</c> names the remote-tracking branch a plain <c>git push</c> of the branch updates, <c>@{upstream}</c>
-    /// the one <see cref="ForcePushAsync"/> replaces; only when both are the same does the force push replace what
-    /// rejected the push. git fails to resolve <c>@{push}</c> when <c>push.default=simple</c> and the names differ.
+    /// the one <see cref="ForcePushAsync"/> replaces; when both are the same, the push of the branch went there. git
+    /// fails to resolve <c>@{push}</c> when <c>push.default=simple</c> and the names differ. Under
+    /// <c>push.default=matching</c> a push updates every branch of the same name, so the rejection can come from
+    /// another branch; no lease is given then.
     /// </remarks>
     public async Task<string?> GetForcePushLeaseAsync(string repoPath, string branch, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(branch);
-        if (await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct) is null or ".")
+        if (await ReadConfigAsync(repoPath, "branch." + branch + ".remote", ct) is null or "."
+            || string.Equals(await ReadConfigAsync(repoPath, "push.default", ct), "matching", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }

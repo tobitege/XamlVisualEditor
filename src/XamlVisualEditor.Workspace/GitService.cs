@@ -300,7 +300,14 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
     /// the steps of a rebase in rebase-merge/msgnum or rebase-apply/next and those of git am in rebase-apply/next, and
     /// names the stopped commit of a cherry-pick or revert in CHERRY_PICK_HEAD or REVERT_HEAD.
     /// </summary>
-    internal static string? ReadOperationStep(string gitDirectory, GitRepositoryOperation operation)
+    internal static string? ReadOperationStep(string gitDirectory, GitRepositoryOperation operation) =>
+        TryReadOperationStep(gitDirectory, operation, out string? step) ? step : null;
+
+    /// <summary>
+    /// Reads the step as <see cref="ReadOperationStep"/> does; returns false when git was rewriting its file, so an
+    /// unknown step never counts as the step the user confirmed.
+    /// </summary>
+    internal static bool TryReadOperationStep(string gitDirectory, GitRepositoryOperation operation, out string? step)
     {
         string[] files = operation switch
         {
@@ -313,12 +320,13 @@ public sealed partial class GitService : IGitService, IGitRepositoryService, IGi
         string? file = files.Select(name => Path.Combine(gitDirectory, name)).FirstOrDefault(File.Exists);
         try
         {
-            return file is null ? null : File.ReadAllText(file).Trim();
+            step = file is null ? null : File.ReadAllText(file).Trim();
+            return true;
         }
         catch (IOException)
         {
-            // git replaced the file meanwhile; the step is then unknown and matches only a confirmed step that was unknown too.
-            return null;
+            step = null;
+            return false;
         }
     }
 

@@ -5,6 +5,8 @@ uses Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
 ### Added
 
 - The Git extension shows the branch of the workspace repository in the status bar, with the commits ahead of and behind its upstream and the number of changed files, for example `main ↑1 ↓2 · 5`; a click opens the Git Changes panel. The panel is listed under View › Panels, Ctrl+Shift+G opens it, and the Extensions › Git submenu and the Command Palette offer refresh, the "Git" output channel, stage all, unstage all, commit and creating a repository. Stage, unstage and discard (after a confirmation) are also in the Git submenu of the editor context menu and work on the active document; the output channel lists every git command the extension runs, with user names and passwords in URLs masked. Extensions can read the context keys `git.available`, `git.isRepository`, `git.hasRemote`, `git.hasUpstream`, `git.isMerging`, `git.hasConflicts` and `git.autoRefresh`.
@@ -222,6 +224,7 @@ uses Semantic Versioning.
 - Linux, Windows, and macOS release archives for x64 and Arm64.
 - Source-linked NuGet packages and symbol packages.
 
-[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v0.1.0

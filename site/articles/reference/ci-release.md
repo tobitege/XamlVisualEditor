@@ -12,7 +12,7 @@ The repository uses three primary GitHub Actions workflows.
 `.github/workflows/build.yml` restores, builds, and tests the complete product
 solution on Linux, Windows, and macOS. It uploads TRX test result artifacts and
 publishes check-run test reports when the token can create checks. A Linux NuGet
-pack job validates all 48 product packages and symbol packages, required NuGet
+pack job validates all 49 product packages and symbol packages, required NuGet
 metadata, generated built-in extension manifests, README badge coverage, and the
 two sample extension packages before uploading `.nupkg` and `.snupkg` artifacts
 for inspection.
@@ -60,10 +60,9 @@ See the [NuGet trusted publishing documentation](https://learn.microsoft.com/en-
 
 After creating the policy, run the Release workflow from a ref containing this
 configuration. Re-running an older failed run uses its original workflow and
-does not pick up the OIDC change. To recover the unpublished `v0.2.0` release,
-dispatch `release.yml` from `main` with version `0.2.0` and prerelease disabled.
-The existing tag remains unchanged. The old repository API-key secret can be
-removed after the first successful trusted publication.
+does not pick up the OIDC change. Trusted publishing was verified by the
+successful `v0.2.0` release. New releases run automatically when a `v*` tag is
+pushed. The old repository API-key secret is no longer used.
 
 Each application archive is checked for the app host, a matching runtime-specific
 previewer host, the VS Code compatibility host, README, changelog, and license

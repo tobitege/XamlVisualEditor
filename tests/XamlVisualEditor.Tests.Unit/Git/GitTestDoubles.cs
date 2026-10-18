@@ -153,6 +153,15 @@ internal sealed class ScriptedRemoteService : IGitRemoteService
     public Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<GitRemote>>([new GitRemote("origin", "remote", "remote")]);
 
+    public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default) => throw new NotSupportedException();
+
+    public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default) => throw new NotSupportedException();
+
+    public Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default) => throw new NotSupportedException();
+
     public Task<GitRemoteResult> FetchAsync(string repoPath, CancellationToken ct = default) => RunAsync("fetch", ct);
 
     public Task<GitRemoteResult> PullAsync(string repoPath, CancellationToken ct = default) => RunAsync("pull", ct);

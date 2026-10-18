@@ -185,6 +185,18 @@ public sealed partial class GitService
         return GitBranchDeleteResult.Deleted;
     }
 
+    /// <inheritdoc />
+    /// <remarks><c>-m</c> without force refuses a new name that exists; git moves the branch's configuration along.</remarks>
+    public Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+        string branch = name.StartsWith(LOCAL_BRANCH_PREFIX, StringComparison.Ordinal)
+            ? name[LOCAL_BRANCH_PREFIX.Length..]
+            : name;
+        return RunGitCheckedAsync(repoPath, new[] { "branch", "-m", "--", branch, newName }, standardInput: null, ct);
+    }
+
     private async Task<bool> ReferenceExistsAsync(string repoPath, string reference, CancellationToken ct)
     {
         GitProcessResult result = await RunGitAsync(

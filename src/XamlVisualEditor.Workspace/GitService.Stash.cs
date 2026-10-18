@@ -56,14 +56,29 @@ public sealed partial class GitService : IGitStashService
     /// <inheritdoc />
     /// <remarks>git pops and drops only by position; the position is checked against the commit id first.</remarks>
     public Task<bool> PopAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) =>
-        RunOnVerifiedStashAsync(repoPath, "pop", stash, ct);
+        RunOnVerifiedStashAsync(repoPath, ["pop"], stash, ct);
 
     /// <inheritdoc />
     /// <remarks>git pops and drops only by position; the position is checked against the commit id first.</remarks>
     public Task<bool> DropAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default) =>
-        RunOnVerifiedStashAsync(repoPath, "drop", stash, ct);
+        RunOnVerifiedStashAsync(repoPath, ["drop"], stash, ct);
 
-    private async Task<bool> RunOnVerifiedStashAsync(string repoPath, string command, GitStashEntry stash, CancellationToken ct)
+    /// <inheritdoc />
+    /// <remarks>
+    /// git removes the stash after the branch only when it is named by its position; the position is checked against
+    /// the commit id first.
+    /// </remarks>
+    public Task<bool> BranchAsync(string repoPath, GitStashEntry stash, string branchName, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(branchName);
+        return RunOnVerifiedStashAsync(repoPath, ["branch", "--", branchName], stash, ct);
+    }
+
+    /// <inheritdoc />
+    public Task ClearAsync(string repoPath, CancellationToken ct = default) =>
+        RunGitCheckedAsync(repoPath, new[] { "stash", "clear" }, standardInput: null, ct);
+
+    private async Task<bool> RunOnVerifiedStashAsync(string repoPath, string[] command, GitStashEntry stash, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(stash);
         GitProcessResult current = await RunGitAsync(
@@ -77,7 +92,7 @@ public sealed partial class GitService : IGitStashService
             return false;
         }
 
-        await RunGitCheckedAsync(repoPath, new[] { "stash", command, stash.Name }, standardInput: null, ct);
+        await RunGitCheckedAsync(repoPath, ["stash", .. command, stash.Name], standardInput: null, ct);
         return true;
     }
 }

@@ -75,7 +75,15 @@ public sealed class GitCommandsTests
         { GitCommands.ACCEPT_OURS, GitStrings.AcceptOursCommand, CONFLICTS_WHEN },
         { GitCommands.ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CONFLICTS_WHEN },
         { GitCommands.MARK_RESOLVED, GitStrings.MarkResolvedCommand, CONFLICTS_WHEN },
-        { GitCommands.RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CONFLICTS_WHEN }
+        { GitCommands.RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CONFLICTS_WHEN },
+        { GitCommands.RENAME_BRANCH, GitStrings.RenameBranchCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_SHOW, GitStrings.StashShowCommand, REPOSITORY_WHEN },
+        { GitCommands.STASH_BRANCH, GitStrings.StashBranchCommand, NO_OPERATION_WHEN },
+        { GitCommands.STASH_CLEAR, GitStrings.StashClearCommand, REPOSITORY_WHEN },
+        { GitCommands.ADD_REMOTE, GitStrings.AddRemoteCommand, REPOSITORY_WHEN },
+        { GitCommands.RENAME_REMOTE, GitStrings.RenameRemoteCommand, REMOTE_WHEN },
+        { GitCommands.SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, REMOTE_WHEN },
+        { GitCommands.REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTE_WHEN }
     };
 
     [Theory]
@@ -102,7 +110,7 @@ public sealed class GitCommandsTests
         using Registration registration = await Registration.CreateAsync();
 
         IReadOnlyList<string> commandIds = await registration.Commands.GetCommandsAsync(CancellationToken.None);
-        Assert.Equal(44, commandIds.Count);
+        Assert.Equal(52, commandIds.Count);
         Assert.Equal(
             commandIds.Order(StringComparer.Ordinal),
             registration.Contributions.CommandPaletteItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));
@@ -137,10 +145,12 @@ public sealed class GitCommandsTests
             GitCommands.SHOW_CHANGES, GitCommands.REFRESH, GitCommands.SHOW_OUTPUT, GitCommands.TOGGLE_AUTO_REFRESH,
             GitCommands.TOGGLE_EXPLORER_DECORATIONS, GitCommands.TOGGLE_CHANGE_MARKERS,
             GitCommands.STAGE_ALL, GitCommands.UNSTAGE_ALL, GitCommands.COMMIT, GitCommands.COMMIT_AMEND, GitCommands.INIT,
-            GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.DELETE_BRANCH,
+            GitCommands.CHECKOUT, GitCommands.CREATE_BRANCH, GitCommands.RENAME_BRANCH, GitCommands.DELETE_BRANCH,
             GitCommands.FETCH, GitCommands.PULL, GitCommands.PUSH, GitCommands.SYNC, GitCommands.SHOW_HISTORY,
-            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_APPLY, GitCommands.STASH_POP,
-            GitCommands.STASH_DROP, GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.ABORT
+            GitCommands.STASH, GitCommands.STASH_INCLUDE_UNTRACKED, GitCommands.STASH_SHOW, GitCommands.STASH_APPLY,
+            GitCommands.STASH_POP, GitCommands.STASH_BRANCH, GitCommands.STASH_DROP, GitCommands.STASH_CLEAR,
+            GitCommands.MERGE, GitCommands.CONTINUE, GitCommands.ABORT,
+            GitCommands.ADD_REMOTE, GitCommands.RENAME_REMOTE, GitCommands.SET_REMOTE_URL, GitCommands.REMOVE_REMOTE
         ];
         ExtensionMenuContribution[] extensionsItems = items.Where(item => item.Location == ExtensionMenuLocations.Extensions).ToArray();
         Assert.Equal(extensionsIds.Order(StringComparer.Ordinal), extensionsItems.Select(item => item.CommandId).Order(StringComparer.Ordinal));

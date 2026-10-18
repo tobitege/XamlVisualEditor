@@ -108,6 +108,7 @@ public sealed class ViewLocator : IDataTemplate
             GitHistoryViewModel => new GitHistoryView(),
             GitCompareDocumentViewModel => new GitCompareDocumentView(),
             GitBlameDocumentViewModel => new GitBlameDocumentView(),
+            GitCommitDetailsViewModel => new GitCommitDetailsView(),
             PendingChangesViewModel => new PendingChangesView(),
             SourceControlExplorerViewModel => new SourceControlExplorerView(),
             TfvcHistoryViewModel => new TfvcHistoryView(),
@@ -172,6 +173,7 @@ public sealed class ViewLocator : IDataTemplate
             or GitHistoryViewModel
             or GitCompareDocumentViewModel
             or GitBlameDocumentViewModel
+            or GitCommitDetailsViewModel
             or PendingChangesViewModel
             or SourceControlExplorerViewModel
             or TfvcHistoryViewModel

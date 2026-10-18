@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
-/// Lists, switches, creates and deletes branches. Every method throws
+/// Lists, switches, creates, renames and deletes branches. Every method throws
 /// <see cref="System.InvalidOperationException"/> with git's error output when git fails.
 /// </summary>
 public interface IGitBranchService
@@ -46,4 +46,10 @@ public interface IGitBranchService
     /// fully merged is kept and <see cref="GitBranchDeleteResult.NotFullyMerged"/> is returned.
     /// </summary>
     Task<GitBranchDeleteResult> DeleteAsync(string repoPath, string name, bool force, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renames the local branch <paramref name="name"/> to <paramref name="newName"/>, with its upstream and its
+    /// other configuration; a remote branch keeps its name. A new name that another branch has fails.
+    /// </summary>
+    Task RenameAsync(string repoPath, string name, string newName, CancellationToken ct = default);
 }

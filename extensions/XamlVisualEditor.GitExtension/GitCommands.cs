@@ -91,6 +91,21 @@ public static class GitCommands
     /// <summary>Removes the stash with the commit id in argument 0, otherwise one picked from a list, after a confirmation.</summary>
     public const string STASH_DROP = "git.stashDrop";
 
+    /// <summary>
+    /// Opens a document tab with the files and diffs of the stash with the commit id in argument 0, otherwise of one
+    /// picked from a list; untracked files of the stash show as added.
+    /// </summary>
+    public const string STASH_SHOW = "git.stashShow";
+
+    /// <summary>
+    /// Creates a branch with an entered name at the commit the stash with the commit id in argument 0, otherwise one
+    /// picked from a list, was made on, switches to it, applies the stash and removes it.
+    /// </summary>
+    public const string STASH_BRANCH = "git.stashBranch";
+
+    /// <summary>Removes every stash after a confirmation.</summary>
+    public const string STASH_CLEAR = "git.stashClear";
+
     /// <summary>View id of the Git Repository panel with the branches.</summary>
     public const string REPOSITORY_VIEW_ID = "git.repository";
 
@@ -105,6 +120,24 @@ public static class GitCommands
 
     /// <summary>Deletes the local branch in argument 0, otherwise one picked from a list, after a confirmation.</summary>
     public const string DELETE_BRANCH = "git.deleteBranch";
+
+    /// <summary>Renames the local branch in argument 0, otherwise one picked from a list, to an entered name.</summary>
+    public const string RENAME_BRANCH = "git.renameBranch";
+
+    /// <summary>Adds a remote with an entered name and URL.</summary>
+    public const string ADD_REMOTE = "git.addRemote";
+
+    /// <summary>Renames the remote in argument 0, otherwise one picked from a list, to an entered name.</summary>
+    public const string RENAME_REMOTE = "git.renameRemote";
+
+    /// <summary>Changes the URL of the remote in argument 0, otherwise of one picked from a list, to an entered URL.</summary>
+    public const string SET_REMOTE_URL = "git.setRemoteUrl";
+
+    /// <summary>
+    /// Removes the remote in argument 0, otherwise one picked from a list, with its remote-tracking branches after a
+    /// confirmation.
+    /// </summary>
+    public const string REMOVE_REMOTE = "git.removeRemote";
 
     /// <summary>Merges the branch in argument 0 (full or short name), otherwise one picked from a list, into the current branch.</summary>
     public const string MERGE = "git.merge";
@@ -226,6 +259,7 @@ public static class GitCommands
     private const string SYNC_GROUP = "5_sync";
     private const string HISTORY_GROUP = "6_history";
     private const string STASH_GROUP = "7_stash";
+    private const string REMOTES_GROUP = "8_remotes";
     private const string REPOSITORY_WHEN = IS_REPOSITORY_CONTEXT_KEY;
     private const string REMOTE_WHEN = HAS_REMOTE_CONTEXT_KEY;
     private const string UPSTREAM_WHEN = IS_REPOSITORY_CONTEXT_KEY + " && " + HAS_UPSTREAM_CONTEXT_KEY;
@@ -331,6 +365,22 @@ public static class GitCommands
             new CommandMetadata(GitStrings.MarkResolvedCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 430));
         Register(RESOLVE_CONFLICT, handler.ResolveConflictAsync,
             new CommandMetadata(GitStrings.ResolveConflictCommand, CATEGORY, When: CONFLICTS_WHEN, Priority: 440));
+        Register(RENAME_BRANCH, handler.RenameBranchAsync,
+            new CommandMetadata(GitStrings.RenameBranchCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 450));
+        Register(STASH_SHOW, handler.StashShowAsync,
+            new CommandMetadata(GitStrings.StashShowCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 460));
+        Register(STASH_BRANCH, handler.StashBranchAsync,
+            new CommandMetadata(GitStrings.StashBranchCommand, CATEGORY, When: NO_OPERATION_WHEN, Priority: 470));
+        Register(STASH_CLEAR, handler.StashClearAsync,
+            new CommandMetadata(GitStrings.StashClearCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 480));
+        Register(ADD_REMOTE, handler.AddRemoteAsync,
+            new CommandMetadata(GitStrings.AddRemoteCommand, CATEGORY, When: REPOSITORY_WHEN, Priority: 490));
+        Register(RENAME_REMOTE, handler.RenameRemoteAsync,
+            new CommandMetadata(GitStrings.RenameRemoteCommand, CATEGORY, When: REMOTE_WHEN, Priority: 500));
+        Register(SET_REMOTE_URL, handler.SetRemoteUrlAsync,
+            new CommandMetadata(GitStrings.SetRemoteUrlCommand, CATEGORY, When: REMOTE_WHEN, Priority: 510));
+        Register(REMOVE_REMOTE, handler.RemoveRemoteAsync,
+            new CommandMetadata(GitStrings.RemoveRemoteCommand, CATEGORY, When: REMOTE_WHEN, Priority: 520));
 
         void Register(string commandId, Func<CommandContext, Task> execute, CommandMetadata metadata)
         {
@@ -376,6 +426,7 @@ public static class GitCommands
                 new ExtensionMenuContribution(TOGGLE_REPOSITORY_VIEW, GitStrings.RepositoryViewTitle, ExtensionMenuLocations.View, "views.left", 50),
                 ExtensionsItem(CHECKOUT, GitStrings.CheckoutCommand, BRANCHES_GROUP, 90),
                 ExtensionsItem(CREATE_BRANCH, GitStrings.CreateBranchCommand, BRANCHES_GROUP, 100),
+                ExtensionsItem(RENAME_BRANCH, GitStrings.RenameBranchCommand, BRANCHES_GROUP, 105),
                 ExtensionsItem(DELETE_BRANCH, GitStrings.DeleteBranchCommand, BRANCHES_GROUP, 110),
                 ExtensionsItem(MERGE, GitStrings.MergeCommand, BRANCHES_GROUP, 112),
                 ExtensionsItem(CONTINUE, GitStrings.ContinueCommand, BRANCHES_GROUP, 114),
@@ -390,7 +441,14 @@ public static class GitCommands
                 ExtensionsItem(STASH_INCLUDE_UNTRACKED, GitStrings.StashIncludeUntrackedCommand, STASH_GROUP, 180),
                 ExtensionsItem(STASH_APPLY, GitStrings.StashApplyCommand, STASH_GROUP, 190),
                 ExtensionsItem(STASH_POP, GitStrings.StashPopCommand, STASH_GROUP, 200),
+                ExtensionsItem(STASH_SHOW, GitStrings.StashShowCommand, STASH_GROUP, 185),
+                ExtensionsItem(STASH_BRANCH, GitStrings.StashBranchCommand, STASH_GROUP, 205),
                 ExtensionsItem(STASH_DROP, GitStrings.StashDropCommand, STASH_GROUP, 210),
+                ExtensionsItem(STASH_CLEAR, GitStrings.StashClearCommand, STASH_GROUP, 215),
+                ExtensionsItem(ADD_REMOTE, GitStrings.AddRemoteCommand, REMOTES_GROUP, 220),
+                ExtensionsItem(RENAME_REMOTE, GitStrings.RenameRemoteCommand, REMOTES_GROUP, 230),
+                ExtensionsItem(SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, REMOTES_GROUP, 240),
+                ExtensionsItem(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, REMOTES_GROUP, 250),
                 ContextItem(ExtensionMenuLocations.EditorContext, STAGE, GitStrings.StageCommand, 10),
                 ContextItem(ExtensionMenuLocations.EditorContext, UNSTAGE, GitStrings.UnstageCommand, 20),
                 ContextItem(ExtensionMenuLocations.EditorContext, DISCARD, GitStrings.DiscardCommand, 30),
@@ -455,7 +513,15 @@ public static class GitCommands
                 new ExtensionCommandPaletteContribution(ACCEPT_OURS, GitStrings.AcceptOursCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(ACCEPT_THEIRS, GitStrings.AcceptTheirsCommand, CATEGORY),
                 new ExtensionCommandPaletteContribution(MARK_RESOLVED, GitStrings.MarkResolvedCommand, CATEGORY),
-                new ExtensionCommandPaletteContribution(RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CATEGORY)
+                new ExtensionCommandPaletteContribution(RESOLVE_CONFLICT, GitStrings.ResolveConflictCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(RENAME_BRANCH, GitStrings.RenameBranchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_SHOW, GitStrings.StashShowCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_BRANCH, GitStrings.StashBranchCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(STASH_CLEAR, GitStrings.StashClearCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(ADD_REMOTE, GitStrings.AddRemoteCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(RENAME_REMOTE, GitStrings.RenameRemoteCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(SET_REMOTE_URL, GitStrings.SetRemoteUrlCommand, CATEGORY),
+                new ExtensionCommandPaletteContribution(REMOVE_REMOTE, GitStrings.RemoveRemoteCommand, CATEGORY)
             ]));
 
         // The document commands of a file, after its file commands.

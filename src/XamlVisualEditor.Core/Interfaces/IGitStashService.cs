@@ -30,4 +30,14 @@ public interface IGitStashService
 
     /// <summary>Removes <paramref name="stash"/>. Returns false and changes nothing when the stash is no longer at its position in the list.</summary>
     Task<bool> DropAsync(string repoPath, GitStashEntry stash, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates the branch <paramref name="branchName"/> at the commit <paramref name="stash"/> was made on, switches
+    /// to it, applies the stash there and removes it when it applied without conflict. Returns false and changes
+    /// nothing when the stash is no longer at its position in the list.
+    /// </summary>
+    Task<bool> BranchAsync(string repoPath, GitStashEntry stash, string branchName, CancellationToken ct = default);
+
+    /// <summary>Removes every stash.</summary>
+    Task ClearAsync(string repoPath, CancellationToken ct = default);
 }

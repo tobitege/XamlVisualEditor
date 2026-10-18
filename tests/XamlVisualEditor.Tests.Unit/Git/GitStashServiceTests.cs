@@ -79,6 +79,46 @@ public sealed class GitStashServiceTests
     }
 
     [Fact]
+    public async Task Branch_applies_the_stash_on_a_new_branch_at_its_commit_and_removes_it()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        string stashedOn = repository.RunGit("rev-parse", "HEAD").Trim();
+        repository.WriteFile("a.txt", "stashed\n");
+        await service.PushAsync(repository.Path, "work", includeUntracked: false, ct);
+        repository.CommitFileIn(repository.Path, "a.txt", "later\n", "Later");
+        GitStashEntry stash = Assert.Single(await service.ListAsync(repository.Path, ct));
+
+        Assert.True(await service.BranchAsync(repository.Path, stash, "from-stash", ct));
+
+        Assert.Equal("from-stash", repository.RunGit("rev-parse", "--abbrev-ref", "HEAD").Trim());
+        Assert.Equal(stashedOn, repository.RunGit("rev-parse", "HEAD").Trim());
+        Assert.Equal("stashed\n", repository.ReadFile("a.txt"));
+        Assert.Empty(await service.ListAsync(repository.Path, ct));
+    }
+
+    [Fact]
+    public async Task Branch_of_a_stash_that_moved_changes_nothing_and_clear_removes_every_stash()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt", "b.txt");
+        GitService service = new(options: repository.ProcessOptions);
+        repository.WriteFile("a.txt", "first\n");
+        await service.PushAsync(repository.Path, "first", includeUntracked: false, ct);
+        GitStashEntry first = Assert.Single(await service.ListAsync(repository.Path, ct));
+        repository.WriteFile("b.txt", "second\n");
+        repository.RunGit("stash", "push", "-q", "-m", "pushed elsewhere");
+
+        Assert.False(await service.BranchAsync(repository.Path, first, "from-stash", ct));
+        Assert.False(repository.TryRunGit(out _, "rev-parse", "--verify", "--quiet", "refs/heads/from-stash"));
+
+        await service.ClearAsync(repository.Path, ct);
+
+        Assert.Empty(await service.ListAsync(repository.Path, ct));
+    }
+
+    [Fact]
     public async Task Drop_and_pop_of_a_stash_that_moved_in_the_list_change_nothing()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

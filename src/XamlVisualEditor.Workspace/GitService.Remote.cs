@@ -29,6 +29,36 @@ public sealed partial class GitService
     }
 
     /// <inheritdoc />
+    public Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default) =>
+        RunRemoteCommandAsync(repoPath, "add", name, url, ct);
+
+    /// <inheritdoc />
+    public Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default) =>
+        RunRemoteCommandAsync(repoPath, "rename", name, newName, ct);
+
+    /// <inheritdoc />
+    public Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default) =>
+        RunRemoteCommandAsync(repoPath, "remove", name, null, ct);
+
+    /// <inheritdoc />
+    public Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default) =>
+        RunRemoteCommandAsync(repoPath, "set-url", name, url, ct);
+
+    // The end of the options keeps a name or URL that starts with "-" from being read as an option.
+    private Task RunRemoteCommandAsync(string repoPath, string command, string name, string? value, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        List<string> args = new() { "remote", command, "--", name };
+        if (value is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(value);
+            args.Add(value);
+        }
+
+        return RunGitCheckedAsync(repoPath, args, standardInput: null, ct);
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Each remote is fetched with <c>git fetch &lt;remote&gt;</c>, so its configured refspecs, tag following and the
     /// pruning of <c>fetch.prune</c>, <c>remote.&lt;name&gt;.prune</c> and <c>fetch.pruneTags</c> apply as on the

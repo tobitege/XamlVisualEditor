@@ -16,6 +16,33 @@ public interface IGitRemoteService
     Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default);
 
     /// <summary>
+    /// Adds the remote <paramref name="name"/> with <paramref name="url"/> for fetch and push, without fetching it.
+    /// Throws <see cref="System.InvalidOperationException"/> with git's error output when git refuses the name, for
+    /// example because a remote of that name exists.
+    /// </summary>
+    Task AddRemoteAsync(string repoPath, string name, string url, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renames the remote <paramref name="name"/> to <paramref name="newName"/> with its remote-tracking branches and
+    /// the upstreams of the branches that track them. Throws <see cref="System.InvalidOperationException"/> with git's
+    /// error output when git fails.
+    /// </summary>
+    Task RenameRemoteAsync(string repoPath, string name, string newName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes the remote <paramref name="name"/> with its remote-tracking branches; branches that tracked them lose
+    /// their upstream. Throws <see cref="System.InvalidOperationException"/> with git's error output when git fails.
+    /// </summary>
+    Task RemoveRemoteAsync(string repoPath, string name, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets the URL of the remote <paramref name="name"/> to <paramref name="url"/>. A remote without its own push URL
+    /// pushes to it as well. Throws <see cref="System.InvalidOperationException"/> with git's error output when git
+    /// fails.
+    /// </summary>
+    Task SetRemoteUrlAsync(string repoPath, string name, string url, CancellationToken ct = default);
+
+    /// <summary>
     /// Fetches every remote that a fetch of all remotes does not skip, one remote after the other, as configured for
     /// it: with its refspecs and with pruning only when <c>fetch.prune</c> or <c>remote.&lt;name&gt;.prune</c> asks
     /// for it. A failing remote does not stop the others: the result then fails with the failure of the first

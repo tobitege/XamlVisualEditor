@@ -430,7 +430,17 @@ internal sealed class RecordingWindow : IWindow
         return Task.CompletedTask;
     }
 
-    public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult(InputBoxResult);
+    /// <summary>Gets the answers of the next input boxes, in order; once it is empty, <see cref="InputBoxResult"/> answers.</summary>
+    public Queue<string?> InputBoxResults { get; } = new();
+
+    /// <summary>Gets the options of the shown input boxes.</summary>
+    public List<InputBoxOptions> InputBoxes { get; } = new();
+
+    public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken)
+    {
+        InputBoxes.Add(options);
+        return Task.FromResult(InputBoxResults.Count > 0 ? InputBoxResults.Dequeue() : InputBoxResult);
+    }
 
     /// <summary>Gets or sets what the quick pick returns for its items; null cancels every quick pick.</summary>
     public Func<IReadOnlyList<QuickPickItem>, QuickPickItem?>? QuickPick { get; set; }

@@ -3,7 +3,7 @@ namespace XamlVisualEditor.GitExtension;
 /// <summary>
 /// Fluent System Icons (20, regular) of the Git panel buttons. Path data is copied verbatim from @fluentui/svg-icons;
 /// refresh, add and undo are the same geometries as in the animation editor toolbar. <see cref="WholeFile"/> is a
-/// Material icon.
+/// Material icon, and <see cref="Rename"/> is drawn for the Git panels.
 /// </summary>
 public static class GitIcons
 {
@@ -138,6 +138,27 @@ public static class GitIcons
 
     /// <summary>checkmark_20_regular, the same geometry as <see cref="Commit"/>; marks a conflicted file resolved.</summary>
     public const string MarkResolved = Commit;
+
+    /// <summary>
+    /// A text cursor, drawn for the Git panels in the 20 by 20 grid of the Fluent icons; renames a branch or a remote
+    /// and changes the URL of a remote.
+    /// </summary>
+    public const string Rename = "M6.5 3h7a.5.5 0 0 1 0 1h-3v12h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3V4h-3a.5.5 0 0 1 0-1z";
+
+    /// <summary>eye_20_regular, the same geometry as <see cref="WatchWorkingFolder"/>; shows the files of a stash.</summary>
+    public const string ShowStash = WatchWorkingFolder;
+
+    /// <summary>add_20_regular, the same geometry as <see cref="CreateBranch"/>; creates a branch from a stash.</summary>
+    public const string StashBranch = CreateBranch;
+
+    /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; removes every stash.</summary>
+    public const string ClearStashes = DeleteBranch;
+
+    /// <summary>add_20_regular, the same geometry as <see cref="Stage"/>; adds a remote.</summary>
+    public const string AddRemote = Stage;
+
+    /// <summary>delete_20_regular, the same geometry as <see cref="DeleteBranch"/>; removes a remote.</summary>
+    public const string RemoveRemote = DeleteBranch;
 
     /// <summary>tag_20_regular, path data of the Fluent UI System Icons asset SVG; marks the Tags tab and a tag.</summary>
     public const string Tag = "M14 7C14.5523 7 15 6.55228 15 6C15 5.44772 14.5523 5 14 5C13.4477 5 13 5.44772 13 6C13 6.55228 13.4477 7 14 7ZM11.1292 2.00004C10.5951 1.99654 10.0818 2.20681 9.7037 2.58399L3.02216 9.24852C2.23941 10.0293 2.2386 11.297 3.02036 12.0788L7.96875 17.0271C8.7498 17.8082 10.0161 17.8082 10.7972 17.0271L17.428 10.3963C17.8038 10.0205 18.0146 9.51063 18.0138 8.97917L18.0065 4.02911C18.0049 2.93081 17.1179 2.0393 16.0196 2.0321L11.1292 2.00004ZM10.4099 3.29199C10.599 3.1034 10.8556 2.99827 11.1227 3.00002L16.013 3.03208C16.5622 3.03568 17.0057 3.48143 17.0065 4.03058L17.0138 8.98065C17.0142 9.24637 16.9088 9.50133 16.7209 9.68923L10.0901 16.32C9.69955 16.7106 9.06638 16.7106 8.67586 16.32L3.72746 11.3716C3.33659 10.9808 3.33699 10.3469 3.72836 9.95653L10.4099 3.29199Z";

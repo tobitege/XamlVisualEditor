@@ -252,7 +252,7 @@
   <data name="StashConflicts" xml:space="preserve"><value>Der Stash wurde mit Konflikten angewendet und bleibt erhalten. Löse die Konflikte in den als Konflikt markierten Dateien.</value></data>
   <data name="StashDropPromptFormat" xml:space="preserve"><value>{0} ({1}) löschen? Seine Änderungen gehen verloren.</value></data>
   <data name="StashDropConfirm" xml:space="preserve"><value>Löschen</value></data>
-  <data name="MergeCommand" xml:space="preserve"><value>Branch mergen…</value></data>
+  <data name="MergeCommand" xml:space="preserve"><value>Branch mergen …</value></data>
   <data name="MergePickTitle" xml:space="preserve"><value>In den aktuellen Branch mergen</value></data>
   <data name="NoBranchToMerge" xml:space="preserve"><value>Es gibt keinen anderen Branch zum Mergen.</value></data>
   <data name="MergedFormat" xml:space="preserve"><value>{0} wurde in {1} gemergt.</value></data>
@@ -268,7 +268,7 @@
   <data name="ConflictsHeaderFormat" xml:space="preserve"><value>Konflikte ({0})</value></data>
   <data name="MergeReadyToCommit" xml:space="preserve"><value>keine Konflikte offen, Commit schließt den Merge ab</value></data>
   <data name="OperationReadyToContinue" xml:space="preserve"><value>keine Konflikte offen, Fortsetzen macht weiter</value></data>
-  <data name="AbortCommand" xml:space="preserve"><value>Vorgang abbrechen…</value></data>
+  <data name="AbortCommand" xml:space="preserve"><value>Vorgang abbrechen …</value></data>
   <data name="AbortButton" xml:space="preserve"><value>Abbrechen</value></data>
   <data name="AbortTitle" xml:space="preserve"><value>Vorgang abbrechen</value></data>
   <data name="AbortConfirm" xml:space="preserve"><value>Vorgang abbrechen</value></data>
@@ -277,11 +277,11 @@
   <data name="NoOperationInProgress" xml:space="preserve"><value>Es läuft kein Merge, Rebase, Cherry-Pick oder Revert und keine Patch-Anwendung.</value></data>
   <data name="ContinueCommand" xml:space="preserve"><value>Vorgang fortsetzen</value></data>
   <data name="ContinueButton" xml:space="preserve"><value>Fortsetzen</value></data>
-  <data name="ContinueProgress" xml:space="preserve"><value>Wird fortgesetzt…</value></data>
+  <data name="ContinueProgress" xml:space="preserve"><value>Wird fortgesetzt …</value></data>
   <data name="ContinueMergeWithCommit" xml:space="preserve"><value>Ein Merge wird mit Commit abgeschlossen.</value></data>
   <data name="ContinueWithConflicts" xml:space="preserve"><value>Erst die Konflikte lösen, dann fortsetzen.</value></data>
-  <data name="AcceptOursCommand" xml:space="preserve"><value>Aktuelle Version übernehmen…</value></data>
-  <data name="AcceptTheirsCommand" xml:space="preserve"><value>Eingehende Version übernehmen…</value></data>
+  <data name="AcceptOursCommand" xml:space="preserve"><value>Aktuelle Version übernehmen …</value></data>
+  <data name="AcceptTheirsCommand" xml:space="preserve"><value>Eingehende Version übernehmen …</value></data>
   <data name="AcceptOursButton" xml:space="preserve"><value>Aktuelle</value></data>
   <data name="AcceptTheirsButton" xml:space="preserve"><value>Eingehende</value></data>
   <data name="AcceptOursPromptFormat" xml:space="preserve"><value>{0} mit der aktuellen Version aus HEAD lösen? Die Dateien im Arbeitsverzeichnis werden ersetzt, und eine Datei, die diese Seite gelöscht hat, wird gelöscht.</value></data>
@@ -295,7 +295,7 @@
 Trotzdem als gelöst markieren?</value></data>
   <data name="MarkResolvedUnsavedFormat" xml:space="preserve"><value>Diese Dateien zuerst speichern. Git markiert die gespeicherte Datei als gelöst, nicht den Text im Editor.
 {0}</value></data>
-  <data name="ResolveConflictCommand" xml:space="preserve"><value>Konflikt lösen…</value></data>
+  <data name="ResolveConflictCommand" xml:space="preserve"><value>Konflikt lösen …</value></data>
   <data name="ResolveOursLabel" xml:space="preserve"><value>Aktuelle übernehmen</value></data>
   <data name="ResolveTheirsLabel" xml:space="preserve"><value>Eingehende übernehmen</value></data>
   <data name="ResolveBothLabel" xml:space="preserve"><value>Beide übernehmen</value></data>
@@ -315,4 +315,41 @@ Trotzdem als gelöst markieren?</value></data>
   <data name="CommitDuringOperationFormat" xml:space="preserve"><value>Im laufenden Vorgang ({0}) ist kein Commit möglich. Fortsetzen committet den aktuellen Schritt und macht weiter.</value></data>
   <data name="LogConflictBlocksFailed" xml:space="preserve"><value>Das Lesen der Konfliktblöcke eines Dokuments ist fehlgeschlagen.</value></data>
   <data name="RefusedDuringOperationFormat" xml:space="preserve"><value>Das geht nicht, solange ein Vorgang läuft ({0}). Erst abschließen oder abbrechen.</value></data>
+  <data name="RenameBranchCommand" xml:space="preserve"><value>Branch umbenennen …</value></data>
+  <data name="RenameBranchPickTitle" xml:space="preserve"><value>Branch umbenennen</value></data>
+  <data name="RenameBranchPromptFormat" xml:space="preserve"><value>Neuer Name für {0}</value></data>
+  <data name="NoBranchToRename" xml:space="preserve"><value>Es gibt keinen lokalen Branch, den du umbenennen kannst.</value></data>
+  <data name="CannotRenameRemoteFormat" xml:space="preserve"><value>{0} ist ein Remote-Branch. Nur lokale Branches lassen sich umbenennen.</value></data>
+  <data name="StashShowCommand" xml:space="preserve"><value>Stash anzeigen …</value></data>
+  <data name="StashShowButton" xml:space="preserve"><value>Anzeigen</value></data>
+  <data name="StashTitleFormat" xml:space="preserve"><value>Stash {0}</value></data>
+  <data name="StashComparisonFormat" xml:space="preserve"><value>Verglichen mit {0}, dem Commit, auf dem der Stash entstand. Unversionierte Dateien erscheinen als hinzugefügt.</value></data>
+  <data name="StashBranchCommand" xml:space="preserve"><value>Branch aus Stash erstellen …</value></data>
+  <data name="StashBranchButton" xml:space="preserve"><value>Branch</value></data>
+  <data name="StashBranchPromptFormat" xml:space="preserve"><value>Name des neuen Branches für {0}. Er beginnt bei dem Commit, auf dem der Stash entstand. Dort wird der Stash angewendet und danach entfernt.</value></data>
+  <data name="StashClearCommand" xml:space="preserve"><value>Alle Stashes löschen …</value></data>
+  <data name="StashClearButton" xml:space="preserve"><value>Alle löschen</value></data>
+  <data name="StashClearConfirm" xml:space="preserve"><value>Alle löschen</value></data>
+  <data name="StashClearPromptFormat" xml:space="preserve"><value>Alle Stashes löschen ({0})? Ihre Änderungen gehen verloren.</value></data>
+  <data name="RemotesTab" xml:space="preserve"><value>Remotes</value></data>
+  <data name="ColumnRemote" xml:space="preserve"><value>Remote</value></data>
+  <data name="ColumnUrl" xml:space="preserve"><value>URL</value></data>
+  <data name="RemoteFetchUrlFormat" xml:space="preserve"><value>Fetch: {0}</value></data>
+  <data name="RemotePushUrlFormat" xml:space="preserve"><value>Push: {0}</value></data>
+  <data name="AddRemoteCommand" xml:space="preserve"><value>Remote hinzufügen …</value></data>
+  <data name="AddRemoteButton" xml:space="preserve"><value>Hinzufügen</value></data>
+  <data name="RenameRemoteCommand" xml:space="preserve"><value>Remote umbenennen …</value></data>
+  <data name="RenameRemoteButton" xml:space="preserve"><value>Umbenennen</value></data>
+  <data name="SetRemoteUrlCommand" xml:space="preserve"><value>Remote-URL ändern …</value></data>
+  <data name="SetRemoteUrlButton" xml:space="preserve"><value>URL ändern</value></data>
+  <data name="RemoveRemoteCommand" xml:space="preserve"><value>Remote entfernen …</value></data>
+  <data name="RemoveRemoteButton" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="RemoveRemoteConfirm" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="RemoveRemotePromptFormat" xml:space="preserve"><value>Das Remote {0} entfernen? Seine Remote-Tracking-Branches werden gelöscht, und die Branches, die ihnen folgen, verlieren ihren Upstream.</value></data>
+  <data name="RemoteNamePrompt" xml:space="preserve"><value>Name des neuen Remotes</value></data>
+  <data name="RemoteUrlPromptFormat" xml:space="preserve"><value>URL von {0}</value></data>
+  <data name="RenameRemotePromptFormat" xml:space="preserve"><value>Neuer Name für {0}</value></data>
+  <data name="RemoteNotFoundFormat" xml:space="preserve"><value>Das Remote {0} existiert nicht.</value></data>
+  <data name="NoRemotes" xml:space="preserve"><value>Das Repository hat kein Remote.</value></data>
+  <data name="LoadRemotesFailedFormat" xml:space="preserve"><value>Die Remotes konnten nicht gelesen werden: {0}</value></data>
 </root>

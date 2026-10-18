@@ -45,6 +45,46 @@ public sealed class GitRemoteServiceTests
     }
 
     [Fact]
+    public async Task Remotes_are_added_renamed_with_their_upstreams_changed_and_removed_with_their_branches()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        string remotePath = repository.AddBareRemote();
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.AddRemoteAsync(repository.Path, "backup", remotePath, ct);
+        await service.RenameRemoteAsync(repository.Path, "origin", "upstream", ct);
+        await service.SetRemoteUrlAsync(repository.Path, "backup", "https://example.com/repo.git", ct);
+
+        Assert.Equal("upstream/main", repository.RunGit("rev-parse", "--abbrev-ref", "main@{upstream}").Trim());
+        Assert.Equal(
+            [("backup", "https://example.com/repo.git"), ("upstream", remotePath)],
+            (await service.GetRemotesAsync(repository.Path, ct)).Select(remote => (remote.Name, remote.FetchUrl)).OrderBy(remote => remote.Name));
+
+        await service.RemoveRemoteAsync(repository.Path, "upstream", ct);
+
+        Assert.Equal("backup", Assert.Single(await service.GetRemotesAsync(repository.Path, ct)).Name);
+        Assert.Equal(string.Empty, repository.RunGit("branch", "-r").Trim());
+        Assert.False(repository.TryRunGit(out _, "rev-parse", "--abbrev-ref", "main@{upstream}"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddRemoteAsync(repository.Path, "backup", remotePath, ct));
+    }
+
+    [Fact]
+    public async Task An_option_like_url_is_stored_as_the_url()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.AddRemoteAsync(repository.Path, "odd", "--mirror=fetch", ct);
+
+        GitRemote remote = Assert.Single(await service.GetRemotesAsync(repository.Path, ct));
+        Assert.Equal(("odd", "--mirror=fetch"), (remote.Name, remote.FetchUrl));
+        Assert.False(repository.TryRunGit(out _, "config", "remote.odd.mirror"));
+    }
+
+    [Fact]
     public async Task Fetch_reports_the_commits_behind_and_pull_fast_forwards()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

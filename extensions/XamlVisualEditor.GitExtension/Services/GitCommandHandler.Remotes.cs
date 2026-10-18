@@ -1,0 +1,160 @@
+using System.Globalization;
+using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Extensions;
+using XamlVisualEditor.GitExtension.Localization;
+
+namespace XamlVisualEditor.GitExtension.Services;
+
+internal sealed partial class GitCommandHandler
+{
+    public async Task AddRemoteAsync(CommandContext context)
+    {
+        if (await LoadRemotesAsync() is not { } remotes)
+        {
+            return;
+        }
+
+        // The first remote of a repository is usually origin, as git names the remote of a clone.
+        string? name = await AskAsync(GitStrings.AddRemoteCommand, GitStrings.RemoteNamePrompt, remotes.Count == 0 ? GitRemote.DEFAULT_NAME : null);
+        if (name is null)
+        {
+            return;
+        }
+
+        string? url = await AskAsync(
+            GitStrings.AddRemoteCommand,
+            string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlPromptFormat, name),
+            null);
+        if (url is not null)
+        {
+            await TryRunRemoteAsync((service, root, ct) => service.AddRemoteAsync(root, name, url, ct));
+        }
+    }
+
+    public async Task RenameRemoteAsync(CommandContext context)
+    {
+        if (await PickRemoteAsync(context, GitStrings.RenameRemoteCommand) is not { } remote)
+        {
+            return;
+        }
+
+        string? newName = await AskAsync(
+            GitStrings.RenameRemoteCommand,
+            string.Format(CultureInfo.CurrentCulture, GitStrings.RenameRemotePromptFormat, remote.Name),
+            remote.Name);
+        if (newName is not null && !string.Equals(newName, remote.Name, StringComparison.Ordinal))
+        {
+            await TryRunRemoteAsync((service, root, ct) => service.RenameRemoteAsync(root, remote.Name, newName, ct));
+        }
+    }
+
+    public async Task SetRemoteUrlAsync(CommandContext context)
+    {
+        if (await PickRemoteAsync(context, GitStrings.SetRemoteUrlCommand) is not { } remote)
+        {
+            return;
+        }
+
+        string? url = await AskAsync(
+            GitStrings.SetRemoteUrlCommand,
+            string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteUrlPromptFormat, remote.Name),
+            remote.FetchUrl);
+        if (url is not null && !string.Equals(url, remote.FetchUrl, StringComparison.Ordinal))
+        {
+            await TryRunRemoteAsync((service, root, ct) => service.SetRemoteUrlAsync(root, remote.Name, url, ct));
+        }
+    }
+
+    public async Task RemoveRemoteAsync(CommandContext context)
+    {
+        if (await PickRemoteAsync(context, GitStrings.RemoveRemoteCommand) is not { } remote
+            || !await ConfirmAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.RemoveRemotePromptFormat, remote.Name),
+                GitStrings.RemoveRemoteConfirm,
+                GitStrings.RemoveRemoteCommand,
+                isDestructive: true))
+        {
+            return;
+        }
+
+        await TryRunRemoteAsync((service, root, ct) => service.RemoveRemoteAsync(root, remote.Name, ct));
+    }
+
+    /// <summary>Returns the remote named in argument 0, or one picked from a list; null after reporting why there is none.</summary>
+    private async Task<GitRemote?> PickRemoteAsync(CommandContext context, string title)
+    {
+        if (await LoadRemotesAsync() is not { } remotes)
+        {
+            return null;
+        }
+
+        if (FirstStringArgument(context) is { } name)
+        {
+            GitRemote? match = remotes.FirstOrDefault(remote => string.Equals(remote.Name, name, StringComparison.Ordinal));
+            if (match is null)
+            {
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteNotFoundFormat, name));
+            }
+
+            return match;
+        }
+
+        if (remotes.Count == 0)
+        {
+            await ShowInformationAsync(GitStrings.NoRemotes);
+            return null;
+        }
+
+        // The remote names are distinct, so the index of the picked item is its remote.
+        QuickPickItem[] items = remotes
+            .Select(remote => new QuickPickItem(remote.Name, GitRemoteUrls.Redact(remote.FetchUrl), null))
+            .ToArray();
+        QuickPickItem? picked = await _window.ShowQuickPickAsync(items, new QuickPickOptions(title, false), CancellationToken.None);
+        int index = picked is null ? -1 : Array.IndexOf(items, picked);
+        return index < 0 ? null : remotes[index];
+    }
+
+    /// <summary>Returns the remotes of the repository, or null after reporting why there are none.</summary>
+    private async Task<IReadOnlyList<GitRemote>?> LoadRemotesAsync()
+    {
+        if (!await EnsureRemoteServiceAsync())
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _session.Services.Remotes!.GetRemotesAsync(_session.Current.RepositoryRoot!, CancellationToken.None);
+        }
+        catch (InvalidOperationException exception)
+        {
+            await ReportFailureAsync(exception);
+            return null;
+        }
+    }
+
+    /// <summary>Returns the entered text without surrounding spaces, or null when it was cancelled or is empty.</summary>
+    private async Task<string?> AskAsync(string title, string prompt, string? value)
+    {
+        string? text = (await _window.ShowInputBoxAsync(new InputBoxOptions(title, prompt, value), CancellationToken.None))?.Trim();
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    /// <summary>Runs a remote operation through the session and reports git's error when it failed.</summary>
+    private async Task TryRunRemoteAsync(Func<IGitRemoteService, string, CancellationToken, Task> operation)
+    {
+        try
+        {
+            await _session.RunWithServicesAsync(async (services, root, ct) =>
+            {
+                await operation(services.Remotes!, root, ct);
+                return true;
+            });
+        }
+        catch (InvalidOperationException exception)
+        {
+            await ReportFailureAsync(exception);
+        }
+    }
+}

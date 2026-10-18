@@ -56,6 +56,65 @@ internal sealed partial class GitCommandHandler
         }
     }
 
+    public async Task RenameBranchAsync(CommandContext context)
+    {
+        if (await LoadBranchesAsync() is not { } branches)
+        {
+            return;
+        }
+
+        GitBranch? target;
+        if (FirstStringArgument(context) is { } argument)
+        {
+            target = FindBranch(branches, argument);
+            if (target is null)
+            {
+                await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.BranchNotFoundFormat, argument));
+                return;
+            }
+        }
+        else
+        {
+            // The current branch first, the one renamed most often.
+            GitBranch[] candidates = branches.Where(branch => !branch.IsRemote).OrderByDescending(branch => branch.IsCurrent).ToArray();
+            if (candidates.Length == 0)
+            {
+                await ShowInformationAsync(GitStrings.NoBranchToRename);
+                return;
+            }
+
+            target = await PickBranchAsync(candidates, GitStrings.RenameBranchPickTitle);
+            if (target is null)
+            {
+                return;
+            }
+        }
+
+        if (target.IsRemote)
+        {
+            await ShowInformationAsync(string.Format(CultureInfo.CurrentCulture, GitStrings.CannotRenameRemoteFormat, target.Name));
+            return;
+        }
+
+        string name = target.Name;
+        string? newName = (await _window.ShowInputBoxAsync(
+            new InputBoxOptions(
+                GitStrings.RenameBranchCommand,
+                string.Format(CultureInfo.CurrentCulture, GitStrings.RenameBranchPromptFormat, name),
+                name),
+            CancellationToken.None))?.Trim();
+        if (string.IsNullOrEmpty(newName) || string.Equals(newName, name, StringComparison.Ordinal) || !await IsValidBranchNameAsync(newName))
+        {
+            return;
+        }
+
+        await TryRunAsync<bool>(async (service, root, ct) =>
+        {
+            await service.RenameAsync(root, name, newName, ct);
+            return true;
+        });
+    }
+
     public async Task DeleteBranchAsync(CommandContext context)
     {
         if (await LoadBranchesAsync() is not { } branches)
@@ -543,19 +602,8 @@ internal sealed partial class GitCommandHandler
             return;
         }
 
-        // Checked before git runs, so an invalid name gets a plain message instead of git's error output.
-        bool? valid = await TryRunAsync<bool>(async (branches, root, ct) =>
-            await branches.IsValidBranchNameAsync(root, name, ct));
-        if (valid is null)
+        if (!await IsValidBranchNameAsync(name))
         {
-            return;
-        }
-
-        if (valid is false)
-        {
-            await ShowErrorAsync(
-                string.Format(CultureInfo.CurrentCulture, GitStrings.InvalidBranchNameFormat, name),
-                hasGitOutput: false);
             return;
         }
 
@@ -576,6 +624,24 @@ internal sealed partial class GitCommandHandler
             await branches.CreateAsync(root, name, startPoint, switchTo, ct);
             return true;
         });
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="name"/> is a valid branch name, after reporting why not. Checked before git runs,
+    /// so an invalid name gets a plain message instead of git's error output.
+    /// </summary>
+    private async Task<bool> IsValidBranchNameAsync(string name)
+    {
+        bool? valid = await TryRunAsync<bool>(async (branches, root, ct) =>
+            await branches.IsValidBranchNameAsync(root, name, ct));
+        if (valid is false)
+        {
+            await ShowErrorAsync(
+                string.Format(CultureInfo.CurrentCulture, GitStrings.InvalidBranchNameFormat, name),
+                hasGitOutput: false);
+        }
+
+        return valid is true;
     }
 
     private Task<GitBranchDeleteResult?> DeleteAsync(string name, bool force) =>

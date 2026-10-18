@@ -286,6 +286,25 @@ public sealed class GitBranchServiceTests
     }
 
     [Fact]
+    public async Task Rename_moves_the_branch_with_its_upstream_and_refuses_the_name_of_another_branch()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using GitTestRepository repository = GitTestRepository.Create("a.txt");
+        repository.AddBareRemote();
+        repository.RunGit("push", "-q", "-u", "origin", "main");
+        repository.RunGit("branch", "other");
+        GitService service = new(options: repository.ProcessOptions);
+
+        await service.RenameAsync(repository.Path, "refs/heads/main", "renamed", ct);
+
+        Assert.Equal("renamed", CurrentBranch(repository));
+        Assert.Equal("origin/main", repository.RunGit("rev-parse", "--abbrev-ref", "renamed@{upstream}").Trim());
+        Assert.Equal(new[] { "other", "renamed" }, Branches(repository));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RenameAsync(repository.Path, "renamed", "other", ct));
+        Assert.Equal(new[] { "other", "renamed" }, Branches(repository));
+    }
+
+    [Fact]
     public async Task Deleting_the_current_branch_throws()
     {
         using GitTestRepository repository = GitTestRepository.Create("a.txt");

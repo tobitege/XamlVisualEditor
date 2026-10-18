@@ -49,6 +49,7 @@ public sealed class GitBranchItemViewModel
         Branch = branch;
         SwitchCommand = panel.SwitchCommand;
         DeleteCommand = panel.DeleteCommand;
+        RenameCommand = panel.RenameCommand;
         CreateBranchFromCommand = panel.CreateBranchFromCommand;
         TrackingText = FormatTracking(branch);
         ToolTip = FormatToolTip(branch);
@@ -69,6 +70,9 @@ public sealed class GitBranchItemViewModel
     /// <summary>Gets whether the branch can be deleted: a local branch that is not the current one.</summary>
     public bool CanDelete => !Branch.IsRemote && !Branch.IsCurrent;
 
+    /// <summary>Gets whether the branch can be renamed: a local branch.</summary>
+    public bool CanRename => !Branch.IsRemote;
+
     /// <summary>
     /// Gets the state of the upstream: the commits ahead of and behind it, for example "↑1 ↓2", or the marker of an
     /// upstream that no longer exists; empty otherwise.
@@ -83,6 +87,9 @@ public sealed class GitBranchItemViewModel
 
     /// <summary>Gets the command that deletes the branch; its parameter is this item.</summary>
     public ICommand DeleteCommand { get; }
+
+    /// <summary>Gets the command that renames the branch; its parameter is this item.</summary>
+    public ICommand RenameCommand { get; }
 
     /// <summary>Gets the command that creates a branch starting at this branch; its parameter is this item.</summary>
     public ICommand CreateBranchFromCommand { get; }
@@ -219,12 +226,42 @@ public sealed class GitStashItemViewModel
 }
 
 /// <summary>
-/// ViewModel of the Git Repository panel: the local and remote-tracking branches, the tags and the stashes of the
-/// session's repository and buttons for fetch, pull, push, sync, a new branch and the stash commands. The actions run
-/// the Git commands, which ask, show progress and report results.
+/// A remote in the Remotes tab of the Git Repository panel.
+/// </summary>
+public sealed class GitRemoteItemViewModel
+{
+    /// <summary>Creates the item for <paramref name="remote"/>.</summary>
+    public GitRemoteItemViewModel(GitRemote remote)
+    {
+        Remote = remote;
+        UrlText = GitRemoteUrls.Redact(remote.FetchUrl);
+        string fetch = string.Format(CultureInfo.CurrentCulture, GitStrings.RemoteFetchUrlFormat, UrlText);
+        ToolTip = string.Equals(remote.PushUrl, remote.FetchUrl, StringComparison.Ordinal)
+            ? fetch
+            : fetch + Environment.NewLine
+              + string.Format(CultureInfo.CurrentCulture, GitStrings.RemotePushUrlFormat, GitRemoteUrls.Redact(remote.PushUrl));
+    }
+
+    /// <summary>Gets the remote.</summary>
+    public GitRemote Remote { get; }
+
+    /// <summary>Gets the remote name.</summary>
+    public string Name => Remote.Name;
+
+    /// <summary>Gets the fetch URL without the password it may contain.</summary>
+    public string UrlText { get; }
+
+    /// <summary>Gets the tooltip: the fetch URL and, when it differs, the push URL, both without passwords.</summary>
+    public string ToolTip { get; }
+}
+
+/// <summary>
+/// ViewModel of the Git Repository panel: the local and remote-tracking branches, the tags, the stashes and the
+/// remotes of the session's repository and buttons for fetch, pull, push, sync, a new branch and the stash and remote
+/// commands. The actions run the Git commands, which ask, show progress and report results.
 /// </summary>
 /// <remarks>
-/// The branches, tags and stashes are read only while <see cref="IsShown"/> is true, and again only when a snapshot
+/// The branches, tags, stashes and remotes are read only while <see cref="IsShown"/> is true, and again only when a snapshot
 /// changes HEAD, the branch, its upstream state or <see cref="GitSnapshot.RefsVersion"/>; a newer read cancels an
 /// older one. Items of unchanged branches are kept.
 /// </remarks>
@@ -236,6 +273,7 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     private bool _branchesLoading;
     private bool _tagsLoading;
     private bool _stashesLoading;
+    private bool _remotesLoading;
 
     /// <summary>Creates the panel for a shared session.</summary>
     /// <param name="session">The Git session whose repository is shown.</param>
@@ -262,6 +300,8 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
             item => _executeCommand(GitCommands.CHECKOUT, [item.Branch.FullName])));
         DeleteCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
             item => _executeCommand(GitCommands.DELETE_BRANCH, [item.Branch.FullName])));
+        RenameCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
+            item => _executeCommand(GitCommands.RENAME_BRANCH, [item.Branch.FullName])));
         CreateBranchFromCommand = AddCommand(ReactiveCommand.CreateFromTask<GitBranchItemViewModel>(
             item => _executeCommand(GitCommands.CREATE_BRANCH, [item.Branch.FullName])));
         // A tag of a tree or a blob has no history, and no branch can start at it.
@@ -281,11 +321,29 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         ApplyStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_APPLY), hasStash));
         PopStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_POP), hasStash));
         DropStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_DROP), hasStash));
+        ShowStashCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_SHOW), hasStash));
+        StashBranchCommand = AddCommand(ReactiveCommand.CreateFromTask(() => RunForSelectedStashAsync(GitCommands.STASH_BRANCH), hasStash));
+        ClearStashesCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => _executeCommand(GitCommands.STASH_CLEAR, null),
+            this.WhenAnyValue(x => x.HasStashes)));
+
+        AddRemoteCommand = AddCommand(ReactiveCommand.CreateFromTask(() => _executeCommand(GitCommands.ADD_REMOTE, null), isRepository));
+        IObservable<bool> hasSelectedRemote = this.WhenAnyValue(x => x.SelectedRemote).Select(remote => remote is not null);
+        RenameRemoteCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => RunForSelectedRemoteAsync(GitCommands.RENAME_REMOTE),
+            hasSelectedRemote));
+        SetRemoteUrlCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => RunForSelectedRemoteAsync(GitCommands.SET_REMOTE_URL),
+            hasSelectedRemote));
+        RemoveRemoteCommand = AddCommand(ReactiveCommand.CreateFromTask(
+            () => RunForSelectedRemoteAsync(GitCommands.REMOVE_REMOTE),
+            hasSelectedRemote));
 
         _disposables.Add(_session.Snapshots.WitnessOn(RxSchedulers.MainThreadScheduler).Subscribe(OnSnapshot));
         LoadWhileShown(LoadBranches, ApplyLoad);
         LoadWhileShown(LoadTags, ApplyTagLoad);
         LoadWhileShown(LoadStashes, ApplyStashLoad);
+        LoadWhileShown(LoadRemotes, ApplyRemoteLoad);
     }
 
     /// <summary>
@@ -315,7 +373,7 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     [Reactive]
     public partial string? StatusMessage { get; private set; }
 
-    /// <summary>Gets whether the branches, the tags or the stashes are being read.</summary>
+    /// <summary>Gets whether the branches, the tags, the stashes or the remotes are being read.</summary>
     [Reactive]
     public partial bool IsLoading { get; private set; }
 
@@ -362,6 +420,42 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     /// <summary>Runs <see cref="GitCommands.STASH_DROP"/> for the selected stash.</summary>
     public ReactiveCommand<RxVoid, RxVoid> DropStashCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.STASH_SHOW"/> for the selected stash.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> ShowStashCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_BRANCH"/> for the selected stash.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> StashBranchCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.STASH_CLEAR"/>; enabled while stashes are listed.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> ClearStashesCommand { get; }
+
+    /// <summary>Gets whether stashes are listed.</summary>
+    [Reactive]
+    public partial bool HasStashes { get; private set; }
+
+    /// <summary>Gets the remotes.</summary>
+    public ObservableCollection<GitRemoteItemViewModel> Remotes { get; } = new();
+
+    /// <summary>Gets or sets the selected remote.</summary>
+    [Reactive]
+    public partial GitRemoteItemViewModel? SelectedRemote { get; set; }
+
+    /// <summary>Gets why no remotes are listed, or a reading error; null while remotes are listed.</summary>
+    [Reactive]
+    public partial string? RemotesMessage { get; private set; }
+
+    /// <summary>Runs <see cref="GitCommands.ADD_REMOTE"/>.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> AddRemoteCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.RENAME_REMOTE"/> for the selected remote.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> RenameRemoteCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.SET_REMOTE_URL"/> for the selected remote.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> SetRemoteUrlCommand { get; }
+
+    /// <summary>Runs <see cref="GitCommands.REMOVE_REMOTE"/> for the selected remote.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> RemoveRemoteCommand { get; }
+
     /// <summary>Gets or sets the selected tree item: a group or a branch.</summary>
     [Reactive]
     public partial object? SelectedItem { get; set; }
@@ -399,6 +493,9 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
     /// <summary>Runs <see cref="GitCommands.DELETE_BRANCH"/> for a branch item.</summary>
     public ReactiveCommand<GitBranchItemViewModel, RxVoid> DeleteCommand { get; }
 
+    /// <summary>Runs <see cref="GitCommands.RENAME_BRANCH"/> for a branch item.</summary>
+    public ReactiveCommand<GitBranchItemViewModel, RxVoid> RenameCommand { get; }
+
     /// <summary>Runs <see cref="GitCommands.CREATE_BRANCH"/> starting at a branch item.</summary>
     public ReactiveCommand<GitBranchItemViewModel, RxVoid> CreateBranchFromCommand { get; }
 
@@ -429,6 +526,9 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
 
     private Task RunForSelectedStashAsync(string commandId) =>
         SelectedStash is { } stash ? _executeCommand(commandId, [stash.Stash.ObjectId]) : Task.CompletedTask;
+
+    private Task RunForSelectedRemoteAsync(string commandId) =>
+        SelectedRemote is { } remote ? _executeCommand(commandId, [remote.Name]) : Task.CompletedTask;
 
     /// <summary>Applies the loads of <paramref name="load"/> while the panel is shown and an idle state otherwise.</summary>
     private void LoadWhileShown<T>(Func<GitSnapshot, IObservable<ListLoad<T>>> load, Action<ListLoad<T>> apply)
@@ -465,6 +565,14 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         GitStrings.StashesUnavailable,
         GitStrings.NoStashes,
         GitStrings.LoadStashesFailedFormat);
+
+    private IObservable<ListLoad<GitRemote>> LoadRemotes(GitSnapshot snapshot) => LoadList<GitRemote>(
+        snapshot,
+        _session.Services.Remotes is { } remotes ? remotes.GetRemotesAsync : null,
+        null,
+        GitStrings.RemotesUnavailable,
+        GitStrings.NoRemotes,
+        GitStrings.LoadRemotesFailedFormat);
 
     /// <summary>
     /// Returns the list <paramref name="read"/> reads for <paramref name="snapshot"/> in the background after a loading
@@ -543,7 +651,28 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         }
 
         SelectedStash = Stashes.FirstOrDefault(item => string.Equals(item.Stash.ObjectId, selected, StringComparison.Ordinal));
+        HasStashes = Stashes.Count > 0;
         StashesMessage = load.Message;
+    }
+
+    private void ApplyRemoteLoad(ListLoad<GitRemote> load)
+    {
+        _remotesLoading = load.IsLoading;
+        UpdateIsLoading();
+        if (load.Items is null)
+        {
+            return;
+        }
+
+        string? selected = SelectedRemote?.Name;
+        Remotes.Clear();
+        foreach (GitRemote remote in load.Items)
+        {
+            Remotes.Add(new GitRemoteItemViewModel(remote));
+        }
+
+        SelectedRemote = Remotes.FirstOrDefault(item => string.Equals(item.Name, selected, StringComparison.Ordinal));
+        RemotesMessage = load.Message;
     }
 
     private void ApplyLoad(ListLoad<GitBranch> load)
@@ -560,7 +689,7 @@ public sealed partial class GitRepositoryPanelViewModel : ReactiveObject, IDispo
         StatusMessage = load.Message;
     }
 
-    private void UpdateIsLoading() => IsLoading = _branchesLoading || _tagsLoading || _stashesLoading;
+    private void UpdateIsLoading() => IsLoading = _branchesLoading || _tagsLoading || _stashesLoading || _remotesLoading;
 
     /// <summary>
     /// Makes <paramref name="items"/> show <paramref name="branches"/> in their order. Items are matched by full

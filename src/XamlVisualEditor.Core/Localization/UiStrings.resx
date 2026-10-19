@@ -1334,4 +1334,147 @@
   <data name="GitWritesCloseAnyway" xml:space="preserve"><value>Close Anyway</value></data>
   <data name="GitWritesCloseAnywayPrompt" xml:space="preserve"><value>git is still running, possibly in a hook that waits. If the editor closes now, git can fail when it writes its output and leave the command half done. Close anyway?</value></data>
   <data name="GitStashSavedChangesKeptFormat" xml:space="preserve"><value>git saved the stash but left its changes in the working tree: {0}</value></data>
+  <data name="LayoutEditContainsItself" xml:space="preserve"><value>An element cannot contain itself or an ancestor.</value></data>
+  <data name="LayoutEditUnsupportedContainer" xml:space="preserve"><value>{0} is not a supported visual container.</value></data>
+  <data name="LayoutEditTypeUnresolved" xml:space="preserve"><value>The control type cannot be resolved in the loaded project.</value></data>
+  <data name="LayoutEditNotVisualControl" xml:space="preserve"><value>Only visual controls can be inserted into a layout container.</value></data>
+  <data name="LayoutEditTopLevelWindow" xml:space="preserve"><value>A top-level window cannot be inserted into another control.</value></data>
+  <data name="LayoutEditItemsSource" xml:space="preserve"><value>The target uses ItemsSource; its generated items cannot be replaced by manual children.</value></data>
+  <data name="LayoutEditContentAssigned" xml:space="preserve"><value>The target already has a content value or binding.</value></data>
+  <data name="LayoutEditMixedContent" xml:space="preserve"><value>The target mixes implicit and explicit content; resolve that ambiguity first.</value></data>
+  <data name="LayoutEditContentOccupied" xml:space="preserve"><value>The target already contains an element. Choose a panel or an empty content slot.</value></data>
+  <data name="LayoutEditHasParent" xml:space="preserve"><value>The element already has a parent; use a move operation.</value></data>
+  <data name="LayoutEditInsertionOutside" xml:space="preserve"><value>The insertion position is outside the target.</value></data>
+  <data name="LayoutEditRootMove" xml:space="preserve"><value>The document root cannot be moved.</value></data>
+  <data name="LayoutEditSourceNotContent" xml:space="preserve"><value>The source is not visual content of its parent.</value></data>
+  <data name="LayoutEditDropUnsupported" xml:space="preserve"><value>The drop position is not supported.</value></data>
+  <data name="LayoutEditDropOnItself" xml:space="preserve"><value>An element cannot be dropped onto itself.</value></data>
+  <data name="LayoutEditNoRootSibling" xml:space="preserve"><value>There is no sibling position beside the document root.</value></data>
+  <data name="LayoutEditTargetNotContent" xml:space="preserve"><value>The target is not visual content of its parent.</value></data>
+  <data name="LayoutEditRootDelete" xml:space="preserve"><value>The document root cannot be deleted.</value></data>
+  <data name="LayoutEditElementNotContent" xml:space="preserve"><value>The element is not visual content of its parent.</value></data>
+  <data name="LayoutEditRootWrap" xml:space="preserve"><value>The document root cannot be wrapped.</value></data>
+  <data name="LayoutEditWrapperAttached" xml:space="preserve"><value>The wrapper already belongs to a document.</value></data>
+  <data name="DesignerOpenDocumentFirst" xml:space="preserve"><value>Open a designer document first.</value></data>
+  <data name="DesignerClipboardNoElements" xml:space="preserve"><value>The clipboard contains no XAML elements.</value></data>
+  <data name="DesignerClipboardInvalidXaml" xml:space="preserve"><value>The clipboard does not contain valid XAML fragments.</value></data>
+  <data name="DesignerPasteCompleteElements" xml:space="preserve"><value>Paste complete control elements without surrounding text or standalone property elements.</value></data>
+  <data name="DesignerSelectLayoutTarget" xml:space="preserve"><value>Select a layout panel or an empty content slot.</value></data>
+  <data name="DesignerPasteMultipleNeedsPanel" xml:space="preserve"><value>Multiple elements require a panel or an items container.</value></data>
+  <data name="DesignerDuplicateSiblingsRequired" xml:space="preserve"><value>Duplicate requires selected siblings in one container.</value></data>
+  <data name="DesignerInsertionTargetGone" xml:space="preserve"><value>The requested insertion target is no longer available.</value></data>
+  <data name="DesignerSelectSynchronizedControl" xml:space="preserve"><value>Select a control in a synchronized designer document first.</value></data>
+  <data name="DesignerDocumentNotSynchronized" xml:space="preserve"><value>The AXAML document is not synchronized.</value></data>
+  <data name="DesignerDocumentNoRoot" xml:space="preserve"><value>The AXAML document has no root control.</value></data>
+  <data name="DesignerDocumentSynchronizing" xml:space="preserve"><value>Wait for the AXAML document to finish synchronizing.</value></data>
+  <data name="DesignerResolveXamlErrors" xml:space="preserve"><value>Resolve XAML errors before editing the designer.</value></data>
+  <data name="DesignerUndoLaterChangesFirst" xml:space="preserve"><value>Undo later designer changes before undoing this refactoring.</value></data>
+  <data name="DesignerRedoEarlierChangesFirst" xml:space="preserve"><value>Redo earlier designer changes before redoing this refactoring.</value></data>
+  <data name="DesignerNameInvalid" xml:space="preserve"><value>Enter a valid control name without spaces or C# keywords.</value></data>
+  <data name="DesignerNameInUse" xml:space="preserve"><value>The name '{0}' is already used in this name scope.</value></data>
+  <data name="DesignerNameSelectorAmbiguous" xml:space="preserve"><value>Style selector '{0}' refers to a name shared across name scopes. Resolve the selector ambiguity before renaming.</value></data>
+  <data name="DesignerNameUsedBySelector" xml:space="preserve"><value>The name '{0}' is used by a style selector and cannot be removed.</value></data>
+  <data name="DesignerNameUsedByBinding" xml:space="preserve"><value>The name '{0}' is referenced by a binding and cannot be removed.</value></data>
+  <data name="ArrangeOpenDocument" xml:space="preserve"><value>Open a valid designer document first.</value></data>
+  <data name="ArrangeSelectTwoSiblings" xml:space="preserve"><value>Select at least two sibling controls.</value></data>
+  <data name="ArrangeOneTemplateInstance" xml:space="preserve"><value>Select controls from one template instance, not repeated instances of the same source element.</value></data>
+  <data name="ArrangeSelectionChanged" xml:space="preserve"><value>The selection changed. Select the controls again.</value></data>
+  <data name="ArrangeSameContainer" xml:space="preserve"><value>Layout actions require controls in the same container.</value></data>
+  <data name="ArrangeWaitForMeasurements" xml:space="preserve"><value>Wait for current layout measurements from the previewer.</value></data>
+  <data name="ArrangeRenderFirst" xml:space="preserve"><value>Render the selected controls before arranging them.</value></data>
+  <data name="ArrangeSameRenderedContainer" xml:space="preserve"><value>Select controls in the same rendered container.</value></data>
+  <data name="ArrangeSizeConstraint" xml:space="preserve"><value>The primary control's size exceeds a selected control's Min/Max constraint.</value></data>
+  <data name="ArrangeCanvasThreeControls" xml:space="preserve"><value>Canvas distribution requires at least three controls.</value></data>
+  <data name="ArrangeGridColumnsMissing" xml:space="preserve"><value>The Grid needs at least {0} existing columns. Existing definitions are not replaced.</value></data>
+  <data name="ArrangeGridRowsMissing" xml:space="preserve"><value>The Grid needs at least {0} existing rows. Existing definitions are not replaced.</value></data>
+  <data name="ArrangeStackOrientation" xml:space="preserve"><value>Choose distribution along the StackPanel's orientation.</value></data>
+  <data name="ArrangeStackSelectAll" xml:space="preserve"><value>Select all children before changing their shared StackPanel spacing.</value></data>
+  <data name="ArrangeStackTooSmall" xml:space="preserve"><value>The StackPanel is too small to distribute its children without overlap.</value></data>
+  <data name="ArrangeDistributionUnsupported" xml:space="preserve"><value>Distribution is available for Canvas, Grid and StackPanel containers.</value></data>
+  <data name="ArrangeControlDetached" xml:space="preserve"><value>The selected control is not attached to the design surface.</value></data>
+  <data name="ArrangeStructuredValue" xml:space="preserve"><value>{0}.{1} contains an expression or structured value. Edit or reset it explicitly before arranging the control.</value></data>
+  <data name="PreviewerEditXamlErrorsInsert" xml:space="preserve"><value>Correct the XAML errors before inserting controls.</value></data>
+  <data name="PreviewerEditXamlErrorsArrange" xml:space="preserve"><value>Correct the XAML errors before arranging controls.</value></data>
+  <data name="PreviewerEditXamlErrorsResize" xml:space="preserve"><value>Correct the XAML errors before resizing controls.</value></data>
+  <data name="PreviewerEditXamlErrorsMove" xml:space="preserve"><value>Correct the XAML errors before moving controls.</value></data>
+  <data name="PreviewerEditToolboxControlRequired" xml:space="preserve"><value>Choose a control from the loaded toolbox.</value></data>
+  <data name="PreviewerEditDropTargetRequired" xml:space="preserve"><value>Drop on a layout panel or an empty content slot.</value></data>
+  <data name="PreviewerEditContainerNotMeasured" xml:space="preserve"><value>The insertion container has not been measured yet.</value></data>
+  <data name="PreviewerEditSelectTwoControls" xml:space="preserve"><value>Select at least two controls.</value></data>
+  <data name="PreviewerEditArrangeOneContainer" xml:space="preserve"><value>Arrange controls from one source container at a time.</value></data>
+  <data name="PreviewerEditDragOneContainer" xml:space="preserve"><value>Drag controls from one source container at a time.</value></data>
+  <data name="PreviewerEditOneResizeHandle" xml:space="preserve"><value>Choose one resize handle.</value></data>
+  <data name="PreviewerEditRootResizeSides" xml:space="preserve"><value>Resize the document root from its right or bottom side.</value></data>
+  <data name="PreviewerEditDraggedControlDeselected" xml:space="preserve"><value>The dragged control is no longer selected.</value></data>
+  <data name="PreviewerEditPointerPlacementUnsupported" xml:space="preserve"><value>The selected container does not support pointer placement.</value></data>
+  <data name="PreviewerEditTransformNotInvertible" xml:space="preserve"><value>The container transform cannot be inverted.</value></data>
+  <data name="PreviewerEditNoSourceContainer" xml:space="preserve"><value>The selected control has no editable source container.</value></data>
+  <data name="PreviewerEditMoveContainerUnsupported" xml:space="preserve"><value>Move the control within a Canvas, Grid or ordered panel.</value></data>
+  <data name="PreviewerEditSelectControl" xml:space="preserve"><value>Select a control first.</value></data>
+  <data name="PreviewerEditSelectSourceControls" xml:space="preserve"><value>Select source controls rather than repeated instances of the same template element.</value></data>
+  <data name="PreviewerEditValueNotFinite" xml:space="preserve"><value>The layout value must be finite.</value></data>
+  <data name="PropertyNullValueUnsupported" xml:space="preserve"><value>This property does not support an explicit null value. Use Reset to remove its local value.</value></data>
+  <data name="PropertyImplicitContentTypeMissing" xml:space="preserve"><value>The control type must be available before changing a value alongside implicit content.</value></data>
+  <data name="EventHandlerAssignFirst" xml:space="preserve"><value>Assign an event handler before opening its definition.</value></data>
+  <data name="EventHandlerMetadataOnly" xml:space="preserve"><value>This handler is declared in assembly metadata and has no editable source definition.</value></data>
+  <data name="EventHandlerSourceChangedNavigation" xml:space="preserve"><value>The handler source changed while opening its definition. Retry navigation.</value></data>
+  <data name="EventHandlerClassRequired" xml:space="preserve"><value>An event handler requires an x:Class with a matching C# form class.</value></data>
+  <data name="EventHandlerControlTypeUnresolved" xml:space="preserve"><value>The selected control's type could not be resolved.</value></data>
+  <data name="EventHandlerMultipleProjects" xml:space="preserve"><value>The AXAML file belongs to multiple projects. Open its owning project first.</value></data>
+  <data name="EventHandlerServiceMissing" xml:space="preserve"><value>The loaded project has no C# event-binding service.</value></data>
+  <data name="EventHandlerSourceChangedValidation" xml:space="preserve"><value>The handler source changed during validation. Reload it and retry the assignment.</value></data>
+  <data name="EventHandlerCodeChanged" xml:space="preserve"><value>A C# document changed during event validation. Retry the assignment.</value></data>
+  <data name="EventHandlerCodeEdited" xml:space="preserve"><value>A C# document was edited during event validation. Retry the assignment.</value></data>
+  <data name="EventHandlerEventNotExposed" xml:space="preserve"><value>The selected control does not expose the event '{0}'.</value></data>
+  <data name="CodeBehindRenameMultipleProjects" xml:space="preserve"><value>The AXAML file belongs to multiple projects. Open its owning project before renaming a control.</value></data>
+  <data name="CodeBehindRenameServiceMissing" xml:space="preserve"><value>The loaded project has no C# refactoring service.</value></data>
+  <data name="CodeBehindRenameSynchronizing" xml:space="preserve"><value>Wait for the AXAML document to finish synchronizing before renaming a control.</value></data>
+  <data name="CodeBehindRenameInvalidEdit" xml:space="preserve"><value>The C# refactoring returned an invalid document edit.</value></data>
+  <data name="CodeBehindRenameDocumentMissing" xml:space="preserve"><value>A code-behind document is no longer available.</value></data>
+  <data name="CodeBehindRenameDocumentChanged" xml:space="preserve"><value>The code document changed while preparing the refactoring: {0}</value></data>
+  <data name="CodeBehindRenameDesignerClosed" xml:space="preserve"><value>The designer document for this refactoring is no longer open.</value></data>
+  <data name="CodeBehindRenameDesignerChanged" xml:space="preserve"><value>The designer changed while preparing the edit. Retry the change.</value></data>
+  <data name="CodeBehindRenameOverlappingEdits" xml:space="preserve"><value>The C# refactoring returned overlapping or out-of-range edits.</value></data>
+  <data name="CodeBehindRenameUndoLaterChanges" xml:space="preserve"><value>Undo later changes before replaying this refactoring: {0}</value></data>
+  <data name="CodeBehindRenameHistoryGone" xml:space="preserve"><value>The refactoring is no longer available in the document history: {0}</value></data>
+  <data name="PreviewerInvalidThemeCatalog" xml:space="preserve"><value>The previewer returned invalid theme-catalog data.</value></data>
+  <data name="PreviewerInvalidDesignTree" xml:space="preserve"><value>The previewer returned invalid design-tree data.</value></data>
+  <data name="PreviewerInputFailed" xml:space="preserve"><value>Preview input failed: {0}</value></data>
+  <data name="ControlMetadataReadFailed" xml:space="preserve"><value>Cannot read control metadata from '{0}': {1}</value></data>
+  <data name="ControlDependencyMissing" xml:space="preserve"><value>The project dependency '{0}' is missing. Restore the project references.</value></data>
+  <data name="GitForcePushNoUpstreamFormat" xml:space="preserve"><value>The branch {0} has no upstream branch on a remote.</value></data>
+  <data name="GitNoOperationInProgress" xml:space="preserve"><value>No merge, rebase, cherry-pick, revert or patch application is in progress.</value></data>
+  <data name="DotnetTemplatesNotFound" xml:space="preserve"><value>No templates were found.</value></data>
+  <data name="AcpAgentPathRequired" xml:space="preserve"><value>Agent executable path is required.</value></data>
+  <data name="AcpAgentExitedOnStartup" xml:space="preserve"><value>The ACP agent exited during startup.</value></data>
+  <data name="AcpMockAgentPathMissing" xml:space="preserve"><value>Mock agent path is not configured.</value></data>
+  <data name="AcpMockAgentNotFound" xml:space="preserve"><value>Mock agent executable not found.</value></data>
+  <data name="AcpProtocolVersionMismatch" xml:space="preserve"><value>The agent did not negotiate ACP protocol version 1.</value></data>
+  <data name="AcpInvalidSessionId" xml:space="preserve"><value>The agent returned an invalid session ID.</value></data>
+  <data name="AcpAgentStartFailed" xml:space="preserve"><value>Failed to start ACP agent process.</value></data>
+  <data name="AcpPromptAlreadyRunning" xml:space="preserve"><value>An ACP prompt is already running.</value></data>
+  <data name="AcpClientNotConnected" xml:space="preserve"><value>ACP client is not connected.</value></data>
+  <data name="DebugAdapterStartFailed" xml:space="preserve"><value>Failed to start debug adapter process.</value></data>
+  <data name="PropertyStructureTextUnavailable" xml:space="preserve"><value>The document text is unavailable.</value></data>
+  <data name="PropertyStructureDocumentChanged" xml:space="preserve"><value>The document changed while this editor was open. Cancel and reopen the property to use the current version.</value></data>
+  <data name="PropertyStructureOwnerFixed" xml:space="preserve"><value>The property owner cannot be changed.</value></data>
+  <data name="PropertyStructureSingleValue" xml:space="preserve"><value>This property accepts only one value. Use a container for multiple children.</value></data>
+  <data name="PropertyStructureScalarMixed" xml:space="preserve"><value>A scalar expression cannot be mixed with object elements.</value></data>
+  <data name="PropertyStructureParseFailed" xml:space="preserve"><value>Cannot edit {0} in {1}: {2}</value></data>
+  <data name="PropertyStructureDiagnostic" xml:space="preserve"><value>Line {0}, column {1}: {2}</value></data>
+  <data name="PropertyStructureOneElement" xml:space="preserve"><value>Editing {0} on {1} requires one property element, such as &lt;{1}.{0}&gt;, not &lt;{2}&gt;.</value></data>
+  <data name="PropertyStructureTypeMismatch" xml:space="preserve"><value>{0} requires {1}, not {2}.</value></data>
+  <data name="PropertyStructureSetTwice" xml:space="preserve"><value>{0} is set more than once. Keep either the attribute or the property element.</value></data>
+  <data name="PropertyStructureGridIdentitiesMissing" xml:space="preserve"><value>Grid definition edits require the original row or column identities.</value></data>
+  <data name="PropertyStructureGridIdentitiesInvalid" xml:space="preserve"><value>The original Grid definition identities are invalid. Reopen the editor.</value></data>
+  <data name="PropertyStructureGridAxisMismatch" xml:space="preserve"><value>'{0}' is not a definition for this Grid axis.</value></data>
+  <data name="PropertyStructureGridSpanSplit" xml:space="preserve"><value>Moving this definition would split Grid.{0} on '{1}'. Change that span first.</value></data>
+  <data name="PropertyStructureGridWrapperRequired" xml:space="preserve"><value>Keep the Grid definition collection wrapper and edit its rows or columns.</value></data>
+  <data name="PropertyStructureGridCellAmbiguous" xml:space="preserve"><value>'{0}' has multiple Grid.{1} assignments.</value></data>
+  <data name="PropertyStructureGridCellNotLiteral" xml:space="preserve"><value>Grid.{0} on '{1}' is not a literal valid cell value. Its binding or expression cannot be moved automatically.</value></data>
+  <data name="PropertyStructureGridCellCreateFailed" xml:space="preserve"><value>Cannot create Grid.{0} for '{1}'.</value></data>
+  <data name="PropertyStructureDocumentRequired" xml:space="preserve"><value>Open a valid XAML document before editing its structure.</value></data>
+  <data name="PropertyStructureOwnerGone" xml:space="preserve"><value>The property owner is no longer available.</value></data>
+  <data name="PropertyValueEnumUndefined" xml:space="preserve"><value>Choose a defined enum value.</value></data>
+  <data name="PropertyValueTypeInvalid" xml:space="preserve"><value>{0} requires {1}: {2}</value></data>
 </root>

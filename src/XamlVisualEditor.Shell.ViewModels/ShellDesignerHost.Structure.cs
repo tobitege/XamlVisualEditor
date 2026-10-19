@@ -8,6 +8,7 @@ using System.Xml.Linq;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Sync;
@@ -92,7 +93,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 collection = true;
 
             DesignerPropertyStructure snapshot = new(document.FilePath, nodeId, propertyName,
-                document.SyncEngine.CurrentText ?? throw new InvalidOperationException("The document text is unavailable."),
+                document.SyncEngine.CurrentText ?? throw new InvalidOperationException(UiStrings.PropertyStructureTextUnavailable),
                 property.ToString(SaveOptions.DisableFormatting), collection,
                 implicitContent, Array.Empty<DesignerStructureType>())
             {
@@ -133,16 +134,16 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
             DesignerDocumentViewModel document = RequireStructureDocument();
             if (!string.Equals(document.FilePath, original.DocumentPath, StringComparison.OrdinalIgnoreCase)
                 || document.SyncEngine.CurrentText != original.DocumentText)
-                throw new InvalidOperationException("The document changed while this editor was open. Cancel and reopen the property to use the current version.");
+                throw new InvalidOperationException(UiStrings.PropertyStructureDocumentChanged);
             MutableAstObjectNode node = RequireStructureNode(document, original.OwnerNodeId);
             XElement property = XElement.Parse(propertyElementXaml, LoadOptions.PreserveWhitespace);
             XElement previous = XElement.Parse(original.PropertyElementXaml, LoadOptions.PreserveWhitespace);
-            if (property.Name != previous.Name) throw new InvalidOperationException("The property owner cannot be changed.");
+            if (property.Name != previous.Name) throw new InvalidOperationException(UiStrings.PropertyStructureOwnerFixed);
             if (XNode.DeepEquals(previous, property)) return;
             if (!original.IsCollection && property.Elements().Skip(1).Any())
-                throw new InvalidOperationException("This property accepts only one value. Use a container for multiple children.");
+                throw new InvalidOperationException(UiStrings.PropertyStructureSingleValue);
             if (property.Elements().Any() && property.Nodes().OfType<XText>().Any(text => !string.IsNullOrWhiteSpace(text.Value)))
-                throw new InvalidOperationException("A scalar expression cannot be mixed with object elements.");
+                throw new InvalidOperationException(UiStrings.PropertyStructureScalarMixed);
             ValidateStructureValues(document, property);
 
             XElement owner = new(XName.Get(node.TypeName[(node.TypeName.IndexOf(':') + 1)..], node.XmlNamespace), property);
@@ -150,14 +151,14 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 owner.SetAttributeValue(declaration.Name, declaration.Value);
             var parsed = new XamlParsingService().Parse(owner.ToString(SaveOptions.DisableFormatting));
             if (parsed.HasErrors)
-                throw new InvalidOperationException($"Cannot edit {original.PropertyName} in {document.FilePath}: " +
-                    string.Join("; ", parsed.Diagnostics.Select(diagnostic =>
-                        $"Line {diagnostic.Line}, column {diagnostic.Column}: {diagnostic.Message}")));
+                throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureParseFailed,
+                    original.PropertyName, document.FilePath,
+                    string.Join("; ", parsed.Diagnostics.Select(diagnostic => string.Format(
+                        UiStrings.PropertyStructureDiagnostic, diagnostic.Line, diagnostic.Column, diagnostic.Message)))));
             if (parsed.Document is not MutableAstDocument { Root: { } parsedOwner }
                 || parsedOwner.Properties.Count != 1)
-                throw new InvalidOperationException(
-                    $"Editing {original.PropertyName} on {node.TypeName} requires one property element, " +
-                    $"such as <{node.TypeName}.{original.PropertyName}>, not <{property.Name.LocalName}>.");
+                throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureOneElement,
+                    original.PropertyName, node.TypeName, property.Name.LocalName));
             MutableAstPropertyNode replacement = parsedOwner.Properties[0];
             parsedOwner.Properties.Remove(replacement);
 
@@ -247,7 +248,8 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 method.Name == "op_Implicit" && !method.ContainsGenericParameters && expectedType.IsAssignableFrom(method.ReturnType)
                 && method.GetParameters() is { Length: 1 } parameters && parameters[0].ParameterType.IsAssignableFrom(valueType))) return;
 
-            throw new InvalidOperationException($"{member.Name.LocalName} requires {expectedType.Name}, not {valueType.Name}.");
+            throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureTypeMismatch,
+                member.Name.LocalName, expectedType.Name, valueType.Name));
         }
 
         foreach (XElement element in root.DescendantsAndSelf())
@@ -267,7 +269,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 string key = declaration.IsAttached ? declaration.OwnerType + "|" + declaration.Name : declaration.Name;
                 if (assigned.Add(key)) return;
                 string member = name.LocalName.Contains('.') ? name.LocalName : element.Name.LocalName + "." + name.LocalName;
-                throw new InvalidOperationException($"{member} is set more than once. Keep either the attribute or the property element.");
+                throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureSetTwice, member));
             }
             foreach (XAttribute attribute in element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration))
             {
@@ -302,7 +304,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
             return Array.Empty<Action>();
 
         IReadOnlyList<int?> indices = original.GridDefinitionOriginalIndices
-            ?? throw new InvalidOperationException("Grid definition edits require the original row or column identities.");
+            ?? throw new InvalidOperationException(UiStrings.PropertyStructureGridIdentitiesMissing);
         XElement before = GetGridDefinitionContainer(
             XElement.Parse(original.PropertyElementXaml, LoadOptions.PreserveWhitespace), original);
         XElement after = GetGridDefinitionContainer(
@@ -312,13 +314,13 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
         if (indices.Count != definitions.Length ||
             indices.Any(index => index.HasValue && (index.Value < 0 || index.Value >= oldCount)) ||
             indices.Where(index => index.HasValue).Distinct().Count() != indices.Count(index => index.HasValue))
-            throw new InvalidOperationException("The original Grid definition identities are invalid. Reopen the editor.");
+            throw new InvalidOperationException(UiStrings.PropertyStructureGridIdentitiesInvalid);
 
         foreach (XElement definition in definitions)
         {
             TypeMetadata? type = document.MetadataService?.GetType(definition.Name.NamespaceName, definition.Name.LocalName);
             if (type is null || GetGridDefinitionAxis(type) != original.GridAxis)
-                throw new InvalidOperationException($"'{definition.Name.LocalName}' is not a definition for this Grid axis.");
+                throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureGridAxisMismatch, definition.Name.LocalName));
         }
 
         if (indices.Count == oldCount && indices.Select((index, ordinal) => index == ordinal).All(same => same))
@@ -350,7 +352,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 {
                     if (indices[index] is int previous && (previous < start || previous >= end))
                         throw new InvalidOperationException(
-                            $"Moving this definition would split Grid.{spanName} on '{child.TypeName}'. Change that span first.");
+                            string.Format(UiStrings.PropertyStructureGridSpanSplit, spanName, child.TypeName));
                 }
                 newSpan = last - newPosition + 1;
             }
@@ -378,7 +380,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
             return property;
         XElement[] containers = property.Elements().Take(2).ToArray();
         if (containers.Length != 1 || containers[0].Name != XName.Get(original.GridDefinitionContainerName))
-            throw new InvalidOperationException("Keep the Grid definition collection wrapper and edit its rows or columns.");
+            throw new InvalidOperationException(UiStrings.PropertyStructureGridWrapperRequired);
         return containers[0];
     }
 
@@ -400,7 +402,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
                 (ownerType is null || !IsStructureTypeOrDerived(ownerType, typeof(Grid))))
                 continue;
             if (result is not null)
-                throw new InvalidOperationException($"'{child.TypeName}' has multiple Grid.{name} assignments.");
+                throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureGridCellAmbiguous, child.TypeName, name));
             result = property;
         }
         return result;
@@ -414,7 +416,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
         string? value = child.GetPropertyValue(property.PropertyName);
         if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) || number < defaultValue)
             throw new InvalidOperationException(
-                $"Grid.{name} on '{child.TypeName}' is not a literal valid cell value. Its binding or expression cannot be moved automatically.");
+                string.Format(UiStrings.PropertyStructureGridCellNotLiteral, name, child.TypeName));
         return number;
     }
 
@@ -453,7 +455,7 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
         var parsed = new XamlParsingService().Parse(wrapper.ToString(SaveOptions.DisableFormatting));
         if (parsed.HasErrors || parsed.Document is not MutableAstDocument { Root: { } parsedOwner }
             || parsedOwner.Properties.Count != 1)
-            throw new InvalidOperationException($"Cannot create Grid.{name} for '{child.TypeName}'.");
+            throw new InvalidOperationException(string.Format(UiStrings.PropertyStructureGridCellCreateFailed, name, child.TypeName));
         MutableAstPropertyNode replacement = parsedOwner.Properties[0];
         parsedOwner.Properties.Remove(replacement);
         changes.Add(() =>
@@ -485,13 +487,13 @@ public sealed partial class ShellDesignerHost : IDesignerStructureHost
     {
         DesignerDocumentViewModel? document = GetActiveDocument();
         if (document is null || document.IsDisposed || !document.SyncEngine.CanEditAst)
-            throw new InvalidOperationException("Open a valid XAML document before editing its structure.");
+            throw new InvalidOperationException(UiStrings.PropertyStructureDocumentRequired);
         return document;
     }
 
     private static MutableAstObjectNode RequireStructureNode(DesignerDocumentViewModel document, string nodeId) =>
         Guid.TryParse(nodeId, out Guid id) && document.NodeMap.FindById(id) is MutableAstObjectNode node
-            ? node : throw new InvalidOperationException("The property owner is no longer available.");
+            ? node : throw new InvalidOperationException(UiStrings.PropertyStructureOwnerGone);
 
     private static bool UsesImplicitContent(DesignerDocumentViewModel document, MutableAstObjectNode node, string propertyName) =>
         new LayoutEditService(document.MetadataService).GetKind(node) switch

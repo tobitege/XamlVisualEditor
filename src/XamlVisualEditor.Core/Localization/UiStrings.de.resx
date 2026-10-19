@@ -133,7 +133,7 @@
   <data name="SearchChanges" xml:space="preserve"><value>Änderungen suchen...</value></data>
   <data name="Stage" xml:space="preserve"><value>Stage</value></data>
   <data name="Unstage" xml:space="preserve"><value>Unstage</value></data>
-  <data name="Discard" xml:space="preserve"><value>Discard</value></data>
+  <data name="Discard" xml:space="preserve"><value>Verwerfen</value></data>
   <data name="StageAll" xml:space="preserve"><value>Stage All</value></data>
   <data name="UnstageAll" xml:space="preserve"><value>Unstage All</value></data>
   <data name="Status" xml:space="preserve"><value>Status</value></data>
@@ -380,8 +380,8 @@
   <data name="Item" xml:space="preserve"><value>Eintrag</value></data>
   <data name="SearchFiles" xml:space="preserve"><value>🔍 Dateien suchen...</value></data>
   <data name="SetStartupProject" xml:space="preserve"><value>Als Startprojekt festlegen</value></data>
-  <data name="StartupProjectToolTip" xml:space="preserve"><value>Startprojekt: „Ausführen“ startet dieses Projekt.</value></data>
-  <data name="ExecutableProjectToolTip" xml:space="preserve"><value>Ausführbares Projekt: „Als Startprojekt festlegen“ im Kontextmenü lässt „Ausführen“ es starten.</value></data>
+  <data name="StartupProjectToolTip" xml:space="preserve"><value>Startprojekt: 'Ausführen' startet dieses Projekt.</value></data>
+  <data name="ExecutableProjectToolTip" xml:space="preserve"><value>Ausführbares Projekt: 'Als Startprojekt festlegen' im Kontextmenü lässt 'Ausführen' es starten.</value></data>
   <data name="WordWrap" xml:space="preserve"><value>Zeilenumbruch</value></data>
   <data name="Wrap" xml:space="preserve"><value>Umbruch</value></data>
   <data name="ShowLineNumbers" xml:space="preserve"><value>Zeilennummern anzeigen</value></data>
@@ -505,7 +505,7 @@
   <data name="DocumentSaveFailed" xml:space="preserve"><value>Dokument konnte nicht gespeichert werden; die Änderungen bleiben im Editor: {0}</value></data>
   <data name="ReadOnlyTitleSuffix" xml:space="preserve"><value>(schreibgeschützt)</value></data>
   <data name="ReadOnlyFileBanner" xml:space="preserve"><value>Diese Datei ist schreibgeschützt. Änderungen lassen sich erst speichern, wenn der Schreibschutz aufgehoben ist, zum Beispiel durch Auschecken in der Quellcodeverwaltung.</value></data>
-  <data name="DocumentSaveReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gespeichert werden; die Änderungen bleiben im Editor.</value></data>
+  <data name="DocumentSaveReadOnly" xml:space="preserve"><value>'{0}' ist schreibgeschützt und kann nicht gespeichert werden; die Änderungen bleiben im Editor.</value></data>
   <data name="SavingDisabled" xml:space="preserve"><value>Speichern ist deaktiviert</value></data>
   <data name="DocumentSaved" xml:space="preserve"><value>{0} gespeichert</value></data>
   <data name="AllDocumentsSaved" xml:space="preserve"><value>Alle Dokumente gespeichert</value></data>
@@ -732,11 +732,11 @@
   <data name="KeepItem" xml:space="preserve"><value>Eintrag behalten</value></data>
   <data name="ConfirmDelete" xml:space="preserve"><value>Löschen bestätigen</value></data>
   <data name="DeleteFailed" xml:space="preserve"><value>Löschen fehlgeschlagen: {0}</value></data>
-  <data name="DeleteReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt und kann nicht gelöscht werden.</value></data>
-  <data name="FileIsReadOnly" xml:space="preserve"><value>„{0}“ ist schreibgeschützt.</value></data>
-  <data name="FileAccessDenied" xml:space="preserve"><value>Der Zugriff auf „{0}“ wurde verweigert.</value></data>
-  <data name="FileInUse" xml:space="preserve"><value>„{0}“ wird von einem anderen Prozess verwendet.</value></data>
-  <data name="FileChangedOutsideEditor" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Vor dem Speichern neu laden.</value></data>
+  <data name="DeleteReadOnly" xml:space="preserve"><value>'{0}' ist schreibgeschützt und kann nicht gelöscht werden.</value></data>
+  <data name="FileIsReadOnly" xml:space="preserve"><value>'{0}' ist schreibgeschützt.</value></data>
+  <data name="FileAccessDenied" xml:space="preserve"><value>Der Zugriff auf '{0}' wurde verweigert.</value></data>
+  <data name="FileInUse" xml:space="preserve"><value>'{0}' wird von einem anderen Prozess verwendet.</value></data>
+  <data name="FileChangedOutsideEditor" xml:space="preserve"><value>'{0}' wurde außerhalb des Editors geändert. Vor dem Speichern neu laden.</value></data>
   <data name="FileNamePrompt" xml:space="preserve"><value>Dateinamen eingeben</value></data>
   <data name="CreateFileFailed" xml:space="preserve"><value>Datei konnte nicht erstellt werden: {0}</value></data>
   <data name="FolderNamePrompt" xml:space="preserve"><value>Ordnernamen eingeben</value></data>
@@ -863,13 +863,13 @@
   <data name="DesignThemesFailed" xml:space="preserve"><value>Design-Themes aus {0} konnten nicht geladen werden: {1}</value></data>
   <data name="DesignThemesScopeFailed" xml:space="preserve"><value>Die Design-Themes aus {0} ließen sich im Editor nicht als ein Bereich kompilieren ({1}); ladbare Includes und Theme-Elemente werden einzeln angewendet.</value></data>
   <data name="DesignThemesSkipped" xml:space="preserve"><value>Übersprungene Design-Themes aus {0}: {1}</value></data>
-  <data name="PreviewerInvalidNumber" xml:space="preserve"><value>„{0}“ ist keine gültige Zahl für {1}.</value></data>
-  <data name="PreviewerInvalidValue" xml:space="preserve"><value>„{0}“ ist kein gültiger {2}-Wert für {1}.</value></data>
-  <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>„{0}“ ist kein gültiger Wert für {1}. Erlaubt: {2}.</value></data>
+  <data name="PreviewerInvalidNumber" xml:space="preserve"><value>'{0}' ist keine gültige Zahl für {1}.</value></data>
+  <data name="PreviewerInvalidValue" xml:space="preserve"><value>'{0}' ist kein gültiger {2}-Wert für {1}.</value></data>
+  <data name="PreviewerInvalidEnumValue" xml:space="preserve"><value>'{0}' ist kein gültiger Wert für {1}. Erlaubt: {2}.</value></data>
   <data name="PreviewerSingleChild" xml:space="preserve"><value>&lt;{0}&gt; kann in {1} nur ein Element aufnehmen.</value></data>
-  <data name="PreviewerUnknownProperty" xml:space="preserve"><value>&lt;{0}&gt; hat keine Eigenschaft „{1}“.</value></data>
+  <data name="PreviewerUnknownProperty" xml:space="preserve"><value>&lt;{0}&gt; hat keine Eigenschaft '{1}'.</value></data>
   <data name="PreviewerUnknownElement" xml:space="preserve"><value>Unbekanntes Element &lt;{0}&gt;; Name und xmlns-Namespace prüfen.</value></data>
-  <data name="PreviewerTextNotAllowed" xml:space="preserve"><value>Text „{0}“ kann nicht direkt in &lt;{1}&gt; stehen, dort sind nur Controls erlaubt. Den Text in einen TextBlock setzen oder entfernen.</value></data>
+  <data name="PreviewerTextNotAllowed" xml:space="preserve"><value>Text '{0}' kann nicht direkt in &lt;{1}&gt; stehen, dort sind nur Controls erlaubt. Den Text in einen TextBlock setzen oder entfernen.</value></data>
   <data name="WorkspaceThemeLoadFailed" xml:space="preserve"><value>Das Vorschau-Theme des Arbeitsbereichs konnte nicht geladen werden: {0}</value></data>
   <data name="WorkspaceThemeSaveFailed" xml:space="preserve"><value>Das Vorschau-Theme des Arbeitsbereichs konnte nicht gespeichert werden: {0}</value></data>
   <data name="ControlReferencesRenamed" xml:space="preserve"><value>Control und C#-Verweise umbenannt.</value></data>
@@ -895,14 +895,14 @@
   <data name="ProjectOutputsCount" xml:space="preserve"><value>Projektausgaben: {0}</value></data>
   <data name="ProjectOutputsNone" xml:space="preserve"><value>Projektausgaben: keine</value></data>
   <data name="MissingOutputsSuffix" xml:space="preserve"><value> (fehlende Ausgaben erkannt)</value></data>
-  <data name="GitAddedSuffix" xml:space="preserve"><value> Added</value></data>
-  <data name="GitModifiedSuffix" xml:space="preserve"><value> Modified</value></data>
-  <data name="GitDeletedSuffix" xml:space="preserve"><value> Deleted</value></data>
-  <data name="GitRenamedSuffix" xml:space="preserve"><value> Renamed</value></data>
-  <data name="GitCopiedSuffix" xml:space="preserve"><value> Copied</value></data>
-  <data name="GitTypeChangedSuffix" xml:space="preserve"><value> Type Changed</value></data>
-  <data name="GitUnmergedSuffix" xml:space="preserve"><value> Unmerged</value></data>
-  <data name="GitChangedSuffix" xml:space="preserve"><value> Changed</value></data>
+  <data name="GitAddedSuffix" xml:space="preserve"><value> hinzugefügt</value></data>
+  <data name="GitModifiedSuffix" xml:space="preserve"><value> geändert</value></data>
+  <data name="GitDeletedSuffix" xml:space="preserve"><value> gelöscht</value></data>
+  <data name="GitRenamedSuffix" xml:space="preserve"><value> umbenannt</value></data>
+  <data name="GitCopiedSuffix" xml:space="preserve"><value> kopiert</value></data>
+  <data name="GitTypeChangedSuffix" xml:space="preserve"><value> Typ geändert</value></data>
+  <data name="GitUnmergedSuffix" xml:space="preserve"><value> mit Konflikt</value></data>
+  <data name="GitChangedSuffix" xml:space="preserve"><value> geändert</value></data>
   <data name="LocalValues" xml:space="preserve"><value>Lokale Werte</value></data>
   <data name="ExtensionUpToDate" xml:space="preserve"><value>Aktuell</value></data>
   <data name="ExtensionUpdatePrefix" xml:space="preserve"><value>Aktualisierung </value></data>
@@ -1108,7 +1108,7 @@
   <data name="MeasureHint" xml:space="preserve"><value>Messen: auf der Fläche ziehen, um einen Abstand in Pixeln zu messen</value></data>
   <data name="MeasureResult" xml:space="preserve"><value>Gemessener Abstand</value></data>
   <data name="MeasureResultHint" xml:space="preserve"><value>Waagerechter und senkrechter Abstand sowie direkte Länge. Klicken kopiert den Wert als dx,dy.</value></data>
-  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Lade das zugehörige Projekt, bevor du Control-Namen umgestaltest.</value></data>
+  <data name="CodeBehindRenameProjectNotLoaded" xml:space="preserve"><value>Lade das zugehörige Projekt, bevor du Control-Namen per Refactoring änderst.</value></data>
   <data name="CodeBehindRenameOwningProjectMissing" xml:space="preserve"><value>Das Projekt, zu dem das Control gehört, ist nicht geladen.</value></data>
   <data name="CodeBehindRenameInvalidName" xml:space="preserve"><value>Der neue Control-Name ist kein gültiger C#-Membername.</value></data>
   <data name="CodeBehindRenameCompilationUnavailable" xml:space="preserve"><value>Die Kompilierung des Projekts ist nicht verfügbar.</value></data>
@@ -1117,15 +1117,15 @@
   <data name="CodeBehindRenameMemberExists" xml:space="preserve"><value>Die Code-Behind-Klasse enthält bereits einen Member namens '{0}'.</value></data>
   <data name="CodeBehindRenameNameReferenced" xml:space="preserve"><value>Der Name '{0}' wird im Code-Behind verwendet und kann nicht entfernt werden.</value></data>
   <data name="CodeBehindRenameConflictingEdits" xml:space="preserve"><value>Widersprüchliche Umbenennungen in '{0}'.</value></data>
-  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Lade das Projekt des Formulars, bevor du einen Event-Handler zuweist.</value></data>
-  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Gib einen C#-Methodennamen für den Event-Handler ein.</value></data>
+  <data name="EventHandlerProjectNotLoaded" xml:space="preserve"><value>Lade das Projekt des Formulars, bevor du einen Ereignishandler zuweist.</value></data>
+  <data name="EventHandlerNameInvalid" xml:space="preserve"><value>Gib einen C#-Methodennamen für den Ereignishandler ein.</value></data>
   <data name="EventHandlerFormClassMissing" xml:space="preserve"><value>Die Formularklasse '{0}' ist im geladenen C#-Projekt nicht verfügbar.</value></data>
   <data name="EventHandlerFormClassAmbiguous" xml:space="preserve"><value>Die Formularklasse '{0}' gehört zu mehreren Projekten. Öffne das zugehörige Projekt.</value></data>
   <data name="EventHandlerControlTypeMissing" xml:space="preserve"><value>Der Control-Typ '{0}' ist im Projekt des Formulars nicht verfügbar.</value></data>
-  <data name="EventHandlerGenericControl" xml:space="preserve"><value>Die Event-Prüfung für ein generisches Control benötigt dessen konkrete Typargumente.</value></data>
-  <data name="EventHandlerEventMissing" xml:space="preserve"><value>Das Control deklariert das Event '{0}' nicht.</value></data>
+  <data name="EventHandlerGenericControl" xml:space="preserve"><value>Die Ereignisprüfung für ein generisches Control benötigt dessen konkrete Typargumente.</value></data>
+  <data name="EventHandlerEventMissing" xml:space="preserve"><value>Das Control deklariert das Ereignis '{0}' nicht.</value></data>
   <data name="EventHandlerFormDeclarationMissing" xml:space="preserve"><value>Die Formularklasse hat im geladenen Projekt keine C#-Deklaration.</value></data>
-  <data name="EventHandlerSignatureUnrepresentable" xml:space="preserve"><value>Die Event-Signatur lässt sich in C# nicht darstellen.</value></data>
+  <data name="EventHandlerSignatureUnrepresentable" xml:space="preserve"><value>Die Ereignissignatur lässt sich in C# nicht darstellen.</value></data>
   <data name="EventHandlerAssignmentError" xml:space="preserve"><value>'{0}' kann '{1}' nicht zugewiesen werden: {2}</value></data>
   <data name="EventHandlerIncompatibleMethod" xml:space="preserve"><value>Der Handler-Name muss auf eine kompatible C#-Methode verweisen.</value></data>
   <data name="EventHandlerMappingFailed" xml:space="preserve"><value>Der Handler konnte dem ursprünglichen Projekt nicht zugeordnet werden.</value></data>
@@ -1133,7 +1133,7 @@
   <data name="DropPositionUnavailable" xml:space="preserve"><value>Das Element kann nicht neben dem Ablageziel platziert werden.</value></data>
   <data name="GitDiscardWorkingChangesPrompt" xml:space="preserve"><value>Änderungen in der Arbeitsdatei verwerfen: {0}? Die Datei wird auf den Stand im Git-Index oder im letzten Commit zurückgesetzt; Änderungen im Git-Index bleiben erhalten.</value></data>
   <data name="OAuthTokenExpired" xml:space="preserve"><value>Die OAuth-Anmeldung ist abgelaufen und konnte nicht erneuert werden. Melde dich erneut an oder hinterlege die URL des Token-Endpunkts.</value></data>
-  <data name="DocumentOpenFailedNamed" xml:space="preserve"><value>„{0}“ konnte nicht geöffnet werden: {1}</value></data>
+  <data name="DocumentOpenFailedNamed" xml:space="preserve"><value>'{0}' konnte nicht geöffnet werden: {1}</value></data>
   <data name="DocumentNotUtf8Reason" xml:space="preserve"><value>Die Datei ist kein gültiger UTF-8-Text.</value></data>
   <data name="CommandFailed" xml:space="preserve"><value>Der Befehl ist fehlgeschlagen: {0}</value></data>
   <data name="LayoutSaveFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gespeichert werden</value></data>
@@ -1144,13 +1144,13 @@
   <data name="Duplicate" xml:space="preserve"><value>Duplizieren</value></data>
   <data name="ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
-  <data name="ExtensionCapabilities" xml:space="preserve"><value>Capabilities</value></data>
+  <data name="ExtensionCapabilities" xml:space="preserve"><value>Fähigkeiten</value></data>
   <data name="GitCommandFailed" xml:space="preserve"><value>Git-Befehl fehlgeschlagen: {0}</value></data>
-  <data name="GitRevisionNotOneCommitFormat" xml:space="preserve"><value>„{0}“ bezeichnet keinen einzelnen Commit.</value><comment>{0} is the revision as given, such as a branch, a tag or a range.</comment></data>
+  <data name="GitRevisionNotOneCommitFormat" xml:space="preserve"><value>'{0}' bezeichnet keinen einzelnen Commit.</value><comment>{0} is the revision as given, such as a branch, a tag or a range.</comment></data>
   <data name="SaveConflictTitle" xml:space="preserve"><value>Datei auf dem Datenträger geändert</value></data>
-  <data name="SaveConflictPrompt" xml:space="preserve"><value>„{0}“ wurde außerhalb des Editors geändert. Mit dem Text aus dem Editor überschreiben oder vom Datenträger neu laden und die Änderungen im Editor verwerfen?</value></data>
+  <data name="SaveConflictPrompt" xml:space="preserve"><value>'{0}' wurde außerhalb des Editors geändert. Mit dem Text aus dem Editor überschreiben oder vom Datenträger neu laden und die Änderungen im Editor verwerfen?</value></data>
   <data name="Overwrite" xml:space="preserve"><value>Überschreiben</value></data>
-  <data name="DocumentReloadedFromDisk" xml:space="preserve"><value>„{0}“ wurde vom Datenträger neu geladen; die Änderungen im Editor wurden verworfen</value></data>
+  <data name="DocumentReloadedFromDisk" xml:space="preserve"><value>'{0}' wurde vom Datenträger neu geladen; die Änderungen im Editor wurden verworfen</value></data>
   <data name="LayoutRenameFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht umbenannt werden: {1}</value></data>
   <data name="LayoutDeleteFailed" xml:space="preserve"><value>Layout '{0}' konnte nicht gelöscht werden: {1}</value></data>
   <data name="DocumentHasXamlErrors" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du das Dokument hier bearbeitest.</value></data>
@@ -1334,4 +1334,147 @@
   <data name="GitWritesCloseAnyway" xml:space="preserve"><value>Trotzdem beenden</value></data>
   <data name="GitWritesCloseAnywayPrompt" xml:space="preserve"><value>git läuft noch, vielleicht in einem wartenden Hook. Wird der Editor jetzt beendet, kann git beim Schreiben seiner Ausgabe scheitern und den Befehl halb fertig lassen. Trotzdem beenden?</value></data>
   <data name="GitStashSavedChangesKeptFormat" xml:space="preserve"><value>git hat den Stash angelegt, seine Änderungen aber im Arbeitsverzeichnis gelassen: {0}</value></data>
+  <data name="LayoutEditContainsItself" xml:space="preserve"><value>Ein Element kann weder sich selbst noch einen seiner Vorfahren enthalten.</value></data>
+  <data name="LayoutEditUnsupportedContainer" xml:space="preserve"><value>{0} ist kein unterstützter visueller Container.</value></data>
+  <data name="LayoutEditTypeUnresolved" xml:space="preserve"><value>Der Control-Typ lässt sich im geladenen Projekt nicht auflösen.</value></data>
+  <data name="LayoutEditNotVisualControl" xml:space="preserve"><value>In einen Layout-Container lassen sich nur visuelle Controls einfügen.</value></data>
+  <data name="LayoutEditTopLevelWindow" xml:space="preserve"><value>Ein Fenster der obersten Ebene lässt sich nicht in ein anderes Control einfügen.</value></data>
+  <data name="LayoutEditItemsSource" xml:space="preserve"><value>Das Ziel verwendet ItemsSource; seine erzeugten Einträge lassen sich nicht durch manuell eingefügte Elemente ersetzen.</value></data>
+  <data name="LayoutEditContentAssigned" xml:space="preserve"><value>Das Ziel hat bereits einen Content-Wert oder ein Binding.</value></data>
+  <data name="LayoutEditMixedContent" xml:space="preserve"><value>Das Ziel mischt impliziten und expliziten Content; löse diese Mehrdeutigkeit zuerst auf.</value></data>
+  <data name="LayoutEditContentOccupied" xml:space="preserve"><value>Das Ziel enthält bereits ein Element. Wähle ein Panel oder einen leeren Content-Bereich.</value></data>
+  <data name="LayoutEditHasParent" xml:space="preserve"><value>Das Element hat bereits ein übergeordnetes Element; verschiebe es stattdessen.</value></data>
+  <data name="LayoutEditInsertionOutside" xml:space="preserve"><value>Die Einfügeposition liegt außerhalb des Ziels.</value></data>
+  <data name="LayoutEditRootMove" xml:space="preserve"><value>Das Wurzelelement des Dokuments lässt sich nicht verschieben.</value></data>
+  <data name="LayoutEditSourceNotContent" xml:space="preserve"><value>Die Quelle ist kein visueller Inhalt ihres übergeordneten Elements.</value></data>
+  <data name="LayoutEditDropUnsupported" xml:space="preserve"><value>Diese Ablageposition wird nicht unterstützt.</value></data>
+  <data name="LayoutEditDropOnItself" xml:space="preserve"><value>Ein Element lässt sich nicht auf sich selbst ablegen.</value></data>
+  <data name="LayoutEditNoRootSibling" xml:space="preserve"><value>Neben dem Wurzelelement des Dokuments lässt sich nichts einfügen.</value></data>
+  <data name="LayoutEditTargetNotContent" xml:space="preserve"><value>Das Ziel ist kein visueller Inhalt seines übergeordneten Elements.</value></data>
+  <data name="LayoutEditRootDelete" xml:space="preserve"><value>Das Wurzelelement des Dokuments lässt sich nicht löschen.</value></data>
+  <data name="LayoutEditElementNotContent" xml:space="preserve"><value>Das Element ist kein visueller Inhalt seines übergeordneten Elements.</value></data>
+  <data name="LayoutEditRootWrap" xml:space="preserve"><value>Das Wurzelelement des Dokuments lässt sich nicht umschließen.</value></data>
+  <data name="LayoutEditWrapperAttached" xml:space="preserve"><value>Das umschließende Element gehört bereits zu einem Dokument.</value></data>
+  <data name="DesignerOpenDocumentFirst" xml:space="preserve"><value>Öffne zuerst ein Designer-Dokument.</value></data>
+  <data name="DesignerClipboardNoElements" xml:space="preserve"><value>Die Zwischenablage enthält keine XAML-Elemente.</value></data>
+  <data name="DesignerClipboardInvalidXaml" xml:space="preserve"><value>Die Zwischenablage enthält keine gültigen XAML-Fragmente.</value></data>
+  <data name="DesignerPasteCompleteElements" xml:space="preserve"><value>Füge vollständige Control-Elemente ohne umgebenden Text und ohne einzelne Eigenschaftselemente ein.</value></data>
+  <data name="DesignerSelectLayoutTarget" xml:space="preserve"><value>Wähle ein Layout-Panel oder einen leeren Content-Bereich.</value></data>
+  <data name="DesignerPasteMultipleNeedsPanel" xml:space="preserve"><value>Mehrere Elemente brauchen ein Panel oder einen Items-Container.</value></data>
+  <data name="DesignerDuplicateSiblingsRequired" xml:space="preserve"><value>Zum Duplizieren müssen alle ausgewählten Elemente im selben Container liegen.</value></data>
+  <data name="DesignerInsertionTargetGone" xml:space="preserve"><value>Das gewünschte Einfügeziel ist nicht mehr vorhanden.</value></data>
+  <data name="DesignerSelectSynchronizedControl" xml:space="preserve"><value>Wähle zuerst ein Control in einem synchronisierten Designer-Dokument aus.</value></data>
+  <data name="DesignerDocumentNotSynchronized" xml:space="preserve"><value>Das AXAML-Dokument ist nicht synchronisiert.</value></data>
+  <data name="DesignerDocumentNoRoot" xml:space="preserve"><value>Das AXAML-Dokument hat kein Wurzel-Control.</value></data>
+  <data name="DesignerDocumentSynchronizing" xml:space="preserve"><value>Warte, bis das AXAML-Dokument fertig synchronisiert ist.</value></data>
+  <data name="DesignerResolveXamlErrors" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du im Designer etwas änderst.</value></data>
+  <data name="DesignerUndoLaterChangesFirst" xml:space="preserve"><value>Mache zuerst die späteren Designer-Änderungen rückgängig, bevor du dieses Refactoring rückgängig machst.</value></data>
+  <data name="DesignerRedoEarlierChangesFirst" xml:space="preserve"><value>Wiederhole zuerst die früheren Designer-Änderungen, bevor du dieses Refactoring wiederholst.</value></data>
+  <data name="DesignerNameInvalid" xml:space="preserve"><value>Gib einen gültigen Control-Namen ohne Leerzeichen und ohne C#-Schlüsselwörter ein.</value></data>
+  <data name="DesignerNameInUse" xml:space="preserve"><value>Der Name '{0}' wird in diesem Namensbereich bereits verwendet.</value></data>
+  <data name="DesignerNameSelectorAmbiguous" xml:space="preserve"><value>Der Style-Selektor '{0}' verweist auf einen Namen, der in mehreren Namensbereichen vorkommt. Löse diese Mehrdeutigkeit auf, bevor du umbenennst.</value></data>
+  <data name="DesignerNameUsedBySelector" xml:space="preserve"><value>Der Name '{0}' wird von einem Style-Selektor verwendet und kann nicht entfernt werden.</value></data>
+  <data name="DesignerNameUsedByBinding" xml:space="preserve"><value>Der Name '{0}' wird von einem Binding verwendet und kann nicht entfernt werden.</value></data>
+  <data name="ArrangeOpenDocument" xml:space="preserve"><value>Öffne zuerst ein gültiges Designer-Dokument.</value></data>
+  <data name="ArrangeSelectTwoSiblings" xml:space="preserve"><value>Wähle mindestens zwei Controls im selben Container aus.</value></data>
+  <data name="ArrangeOneTemplateInstance" xml:space="preserve"><value>Wähle Controls aus einer Template-Instanz aus, nicht wiederholte Instanzen desselben Quellelements.</value></data>
+  <data name="ArrangeSelectionChanged" xml:space="preserve"><value>Die Auswahl hat sich geändert. Wähle die Controls erneut aus.</value></data>
+  <data name="ArrangeSameContainer" xml:space="preserve"><value>Layout-Aktionen brauchen Controls im selben Container.</value></data>
+  <data name="ArrangeWaitForMeasurements" xml:space="preserve"><value>Warte auf die aktuellen Layout-Maße der Vorschau.</value></data>
+  <data name="ArrangeRenderFirst" xml:space="preserve"><value>Die ausgewählten Controls müssen gerendert sein, bevor du sie anordnest.</value></data>
+  <data name="ArrangeSameRenderedContainer" xml:space="preserve"><value>Wähle Controls im selben gerenderten Container aus.</value></data>
+  <data name="ArrangeSizeConstraint" xml:space="preserve"><value>Die Größe des primären Controls verletzt die Min/Max-Grenzen eines ausgewählten Controls.</value></data>
+  <data name="ArrangeCanvasThreeControls" xml:space="preserve"><value>Zum Verteilen in einem Canvas brauchst du mindestens drei Controls.</value></data>
+  <data name="ArrangeGridColumnsMissing" xml:space="preserve"><value>Das Grid braucht mindestens {0} vorhandene Spalten. Vorhandene Definitionen werden nicht ersetzt.</value></data>
+  <data name="ArrangeGridRowsMissing" xml:space="preserve"><value>Das Grid braucht mindestens {0} vorhandene Zeilen. Vorhandene Definitionen werden nicht ersetzt.</value></data>
+  <data name="ArrangeStackOrientation" xml:space="preserve"><value>Verteile entlang der Ausrichtung des StackPanels.</value></data>
+  <data name="ArrangeStackSelectAll" xml:space="preserve"><value>Wähle alle Kindelemente aus, bevor du ihren gemeinsamen Abstand im StackPanel änderst.</value></data>
+  <data name="ArrangeStackTooSmall" xml:space="preserve"><value>Das StackPanel ist zu klein, um seine Kindelemente ohne Überlappung zu verteilen.</value></data>
+  <data name="ArrangeDistributionUnsupported" xml:space="preserve"><value>Verteilen ist nur in Canvas-, Grid- und StackPanel-Containern möglich.</value></data>
+  <data name="ArrangeControlDetached" xml:space="preserve"><value>Das ausgewählte Control ist nicht mit der Designfläche verbunden.</value></data>
+  <data name="ArrangeStructuredValue" xml:space="preserve"><value>{0}.{1} enthält einen Ausdruck oder einen strukturierten Wert. Bearbeite ihn oder setze ihn ausdrücklich zurück, bevor du das Control anordnest.</value></data>
+  <data name="PreviewerEditXamlErrorsInsert" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du Controls einfügst.</value></data>
+  <data name="PreviewerEditXamlErrorsArrange" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du Controls anordnest.</value></data>
+  <data name="PreviewerEditXamlErrorsResize" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du die Größe von Controls änderst.</value></data>
+  <data name="PreviewerEditXamlErrorsMove" xml:space="preserve"><value>Behebe die XAML-Fehler, bevor du Controls verschiebst.</value></data>
+  <data name="PreviewerEditToolboxControlRequired" xml:space="preserve"><value>Wähle ein Control aus der geladenen Toolbox.</value></data>
+  <data name="PreviewerEditDropTargetRequired" xml:space="preserve"><value>Lege das Control auf einem Layout-Panel oder in einem leeren Content-Bereich ab.</value></data>
+  <data name="PreviewerEditContainerNotMeasured" xml:space="preserve"><value>Der Container zum Einfügen ist noch nicht vermessen.</value></data>
+  <data name="PreviewerEditSelectTwoControls" xml:space="preserve"><value>Wähle mindestens zwei Controls aus.</value></data>
+  <data name="PreviewerEditArrangeOneContainer" xml:space="preserve"><value>Ordne jeweils nur Controls aus einem Quell-Container an.</value></data>
+  <data name="PreviewerEditDragOneContainer" xml:space="preserve"><value>Ziehe jeweils nur Controls aus einem Quell-Container.</value></data>
+  <data name="PreviewerEditOneResizeHandle" xml:space="preserve"><value>Wähle einen Ziehpunkt zum Ändern der Größe.</value></data>
+  <data name="PreviewerEditRootResizeSides" xml:space="preserve"><value>Die Größe des Wurzelelements lässt sich nur an seiner rechten oder unteren Seite ändern.</value></data>
+  <data name="PreviewerEditDraggedControlDeselected" xml:space="preserve"><value>Das gezogene Control ist nicht mehr ausgewählt.</value></data>
+  <data name="PreviewerEditPointerPlacementUnsupported" xml:space="preserve"><value>Der ausgewählte Container unterstützt keine Platzierung mit dem Zeiger.</value></data>
+  <data name="PreviewerEditTransformNotInvertible" xml:space="preserve"><value>Die Transformation des Containers lässt sich nicht umkehren.</value></data>
+  <data name="PreviewerEditNoSourceContainer" xml:space="preserve"><value>Das ausgewählte Control hat keinen bearbeitbaren Quell-Container.</value></data>
+  <data name="PreviewerEditMoveContainerUnsupported" xml:space="preserve"><value>Verschiebe das Control innerhalb eines Canvas, eines Grids oder eines geordneten Panels.</value></data>
+  <data name="PreviewerEditSelectControl" xml:space="preserve"><value>Wähle zuerst ein Control aus.</value></data>
+  <data name="PreviewerEditSelectSourceControls" xml:space="preserve"><value>Wähle Quell-Controls aus, nicht wiederholte Instanzen desselben Template-Elements.</value></data>
+  <data name="PreviewerEditValueNotFinite" xml:space="preserve"><value>Der Layout-Wert muss endlich sein.</value></data>
+  <data name="PropertyNullValueUnsupported" xml:space="preserve"><value>Diese Eigenschaft unterstützt keinen ausdrücklichen null-Wert. Verwende Zurücksetzen, um ihren lokalen Wert zu entfernen.</value></data>
+  <data name="PropertyImplicitContentTypeMissing" xml:space="preserve"><value>Der Control-Typ muss verfügbar sein, bevor du neben implizitem Content einen Wert änderst.</value></data>
+  <data name="EventHandlerAssignFirst" xml:space="preserve"><value>Weise einen Ereignishandler zu, bevor du seine Definition öffnest.</value></data>
+  <data name="EventHandlerMetadataOnly" xml:space="preserve"><value>Dieser Ereignishandler ist in Assembly-Metadaten deklariert und hat keine bearbeitbare Quelldefinition.</value></data>
+  <data name="EventHandlerSourceChangedNavigation" xml:space="preserve"><value>Der Quelltext des Ereignishandlers hat sich beim Öffnen seiner Definition geändert. Versuche es erneut.</value></data>
+  <data name="EventHandlerClassRequired" xml:space="preserve"><value>Ein Ereignishandler braucht ein x:Class mit passender C#-Formularklasse.</value></data>
+  <data name="EventHandlerControlTypeUnresolved" xml:space="preserve"><value>Der Typ des ausgewählten Controls konnte nicht aufgelöst werden.</value></data>
+  <data name="EventHandlerMultipleProjects" xml:space="preserve"><value>Die AXAML-Datei gehört zu mehreren Projekten. Öffne zuerst das zugehörige Projekt.</value></data>
+  <data name="EventHandlerServiceMissing" xml:space="preserve"><value>Das geladene Projekt hat keinen C#-Dienst für Ereignisbindungen.</value></data>
+  <data name="EventHandlerSourceChangedValidation" xml:space="preserve"><value>Der Quelltext des Ereignishandlers hat sich während der Prüfung geändert. Lade ihn neu und weise ihn erneut zu.</value></data>
+  <data name="EventHandlerCodeChanged" xml:space="preserve"><value>Ein C#-Dokument hat sich während der Ereignisprüfung geändert. Weise den Ereignishandler erneut zu.</value></data>
+  <data name="EventHandlerCodeEdited" xml:space="preserve"><value>Ein C#-Dokument wurde während der Ereignisprüfung bearbeitet. Weise den Ereignishandler erneut zu.</value></data>
+  <data name="EventHandlerEventNotExposed" xml:space="preserve"><value>Das ausgewählte Control stellt das Ereignis '{0}' nicht bereit.</value></data>
+  <data name="CodeBehindRenameMultipleProjects" xml:space="preserve"><value>Die AXAML-Datei gehört zu mehreren Projekten. Öffne das zugehörige Projekt, bevor du ein Control umbenennst.</value></data>
+  <data name="CodeBehindRenameServiceMissing" xml:space="preserve"><value>Das geladene Projekt hat keinen C#-Dienst für Refactorings.</value></data>
+  <data name="CodeBehindRenameSynchronizing" xml:space="preserve"><value>Warte, bis das AXAML-Dokument fertig synchronisiert ist, bevor du ein Control umbenennst.</value></data>
+  <data name="CodeBehindRenameInvalidEdit" xml:space="preserve"><value>Das C#-Refactoring hat eine ungültige Dokumentänderung geliefert.</value></data>
+  <data name="CodeBehindRenameDocumentMissing" xml:space="preserve"><value>Ein Code-Behind-Dokument ist nicht mehr vorhanden.</value></data>
+  <data name="CodeBehindRenameDocumentChanged" xml:space="preserve"><value>Das Code-Dokument hat sich während der Vorbereitung des Refactorings geändert: {0}</value></data>
+  <data name="CodeBehindRenameDesignerClosed" xml:space="preserve"><value>Das Designer-Dokument zu diesem Refactoring ist nicht mehr geöffnet.</value></data>
+  <data name="CodeBehindRenameDesignerChanged" xml:space="preserve"><value>Der Designer hat sich während der Vorbereitung der Änderung geändert. Versuche es erneut.</value></data>
+  <data name="CodeBehindRenameOverlappingEdits" xml:space="preserve"><value>Das C#-Refactoring hat überlappende oder außerhalb des Texts liegende Änderungen geliefert.</value></data>
+  <data name="CodeBehindRenameUndoLaterChanges" xml:space="preserve"><value>Mache zuerst die späteren Änderungen rückgängig, bevor du dieses Refactoring erneut anwendest: {0}</value></data>
+  <data name="CodeBehindRenameHistoryGone" xml:space="preserve"><value>Das Refactoring ist im Verlauf des Dokuments nicht mehr vorhanden: {0}</value></data>
+  <data name="PreviewerInvalidThemeCatalog" xml:space="preserve"><value>Die Vorschau hat ungültige Theme-Katalogdaten geliefert.</value></data>
+  <data name="PreviewerInvalidDesignTree" xml:space="preserve"><value>Die Vorschau hat ungültige Designbaum-Daten geliefert.</value></data>
+  <data name="PreviewerInputFailed" xml:space="preserve"><value>Eingabe in der Vorschau fehlgeschlagen: {0}</value></data>
+  <data name="ControlMetadataReadFailed" xml:space="preserve"><value>Control-Metadaten aus '{0}' können nicht gelesen werden: {1}</value></data>
+  <data name="ControlDependencyMissing" xml:space="preserve"><value>Die Projektabhängigkeit '{0}' fehlt. Stelle die Projektverweise wieder her.</value></data>
+  <data name="GitForcePushNoUpstreamFormat" xml:space="preserve"><value>Der Branch {0} hat keinen Upstream-Branch auf einem Remote.</value></data>
+  <data name="GitNoOperationInProgress" xml:space="preserve"><value>Es läuft kein Merge, Rebase, Cherry-Pick oder Revert und keine Patch-Anwendung.</value></data>
+  <data name="DotnetTemplatesNotFound" xml:space="preserve"><value>Es wurden keine Vorlagen gefunden.</value></data>
+  <data name="AcpAgentPathRequired" xml:space="preserve"><value>Der Pfad zur ausführbaren Datei des Agents fehlt.</value></data>
+  <data name="AcpAgentExitedOnStartup" xml:space="preserve"><value>Der ACP-Agent hat sich beim Start beendet.</value></data>
+  <data name="AcpMockAgentPathMissing" xml:space="preserve"><value>Der Pfad zum Testagent ist nicht konfiguriert.</value></data>
+  <data name="AcpMockAgentNotFound" xml:space="preserve"><value>Die ausführbare Datei des Testagents wurde nicht gefunden.</value></data>
+  <data name="AcpProtocolVersionMismatch" xml:space="preserve"><value>Der Agent hat nicht die ACP-Protokollversion 1 ausgehandelt.</value></data>
+  <data name="AcpInvalidSessionId" xml:space="preserve"><value>Der Agent hat eine ungültige Sitzungs-ID geliefert.</value></data>
+  <data name="AcpAgentStartFailed" xml:space="preserve"><value>Der Prozess des ACP-Agents ließ sich nicht starten.</value></data>
+  <data name="AcpPromptAlreadyRunning" xml:space="preserve"><value>Es läuft bereits eine ACP-Anfrage.</value></data>
+  <data name="AcpClientNotConnected" xml:space="preserve"><value>Der ACP-Client ist nicht verbunden.</value></data>
+  <data name="DebugAdapterStartFailed" xml:space="preserve"><value>Der Prozess des Debugadapters ließ sich nicht starten.</value></data>
+  <data name="PropertyStructureTextUnavailable" xml:space="preserve"><value>Der Dokumenttext ist nicht verfügbar.</value></data>
+  <data name="PropertyStructureDocumentChanged" xml:space="preserve"><value>Das Dokument hat sich geändert, während dieser Editor geöffnet war. Brich ab und öffne die Eigenschaft erneut, um den aktuellen Stand zu bearbeiten.</value></data>
+  <data name="PropertyStructureOwnerFixed" xml:space="preserve"><value>Der Besitzer der Eigenschaft lässt sich nicht ändern.</value></data>
+  <data name="PropertyStructureSingleValue" xml:space="preserve"><value>Diese Eigenschaft nimmt nur einen Wert auf. Verwende einen Container für mehrere Kindelemente.</value></data>
+  <data name="PropertyStructureScalarMixed" xml:space="preserve"><value>Ein skalarer Ausdruck lässt sich nicht mit Objektelementen mischen.</value></data>
+  <data name="PropertyStructureParseFailed" xml:space="preserve"><value>{0} in {1} lässt sich nicht bearbeiten: {2}</value></data>
+  <data name="PropertyStructureDiagnostic" xml:space="preserve"><value>Zeile {0}, Spalte {1}: {2}</value></data>
+  <data name="PropertyStructureOneElement" xml:space="preserve"><value>Zum Bearbeiten von {0} an {1} ist genau ein Eigenschaftselement nötig, etwa &lt;{1}.{0}&gt;, nicht &lt;{2}&gt;.</value></data>
+  <data name="PropertyStructureTypeMismatch" xml:space="preserve"><value>{0} erwartet {1}, nicht {2}.</value></data>
+  <data name="PropertyStructureSetTwice" xml:space="preserve"><value>{0} ist mehrfach gesetzt. Behalte entweder das Attribut oder das Eigenschaftselement.</value></data>
+  <data name="PropertyStructureGridIdentitiesMissing" xml:space="preserve"><value>Änderungen an Grid-Definitionen brauchen die ursprüngliche Zuordnung der Zeilen oder Spalten.</value></data>
+  <data name="PropertyStructureGridIdentitiesInvalid" xml:space="preserve"><value>Die ursprüngliche Zuordnung der Grid-Definitionen ist ungültig. Öffne den Editor erneut.</value></data>
+  <data name="PropertyStructureGridAxisMismatch" xml:space="preserve"><value>'{0}' ist keine Definition für diese Grid-Achse.</value></data>
+  <data name="PropertyStructureGridSpanSplit" xml:space="preserve"><value>Das Verschieben dieser Definition würde Grid.{0} an '{1}' teilen. Ändere zuerst Grid.{0}.</value></data>
+  <data name="PropertyStructureGridWrapperRequired" xml:space="preserve"><value>Behalte das umschließende Element der Grid-Definitionen und bearbeite dessen Zeilen oder Spalten.</value></data>
+  <data name="PropertyStructureGridCellAmbiguous" xml:space="preserve"><value>'{0}' hat mehrere Zuweisungen von Grid.{1}.</value></data>
+  <data name="PropertyStructureGridCellNotLiteral" xml:space="preserve"><value>Grid.{0} an '{1}' ist kein gültiger literaler Zellenwert. Sein Binding oder Ausdruck lässt sich nicht automatisch verschieben.</value></data>
+  <data name="PropertyStructureGridCellCreateFailed" xml:space="preserve"><value>Grid.{0} für '{1}' lässt sich nicht anlegen.</value></data>
+  <data name="PropertyStructureDocumentRequired" xml:space="preserve"><value>Öffne ein gültiges XAML-Dokument, bevor du seine Struktur bearbeitest.</value></data>
+  <data name="PropertyStructureOwnerGone" xml:space="preserve"><value>Der Besitzer der Eigenschaft ist nicht mehr vorhanden.</value></data>
+  <data name="PropertyValueEnumUndefined" xml:space="preserve"><value>Wähle einen definierten Enum-Wert.</value></data>
+  <data name="PropertyValueTypeInvalid" xml:space="preserve"><value>{0} erwartet {1}: {2}</value></data>
 </root>

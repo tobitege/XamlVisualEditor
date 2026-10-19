@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Acp;
 
@@ -37,7 +38,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(options.FileName))
         {
-            throw new ArgumentException("Agent executable path is required.", nameof(options));
+            throw new InvalidOperationException(UiStrings.AcpAgentPathRequired);
         }
 
         ProcessStartInfo startInfo = new()
@@ -65,7 +66,7 @@ public sealed class AcpAgentHost : IAsyncDisposable
 
         if (!process.Start())
         {
-            throw new InvalidOperationException("Failed to start ACP agent process.");
+            throw new InvalidOperationException(UiStrings.AcpAgentStartFailed);
         }
 
         Stream input = process.StandardOutput.BaseStream;

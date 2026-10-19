@@ -75,33 +75,33 @@ public sealed class DesignerLayoutEditor
     public void Apply(DesignerLayoutOperation operation)
     {
         if (_document.IsDisposed || !_document.SyncEngine.CanEditAst)
-            throw new InvalidOperationException("Open a valid designer document first.");
+            throw new InvalidOperationException(UiStrings.ArrangeOpenDocument);
         DesignSurfaceViewModel surface = _document.DesignSurface;
         DesignItem[] selection = surface.Selection.SelectedItems.OfType<DesignItem>().ToArray();
-        if (selection.Length < 2) throw new InvalidOperationException("Select at least two sibling controls.");
+        if (selection.Length < 2) throw new InvalidOperationException(UiStrings.ArrangeSelectTwoSiblings);
         if (selection.Select(item => item.AstNodeId).Distinct().Count() != selection.Length)
-            throw new InvalidOperationException("Select controls from one template instance, not repeated instances of the same source element.");
+            throw new InvalidOperationException(UiStrings.ArrangeOneTemplateInstance);
         MutableAstObjectNode[] nodes = selection.Select(item => _document.NodeMap.FindById(item.AstNodeId))
             .OfType<MutableAstObjectNode>().ToArray();
-        if (nodes.Length != selection.Length) throw new InvalidOperationException("The selection changed. Select the controls again.");
+        if (nodes.Length != selection.Length) throw new InvalidOperationException(UiStrings.ArrangeSelectionChanged);
         MutableAstObjectNode? parent = LayoutEditService.GetParent(nodes[0]);
         if (parent is null || nodes.Any(node => !ReferenceEquals(LayoutEditService.GetParent(node), parent)))
-            throw new InvalidOperationException("Layout actions require controls in the same container.");
+            throw new InvalidOperationException(UiStrings.ArrangeSameContainer);
 
         if (_document.UseExternalPreviewer)
         {
             DesignerHostSnapshot snapshot = _document.PreviewerSession?.LastDesignTree
-                ?? throw new InvalidOperationException("Wait for current previewer layout measurements.");
+                ?? throw new InvalidOperationException(UiStrings.ArrangeWaitForMeasurements);
             new PreviewerGeometryEditor(_document, snapshot).Arrange(selection, operation);
             return;
         }
 
         Control[] controls = selection.Select(item => surface.ControlMap.FirstOrDefault(pair => ReferenceEquals(pair.Value, item)).Key).ToArray();
-        if (controls.Any(control => control is null)) throw new InvalidOperationException("Render the selected controls before arranging them.");
+        if (controls.Any(control => control is null)) throw new InvalidOperationException(UiStrings.ArrangeRenderFirst);
         Control? parentControl = controls[0].GetVisualAncestors().OfType<Control>().FirstOrDefault(control =>
             surface.ControlMap.TryGetValue(control, out DesignItem? item) && item.AstNodeId == parent.Id);
         if (parentControl is null || controls.Any(control => !control.GetVisualAncestors().Contains(parentControl)))
-            throw new InvalidOperationException("Select controls in the same rendered container.");
+            throw new InvalidOperationException(UiStrings.ArrangeSameRenderedContainer);
         Item[] items = nodes.Select((node, index) => new Item(node, controls[index], BoundsInParent(controls[index], parentControl))).ToArray();
         Item primary = items.FirstOrDefault(item => item.Node.Id == (surface.Selection.PrimarySelection as DesignItem)?.AstNodeId) ?? items[0];
         LayoutEditService layout = new(_document.MetadataService);
@@ -116,7 +116,7 @@ public sealed class DesignerLayoutEditor
             {
                 double min = horizontal ? item.Control.MinWidth : item.Control.MinHeight;
                 double max = horizontal ? item.Control.MaxWidth : item.Control.MaxHeight;
-                if (size < min || size > max) throw new InvalidOperationException("The primary control's size exceeds a selected control's Min/Max constraint.");
+                if (size < min || size > max) throw new InvalidOperationException(UiStrings.ArrangeSizeConstraint);
                 writes.Add(new(item.Node, horizontal ? "Width" : "Height", Number(size)));
             }
         }
@@ -156,7 +156,7 @@ public sealed class DesignerLayoutEditor
     {
         if (kind == LayoutContainerKind.Canvas)
         {
-            if (items.Length < 3) throw new InvalidOperationException("Canvas distribution requires at least three controls.");
+            if (items.Length < 3) throw new InvalidOperationException(UiStrings.ArrangeCanvasThreeControls);
             Item[] ordered = items.OrderBy(item => horizontal ? item.Bounds.Left : item.Bounds.Top).ToArray();
             double start = horizontal ? ordered[0].Bounds.Left : ordered[0].Bounds.Top;
             double end = horizontal ? ordered[^1].Bounds.Right : ordered[^1].Bounds.Bottom;
@@ -182,7 +182,9 @@ public sealed class DesignerLayoutEditor
                 count = items.Length;
                 writes.Add(new(parent, definitions, string.Join(",", Enumerable.Repeat("*", count))));
             }
-            if (count < items.Length) throw new InvalidOperationException($"The Grid needs at least {items.Length} existing {(horizontal ? "columns" : "rows")}. Existing definitions are not replaced.");
+            if (count < items.Length)
+                throw new InvalidOperationException(string.Format(
+                    horizontal ? UiStrings.ArrangeGridColumnsMissing : UiStrings.ArrangeGridRowsMissing, items.Length));
             Item[] ordered = items.OrderBy(item => horizontal ? Grid.GetColumn(item.Control) : Grid.GetRow(item.Control))
                 .ThenBy(item => Array.IndexOf(childIds, item.Node.Id)).ToArray();
             for (int index = 0; index < ordered.Length; index++)
@@ -196,15 +198,15 @@ public sealed class DesignerLayoutEditor
         if (parentControl is StackPanel stack)
         {
             if ((stack.Orientation == Orientation.Horizontal) != horizontal)
-                throw new InvalidOperationException("Choose distribution along the StackPanel's orientation.");
-            if (!allSelected) throw new InvalidOperationException("Select all children before changing their shared StackPanel spacing.");
+                throw new InvalidOperationException(UiStrings.ArrangeStackOrientation);
+            if (!allSelected) throw new InvalidOperationException(UiStrings.ArrangeStackSelectAll);
             double available = horizontal ? stack.Bounds.Width : stack.Bounds.Height;
             double occupied = items.Sum(item => horizontal ? item.Control.DesiredSize.Width : item.Control.DesiredSize.Height);
-            if (available < occupied) throw new InvalidOperationException("The StackPanel is too small to distribute its children without overlap.");
+            if (available < occupied) throw new InvalidOperationException(UiStrings.ArrangeStackTooSmall);
             writes.Add(new(parent, "Spacing", Number((available - occupied) / (items.Length - 1))));
             return;
         }
-        throw new InvalidOperationException("Distribution is available for Canvas, Grid and StackPanel containers.");
+        throw new InvalidOperationException(UiStrings.ArrangeDistributionUnsupported);
     }
 
     private static void MoveCanvas(Item item, bool horizontal, double delta, List<Write> writes)
@@ -260,7 +262,7 @@ public sealed class DesignerLayoutEditor
     {
         Point[] corners = { default, new(control.Bounds.Width, 0), new(0, control.Bounds.Height), new(control.Bounds.Width, control.Bounds.Height) };
         Point[] points = corners.Select(point => control.TranslatePoint(point, parent)
-            ?? throw new InvalidOperationException("The selected control is not attached to the design surface.")).ToArray();
+            ?? throw new InvalidOperationException(UiStrings.ArrangeControlDetached)).ToArray();
         double left = points.Min(point => point.X);
         double top = points.Min(point => point.Y);
         return new Rect(left, top, points.Max(point => point.X) - left, points.Max(point => point.Y) - top);
@@ -271,7 +273,7 @@ public sealed class DesignerLayoutEditor
         MutableAstPropertyNode? property = node.FindProperty(name);
         if (property is null) return;
         if (property.Value is MutableAstTextNode text && !text.Text.TrimStart().StartsWith('{')) return;
-        throw new InvalidOperationException($"{node.TypeName}.{name} contains an expression or structured value. Edit or reset it explicitly before arranging the control.");
+        throw new InvalidOperationException(string.Format(UiStrings.ArrangeStructuredValue, node.TypeName, name));
     }
 
     private static string Number(double value) => value.ToString("G17", CultureInfo.InvariantCulture);

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Metadata;
 using Avalonia.Threading;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
 
@@ -28,18 +29,18 @@ public sealed partial class ShellDesignerHost : IDesignerPropertyValueHost
         if (document is null || document.IsDisposed || !document.SyncEngine.CanEditAst ||
             !Guid.TryParse(nodeId, out Guid id) || document.NodeMap.FindById(id) is not MutableAstObjectNode node)
         {
-            throw new InvalidOperationException("Select a control in a synchronized designer document first.");
+            throw new InvalidOperationException(UiStrings.DesignerSelectSynchronizedControl);
         }
 
         DesignerPropertyInfo? property = GetPropertiesCore(nodeId)
             .FirstOrDefault(candidate => string.Equals(candidate.Name, propertyName, StringComparison.Ordinal));
         if (property is null || property.IsReadOnly || !property.CanAssignNull)
         {
-            throw new InvalidOperationException("This property does not support an explicit null value. Use Reset to remove its local value.");
+            throw new InvalidOperationException(UiStrings.PropertyNullValueUnsupported);
         }
 
         MutableAstDocument ast = document.SyncEngine.CurrentDocument
-            ?? throw new InvalidOperationException("The AXAML document is not synchronized.");
+            ?? throw new InvalidOperationException(UiStrings.DesignerDocumentNotSynchronized);
         var aliases = DesignerNameEditor.Namespaces(node, ast.NamespaceAliases);
         string? prefix = aliases.Where(pair => pair.Key.Length > 0 && pair.Value == DesignerNameEditor.XamlNamespace)
             .OrderBy(pair => pair.Key == "x" ? 0 : 1)
@@ -64,7 +65,7 @@ public sealed partial class ShellDesignerHost : IDesignerPropertyValueHost
             Type? clrType = owner is null ? null : document.MetadataService?.ResolveClrType(owner);
             if (clrType is null)
             {
-                throw new InvalidOperationException("The control type must be available before changing a value alongside implicit content.");
+                throw new InvalidOperationException(UiStrings.PropertyImplicitContentTypeMissing);
             }
 
             clearImplicitContent = string.Equals(FindContentPropertyName(clrType), propertyName, StringComparison.Ordinal);

@@ -93,7 +93,7 @@ public sealed class PreviewerTcpSession : IDisposable
             }
             ThemeCatalogChanged?.Invoke(catalog);
         }
-        catch (JsonException) { ReportError("The previewer returned invalid theme-catalog data."); }
+        catch (JsonException) { ReportError(UiStrings.PreviewerInvalidThemeCatalog); }
         return true;
     }
 
@@ -142,7 +142,7 @@ public sealed class PreviewerTcpSession : IDisposable
         }
         catch (JsonException)
         {
-            ReportError("The previewer returned invalid design-tree data.");
+            ReportError(UiStrings.PreviewerInvalidDesignTree);
         }
         return true;
     }

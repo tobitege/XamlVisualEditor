@@ -5,6 +5,10 @@ uses Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- The German user interface translates the remaining English texts: the Discard button, the change status of the Git Changes panel (for example "Staged hinzugefügt" or "Unstaged mit Konflikt") and the Capabilities column of the extension manager. The messages of the designer and the previewer when an insert, paste, duplicate, delete, move, resize, arrange, rename, refactoring undo or event handler assignment is refused, the errors of the property structure editor and of property values that do not fit their type, of the previewer connection, of reading toolbox controls, of the template list, of a force push without upstream, of continuing a finished Git operation, of starting a debug adapter and of the ACP agent connection and prompts come from `UiStrings` and follow the language of the editor. Git terms such as Branch, Commit, Stash, Staged and Upstream stay English. The designer and the previewer now ask with the same text to wait for the layout measurements of the previewer, and distributing controls in a Grid in the previewer names the number of rows or columns it needs, as the designer does.
+
 ### Fixed
 
 - The selection pipe of a compact tab, such as Staged and Unstaged in the Git Changes panel, is drawn below the header text instead of through it

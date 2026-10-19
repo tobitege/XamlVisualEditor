@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -41,21 +42,21 @@ public sealed partial class MainWindowViewModel
         string? handlerName = node.GetPropertyValue(eventName);
         if (string.IsNullOrWhiteSpace(handlerName))
         {
-            throw new InvalidOperationException("Assign an event handler before opening its definition.");
+            throw new InvalidOperationException(UiStrings.EventHandlerAssignFirst);
         }
 
         DesignerEventBindingResult binding = await ResolveDesignerEventAsync(
             document, node, eventName, handlerName, cancellationToken);
         if (binding.FilePath is null || binding.ExpectedText is null)
         {
-            throw new InvalidOperationException("This handler is declared in assembly metadata and has no editable source definition.");
+            throw new InvalidOperationException(UiStrings.EventHandlerMetadataOnly);
         }
 
         if (await EnsureDocumentOpenAsync(binding.FilePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: false)
             is not TextDocumentViewModel target || target.IsDisposed ||
             !string.Equals(target.Document.Text, binding.ExpectedText, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("The handler source changed while opening its definition. Retry navigation.");
+            throw new InvalidOperationException(UiStrings.EventHandlerSourceChangedNavigation);
         }
 
         target.SetSelection(binding.NameOffset, binding.NameLength, binding.NameOffset);
@@ -67,26 +68,26 @@ public sealed partial class MainWindowViewModel
         CancellationToken cancellationToken)
     {
         MutableAstDocument ast = document.SyncEngine.CurrentDocument
-            ?? throw new InvalidOperationException("The AXAML document is not synchronized.");
+            ?? throw new InvalidOperationException(UiStrings.DesignerDocumentNotSynchronized);
         MutableAstObjectNode root = ast.Root
-            ?? throw new InvalidOperationException("The AXAML document has no root control.");
+            ?? throw new InvalidOperationException(UiStrings.DesignerDocumentNoRoot);
         string className = GetDesignerClassName(root, ast)
-            ?? throw new InvalidOperationException("An event handler requires an x:Class with a matching C# form class.");
+            ?? throw new InvalidOperationException(UiStrings.EventHandlerClassRequired);
         TypeMetadata controlType = document.MetadataService?.GetType(node.XmlNamespace, node.TypeName)
-            ?? throw new InvalidOperationException("The selected control's type could not be resolved.");
+            ?? throw new InvalidOperationException(UiStrings.EventHandlerControlTypeUnresolved);
         ProjectModel[] owners = _workspace?.Projects
             .Where(project => project.XamlFiles.Any(path => FileSystemPathComparison.Equals(path, document.FilePath)))
             .ToArray() ?? [];
         if (owners.Length > 1)
         {
-            throw new InvalidOperationException("The AXAML file belongs to multiple projects. Open its owning project first.");
+            throw new InvalidOperationException(UiStrings.EventHandlerMultipleProjects);
         }
 
         IDesignerEventBindingService service = _languageRegistry?.Services.OfType<IDesignerEventBindingService>().FirstOrDefault()
-            ?? throw new InvalidOperationException("The loaded project has no C# event-binding service.");
+            ?? throw new InvalidOperationException(UiStrings.EventHandlerServiceMissing);
         WorkspaceModel? workspace = _workspace;
         string originalXaml = document.SyncEngine.CurrentText
-            ?? throw new InvalidOperationException("Wait for the AXAML document to finish synchronizing.");
+            ?? throw new InvalidOperationException(UiStrings.DesignerDocumentSynchronizing);
         Dictionary<string, string> openTexts = Documents.OfType<TextDocumentViewModel>()
             .Where(item => !item.IsDisposed && string.Equals(Path.GetExtension(item.FilePath), ".cs", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(item => item.FilePath, item => item.Document.Text, FileSystemPathComparison.Comparer);
@@ -103,7 +104,7 @@ public sealed partial class MainWindowViewModel
                 : openSource.Document.Text;
             if (!string.Equals(currentSource, result.ExpectedText, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("The handler source changed during validation. Reload it and retry the assignment.");
+                throw new InvalidOperationException(UiStrings.EventHandlerSourceChangedValidation);
             }
         }
 
@@ -114,14 +115,14 @@ public sealed partial class MainWindowViewModel
                 .FirstOrDefault(item => FileSystemPathComparison.Equals(item.FilePath, snapshot.Key));
             if (current is null || current.IsDisposed || !string.Equals(current.Document.Text, snapshot.Value, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("A C# document changed during event validation. Retry the assignment.");
+                throw new InvalidOperationException(UiStrings.EventHandlerCodeChanged);
             }
         }
 
         if (Documents.OfType<TextDocumentViewModel>().Any(item => item.IsModified &&
             string.Equals(Path.GetExtension(item.FilePath), ".cs", StringComparison.OrdinalIgnoreCase) && !openTexts.ContainsKey(item.FilePath)))
         {
-            throw new InvalidOperationException("A C# document was edited during event validation. Retry the assignment.");
+            throw new InvalidOperationException(UiStrings.EventHandlerCodeEdited);
         }
 
         return result;

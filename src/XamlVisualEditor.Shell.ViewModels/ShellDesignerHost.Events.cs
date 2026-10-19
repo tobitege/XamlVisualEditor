@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
 
@@ -44,12 +45,12 @@ public sealed partial class ShellDesignerHost : IDesignerEventHost
         if (document is null || document.IsDisposed || !document.SyncEngine.CanEditAst ||
             !Guid.TryParse(nodeId, out Guid id) || document.NodeMap.FindById(id) is not MutableAstObjectNode node)
         {
-            throw new InvalidOperationException("Select a control in a synchronized designer document first.");
+            throw new InvalidOperationException(UiStrings.DesignerSelectSynchronizedControl);
         }
 
         if (!GetEventsCore(nodeId).Any(item => string.Equals(item.Name, eventName, StringComparison.Ordinal)))
         {
-            throw new InvalidOperationException($"The selected control does not expose the event '{eventName}'.");
+            throw new InvalidOperationException(string.Format(UiStrings.EventHandlerEventNotExposed, eventName));
         }
 
         return (document, node);

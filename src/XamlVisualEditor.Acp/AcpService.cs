@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Acp;
 
@@ -60,7 +61,7 @@ public sealed class AcpService : IAcpService, IDisposable
             if (!host.Client.IsRunning)
             {
                 await DisconnectHostAsync().ConfigureAwait(false);
-                throw new EndOfStreamException("The ACP agent exited during startup.");
+                throw new EndOfStreamException(UiStrings.AcpAgentExitedOnStartup);
             }
             ConnectionChanged?.Invoke();
         }
@@ -75,12 +76,12 @@ public sealed class AcpService : IAcpService, IDisposable
         string? mockPath = _settings?.MockAgentPath;
         if (string.IsNullOrWhiteSpace(mockPath))
         {
-            throw new InvalidOperationException("Mock agent path is not configured.");
+            throw new InvalidOperationException(UiStrings.AcpMockAgentPathMissing);
         }
 
         if (!File.Exists(mockPath))
         {
-            throw new FileNotFoundException("Mock agent executable not found.", mockPath);
+            throw new FileNotFoundException(UiStrings.AcpMockAgentNotFound, mockPath);
         }
 
         AcpAgentProcessOptions options = new()
@@ -147,7 +148,7 @@ public sealed class AcpService : IAcpService, IDisposable
         JsonElement result = await SendRequestAsync("initialize", parameters, ct).ConfigureAwait(false);
         if (!result.TryGetProperty("protocolVersion", out JsonElement version)
             || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out int protocolVersion) || protocolVersion != 1)
-            throw new JsonRpcException(-32603, "The agent did not negotiate ACP protocol version 1.");
+            throw new JsonRpcException(-32603, UiStrings.AcpProtocolVersionMismatch);
         return result;
     }
 
@@ -157,7 +158,7 @@ public sealed class AcpService : IAcpService, IDisposable
         if (!result.TryGetProperty("sessionId", out JsonElement sessionIdElement)
             || sessionIdElement.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(sessionIdElement.GetString()))
-            throw new JsonRpcException(-32603, "The agent returned an invalid session ID.");
+            throw new JsonRpcException(-32603, UiStrings.AcpInvalidSessionId);
         _activeSessionId = sessionIdElement.GetString();
         return _activeSessionId!;
     }
@@ -167,7 +168,7 @@ public sealed class AcpService : IAcpService, IDisposable
         using CancellationTokenSource permissions = CancellationTokenSource.CreateLinkedTokenSource(ct);
         lock (_permissionGate)
         {
-            if (_permissionCancellation is not null) throw new InvalidOperationException("An ACP prompt is already running.");
+            if (_permissionCancellation is not null) throw new InvalidOperationException(UiStrings.AcpPromptAlreadyRunning);
             _permissionCancellation = permissions;
         }
         var payload = new
@@ -203,7 +204,7 @@ public sealed class AcpService : IAcpService, IDisposable
         AcpProtocolClient? client = _host?.Client;
         if (client is null)
         {
-            throw new InvalidOperationException("ACP client is not connected.");
+            throw new InvalidOperationException(UiStrings.AcpClientNotConnected);
         }
 
         return await client.SendRequestAsync(method, parameters, ct).ConfigureAwait(false);
@@ -214,7 +215,7 @@ public sealed class AcpService : IAcpService, IDisposable
         AcpProtocolClient? client = _host?.Client;
         if (client is null)
         {
-            throw new InvalidOperationException("ACP client is not connected.");
+            throw new InvalidOperationException(UiStrings.AcpClientNotConnected);
         }
 
         await client.SendNotificationAsync(method, parameters, ct).ConfigureAwait(false);

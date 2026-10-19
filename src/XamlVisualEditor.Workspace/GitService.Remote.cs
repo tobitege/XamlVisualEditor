@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Workspace;
 
@@ -426,7 +427,8 @@ public sealed partial class GitService
         // The remote "." is the repository itself: its upstream is a local branch, which a force push would rewrite.
         if (remote is null or "." || upstream is null)
         {
-            return GitRemoteResult.Failed(GitRemoteFailureKind.NoUpstream, $"The branch {branch} has no upstream branch on a remote.");
+            return GitRemoteResult.Failed(
+                GitRemoteFailureKind.NoUpstream, string.Format(UiStrings.GitForcePushNoUpstreamFormat, branch));
         }
 
         return await RunNetworkCommandAsync(

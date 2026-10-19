@@ -3,6 +3,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Avalonia.Controls;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Workspace;
 
@@ -78,7 +79,7 @@ internal static class AssemblyTypeCatalog
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                reportFailure($"Cannot read control metadata from '{path}': {error.Message}");
+                reportFailure(string.Format(UiStrings.ControlMetadataReadFailed, path, error.Message));
             }
         }
 

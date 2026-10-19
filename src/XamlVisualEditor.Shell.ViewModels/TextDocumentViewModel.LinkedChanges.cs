@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reactive.Disposables;
 using AvaloniaEdit.Document;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Sync;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -73,7 +74,7 @@ public sealed partial class TextDocumentViewModel
         ArgumentNullException.ThrowIfNull(replayTransaction);
         if (IsDisposed || !string.Equals(Document.Text, before, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"The document changed while preparing the refactoring: {FilePath}");
+            throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameDocumentChanged, FilePath));
         }
 
         LinkedTextChange change = new(this, before, after, edits, replayTransaction);
@@ -115,13 +116,13 @@ public sealed partial class TextDocumentViewModel
             object? expectedPosition = _isApplied ? _afterPosition : _beforePosition;
             if (owner.IsDisposed || !ReferenceEquals(owner._historyPosition, expectedPosition))
             {
-                throw new InvalidOperationException($"Undo later changes before replaying this refactoring: {owner.FilePath}");
+                throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameUndoLaterChanges, owner.FilePath));
             }
 
             if (_afterPosition is not null &&
                 (_isApplied ? !owner.Document.UndoStack.CanUndo : !owner.Document.UndoStack.CanRedo))
             {
-                throw new InvalidOperationException($"The refactoring is no longer available in the document history: {owner.FilePath}");
+                throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameHistoryGone, owner.FilePath));
             }
 
             return owner.Document.Text;

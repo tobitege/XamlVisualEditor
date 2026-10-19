@@ -17,6 +17,7 @@ using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
@@ -1090,7 +1091,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
             catch (BadImageFormatException) { }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                reportFailure($"Cannot read control metadata from '{path}': {error.Message}");
+                reportFailure(string.Format(UiStrings.ControlMetadataReadFailed, path, error.Message));
             }
         }
 
@@ -1104,7 +1105,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
             if (!hasProjectFramework)
                 selected.TryAdd(identity.Name, (path, identity.IsStandardAssembly));
             else if (!selected.ContainsKey(identity.Name))
-                reportFailure($"The project dependency '{identity.Name}' is missing. Restore the project references.");
+                reportFailure(string.Format(UiStrings.ControlDependencyMissing, identity.Name));
         }
         string[] paths = selected.Values.Where(assembly => includeProjectControls || assembly.IsStandard)
             .Select(assembly => assembly.Path).ToArray();

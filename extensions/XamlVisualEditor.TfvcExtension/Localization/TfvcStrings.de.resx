@@ -91,13 +91,13 @@
   <data name="ServerRequestFailedFormat" xml:space="preserve"><value>Serveranfrage ist fehlgeschlagen: {0}</value></data>
   <data name="CheckedInFormat" xml:space="preserve"><value>Changeset {0} wurde eingecheckt.</value></data>
   <data name="CheckedIn" xml:space="preserve"><value>Einchecken abgeschlossen.</value></data>
-  <data name="ShelvedFormat" xml:space="preserve"><value>Shelveset „{0}“ wurde erstellt.</value></data>
+  <data name="ShelvedFormat" xml:space="preserve"><value>Shelveset '{0}' wurde erstellt.</value></data>
   <data name="ShelveNamePrompt" xml:space="preserve"><value>Name des Shelvesets</value></data>
   <data name="UndoConfirmMessageFormat" xml:space="preserve"><value>Die ausstehenden Änderungen von {0} Element(en) rückgängig machen? Lokale Bearbeitungen dieser Dateien gehen verloren.</value></data>
   <data name="UndoConfirmAction" xml:space="preserve"><value>Rückgängig machen</value></data>
   <data name="CheckOutFolderConfirmMessageFormat" xml:space="preserve"><value>Alle Dateien in {0} und seinen Unterordnern zur Bearbeitung auschecken?</value></data>
   <data name="CommandLineTooLong" xml:space="preserve"><value>Für einen tf.exe-Aufruf sind zu viele Elemente ausgewählt. Alle Änderungen einschließen oder die Auswahl verkleinern.</value></data>
-  <data name="AutoCheckOutFailedFormat" xml:space="preserve"><value>Auschecken von „{0}“ ist fehlgeschlagen: {1}</value></data>
+  <data name="AutoCheckOutFailedFormat" xml:space="preserve"><value>Auschecken von '{0}' ist fehlgeschlagen: {1}</value></data>
   <data name="WorkItemNotFoundFormat" xml:space="preserve"><value>Arbeitselement {0} wurde nicht gefunden.</value></data>
   <data name="WorkItemLinkFailedFormat" xml:space="preserve"><value>Verknüpfen von Arbeitselement {0} ist fehlgeschlagen: {1}</value></data>
   <data name="WorkItemLabelFormat" xml:space="preserve"><value>{0} {1}: {2}</value></data>
@@ -123,9 +123,9 @@
   <data name="FileStateOffline" xml:space="preserve"><value>offline</value></data>
   <data name="OfflineStatus" xml:space="preserve"><value>Offline. Ausstehende Änderungen sind nach dem Online-Gehen wieder verfügbar.</value></data>
   <data name="OfflineEditTitle" xml:space="preserve"><value>TFVC offline</value></data>
-  <data name="OfflineEditMessageFormat" xml:space="preserve"><value>„{0}“ ist schreibgeschützt, und TFVC arbeitet offline, daher kann die Datei nicht ausgecheckt werden. Schreibschutz aufheben, um die Datei zu bearbeiten? Beim Online-Gehen wird die Änderung zum Auschecken vorgeschlagen.</value></data>
+  <data name="OfflineEditMessageFormat" xml:space="preserve"><value>'{0}' ist schreibgeschützt, und TFVC arbeitet offline, daher kann die Datei nicht ausgecheckt werden. Schreibschutz aufheben, um die Datei zu bearbeiten? Beim Online-Gehen wird die Änderung zum Auschecken vorgeschlagen.</value></data>
   <data name="OfflineEditConfirm" xml:space="preserve"><value>Schreibschutz aufheben</value></data>
-  <data name="OfflineEditFailedFormat" xml:space="preserve"><value>Der Schreibschutz von „{0}“ konnte nicht aufgehoben werden: {1}</value></data>
+  <data name="OfflineEditFailedFormat" xml:space="preserve"><value>Der Schreibschutz von '{0}' konnte nicht aufgehoben werden: {1}</value></data>
   <data name="GoOfflinePromptTitle" xml:space="preserve"><value>TFVC-Server nicht erreichbar</value></data>
   <data name="GoOfflinePromptMessageFormat" xml:space="preserve"><value>Der TFVC-Server {0} ist nicht erreichbar:
 {1}
@@ -187,5 +187,5 @@ Offline arbeiten? Versionierte Dateien bleiben schreibgeschützt; beim Bearbeite
   <data name="ChangesetNotDeterminedWorkItemsKept" xml:space="preserve"><value>Die Changeset-Nummer konnte nicht ermittelt werden, deshalb wurden die Arbeitselemente nicht verknüpft. Sie bleiben in der Liste.</value></data>
   <data name="PendingChangesChangedCheckInCancelled" xml:space="preserve"><value>Für einen tf.exe-Aufruf sind es zu viele Änderungen, und die ausstehenden Änderungen des Arbeitsbereichs weichen von der angezeigten Liste ab. Es wurde nichts eingecheckt. Die Liste aktualisieren und erneut versuchen.</value></data>
   <data name="PendingChangesChangedShelveCancelled" xml:space="preserve"><value>Für einen tf.exe-Aufruf sind es zu viele Änderungen, und die ausstehenden Änderungen des Arbeitsbereichs weichen von der angezeigten Liste ab. Es wurde kein Shelveset erstellt. Die Liste aktualisieren und erneut versuchen.</value></data>
-  <data name="ShelvesetNameInvalidFormat" xml:space="preserve"><value>„{0}“ ist kein gültiger Shelveset-Name. Ein Shelveset-Name hat höchstens 64 Zeichen, beginnt nicht mit „-“ oder „@“ und enthält keines der Zeichen " / \ : &lt; &gt; | * ? ;</value></data>
+  <data name="ShelvesetNameInvalidFormat" xml:space="preserve"><value>'{0}' ist kein gültiger Shelveset-Name. Ein Shelveset-Name hat höchstens 64 Zeichen, beginnt nicht mit '-' oder '@' und enthält keines der Zeichen " / \ : &lt; &gt; | * ? ;</value></data>
 </root>

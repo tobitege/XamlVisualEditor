@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
@@ -40,7 +41,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
 
     public Guid InsertControl(string typeName, string xmlNamespace, Point viewportPoint)
     {
-        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException("Correct the XAML errors before inserting controls.");
+        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException(UiStrings.PreviewerEditXamlErrorsInsert);
         InsertionPlan plan = PlanInsertion(typeName, xmlNamespace, viewportPoint);
         using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Insert " + typeName);
         LayoutEditService editor = new(document.MetadataService, document.DesignSurface.AutoGenerateAutomationIds);
@@ -56,7 +57,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
     {
         if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(xmlNamespace)
             || document.SyncEngine.CurrentDocument?.Root is not { } root)
-            throw new InvalidOperationException("Choose a control from the loaded toolbox.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditToolboxControlRequired);
         MutableAstObjectNode node = new() { TypeName = typeName, XmlNamespace = xmlNamespace };
         LayoutEditService editor = new(document.MetadataService);
         DesignerHostNode? hit = snapshot.Nodes.Reverse().FirstOrDefault(candidate => candidate.IsVisible
@@ -65,7 +66,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         MutableAstObjectNode? hovered = hit is null ? null : document.NodeMap.FindById(hit.NodeId) as MutableAstObjectNode;
         MutableAstObjectNode? parent = hovered is not null && editor.CanInsert(hovered, node, out _)
             ? hovered : editor.FindInsertionParent(root, hovered, node);
-        if (parent is null) throw new InvalidOperationException("Drop on a layout panel or an empty content slot.");
+        if (parent is null) throw new InvalidOperationException(UiStrings.PreviewerEditDropTargetRequired);
         DesignerHostNode? view = hit;
         while (view is not null && view.NodeId != parent.Id)
         {
@@ -73,7 +74,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
             view = snapshot.Nodes.FirstOrDefault(candidate => candidate.InstanceId == parentInstance);
         }
         view ??= snapshot.Nodes.FirstOrDefault(candidate => candidate.NodeId == parent.Id);
-        if (view?.Layout is not { } layout) throw new InvalidOperationException("The insertion container has not been measured yet.");
+        if (view?.Layout is not { } layout) throw new InvalidOperationException(UiStrings.PreviewerEditContainerNotMeasured);
         Vector position = ToLocalVector(layout, new Vector(viewportPoint.X - layout.M31, viewportPoint.Y - layout.M32));
         LayoutPlacement? placement = layout.Kind == "Canvas" ? new(position.X, position.Y)
             : layout.Kind == "Grid" ? new(Row: TrackIndex(layout.RowHeights, layout.RowSpacing, position.Y),
@@ -123,14 +124,14 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
 
     public void Arrange(IReadOnlyList<DesignItem> selection, DesignerLayoutOperation operation)
     {
-        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException("Correct the XAML errors before arranging controls.");
+        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException(UiStrings.PreviewerEditXamlErrorsArrange);
         var nodes = Resolve(selection);
-        if (nodes.Length < 2) throw new InvalidOperationException("Select at least two controls.");
+        if (nodes.Length < 2) throw new InvalidOperationException(UiStrings.PreviewerEditSelectTwoControls);
         MutableAstObjectNode? parent = LayoutEditService.GetParent(nodes[0].Node);
         DesignerHostNode? parentView = snapshot.Nodes.FirstOrDefault(node => node.InstanceId == nodes[0].View.ParentInstanceId);
         if (parent is null || parentView?.NodeId != parent.Id || parentView.Layout is not { } parentLayout
             || nodes.Any(entry => !ReferenceEquals(LayoutEditService.GetParent(entry.Node), parent)))
-            throw new InvalidOperationException("Arrange controls from one source container at a time.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditArrangeOneContainer);
         var primary = nodes.FirstOrDefault(entry => entry.Node.Id == document.DesignSurface.Selection.PrimarySelection?.AstNodeId);
         if (primary.Node is null) primary = nodes[0];
         DesignerHostLayout primaryLayout = primary.View.Layout!;
@@ -144,7 +145,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
                 DesignerHostLayout layout = entry.View.Layout!;
                 double min = horizontal ? layout.MinWidth : layout.MinHeight;
                 double max = (horizontal ? layout.MaxWidth : layout.MaxHeight) ?? double.PositiveInfinity;
-                if (size < min || size > max) throw new InvalidOperationException("The primary control's size exceeds a selected control's Min/Max constraint.");
+                if (size < min || size > max) throw new InvalidOperationException(UiStrings.ArrangeSizeConstraint);
                 SetNumber(entry.Node, horizontal ? "Width" : "Height", size);
             }
         }
@@ -156,7 +157,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
             bool all = children.Length == nodes.Length && children.All(id => nodes.Any(entry => entry.Node.Id == id));
             if (parentLayout.Kind == "Canvas")
             {
-                if (nodes.Length < 3) throw new InvalidOperationException("Canvas distribution requires at least three controls.");
+                if (nodes.Length < 3) throw new InvalidOperationException(UiStrings.ArrangeCanvasThreeControls);
                 var ordered = nodes.OrderBy(entry => horizontal ? entry.View.Layout!.X : entry.View.Layout!.Y).ToArray();
                 double start = horizontal ? ordered[0].View.Layout!.X : ordered[0].View.Layout!.Y;
                 DesignerHostLayout last = ordered[^1].View.Layout!;
@@ -183,7 +184,9 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
                     count = nodes.Length;
                     SetValue(parent, definitions, string.Join(",", Enumerable.Repeat("*", count)));
                 }
-                if (count < nodes.Length) throw new InvalidOperationException("The Grid needs enough existing rows or columns. Existing definitions are not replaced.");
+                if (count < nodes.Length)
+                    throw new InvalidOperationException(string.Format(
+                        horizontal ? UiStrings.ArrangeGridColumnsMissing : UiStrings.ArrangeGridRowsMissing, nodes.Length));
                 var ordered = nodes.OrderBy(entry => horizontal ? entry.View.Layout!.GridColumn : entry.View.Layout!.GridRow)
                     .ThenBy(entry => Array.IndexOf(children, entry.Node.Id)).ToArray();
                 for (int index = 0; index < ordered.Length; index++)
@@ -195,14 +198,14 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
             }
             else if (parentLayout.Kind == "Stack")
             {
-                if (horizontal != parentLayout.IsHorizontal) throw new InvalidOperationException("Choose distribution along the StackPanel's orientation.");
-                if (!all) throw new InvalidOperationException("Select all children before changing their shared StackPanel spacing.");
+                if (horizontal != parentLayout.IsHorizontal) throw new InvalidOperationException(UiStrings.ArrangeStackOrientation);
+                if (!all) throw new InvalidOperationException(UiStrings.ArrangeStackSelectAll);
                 double available = horizontal ? parentLayout.Width : parentLayout.Height;
                 double occupied = nodes.Sum(entry => horizontal ? entry.View.Layout!.DesiredWidth : entry.View.Layout!.DesiredHeight);
-                if (available < occupied) throw new InvalidOperationException("The StackPanel is too small to distribute its children without overlap.");
+                if (available < occupied) throw new InvalidOperationException(UiStrings.ArrangeStackTooSmall);
                 SetNumber(parent, "Spacing", (available - occupied) / (nodes.Length - 1));
             }
-            else throw new InvalidOperationException("Distribution is available for Canvas, Grid and StackPanel containers.");
+            else throw new InvalidOperationException(UiStrings.ArrangeDistributionUnsupported);
         }
         else
         {
@@ -253,7 +256,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         ReparentPlan? plan = PlanReparent(nodes, viewportPoint);
         DesignerHostNode? sourceParent = snapshot.Nodes.FirstOrDefault(node => node.InstanceId == primary.View.ParentInstanceId);
         if (sourceParent?.Layout is not { } source)
-            throw new InvalidOperationException("Wait for current layout measurements from the previewer.");
+            throw new InvalidOperationException(UiStrings.ArrangeWaitForMeasurements);
         Rect? targetBounds = plan is null ? null : new Rect(plan.View.X, plan.View.Y, plan.View.Width, plan.View.Height);
         if (plan?.Error is not null) return new(viewportDelta, targetBounds, plan.Error);
         DesignerHostNode target = plan?.View ?? sourceParent;
@@ -365,7 +368,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         MutableAstObjectNode? sourceParent = LayoutEditService.GetParent(nodes[0].Node);
         if (sourceParent is null) return null;
         if (nodes.Any(entry => !ReferenceEquals(LayoutEditService.GetParent(entry.Node), sourceParent)))
-            throw new InvalidOperationException("Drag controls from one source container at a time.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditDragOneContainer);
         HashSet<Guid> selectedIds = nodes.Select(entry => entry.Node.Id).ToHashSet();
         HashSet<int> ignoredInstances = new();
         foreach (DesignerHostNode view in snapshot.Nodes)
@@ -517,7 +520,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
 
     public void ResizePointer(DesignItem item, Vector viewportDelta, PreviewerResizeEdges edges)
     {
-        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException("Correct the XAML errors before resizing controls.");
+        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException(UiStrings.PreviewerEditXamlErrorsResize);
         ResizePlan plan = CalculateResize(item, viewportDelta, edges);
         DesignerHostLayout measured = plan.View.Layout!;
         bool horizontal = plan.Width != measured.Width;
@@ -569,8 +572,8 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
         bool left = edges.HasFlag(PreviewerResizeEdges.Left), top = edges.HasFlag(PreviewerResizeEdges.Top);
         bool right = edges.HasFlag(PreviewerResizeEdges.Right), bottom = edges.HasFlag(PreviewerResizeEdges.Bottom);
         if (edges == PreviewerResizeEdges.None || left && right || top && bottom)
-            throw new InvalidOperationException("Choose one resize handle.");
-        if (parent is null && (left || top)) throw new InvalidOperationException("Resize the document root from its right or bottom side.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditOneResizeHandle);
+        if (parent is null && (left || top)) throw new InvalidOperationException(UiStrings.PreviewerEditRootResizeSides);
         Vector delta = ToLocalVector(measured, viewportDelta);
         double width = left || right ? Limit(Snap(measured.Width + (left ? -delta.X : delta.X)), measured.MinWidth, measured.MaxWidth) : measured.Width;
         double height = top || bottom ? Limit(Snap(measured.Height + (top ? -delta.Y : delta.Y)), measured.MinHeight, measured.MaxHeight) : measured.Height;
@@ -645,13 +648,13 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
     {
         var nodes = Resolve(selection);
         var primary = nodes.FirstOrDefault(entry => entry.View.InstanceId == primaryInstanceId);
-        if (primary.Node is null) throw new InvalidOperationException("The dragged control is no longer selected.");
+        if (primary.Node is null) throw new InvalidOperationException(UiStrings.PreviewerEditDraggedControlDeselected);
         MutableAstObjectNode? parent = LayoutEditService.GetParent(primary.Node);
         DesignerHostNode? parentView = snapshot.Nodes.FirstOrDefault(node => node.InstanceId == primary.View.ParentInstanceId);
         DesignerHostLayout? layout = parentView?.Layout;
         if (parent is null || parentView?.NodeId != parent.Id || layout is null
             || nodes.Any(entry => !ReferenceEquals(LayoutEditService.GetParent(entry.Node), parent)))
-            throw new InvalidOperationException("Drag controls from one source container at a time.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditDragOneContainer);
         if (PlanReparent(nodes, viewportPoint) is { } reparent)
         {
             Reparent(nodes, primary.View, layout, reparent, viewportDelta, viewportPoint);
@@ -706,7 +709,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
                 }
                 return;
             default:
-                throw new InvalidOperationException("The selected container does not support pointer placement.");
+                throw new InvalidOperationException(UiStrings.PreviewerEditPointerPlacementUnsupported);
         }
     }
 
@@ -714,14 +717,14 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
     {
         double determinant = layout.M11 * layout.M22 - layout.M12 * layout.M21;
         if (!double.IsFinite(determinant) || Math.Abs(determinant) < 0.0000001)
-            throw new InvalidOperationException("The container transform cannot be inverted.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditTransformNotInvertible);
         return new Vector((vector.X * layout.M22 - vector.Y * layout.M21) / determinant,
             (vector.Y * layout.M11 - vector.X * layout.M12) / determinant);
     }
 
     private void Move(IReadOnlyList<DesignItem> selection, double dx, double dy, bool gridCellDelta)
     {
-        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException("Correct the XAML errors before moving controls.");
+        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException(UiStrings.PreviewerEditXamlErrorsMove);
         var nodes = Resolve(selection);
         LayoutEditService editor = new(document.MetadataService);
         using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Move selection");
@@ -731,7 +734,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
             DesignerHostNode? parentView = snapshot.Nodes.FirstOrDefault(item => item.InstanceId == entry.View.ParentInstanceId);
             DesignerHostLayout? parentLayout = parentView?.Layout;
             if (parent is null || parentView?.NodeId != parent.Id || parentLayout is null)
-                throw new InvalidOperationException("The selected control has no editable source container.");
+                throw new InvalidOperationException(UiStrings.PreviewerEditNoSourceContainer);
             DesignerHostLayout measured = entry.View.Layout!;
             switch (parentLayout.Kind)
             {
@@ -763,7 +766,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
                         ? dx < 0 ? "Left" : "Right" : dy < 0 ? "Top" : "Bottom");
                     break;
                 default:
-                    throw new InvalidOperationException("Move the control within a Canvas, Grid or ordered panel.");
+                    throw new InvalidOperationException(UiStrings.PreviewerEditMoveContainerUnsupported);
             }
         }
         edit.Commit();
@@ -771,7 +774,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
 
     public void Resize(IReadOnlyList<DesignItem> selection, double dw, double dh)
     {
-        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException("Correct the XAML errors before resizing controls.");
+        if (!document.SyncEngine.CanEditAst) throw new InvalidOperationException(UiStrings.PreviewerEditXamlErrorsResize);
         var nodes = Resolve(selection);
         using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction("Resize selection");
         foreach (var entry in nodes)
@@ -785,14 +788,14 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
 
     private (MutableAstObjectNode Node, DesignerHostNode View)[] Resolve(IReadOnlyList<DesignItem> selection)
     {
-        if (selection.Count == 0) throw new InvalidOperationException("Select a control first.");
+        if (selection.Count == 0) throw new InvalidOperationException(UiStrings.PreviewerEditSelectControl);
         if (selection.Select(item => item.AstNodeId).Distinct().Count() != selection.Count)
-            throw new InvalidOperationException("Select source controls rather than repeated instances of the same template element.");
+            throw new InvalidOperationException(UiStrings.PreviewerEditSelectSourceControls);
         return selection.Select(item =>
         {
             DesignerHostNode? view = snapshot.Nodes.FirstOrDefault(node => node.InstanceId == item.HostInstanceId && node.NodeId == item.AstNodeId);
             if (view?.Layout is null || document.NodeMap.FindById(item.AstNodeId) is not MutableAstObjectNode node)
-                throw new InvalidOperationException("Wait for current layout measurements from the previewer.");
+                throw new InvalidOperationException(UiStrings.ArrangeWaitForMeasurements);
             return (node, view);
         }).ToArray();
     }
@@ -816,7 +819,7 @@ public sealed class PreviewerGeometryEditor(DesignerDocumentViewModel document, 
 
     private static void SetNumber(MutableAstObjectNode node, string name, double value)
     {
-        if (!double.IsFinite(value)) throw new InvalidOperationException("The layout value must be finite.");
+        if (!double.IsFinite(value)) throw new InvalidOperationException(UiStrings.PreviewerEditValueNotFinite);
         SetValue(node, name, value.ToString("0.####", CultureInfo.InvariantCulture));
     }
 

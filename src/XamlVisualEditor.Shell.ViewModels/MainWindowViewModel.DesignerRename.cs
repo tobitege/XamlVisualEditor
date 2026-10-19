@@ -45,15 +45,15 @@ public sealed partial class MainWindowViewModel
 
         if (owners.Length != 1)
         {
-            throw new InvalidOperationException("The AXAML file belongs to multiple projects. Open its owning project before renaming a control.");
+            throw new InvalidOperationException(UiStrings.CodeBehindRenameMultipleProjects);
         }
 
         IDesignerCodeBehindRefactoringService service = _languageRegistry?.Services
             .OfType<IDesignerCodeBehindRefactoringService>().FirstOrDefault()
-            ?? throw new InvalidOperationException("The loaded project has no C# refactoring service.");
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameServiceMissing);
         WorkspaceModel? workspace = _workspace;
         string originalXaml = document.SyncEngine.CurrentText
-            ?? throw new InvalidOperationException("Wait for the AXAML document to finish synchronizing before renaming a control.");
+            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameSynchronizing);
         StringComparer pathComparer = FileSystemPathComparison.Comparer;
         Dictionary<string, string> openTexts = Documents.OfType<TextDocumentViewModel>()
             .Where(item => !item.IsDisposed)
@@ -78,7 +78,7 @@ public sealed partial class MainWindowViewModel
                 if (!editedPaths.Add(edit.FilePath) || edit.ExpectedText is null ||
                     !string.Equals(Path.GetExtension(edit.FilePath), ".cs", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("The C# refactoring returned an invalid document edit.");
+                    throw new InvalidOperationException(UiStrings.CodeBehindRenameInvalidEdit);
                 }
 
                 TextEdit[] edits = edit.Edits.ToArray();
@@ -94,7 +94,7 @@ public sealed partial class MainWindowViewModel
                 {
                     if (!File.Exists(edit.FilePath))
                     {
-                        throw new FileNotFoundException("A code-behind document is no longer available.", edit.FilePath);
+                        throw new FileNotFoundException(UiStrings.CodeBehindRenameDocumentMissing, edit.FilePath);
                     }
 
                     codeDocument = new TextDocumentViewModel(edit.FilePath, _languageRegistry)
@@ -115,7 +115,7 @@ public sealed partial class MainWindowViewModel
                     Documents.OfType<TextDocumentViewModel>().Any(item => !ReferenceEquals(item, edit.Document) &&
                         FileSystemPathComparison.Equals(item.FilePath, edit.Document.FilePath)))
                 {
-                    throw new InvalidOperationException($"The code document changed while preparing the refactoring: {edit.Document.FilePath}");
+                    throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameDocumentChanged, edit.Document.FilePath));
                 }
             }
 
@@ -124,7 +124,7 @@ public sealed partial class MainWindowViewModel
             {
                 if (document.IsDisposed || transactionAnchor is null)
                 {
-                    throw new InvalidOperationException("The designer document for this refactoring is no longer open.");
+                    throw new InvalidOperationException(UiStrings.CodeBehindRenameDesignerClosed);
                 }
 
                 if (forward)
@@ -178,7 +178,7 @@ public sealed partial class MainWindowViewModel
             !ReferenceEquals(document.NodeMap.FindById(node.Id), node) ||
             !string.Equals(document.SyncEngine.CurrentText, originalXaml, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("The designer changed while preparing the edit. Retry the change.");
+            throw new InvalidOperationException(UiStrings.CodeBehindRenameDesignerChanged);
         }
     }
 
@@ -213,7 +213,7 @@ public sealed partial class MainWindowViewModel
             if (edit.NewText is null || edit.Offset < 0 || edit.Length < 0 || edit.Offset > text.Length - edit.Length ||
                 previousOffset >= 0 && (edit.Offset == previousOffset || edit.Offset + edit.Length > previousOffset))
             {
-                throw new InvalidOperationException("The C# refactoring returned overlapping or out-of-range edits.");
+                throw new InvalidOperationException(UiStrings.CodeBehindRenameOverlappingEdits);
             }
 
             result = result.Remove(edit.Offset, edit.Length).Insert(edit.Offset, edit.NewText);

@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia.Controls;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.Designer.Core;
@@ -79,27 +80,27 @@ public sealed class LayoutEditService
         error = null;
         for (MutableAstNode? ancestor = parent; ancestor is not null; ancestor = ancestor.Parent)
         {
-            if (ReferenceEquals(ancestor, node)) return Fail("An element cannot contain itself or an ancestor.", out error);
+            if (ReferenceEquals(ancestor, node)) return Fail(UiStrings.LayoutEditContainsItself, out error);
         }
         LayoutContainerKind kind = GetKind(parent);
-        if (kind == LayoutContainerKind.None) return Fail(parent.TypeName + " is not a supported visual container.", out error);
+        if (kind == LayoutContainerKind.None) return Fail(string.Format(UiStrings.LayoutEditUnsupportedContainer, parent.TypeName), out error);
         TypeMetadata? childType = _metadata?.GetType(node.XmlNamespace, node.TypeName);
         if (_metadata is not null && childType is null)
-            return Fail("The control type cannot be resolved in the loaded project.", out error);
+            return Fail(UiStrings.LayoutEditTypeUnresolved, out error);
         if (childType is { IsControl: false })
-            return Fail("Only visual controls can be inserted into a layout container.", out error);
+            return Fail(UiStrings.LayoutEditNotVisualControl, out error);
         if (childType?.IsTopLevel == true || node.TypeName == "Window")
-            return Fail("A top-level window cannot be inserted into another control.", out error);
+            return Fail(UiStrings.LayoutEditTopLevelWindow, out error);
         if (kind == LayoutContainerKind.Items && FindProperty(parent, "ItemsSource") is not null)
-            return Fail("The target uses ItemsSource; its generated items cannot be replaced by manual children.", out error);
+            return Fail(UiStrings.LayoutEditItemsSource, out error);
         ContentSlot slot = GetSlot(parent);
         if (slot.Property?.Value is MutableAstTextNode)
-            return Fail("The target already has a content value or binding.", out error);
+            return Fail(UiStrings.LayoutEditContentAssigned, out error);
         if (slot.Property is not null && parent.Children.Count > 0)
-            return Fail("The target mixes implicit and explicit content; resolve that ambiguity first.", out error);
+            return Fail(UiStrings.LayoutEditMixedContent, out error);
         if (kind is LayoutContainerKind.Content or LayoutContainerKind.Child
             && slot.Nodes.Any(child => !ReferenceEquals(child, node) && !ReferenceEquals(child, replacing)))
-            return Fail("The target already contains an element. Choose a panel or an empty content slot.", out error);
+            return Fail(UiStrings.LayoutEditContentOccupied, out error);
         return true;
     }
 
@@ -107,11 +108,11 @@ public sealed class LayoutEditService
     public bool TryInsert(MutableAstObjectNode parent, MutableAstObjectNode node, out string? error,
         int? index = null, LayoutPlacement? placement = null)
     {
-        if (node.Parent is not null) return Fail("The element already has a parent; use a move operation.", out error);
+        if (node.Parent is not null) return Fail(UiStrings.LayoutEditHasParent, out error);
         if (!CanInsert(parent, node, out error)) return false;
         ContentSlot slot = GetSlot(parent);
         int insertion = index ?? slot.Nodes.Count;
-        if (insertion < 0 || insertion > slot.Nodes.Count) return Fail("The insertion position is outside the target.", out error);
+        if (insertion < 0 || insertion > slot.Nodes.Count) return Fail(UiStrings.LayoutEditInsertionOutside, out error);
         DeclareControlNamespace(parent, node.XmlNamespace);
         if (_generateAutomationIds && _metadata is not null) AutomationIdGenerator.Assign(parent, node, _metadata);
         ApplyPlacement(node, parent, placement);
@@ -145,14 +146,14 @@ public sealed class LayoutEditService
         int? index = null, LayoutPlacement? placement = null)
     {
         MutableAstObjectNode? oldParent = GetParent(node);
-        if (oldParent is null) return Fail("The document root cannot be moved.", out error);
+        if (oldParent is null) return Fail(UiStrings.LayoutEditRootMove, out error);
         ContentSlot source = GetSlot(oldParent);
         int oldIndex = source.Nodes.ToList().IndexOf(node);
-        if (oldIndex < 0) return Fail("The source is not visual content of its parent.", out error);
+        if (oldIndex < 0) return Fail(UiStrings.LayoutEditSourceNotContent, out error);
         if (!CanInsert(parent, node, out error)) return false;
         ContentSlot target = GetSlot(parent);
         int insertion = index ?? target.Nodes.Count;
-        if (insertion < 0 || insertion > target.Nodes.Count) return Fail("The insertion position is outside the target.", out error);
+        if (insertion < 0 || insertion > target.Nodes.Count) return Fail(UiStrings.LayoutEditInsertionOutside, out error);
         if (ReferenceEquals(oldParent, parent) && insertion > oldIndex) insertion--;
         AstSourceScope sourceScope = AstSourceScope.Capture(node);
         source.Remove(node);
@@ -166,13 +167,13 @@ public sealed class LayoutEditService
     public bool TryMoveRelative(MutableAstObjectNode source, MutableAstObjectNode target, DropPosition position, out string? error)
     {
         if (position is not (DropPosition.Inside or DropPosition.Before or DropPosition.After))
-            return Fail("The drop position is not supported.", out error);
-        if (ReferenceEquals(source, target)) return Fail("An element cannot be dropped onto itself.", out error);
+            return Fail(UiStrings.LayoutEditDropUnsupported, out error);
+        if (ReferenceEquals(source, target)) return Fail(UiStrings.LayoutEditDropOnItself, out error);
         if (position == DropPosition.Inside) return TryMove(source, target, out error);
         MutableAstObjectNode? parent = GetParent(target);
-        if (parent is null) return Fail("There is no sibling position beside the document root.", out error);
+        if (parent is null) return Fail(UiStrings.LayoutEditNoRootSibling, out error);
         int index = GetSlot(parent).Nodes.ToList().IndexOf(target);
-        if (index < 0) return Fail("The target is not visual content of its parent.", out error);
+        if (index < 0) return Fail(UiStrings.LayoutEditTargetNotContent, out error);
         return TryMove(source, parent, out error, index + (position == DropPosition.After ? 1 : 0));
     }
 
@@ -180,9 +181,9 @@ public sealed class LayoutEditService
     public bool TryRemove(MutableAstObjectNode node, out string? error)
     {
         MutableAstObjectNode? parent = GetParent(node);
-        if (parent is null) return Fail("The document root cannot be deleted.", out error);
+        if (parent is null) return Fail(UiStrings.LayoutEditRootDelete, out error);
         ContentSlot slot = GetSlot(parent);
-        if (!slot.Nodes.Contains(node)) return Fail("The element is not visual content of its parent.", out error);
+        if (!slot.Nodes.Contains(node)) return Fail(UiStrings.LayoutEditElementNotContent, out error);
         slot.Remove(node);
         error = null;
         return true;
@@ -192,12 +193,12 @@ public sealed class LayoutEditService
     public bool TryWrap(MutableAstObjectNode node, MutableAstObjectNode wrapper, out string? error)
     {
         MutableAstObjectNode? parent = GetParent(node);
-        if (parent is null) return Fail("The document root cannot be wrapped.", out error);
-        if (wrapper.Parent is not null) return Fail("The wrapper already belongs to a document.", out error);
+        if (parent is null) return Fail(UiStrings.LayoutEditRootWrap, out error);
+        if (wrapper.Parent is not null) return Fail(UiStrings.LayoutEditWrapperAttached, out error);
         if (!CanInsert(parent, wrapper, out error, node) || !CanInsert(wrapper, node, out error)) return false;
         ContentSlot slot = GetSlot(parent);
         int index = slot.Nodes.ToList().IndexOf(node);
-        if (index < 0) return Fail("The element is not visual content of its parent.", out error);
+        if (index < 0) return Fail(UiStrings.LayoutEditElementNotContent, out error);
         if (_generateAutomationIds && _metadata is not null) AutomationIdGenerator.Assign(parent, wrapper, _metadata);
         slot.Remove(node);
         foreach (MutableAstPropertyNode property in node.Properties.Where(property =>

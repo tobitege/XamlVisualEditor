@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis.CSharp;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
 
@@ -30,7 +31,7 @@ internal static class DesignerNameEditor
     internal static void Rename(DesignerDocumentViewModel document, MutableAstObjectNode node, string? value)
     {
         if (!string.IsNullOrEmpty(value) && (value.StartsWith('@') || !SyntaxFacts.IsValidIdentifier(value)))
-            throw new InvalidOperationException("Enter a valid control name without spaces or C# keywords.");
+            throw new InvalidOperationException(UiStrings.DesignerNameInvalid);
         string? newName = string.IsNullOrEmpty(value) ? null : value;
         MutableAstPropertyNode? declaration = FindNameProperty(node, document.MetadataService);
         string? oldName = (declaration?.Value as MutableAstTextNode)?.Text;
@@ -38,7 +39,7 @@ internal static class DesignerNameEditor
         MutableAstObjectNode scope = ScopeRoot(node);
         if (newName is not null && ScopeObjects(scope).Any(other => !ReferenceEquals(other, node)
                 && (FindNameProperty(other, document.MetadataService)?.Value as MutableAstTextNode)?.Text == newName))
-            throw new InvalidOperationException($"The name '{newName}' is already used in this name scope.");
+            throw new InvalidOperationException(string.Format(UiStrings.DesignerNameInUse, newName));
 
         List<(MutableAstTextNode Value, string Text)> references = new();
         if (!string.IsNullOrEmpty(oldName))
@@ -59,9 +60,9 @@ internal static class DesignerNameEditor
                         var selector = XamlNameReferences.RewriteSelector(text.Text, names);
                         if (!selector.Found) continue;
                         if (selectorNameIsAmbiguous)
-                            throw new InvalidOperationException($"Style selector '{text.Text}' refers to a name shared across name scopes. Resolve the selector ambiguity before renaming.");
+                            throw new InvalidOperationException(string.Format(UiStrings.DesignerNameSelectorAmbiguous, text.Text));
                         if (newName is null)
-                            throw new InvalidOperationException($"The name '{oldName}' is used by a style selector and cannot be removed.");
+                            throw new InvalidOperationException(string.Format(UiStrings.DesignerNameUsedBySelector, oldName));
                         references.Add((text, selector.Text));
                         continue;
                     }
@@ -69,7 +70,7 @@ internal static class DesignerNameEditor
                     var rewritten = XamlNameReferences.Rewrite(owner, property, names,
                         Namespaces(property, document.SyncEngine.CurrentDocument.NamespaceAliases));
                     if (!rewritten.Found) continue;
-                    if (newName is null) throw new InvalidOperationException($"The name '{oldName}' is referenced by a binding and cannot be removed.");
+                    if (newName is null) throw new InvalidOperationException(string.Format(UiStrings.DesignerNameUsedByBinding, oldName));
                     references.Add((text, rewritten.Text));
                 }
             }

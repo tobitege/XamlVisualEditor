@@ -406,3 +406,6 @@ FodyWeavers.xsd
 /.idea
 /tools/netcoredbg
 /.codex
+
+# Local project references
+/Directory.Build.local.props

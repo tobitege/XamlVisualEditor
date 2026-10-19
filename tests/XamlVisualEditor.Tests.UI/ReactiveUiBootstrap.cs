@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using ReactiveUI.Builder;
-using ReactiveUI.Primitives.Concurrency;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Tests.Shared;
 

@@ -5,6 +5,10 @@ uses Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- The selection pipe of a compact tab, such as Staged and Unstaged in the Git Changes panel, is drawn below the header text instead of through it
+
 ## [0.3.0] - 2026-10-18
 
 ### Added

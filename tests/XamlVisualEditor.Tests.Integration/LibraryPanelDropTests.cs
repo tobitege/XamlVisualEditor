@@ -16,7 +16,6 @@ namespace XamlVisualEditor.Tests.Integration;
 /// <summary>Structural edits and drops into a panel declared in a control library namespace.</summary>
 public sealed class LibraryPanelDropTests
 {
-    private const string OccupiedReason = "The target already contains an element. Choose a panel or an empty content slot.";
     private static readonly string LibraryNamespace =
         $"clr-namespace:XamlVisualEditor.TestControls;assembly={typeof(LibraryGrid).Assembly.GetName().Name}";
 
@@ -64,7 +63,7 @@ public sealed class LibraryPanelDropTests
 
         MutableAstObjectNode second = Find(root, "second");
         Assert.False(editor.TryMove(second, Find(root, "caption"), out string? reason));
-        Assert.Equal(OccupiedReason, reason);
+        Assert.Equal(UiStrings.LayoutEditContentOccupied, reason);
         Assert.Same(Find(root, "stack"), LayoutEditService.GetParent(second));
 
         string saved = await engine.SaveAsync();
@@ -101,7 +100,7 @@ public sealed class LibraryPanelDropTests
 
         Assert.Null(handler.Drop("Button", string.Empty, new DesignItem(Find(root, "caption")),
             DropPosition.Inside, out error, metadata: metadata));
-        Assert.Equal(OccupiedReason, error);
+        Assert.Equal(UiStrings.LayoutEditContentOccupied, error);
         Assert.Null(handler.Drop("Button", string.Empty, new DesignItem(root), DropPosition.After, out error, metadata: metadata));
         Assert.Equal(UiStrings.DropPositionUnavailable, error);
         Assert.Null(handler.Drop("Button", string.Empty, null, DropPosition.Inside, out error, metadata: metadata));
@@ -129,7 +128,7 @@ public sealed class LibraryPanelDropTests
         Assert.Same(custom.AstNode, LayoutEditService.GetParent(first.AstNode));
 
         Assert.False(handler.Move(second, caption, DropPosition.Inside, metadata, out error));
-        Assert.Equal(OccupiedReason, error);
+        Assert.Equal(UiStrings.LayoutEditContentOccupied, error);
         Assert.Same(stack, second.Parent);
         Assert.Same(stack.AstNode, LayoutEditService.GetParent(second.AstNode));
 
@@ -151,7 +150,7 @@ public sealed class LibraryPanelDropTests
         Assert.Same(Find(root, "custom"), LayoutEditService.GetParent(second));
 
         Assert.False(handler.MoveNode(second.Id, root.Id, DropPosition.Before, map, metadata, out error));
-        Assert.Equal("There is no sibling position beside the document root.", error);
+        Assert.Equal(UiStrings.LayoutEditNoRootSibling, error);
         Assert.False(handler.MoveNode(second.Id, Guid.NewGuid(), DropPosition.Inside, map, metadata, out error));
         Assert.Equal(UiStrings.DropTargetUnavailable, error);
         Assert.Same(Find(root, "custom"), LayoutEditService.GetParent(second));

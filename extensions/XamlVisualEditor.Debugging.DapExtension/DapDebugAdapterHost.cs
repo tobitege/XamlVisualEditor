@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Debugging.Dap;
 
@@ -40,7 +41,7 @@ internal sealed class DapDebugAdapterHost : IAsyncDisposable
 
         if (!process.Start())
         {
-            throw new InvalidOperationException("Failed to start debug adapter process.");
+            throw new InvalidOperationException(UiStrings.DebugAdapterStartFailed);
         }
 
         _ = Task.Run(async () =>

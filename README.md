@@ -22,8 +22,14 @@ extension model in one Dock-based workspace.
 
 - Live XAML parsing, AST synchronization, minimal-edit serialization, preview,
   selection, resizing, drag-and-drop, rulers, grids, and layout adorners.
+- Form editing on the design surface: insert controls from the toolbox, move,
+  paste, duplicate, delete, and rename them with their code-behind references,
+  assign event handlers checked against the code-behind and open their
+  definitions, and edit property elements such as Grid row and column
+  definitions in a structure editor.
 - AvaloniaEdit code surfaces with TextMate highlighting, completion, semantic
-  tokens, diagnostics, navigation, and execution-line rendering.
+  tokens, diagnostics, navigation, and execution-line rendering, plus find and
+  replace, go to line, and matching brackets.
 - C# and XAML language services plus an LSP router for external language servers.
 - DAP and .NET SDK debugging with breakpoints, call stack, locals, watches, and
   configurable debugger tooling.
@@ -31,7 +37,17 @@ extension model in one Dock-based workspace.
   language servers, settings, storage, dialogs, and permissions.
 - Solution and file explorers, toolbox, property editor, output/problems,
   references, tree inspectors, animation editor, terminal, Git, ACP, MCP,
-  collaboration, and IDE-bridge panels.
+  collaboration, and IDE-bridge panels, with a Command Palette
+  (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>) that lists the editor and
+  extension commands.
+- Git integration: status bar, changes with line and hunk staging, commit and
+  amend, history, blame, branches, tags, remotes, stashes, merge, rebase,
+  cherry-pick, revert, conflict resolution in the editor, branch comparison,
+  and change marks in the explorers and editors.
+- Optional TFVC integration on Windows: source control explorer, pending
+  changes, automatic check-out on the first edit, changeset details, and an
+  offline mode.
+- English and German user interface, selected in the Options dialog.
 - Strict MVVM and ReactiveUI architecture with compiled Avalonia bindings,
   Xaml.Behaviors input routing, dependency injection, and source-generated
   reactive properties.
@@ -157,7 +173,7 @@ dotnet add package XamlVisualEditor.Core
 | [XamlVisualEditor.Debugging.DotNetSdkExtension](https://www.nuget.org/packages/XamlVisualEditor.Debugging.DotNetSdkExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.Debugging.DotNetSdkExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.Debugging.DotNetSdkExtension) | .NET SDK debugger integration. |
 | [XamlVisualEditor.DotNetTemplatesExtension](https://www.nuget.org/packages/XamlVisualEditor.DotNetTemplatesExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.DotNetTemplatesExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.DotNetTemplatesExtension) | .NET project and solution template wizard. |
 | [XamlVisualEditor.FileExplorerExtension](https://www.nuget.org/packages/XamlVisualEditor.FileExplorerExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.FileExplorerExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.FileExplorerExtension) | File explorer panel. |
-| [XamlVisualEditor.GitExtension](https://www.nuget.org/packages/XamlVisualEditor.GitExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.GitExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.GitExtension) | Git status, changes, branches, history, stashes, merge, explorer and editor marks. |
+| [XamlVisualEditor.GitExtension](https://www.nuget.org/packages/XamlVisualEditor.GitExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.GitExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.GitExtension) | Git status, changes with line staging, history, blame, branches, tags, remotes, stashes, merge, rebase, cherry-pick, revert, conflicts, branch comparison, explorer and editor marks. |
 | [XamlVisualEditor.IdeBridgeExtension](https://www.nuget.org/packages/XamlVisualEditor.IdeBridgeExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.IdeBridgeExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.IdeBridgeExtension) | IDE bridge runtime and configuration panel. |
 | [XamlVisualEditor.LspSettingsExtension](https://www.nuget.org/packages/XamlVisualEditor.LspSettingsExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.LspSettingsExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.LspSettingsExtension) | External language-server settings. |
 | [XamlVisualEditor.McpExtension](https://www.nuget.org/packages/XamlVisualEditor.McpExtension) | [![NuGet](https://img.shields.io/nuget/v/XamlVisualEditor.McpExtension.svg)](https://www.nuget.org/packages/XamlVisualEditor.McpExtension) | MCP runtime and permissions panel. |
@@ -214,6 +230,15 @@ dotnet tool run lunet serve
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and the authoritative engineering rules
 in [AGENTS.md](AGENTS.md). Before opening a pull request, build the Release
 solution, run the relevant test projects, validate packages, and build the docs.
+
+Two environment variables help with development:
+
+- `XVE_CDP_PORT=<port>` starts a Chrome DevTools Protocol endpoint on
+  `127.0.0.1` for UI automation. It requires a build with
+  `-p:EnableCdpDiagnostics=true`. The endpoint URL with its access token is
+  written to the application log.
+- `XVE_TERMINAL_LOG=<file>` writes the escape sequences of the integrated
+  terminal to a file.
 
 ## License
 
@@ -347,13 +372,28 @@ The value `full` also permits write operations.
 
 CAUTION: Use `full` only for a trusted local client. This value skips the normal permission prompt.
 
-The bridge provides these automation methods:
+The bridge provides these methods. Read-only access allows every method
+except the ones marked `full`:
 
 | Method | Purpose |
 | --- | --- |
-| `document.close` | Close an open document without saving it. |
+| `bridge.initialize`, `bridge.shutdown` | Start and end a bridge session. |
+| `workspace.list`, `workspace.getActive` | List the open workspaces and return the active one. |
+| `workspace.findFiles` | Find files in the workspace. |
+| `document.open`, `document.close` | Open a document, or close it without saving it. |
+| `document.getText` | Return the text of a document. |
+| `document.applyEdits` (`full`) | Apply text edits to a document. |
+| `document.save` (`full`) | Save a document. |
+| `selection.get`, `selection.set` | Read or set the editor selection. |
+| `diagnostics.get` | Return the diagnostics of the documents. |
 | `editor.status` | Return the active document, open-document count, and process memory values. |
 | `preview.export` | Render an open AXAML document and save the preview frame as a PNG file. |
+| `commands.list`, `commands.execute` (`full`) | List the registered commands and execute one. |
+| `ui.showMessage`, `ui.pick`, `ui.input` | Show a message, a quick pick, or an input box in the editor. |
+| `terminal.create`, `terminal.sendText` (`full`) | Create an integrated terminal and send text to it. |
+
+The bridge sends the notifications `workspace.changed`, `document.changed`,
+`diagnostics.changed`, and `selection.changed`.
 
 Open the document before you export its preview:
 

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Workspace;
 
@@ -281,7 +282,7 @@ public sealed partial class GitService : IGitMergeService
         };
         if (command is null)
         {
-            throw new InvalidOperationException("No merge, rebase, cherry-pick, revert or patch application is in progress.");
+            throw new InvalidOperationException(UiStrings.GitNoOperationInProgress);
         }
 
         GitProcessResult result = await RunWorkingTreeCommandAsync(repoPath, new[] { command, option }, ct);

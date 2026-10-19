@@ -1,5 +1,6 @@
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
@@ -47,7 +48,7 @@ public sealed class DesignerSelectionEditor
         IReadOnlyList<MutableAstObjectNode> nodes = SelectionRoots(selection);
         if (nodes.Count == 0) return;
         if (nodes.Any(node => LayoutEditService.GetParent(node) is null))
-            throw new InvalidOperationException("The document root cannot be deleted.");
+            throw new InvalidOperationException(UiStrings.LayoutEditRootDelete);
         using DocumentEditTransaction edit = _engine.BeginEditTransaction("Delete selection");
         foreach (MutableAstObjectNode node in nodes)
         {
@@ -61,13 +62,13 @@ public sealed class DesignerSelectionEditor
         MutableAstObjectNode? explicitParent = null)
     {
         MutableAstObjectNode root = _engine.CurrentDocument?.Root
-            ?? throw new InvalidOperationException("Open a designer document first.");
+            ?? throw new InvalidOperationException(UiStrings.DesignerOpenDocumentFirst);
         List<MutableAstObjectNode> nodes = ParseFragments(text);
-        if (nodes.Count == 0) throw new InvalidOperationException("The clipboard contains no XAML elements.");
+        if (nodes.Count == 0) throw new InvalidOperationException(UiStrings.DesignerClipboardNoElements);
         MutableAstObjectNode? parent = explicitParent ?? _layout.FindInsertionParent(root, selection, nodes[0]);
-        if (parent is null) throw new InvalidOperationException("Select a layout panel or an empty content slot.");
+        if (parent is null) throw new InvalidOperationException(UiStrings.DesignerSelectLayoutTarget);
         if (nodes.Count > 1 && _layout.GetKind(parent) is LayoutContainerKind.Content or LayoutContainerKind.Child)
-            throw new InvalidOperationException("Multiple elements require a panel or an items container.");
+            throw new InvalidOperationException(UiStrings.DesignerPasteMultipleNeedsPanel);
         foreach (MutableAstObjectNode node in nodes)
         {
             if (!_layout.CanInsert(parent, node, out string? error)) throw new InvalidOperationException(error);
@@ -94,7 +95,7 @@ public sealed class DesignerSelectionEditor
         if (roots.Count == 0) return Array.Empty<MutableAstObjectNode>();
         MutableAstObjectNode? parent = LayoutEditService.GetParent(roots[0]);
         if (parent is null || roots.Any(node => !ReferenceEquals(LayoutEditService.GetParent(node), parent)))
-            throw new InvalidOperationException("Duplicate requires selected siblings in one container.");
+            throw new InvalidOperationException(UiStrings.DesignerDuplicateSiblingsRequired);
         using DocumentEditTransaction edit = _engine.BeginEditTransaction("Duplicate selection");
         IReadOnlyList<MutableAstObjectNode> copies = Paste(Copy(roots), explicitParent: parent);
         if (_layout.GetKind(parent) == LayoutContainerKind.Canvas)
@@ -140,10 +141,10 @@ public sealed class DesignerSelectionEditor
         }
         parsed = _parser.Parse("<Panel xmlns=\"https://github.com/avaloniaui\">" + text + "</Panel>", options);
         if (parsed.HasErrors || parsed.Document is not MutableAstDocument { Root: { } wrapper })
-            throw new InvalidOperationException("The clipboard does not contain valid XAML fragments.");
+            throw new InvalidOperationException(UiStrings.DesignerClipboardInvalidXaml);
         if (wrapper.Properties.Count > 0 || wrapper.Children.Any(node =>
                 node is MutableAstTextNode value && !string.IsNullOrWhiteSpace(value.Text)))
-            throw new InvalidOperationException("Paste complete control elements without surrounding text or standalone property elements.");
+            throw new InvalidOperationException(UiStrings.DesignerPasteCompleteElements);
         List<MutableAstObjectNode> nodes = wrapper.Children.OfType<MutableAstObjectNode>().ToList();
         wrapper.Children.Clear();
         return nodes;

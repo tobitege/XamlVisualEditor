@@ -52,7 +52,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
         IReadOnlyList<DotNetTemplateInfo> parsed = ParseTemplatesFromText(textResult.StandardOutput);
         if (parsed.Count == 0)
         {
-            throw new InvalidOperationException("No templates were found.");
+            throw new InvalidOperationException(UiStrings.DotnetTemplatesNotFound);
         }
 
         return parsed;

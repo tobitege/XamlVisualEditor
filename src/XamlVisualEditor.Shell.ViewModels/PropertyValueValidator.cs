@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Reflection;
 using Avalonia.Media;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -26,7 +27,7 @@ internal static class PropertyValueValidator
             {
                 object parsed = Enum.Parse(type, value, ignoreCase: true);
                 if (!type.IsDefined(typeof(FlagsAttribute), inherit: false) && !Enum.IsDefined(type, parsed))
-                    throw new FormatException("Choose a defined enum value.");
+                    throw new FormatException(UiStrings.PropertyValueEnumUndefined);
                 return;
             }
             TypeConverter converter = TypeDescriptor.GetConverter(type);
@@ -50,7 +51,8 @@ internal static class PropertyValueValidator
         catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException
             or NotSupportedException or TargetInvocationException)
         {
-            throw new ArgumentException($"{property.Name} requires {type.Name}: {exception.GetBaseException().Message}", exception);
+            throw new ArgumentException(
+                string.Format(UiStrings.PropertyValueTypeInvalid, property.Name, type.Name, exception.GetBaseException().Message), exception);
         }
     }
 }

@@ -330,7 +330,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     public DocumentEditTransaction BeginEditTransaction(string description, SyncSource source = SyncSource.DesignSurface)
     {
         if (_isDisposed) throw new ObjectDisposedException(nameof(SyncEngine));
-        if (!CanEditAst) throw new InvalidOperationException("Resolve XAML errors before editing the designer.");
+        if (!CanEditAst) throw new InvalidOperationException(UiStrings.DesignerResolveXamlErrors);
         if (_editGroup is null)
         {
             CommitUndoBatch(UiStrings.Edit);
@@ -355,7 +355,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     {
         if (!_undoRedo.CanUndoCompanion(requiredChange))
         {
-            throw new InvalidOperationException("Undo later designer changes before undoing this refactoring.");
+            throw new InvalidOperationException(UiStrings.DesignerUndoLaterChangesFirst);
         }
 
         Undo();
@@ -365,7 +365,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     {
         if (!_undoRedo.CanRedoCompanion(requiredChange))
         {
-            throw new InvalidOperationException("Redo earlier designer changes before redoing this refactoring.");
+            throw new InvalidOperationException(UiStrings.DesignerRedoEarlierChangesFirst);
         }
 
         Redo();
@@ -482,7 +482,7 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         bool companionsApplied = false;
         try
         {
-            if (!SynchronizeAst()) throw new InvalidOperationException("Resolve XAML errors before editing the designer.");
+            if (!SynchronizeAst()) throw new InvalidOperationException(UiStrings.DesignerResolveXamlErrors);
             DocumentSnapshot after = CaptureSnapshot();
             DocumentCompanionChange.ApplyAll(group.CompanionChanges, forward: true);
             companionsApplied = true;

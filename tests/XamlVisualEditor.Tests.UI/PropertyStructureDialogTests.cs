@@ -18,6 +18,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReactiveUI;
 using Xunit;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.PropertyEditorExtension;
 using XamlVisualEditor.PropertyEditorExtension.Views;
@@ -63,8 +64,13 @@ public sealed class PropertyStructureDialogTests
         }
 
         await editor.ApplyCommand.Execute();
-        Assert.Contains(member[(member.IndexOf(':') + 1)..], editor.Error);
-        if (duplicate) Assert.Contains("more than once", editor.Error);
+        string localName = member[(member.IndexOf(':') + 1)..];
+        Assert.Contains(localName, editor.Error);
+        if (duplicate)
+        {
+            Assert.Equal(string.Format(UiStrings.PropertyStructureSetTwice,
+                localName.Contains('.') ? localName : "Border." + localName), editor.Error);
+        }
         Assert.False(closed);
         Assert.Equal(original, document.SyncEngine.CurrentText);
         Assert.Equal(original, document.CodeEditor.Document.Text);
@@ -130,7 +136,7 @@ public sealed class PropertyStructureDialogTests
         int activeUndoCount = active.SyncEngine.UndoRedo.UndoCount;
 
         await editor.ApplyCommand.Execute();
-        Assert.Contains("document changed", editor.Error);
+        Assert.Equal(UiStrings.PropertyStructureDocumentChanged, editor.Error);
         Assert.False(closed);
         Assert.Equal(documentText, document.SyncEngine.CurrentText);
         Assert.Equal(activeText, active.SyncEngine.CurrentText);

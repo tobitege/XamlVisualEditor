@@ -4,6 +4,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using XamlVisualEditor.Core.Localization;
 using RemoteInput = Avalonia.Remote.Protocol.Input;
 
 namespace XamlVisualEditor.App.Views;
@@ -27,7 +28,7 @@ public sealed partial class PreviewerSurfaceControl
         catch (Exception error)
         {
             if (ReferenceEquals(_session, session) && ReferenceEquals(session!.Connection, connection))
-                session.ReportError($"Preview input failed: {error.Message}");
+                session.ReportError(string.Format(UiStrings.PreviewerInputFailed, error.Message));
         }
     }
 

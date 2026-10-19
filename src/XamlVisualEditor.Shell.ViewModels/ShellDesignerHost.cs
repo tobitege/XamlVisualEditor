@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Sync;
@@ -335,13 +336,13 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
         {
             parent = Guid.TryParse(parentNodeId, out Guid targetId)
                 ? document.NodeMap.FindById(targetId) as MutableAstObjectNode : null;
-            if (parent is null) throw new InvalidOperationException("The requested insertion target is no longer available.");
+            if (parent is null) throw new InvalidOperationException(UiStrings.DesignerInsertionTargetGone);
         }
         else
         {
             parent = editor.FindInsertionParent(currentDocument.Root, ResolveParentNode(document, null), inserted);
         }
-        if (parent is null) throw new InvalidOperationException("Select a layout panel or an empty content slot.");
+        if (parent is null) throw new InvalidOperationException(UiStrings.DesignerSelectLayoutTarget);
 
         using DocumentEditTransaction edit = document.SyncEngine.BeginEditTransaction($"Insert {typeName}");
         if (!editor.TryInsert(parent, inserted, out string? error)) throw new InvalidOperationException(error);

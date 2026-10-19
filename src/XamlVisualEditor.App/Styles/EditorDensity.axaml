@@ -43,6 +43,11 @@
         <Setter Property="FontSize" Value="{DynamicResource ControlContentThemeFontSize}" />
     </Style>
 
+    <!-- The compact header leaves no room under the text; the selection pipe moves into the bottom padding. -->
+    <Style Selector=".editor-chrome TabItem /template/ Border#PART_SelectedPipe">
+        <Setter Property="Margin" Value="0,0,0,-3" />
+    </Style>
+
     <Style Selector=".editor-chrome DataGridCell, .editor-chrome DataGridColumnHeader">
         <Setter Property="Padding" Value="4,2" />
         <Setter Property="MinHeight" Value="24" />

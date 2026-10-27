@@ -7,6 +7,9 @@ public interface ITerminalViewModel
 {
     ITerminalEmulator Emulator { get; }
     TerminalTheme Theme { get; }
+    /// <summary>Comma-separated font families; the view uses the first installed one.</summary>
+    string FontFamilies => TerminalFont.DefaultFamilies;
+    double FontSize => TerminalFont.DefaultSize;
     TerminalSelection Selection { get; }
     bool HasSelection { get; }
     int ScrollOffset { get; }

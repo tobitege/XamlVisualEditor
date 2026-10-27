@@ -3,15 +3,30 @@
 All notable changes to XamlVisualEditor are documented in this file. The project
 uses Semantic Versioning.
 
-## [Unreleased]
+## [0.4.0] - 2026-10-27
+
+### Added
+
+- `TerminalEnvironment.CaptureStartup()` records the environment the host process was started with, and both PTY providers start the shell from it with the overrides of `TerminalSessionOptions.Environment` applied. The editor captures it first thing at startup, so variables it sets for itself later, such as the MSBuild paths it registers for loading projects, no longer reach the shell, and `dotnet build` in a terminal uses the SDK the repository selects. A host that does not call `CaptureStartup()` keeps the current process environment.
+- Options › Terminal sets the font families and the font size of the terminal, on every platform. The families are a comma-separated list of which the terminal uses the first installed one; an empty list restores the default `Cascadia Mono, Menlo, Consolas, monospace`, and the size is limited to 6 to 72. Open terminals take a saved change at once. `ITerminalViewModel` has the members `FontFamilies` and `FontSize`, with these defaults for existing implementations, `TerminalFont` holds the defaults and limits, and `FontFamilyListConverter` turns such a list into a `FontFamily` for bindings. `TerminalControl` defaults to the same list instead of Cascadia Mono alone.
 
 ### Changed
 
 - The German user interface translates the remaining English texts: the Discard button, the change status of the Git Changes panel (for example "Staged hinzugefügt" or "Unstaged mit Konflikt") and the Capabilities column of the extension manager. The messages of the designer and the previewer when an insert, paste, duplicate, delete, move, resize, arrange, rename, refactoring undo or event handler assignment is refused, the errors of the property structure editor and of property values that do not fit their type, of the previewer connection, of reading toolbox controls, of the template list, of a force push without upstream, of continuing a finished Git operation, of starting a debug adapter and of the ACP agent connection and prompts come from `UiStrings` and follow the language of the editor. Git terms such as Branch, Commit, Stash, Staged and Upstream stay English. The designer and the previewer now ask with the same text to wait for the layout measurements of the previewer, and distributing controls in a Grid in the previewer names the number of rows or columns it needs, as the designer does.
+- An empty value in `TerminalSessionOptions.Environment` removes the variable; it used to set the variable to an empty value. Without an override for `TERM` or `COLORTERM`, Linux and macOS set them to `xterm-256color` and `truecolor` as before, and Windows only adds them when they are missing.
+- Terminals on Linux and macOS no longer inherit `TMUX`, `TMUX_PANE`, `STY`, `WINDOW`, `WINDOWID`, `TERMCAP`, `COLUMNS` and `LINES`, so `tmux` and `screen` also start in the terminal of an editor that was itself started inside one of them.
+- Closing a terminal on Linux or macOS hangs up its shell, and on macOS kills a shell that is still running after a short grace period; the shell is collected after it exits. The close runs on the thread pool and does not block the window. On Linux the kernel window size of the terminal no longer carries the pixel size; the emulator still answers pixel size queries.
+- `XamlVisualEditor.Terminal` depends on [Porta.Pty](https://github.com/tomlm/Porta.Pty) and, through it, on `Microsoft.Windows.Console.ConPTY`. Windows keeps the in-box ConPTY, and projects that reference the terminal do not get the `OpenConsole.exe` host copied to their output.
+
+### Removed
+
+- The public constructor of `UnixPtyProcess`, which took the process id and the file descriptor of a PTY created outside the provider; `UnixPtyProvider.StartProcess` creates the process.
 
 ### Fixed
 
 - The selection pipe of a compact tab, such as Staged and Unstaged in the Git Changes panel, is drawn below the header text instead of through it
+- Opening a terminal on Linux or macOS no longer crashes the editor at a later, random point. The terminal forked the editor process and ran .NET code in the child before it started the shell; with W^X, which .NET enables by default since .NET 7, the child shared the executable code memory of the editor and overwrote it. `UnixPtyProvider` now starts the shell through Porta.Pty, which forks and executes in native code and resizes on macOS without running `stty`. The PTY tests also run in CI.
+- The terminal uses the first installed font of its font list, such as `monospace` on Linux, instead of only trying the first one. Where Cascadia Mono was missing it fell back to a proportional font, sized its cells for the widest letter and drew the text with gaps between narrow letters.
 
 ## [0.3.0] - 2026-10-18
 
@@ -232,7 +247,7 @@ uses Semantic Versioning.
 - Linux, Windows, and macOS release archives for x64 and Arm64.
 - Source-linked NuGet packages and symbol packages.
 
-[Unreleased]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.3.0...HEAD
+[0.4.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wieslawsoltes/XamlVisualEditor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v0.1.0

@@ -3318,6 +3318,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             {
                 foreach (ExtensionTreeViewModel tree in ExtensionViews.OfType<ExtensionTreeViewModel>())
                     tree.SetFoldersBeforeFiles(_editorOptions.Current.FileExplorerFoldersBeforeFiles);
+                foreach (TerminalViewModel terminal in Terminals)
+                {
+                    terminal.FontFamilies = _editorOptions.Current.TerminalFontFamilies;
+                    terminal.FontSize = _editorOptions.Current.TerminalFontSize;
+                }
                 UpdateWindowTitle();
                 StatusText = XamlVisualEditor.Core.Localization.UiStrings.OptionsSaved;
             }
@@ -6346,7 +6351,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         ITerminalSession session = _terminalService.CreateSession(resolved);
-        TerminalViewModel terminalVm = new(session, resolved.Command);
+        TerminalViewModel terminalVm = new(session, resolved.Command)
+        {
+            FontFamilies = _editorOptions.Current.TerminalFontFamilies,
+            FontSize = _editorOptions.Current.TerminalFontSize
+        };
         try { terminalVm.Start(); }
         catch
         {

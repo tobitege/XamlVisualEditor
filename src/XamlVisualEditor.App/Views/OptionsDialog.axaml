@@ -51,6 +51,15 @@
                   IsChecked="{CompiledBinding FileExplorerFoldersBeforeFiles, Mode=TwoWay}" />
         <Separator Margin="0,4" />
         <TextBlock Text="{x:Static loc:UiStrings.TerminalGroup}" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+          <TextBlock Text="{x:Static loc:UiStrings.TerminalFontFamilies}" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Name="TerminalFontFamilies" Text="{CompiledBinding TerminalFontFamilies, Mode=TwoWay}" />
+          <TextBlock Grid.Row="1" Text="{x:Static loc:UiStrings.TerminalFontSize}" VerticalAlignment="Center" />
+          <NumericUpDown Grid.Row="1" Grid.Column="1" Name="TerminalFontSize" Value="{CompiledBinding TerminalFontSize, Mode=TwoWay}"
+                         Minimum="{CompiledBinding TerminalFontSizeMinimum}" Maximum="{CompiledBinding TerminalFontSizeMaximum}"
+                         Increment="1" FormatString="0.#" Width="120" HorizontalAlignment="Left" VerticalContentAlignment="Center" />
+        </Grid>
+        <TextBlock Text="{x:Static loc:UiStrings.TerminalFontHint}" TextWrapping="Wrap" />
         <TextBlock Text="{x:Static loc:UiStrings.WindowsTerminalOptionsHint}" TextWrapping="Wrap" />
         <StackPanel Spacing="10" IsEnabled="{CompiledBinding IsWindows}">
           <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="8">

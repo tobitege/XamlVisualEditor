@@ -17,6 +17,9 @@
   <data name="LanguageRestartHint" xml:space="preserve"><value>Language changes apply after restarting XVE.</value></data>
   <data name="TerminalGroup" xml:space="preserve"><value>Terminal</value></data>
   <data name="TerminalMode" xml:space="preserve"><value>Open terminal</value></data>
+  <data name="TerminalFontFamilies" xml:space="preserve"><value>Font families</value></data>
+  <data name="TerminalFontSize" xml:space="preserve"><value>Font size</value></data>
+  <data name="TerminalFontHint" xml:space="preserve"><value>Several families separated by commas are tried in order; an empty value restores the default.</value></data>
   <data name="TerminalInternal" xml:space="preserve"><value>Inside XVE</value></data>
   <data name="TerminalExternal" xml:space="preserve"><value>In a separate window</value></data>
   <data name="TerminalShell" xml:space="preserve"><value>Shell</value></data>

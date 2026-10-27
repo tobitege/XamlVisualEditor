@@ -10,4 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.UI" />
+  </ItemGroup>
 </Project>

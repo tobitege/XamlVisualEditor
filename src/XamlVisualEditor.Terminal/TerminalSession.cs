@@ -156,7 +156,11 @@ public sealed class TerminalSession : ITerminalSession
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("Terminal read failed: {Message}", ex.Message);
+            // Closing the session closes the PTY under the pending read; that is not a failure.
+            if (!ct.IsCancellationRequested)
+            {
+                _logger.LogWarning("Terminal read failed: {Message}", ex.Message);
+            }
         }
         finally
         {
@@ -166,8 +170,8 @@ public sealed class TerminalSession : ITerminalSession
 
     public void Dispose()
     {
-        _process?.Dispose();
         _cts?.Cancel();
+        _process?.Dispose();
         _cts?.Dispose();
         _sequenceLogger?.Dispose();
         SignalExited(null);

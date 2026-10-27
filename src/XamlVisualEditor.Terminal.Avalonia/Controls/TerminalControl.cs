@@ -23,12 +23,12 @@ public sealed class TerminalControl : Control, ILogicalScrollable
     public static readonly StyledProperty<FontFamily> FontFamilyProperty =
         AvaloniaProperty.Register<TerminalControl, FontFamily>(
             nameof(FontFamily),
-            new FontFamily("Cascadia Mono"));
+            new FontFamily(TerminalFont.DefaultFamilies));
 
     public static readonly StyledProperty<double> FontSizeProperty =
         AvaloniaProperty.Register<TerminalControl, double>(
             nameof(FontSize),
-            13);
+            TerminalFont.DefaultSize);
 
     public static readonly DirectProperty<TerminalControl, ITerminalViewModel?> TerminalViewModelProperty =
         AvaloniaProperty.RegisterDirect<TerminalControl, ITerminalViewModel?>(
@@ -255,9 +255,8 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
         if (_renderState is null || recreateRenderState)
         {
-            Typeface typeface = new(FontFamily, FontStyle.Normal, FontWeight.Normal);
             _renderState?.Dispose();
-            _renderState = TerminalRenderState.Create(typeface, FontSize);
+            _renderState = TerminalRenderState.Create(FontFamily, FontSize);
         }
 
         int cols = (int)Math.Floor(Bounds.Width / _renderState.CellSize.Width);
@@ -527,7 +526,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             0,
             false,
             false,
-            string.Empty,
+            FontFamily,
             0));
         ElementComposition.SetElementChildVisual(this, null);
         _compositionVisual = null;
@@ -546,7 +545,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             _offsetY,
             IsCaretVisible(),
             IsCaretBlinkEnabled(),
-            FontFamily.Name,
+            FontFamily,
             FontSize));
     }
 
@@ -562,6 +561,25 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         RequestRender();
     }
 
+    /// <summary>
+    /// Returns the first installed family of <paramref name="fontFamily"/>; the generic family
+    /// <c>monospace</c> is taken as resolved by the platform font manager.
+    /// </summary>
+    internal static SKTypeface ResolveTypeface(FontFamily fontFamily)
+    {
+        foreach (string family in fontFamily.FamilyNames)
+        {
+            SKTypeface matched = SKTypeface.FromFamilyName(family, SKFontStyleWeight.Normal, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+            if (string.Equals(family, "monospace", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(matched.FamilyName, family, StringComparison.OrdinalIgnoreCase))
+            {
+                return matched;
+            }
+        }
+
+        return SKTypeface.FromFamilyName(fontFamily.Name, SKFontStyleWeight.Normal, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+    }
+
     private enum TerminalVisualCommand
     {
         Update,
@@ -573,7 +591,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         double OffsetY,
         bool CaretVisible,
         bool CaretBlink,
-        string FontFamilyName,
+        FontFamily FontFamily,
         double FontSize);
 
     private sealed class TerminalCompositionCustomVisualHandler : CompositionCustomVisualHandler
@@ -587,7 +605,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         private bool _caretBlinkState = true;
         private TimeSpan? _lastBlinkToggle;
         private bool _running;
-        private string _fontFamilyName = string.Empty;
+        private FontFamily? _fontFamily;
         private double _fontSize;
 
         public TerminalCompositionCustomVisualHandler(Func<ITerminalViewModel?> getViewModel)
@@ -609,7 +627,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
                     _offsetY = payload.OffsetY;
                     _caretVisible = payload.CaretVisible;
                     _caretBlink = payload.CaretBlink;
-                    UpdateRenderState(payload.FontFamilyName, payload.FontSize);
+                    UpdateRenderState(payload.FontFamily, payload.FontSize);
                     UpdateAnimationState(resetBlinkState);
                     Invalidate();
                     RegisterForNextAnimationFrameUpdate();
@@ -624,7 +642,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
                     _offsetY = 0;
                     DisposeRenderState();
                     DisposeRetiredRenderStates();
-                    _fontFamilyName = string.Empty;
+                    _fontFamily = null;
                     _fontSize = 0;
                     break;
             }
@@ -687,10 +705,10 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             TerminalRenderer.Render(canvas, bounds, viewModel, _renderState, showCaret, _offsetY);
         }
 
-        private void UpdateRenderState(string fontFamilyName, double fontSize)
+        private void UpdateRenderState(FontFamily fontFamily, double fontSize)
         {
             if (_renderState is not null
-                && string.Equals(_fontFamilyName, fontFamilyName, StringComparison.Ordinal)
+                && Equals(_fontFamily, fontFamily)
                 && Math.Abs(_fontSize - fontSize) < 0.01)
             {
                 return;
@@ -701,9 +719,8 @@ public sealed class TerminalControl : Control, ILogicalScrollable
                 _retiredRenderStates.Add(_renderState);
             }
 
-            Typeface typeface = new(new FontFamily(fontFamilyName), FontStyle.Normal, FontWeight.Normal);
-            _renderState = TerminalRenderState.Create(typeface, fontSize);
-            _fontFamilyName = fontFamilyName;
+            _renderState = TerminalRenderState.Create(fontFamily, fontSize);
+            _fontFamily = fontFamily;
             _fontSize = fontSize;
         }
 
@@ -774,9 +791,9 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             Glyphs = glyphs;
         }
 
-        public static TerminalRenderState Create(Typeface typeface, double fontSize)
+        public static TerminalRenderState Create(FontFamily fontFamily, double fontSize)
         {
-            SKTypeface skTypeface = ResolveSkiaTypeface(typeface);
+            SKTypeface skTypeface = ResolveTypeface(fontFamily);
             SKFont font = new(skTypeface, (float)fontSize);
 #pragma warning disable CS0618
             SKPaint textPaint = new()
@@ -842,36 +859,6 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             }
 
             return Math.Max(1f, fontSize * 0.6f);
-        }
-
-        private static SKTypeface ResolveSkiaTypeface(Typeface typeface)
-        {
-            SKFontStyleWeight weight = SKFontStyleWeight.Normal;
-            SKFontStyleSlant slant = SKFontStyleSlant.Upright;
-            string familyList = typeface.FontFamily.Name;
-
-            foreach (string family in familyList.Split(','))
-            {
-                string candidate = family.Trim();
-                if (string.IsNullOrEmpty(candidate))
-                {
-                    continue;
-                }
-
-                SKTypeface matched = SKTypeface.FromFamilyName(candidate, weight, SKFontStyleWidth.Normal, slant);
-                if (string.Equals(candidate, "monospace", StringComparison.OrdinalIgnoreCase))
-                {
-                    return matched;
-                }
-
-                if (!string.IsNullOrEmpty(matched.FamilyName)
-                    && string.Equals(matched.FamilyName, candidate, StringComparison.OrdinalIgnoreCase))
-                {
-                    return matched;
-                }
-            }
-
-            return SKTypeface.FromFamilyName(familyList, weight, SKFontStyleWidth.Normal, slant);
         }
 
         public void Dispose()

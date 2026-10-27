@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -9,11 +14,13 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Xunit;
 using XamlVisualEditor.App;
 using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal;
@@ -110,6 +117,94 @@ public sealed class TerminalControlTests
         {
             window.Close();
         }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TerminalViews_TakeTheFontOfTheirTerminal(bool asDockTool)
+    {
+        TestTerminalSession session = new();
+        TerminalViewModel vm = new(session);
+        Control view = asDockTool
+            ? new XamlVisualEditor.App.ViewLocator().Build(new TerminalTool(vm))
+            : new TerminalView { DataContext = vm };
+
+        Window window = await ShowInWindowAsync(view);
+        try
+        {
+            TerminalControl control = GetTerminalControl(view);
+            Assert.Equal(new FontFamily(TerminalFont.DefaultFamilies), control.FontFamily);
+
+            vm.FontFamilies = "Courier New, monospace";
+            vm.FontSize = 16;
+            await Dispatcher.UIThread.InvokeAsync(() => { });
+
+            Assert.Equal(new[] { "Courier New", "monospace" }, control.FontFamily.FamilyNames);
+            Assert.Equal(16, control.FontSize);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [Fact]
+    public void FontFamilyListConverter_LeavesEmptyListsToTheDefault()
+    {
+        FontFamily converted = Assert.IsType<FontFamily>(FontFamilyListConverter.Instance.Convert(
+            "Courier New, monospace", typeof(FontFamily), null, CultureInfo.InvariantCulture));
+
+        Assert.Equal(new[] { "Courier New", "monospace" }, converted.FamilyNames);
+        Assert.Same(AvaloniaProperty.UnsetValue, FontFamilyListConverter.Instance.Convert(
+            " ", typeof(FontFamily), null, CultureInfo.InvariantCulture));
+    }
+
+    [AvaloniaFact]
+    public async Task Terminals_TakeTheSavedFontAndFollowSavedOptions()
+    {
+        string file = Path.Combine(Path.GetTempPath(), "terminal-font-test-" + Guid.NewGuid().ToString("N") + ".json");
+        EditorOptionsStore store = new(file);
+        store.Save(new EditorOptions { TerminalFontFamilies = "Courier New, monospace", TerminalFontSize = 15 });
+        Avalonia.Themes.Fluent.FluentTheme theme = new();
+        Application.Current!.Styles.Add(theme);
+        using MainWindowViewModel vm = new(editorOptions: store, terminalService: new FakeTerminalService());
+        MainWindow window = new(vm);
+        try
+        {
+            window.Show();
+            await ((IWorkspaceCommands)vm).NewTerminalAsync(CancellationToken.None);
+            TerminalViewModel terminal = Assert.Single(vm.Terminals);
+            Assert.Equal("Courier New, monospace", terminal.FontFamilies);
+            Assert.Equal(15, terminal.FontSize);
+
+            Task open = vm.OpenOptionsCommand.Execute().ToTask();
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            OptionsDialog dialog = Assert.Single(window.OwnedWindows.OfType<OptionsDialog>());
+            OptionsDialogViewModel options = Assert.IsType<OptionsDialogViewModel>(dialog.DataContext);
+            options.TerminalFontFamilies = "Consolas, monospace";
+            options.TerminalFontSize = 17;
+            await options.SaveCommand.Execute().FirstAsync();
+            await open;
+
+            Assert.Equal("Consolas, monospace", terminal.FontFamilies);
+            Assert.Equal(17, terminal.FontSize);
+        }
+        finally
+        {
+            foreach (TerminalViewModel terminal in vm.Terminals.ToArray()) vm.CloseTerminalSession(terminal.Id);
+            foreach (Window dialog in window.OwnedWindows.ToArray()) dialog.Close();
+            window.Close();
+            Application.Current.Styles.Remove(theme);
+            File.Delete(file);
+        }
+    }
+
+    private sealed class FakeTerminalService : ITerminalService
+    {
+        public ITerminalSession CreateSession(TerminalSessionOptions options) => new TestTerminalSession();
+
+        public int StartExternalSession(TerminalSessionOptions options) => throw new NotSupportedException();
     }
 
     [AvaloniaFact]

@@ -33,6 +33,13 @@ public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewMod
 
     public TerminalTheme Theme { get; } = TerminalTheme.DefaultDark;
 
+    /// <inheritdoc />
+    [Reactive]
+    public partial string FontFamilies { get; set; } = TerminalFont.DefaultFamilies;
+
+    [Reactive]
+    public partial double FontSize { get; set; } = TerminalFont.DefaultSize;
+
     public ITerminalEmulator Emulator => _session.Emulator;
 
     public TerminalSelection Selection { get; private set; }

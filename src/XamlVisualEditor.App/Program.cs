@@ -19,6 +19,7 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        TerminalEnvironment.CaptureStartup();
         WireDependencyInjectionResolver();
 
         string? capturePath = TerminalCaptureArgs.ResolveCapturePath(args, Environment.CurrentDirectory);

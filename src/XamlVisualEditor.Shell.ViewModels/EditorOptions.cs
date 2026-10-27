@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
+using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -21,6 +22,9 @@ public sealed record EditorOptions
     public bool ShowFullPathInTitle { get; init; }
     /// <summary>Grid, ruler and coordinate strip settings that every designer document starts with.</summary>
     public DesignerViewportOptions DesignerViewport { get; init; } = new();
+    /// <summary>Comma-separated font families of the terminal; the first installed one is used.</summary>
+    public string TerminalFontFamilies { get; init; } = TerminalFont.DefaultFamilies;
+    public double TerminalFontSize { get; init; } = TerminalFont.DefaultSize;
     public TerminalLocation TerminalLocation { get; init; }
     public TerminalShell TerminalShell { get; init; }
     public string CommandPromptPath { get; init; } = Environment.GetEnvironmentVariable("ComSpec")
@@ -99,7 +103,12 @@ public sealed class EditorOptionsStore
                 throw new JsonException("Unsupported language or terminal option.");
             if (loaded.EditorTheme is null || string.IsNullOrWhiteSpace(loaded.EditorTheme.ProviderId) || string.IsNullOrWhiteSpace(loaded.EditorTheme.ThemeId))
                 throw new JsonException("Invalid editor theme selection.");
-            Current = loaded with { DesignerViewport = DesignerViewportOptions.Normalize(loaded.DesignerViewport) };
+            Current = loaded with
+            {
+                DesignerViewport = DesignerViewportOptions.Normalize(loaded.DesignerViewport),
+                TerminalFontFamilies = TerminalFont.NormalizeFamilies(loaded.TerminalFontFamilies),
+                TerminalFontSize = TerminalFont.NormalizeSize(loaded.TerminalFontSize)
+            };
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {

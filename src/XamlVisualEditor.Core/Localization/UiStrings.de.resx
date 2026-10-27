@@ -17,6 +17,9 @@
   <data name="LanguageRestartHint" xml:space="preserve"><value>Die Sprachänderung gilt nach einem Neustart von XVE.</value></data>
   <data name="TerminalGroup" xml:space="preserve"><value>Terminal</value></data>
   <data name="TerminalMode" xml:space="preserve"><value>Terminal öffnen</value></data>
+  <data name="TerminalFontFamilies" xml:space="preserve"><value>Schriftarten</value></data>
+  <data name="TerminalFontSize" xml:space="preserve"><value>Schriftgröße</value></data>
+  <data name="TerminalFontHint" xml:space="preserve"><value>Mehrere durch Kommas getrennte Schriftarten werden der Reihe nach probiert; ein leerer Wert stellt die Vorgabe wieder her.</value></data>
   <data name="TerminalInternal" xml:space="preserve"><value>Innerhalb von XVE</value></data>
   <data name="TerminalExternal" xml:space="preserve"><value>In einem eigenen Fenster</value></data>
   <data name="TerminalShell" xml:space="preserve"><value>Shell</value></data>

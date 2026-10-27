@@ -368,35 +368,24 @@ internal static class WindowsNative
 
     public static IntPtr CreateEnvironmentBlock(IReadOnlyDictionary<string, string> overrides)
     {
-        Dictionary<string, string> merged = new(StringComparer.OrdinalIgnoreCase);
-        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
-        {
-            string? key = entry.Key as string;
-            string? value = entry.Value as string;
-            if (key is not null && value is not null)
-            {
-                merged[key] = value;
-            }
-        }
-
-        foreach (KeyValuePair<string, string> kvp in overrides)
-        {
-            merged[kvp.Key] = kvp.Value;
-        }
-
-        if (!merged.ContainsKey("TERM"))
-        {
-            merged["TERM"] = "xterm-256color";
-        }
-
-        if (!merged.ContainsKey("COLORTERM"))
-        {
-            merged["COLORTERM"] = "truecolor";
-        }
+        Dictionary<string, string> merged = CreateEnvironment(TerminalEnvironment.Base, overrides);
 
         string block = string.Join("\0", merged.Select(kvp => kvp.Key + "=" + kvp.Value)) + "\0\0";
         return Marshal.StringToHGlobalUni(block);
     }
+
+    /// <summary>
+    /// The session environment on Windows: <paramref name="baseEnvironment"/> with <c>TERM</c> and
+    /// <c>COLORTERM</c> added when it lacks them, then <paramref name="overrides"/>.
+    /// </summary>
+    internal static Dictionary<string, string> CreateEnvironment(
+        IReadOnlyDictionary<string, string> baseEnvironment,
+        IReadOnlyDictionary<string, string> overrides) =>
+        TerminalEnvironment.Compose(baseEnvironment, static environment =>
+        {
+            environment.TryAdd("TERM", "xterm-256color");
+            environment.TryAdd("COLORTERM", "truecolor");
+        }, overrides);
 
     public static void DestroyEnvironmentBlock(IntPtr block)
     {

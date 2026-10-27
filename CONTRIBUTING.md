@@ -34,7 +34,7 @@ dotnet test tests/XamlVisualEditor.Tests.Integration/XamlVisualEditor.Tests.Inte
 dotnet test tests/XamlVisualEditor.Tests.UI/XamlVisualEditor.Tests.UI.csproj -c Release --no-build
 dotnet test tests/XamlVisualEditor.Tests.Performance/XamlVisualEditor.Tests.Performance.csproj -c Release --no-build
 dotnet pack XamlVisualEditor.slnx -c Release --no-build -o artifacts/packages
-./eng/validate-release-packages.sh artifacts/packages 0.3.0
+./eng/validate-release-packages.sh artifacts/packages 0.4.0
 ./build-docs.sh
 ```
 

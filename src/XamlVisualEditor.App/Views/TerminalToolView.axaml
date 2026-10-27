@@ -10,8 +10,8 @@
                   VerticalScrollBarVisibility="Auto">
       <controls:TerminalControl TerminalViewModel="{CompiledBinding TerminalViewModel}"
                                 v:TerminalInputBehavior.ViewModel="{CompiledBinding TerminalViewModel}"
-                                FontFamily="Cascadia Mono, Menlo, Consolas, monospace"
-                                FontSize="13"
+                                FontFamily="{CompiledBinding TerminalViewModel.FontFamilies, Converter={x:Static controls:FontFamilyListConverter.Instance}}"
+                                FontSize="{CompiledBinding TerminalViewModel.FontSize}"
                                 Focusable="True" />
     </ScrollViewer>
   </Grid>

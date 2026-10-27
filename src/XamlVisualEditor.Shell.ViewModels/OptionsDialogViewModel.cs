@@ -4,6 +4,7 @@ using System.Reactive.Linq;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Localization;
+using XamlVisualEditor.Terminal;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -30,6 +31,8 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
     private bool _restoreLastWorkspace;
     private bool _fileExplorerFoldersBeforeFiles;
     private bool _showFullPathInTitle;
+    private string _terminalFontFamilies;
+    private double _terminalFontSize;
     private OptionChoice<TerminalLocation> _location;
     private OptionChoice<TerminalShell> _shell;
     private string _commandPromptPath;
@@ -46,6 +49,8 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
         _restoreLastWorkspace = store.Current.RestoreLastWorkspace;
         _fileExplorerFoldersBeforeFiles = store.Current.FileExplorerFoldersBeforeFiles;
         _showFullPathInTitle = store.Current.ShowFullPathInTitle;
+        _terminalFontFamilies = store.Current.TerminalFontFamilies;
+        _terminalFontSize = store.Current.TerminalFontSize;
         _location = Locations.Single(item => item.Value == store.Current.TerminalLocation);
         _shell = Shells.Single(item => item.Value == store.Current.TerminalShell);
         _commandPromptPath = store.Current.CommandPromptPath;
@@ -120,6 +125,11 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
         set => this.RaiseAndSetIfChanged(ref _fileExplorerFoldersBeforeFiles, value);
     }
     public bool ShowFullPathInTitle { get => _showFullPathInTitle; set => this.RaiseAndSetIfChanged(ref _showFullPathInTitle, value); }
+    /// <summary>Comma-separated font families of the terminal; an empty value restores the default.</summary>
+    public string TerminalFontFamilies { get => _terminalFontFamilies; set => this.RaiseAndSetIfChanged(ref _terminalFontFamilies, value); }
+    public double TerminalFontSize { get => _terminalFontSize; set => this.RaiseAndSetIfChanged(ref _terminalFontSize, value); }
+    public double TerminalFontSizeMinimum => TerminalFont.MinSize;
+    public double TerminalFontSizeMaximum => TerminalFont.MaxSize;
     public OptionChoice<TerminalLocation> SelectedLocation { get => _location; set => this.RaiseAndSetIfChanged(ref _location, value); }
     public OptionChoice<TerminalShell> SelectedShell { get => _shell; set => this.RaiseAndSetIfChanged(ref _shell, value); }
     public string CommandPromptPath { get => _commandPromptPath; set => this.RaiseAndSetIfChanged(ref _commandPromptPath, value); }
@@ -140,6 +150,7 @@ public sealed class OptionsDialogViewModel : ReactiveObject, IDisposable
                 ? new EditorThemeSelection(provider.Id, theme.Id) : _store.Current.EditorTheme,
             Language = SelectedLanguage.Value, RestoreLastWorkspace = RestoreLastWorkspace, FileExplorerFoldersBeforeFiles = FileExplorerFoldersBeforeFiles, ShowFullPathInTitle = ShowFullPathInTitle, TerminalLocation = SelectedLocation.Value, TerminalShell = SelectedShell.Value,
             CommandPromptPath = CommandPromptPath.Trim(), WindowsPowerShellPath = WindowsPowerShellPath.Trim(), PowerShell7Path = PowerShell7Path.Trim(),
+            TerminalFontFamilies = TerminalFont.NormalizeFamilies(TerminalFontFamilies), TerminalFontSize = TerminalFont.NormalizeSize(TerminalFontSize),
             DesignerViewport = _store.Current.DesignerViewport
         };
         if (IsWindows && !File.Exists(options.ShellPath))

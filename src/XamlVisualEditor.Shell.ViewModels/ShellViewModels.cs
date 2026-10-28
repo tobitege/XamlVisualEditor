@@ -3556,17 +3556,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IObservable<bool> hasWorkspace = this.WhenAnyValue(x => x.HasWorkspace);
         IObservable<DebugSessionState> debugState = this.WhenAnyValue(x => x.Debugger.State);
         IObservable<bool> hasDebuggerService = this.WhenAnyValue(x => x.Debugger.HasDebuggerService);
+        IObservable<bool> isWorkspaceBusy = this.WhenAnyValue(x => x.IsWorkspaceLoading, x => x.IsWorkspaceCommandRunning,
+            (isLoading, isCommandRunning) => isLoading || isCommandRunning);
         IObservable<bool> canStartDebug = hasWorkspace
-            .CombineLatest(hasDebuggerService, debugState, this.WhenAnyValue(x => x.IsRunActive),
-                (hasWs, hasService, state, isRunActive) =>
-                    hasWs && hasService && !isRunActive && IsDebugIdle(state));
+            .CombineLatest(hasDebuggerService, debugState, this.WhenAnyValue(x => x.IsRunActive), isWorkspaceBusy,
+                (hasWs, hasService, state, isRunActive, isBusy) =>
+                    hasWs && hasService && !isRunActive && !isBusy && IsDebugIdle(state));
         IObservable<bool> canStopDebug = debugState.Select(state =>
             state == DebugSessionState.Initializing || state == DebugSessionState.Running || state == DebugSessionState.Paused);
         IObservable<bool> canContinue = debugState.Select(state => state == DebugSessionState.Paused);
         IObservable<bool> canStep = canContinue;
         IObservable<bool> canPause = debugState.Select(state => state == DebugSessionState.Running);
         IObservable<bool> canStartRun = hasWorkspace
-            .CombineLatest(debugState, (hasWs, state) => hasWs && IsDebugIdle(state));
+            .CombineLatest(debugState, isWorkspaceBusy,
+                (hasWs, state, isBusy) => hasWs && !isBusy && IsDebugIdle(state));
 
         StartPreviewerCommand = ReactiveCommand.CreateFromTask(
             StartPreviewerForActiveDocumentAsync,
@@ -4334,6 +4337,19 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
+        if (await SaveModifiedDocumentsAsync())
+        {
+            StatusText = UiStrings.AllDocumentsSaved;
+        }
+    }
+
+    // The dotnet commands of the workspace, also those of run and debug, work on the files on disk, so they first
+    // save what the user changed, the way Save All does; a file that cannot be saved stops them, and its save reports why.
+    private async System.Threading.Tasks.Task<bool> SaveBeforeBuildAsync() =>
+        SaveBehavior == SaveBehavior.NoSaving || await SaveModifiedDocumentsAsync();
+
+    private async System.Threading.Tasks.Task<bool> SaveModifiedDocumentsAsync()
+    {
         bool allSaved = true;
         foreach (IEditorDocumentViewModel doc in Documents.ToList())
         {
@@ -4341,12 +4357,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             {
                 if (!HasWorkspace && IsUntitledDocument(doc))
                 {
-                    bool saved = await TrySaveUntitledDocumentAsync(doc);
-                    if (!saved)
-                    {
-                        continue;
-                    }
-
+                    allSaved &= await TrySaveUntitledDocumentAsync(doc);
                     continue;
                 }
 
@@ -4354,10 +4365,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
         }
 
-        if (allSaved)
-        {
-            StatusText = UiStrings.AllDocumentsSaved;
-        }
+        return allSaved;
     }
 
     /// <summary>
@@ -6708,7 +6716,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         LogOutput("Info", $"Debug start requested: {project.Name} ({project.ProjectPath})");
-        await EnsureProjectBuiltAsync(project, suppressWarnings: false);
+        if (!await BuildProjectAsync(project))
+        {
+            return;
+        }
 
         string? assemblyPath = ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(assemblyPath))
@@ -6725,11 +6736,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         string? workingDir = System.IO.Path.GetDirectoryName(assemblyPath);
-        string? adapterPath = await ResolveDebuggerAdapterPathAsync();
+        (string? adapterPath, string? adapterFailure) = await ResolveDebuggerAdapterPathAsync();
         if (string.IsNullOrWhiteSpace(adapterPath))
         {
             DebuggerServiceRegistration? activeRegistration = _debuggerRegistry.GetActiveRegistration();
             string serviceName = activeRegistration?.DisplayName ?? "debugger adapter";
+            if (adapterFailure is not null)
+            {
+                // The resolution logged the reason already.
+                SetPersistentStatus(adapterFailure);
+                return;
+            }
+
             StatusText = string.Format(UiStrings.DebugServiceMissing, serviceName);
             if (string.Equals(activeRegistration?.Id, NetcoredbgServiceId, StringComparison.Ordinal))
             {
@@ -6832,12 +6850,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return null;
     }
 
-    private async System.Threading.Tasks.Task<string?> ResolveDebuggerAdapterPathAsync()
+    // Without a path, Failure names why a download of the adapter failed; null means it is just missing.
+    private async System.Threading.Tasks.Task<(string? Path, string? Failure)> ResolveDebuggerAdapterPathAsync()
     {
         string? adapterPath = ResolveDebuggerAdapterPath(DebuggerAdapterPath);
         if (!string.IsNullOrWhiteSpace(adapterPath))
         {
-            return adapterPath;
+            return (adapterPath, null);
         }
 
         DebuggerServiceRegistration? activeRegistration = _debuggerRegistry.GetActiveRegistration();
@@ -6846,17 +6865,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         if (!string.IsNullOrWhiteSpace(adapterPath))
         {
             DebuggerAdapterPath = adapterPath;
-            return adapterPath;
+            return (adapterPath, null);
         }
 
         if (activeRegistration?.Id != NetcoredbgServiceId)
         {
-            return null;
+            return (null, null);
         }
 
         if (!AutoDownloadTools || _debugToolInstaller is null)
         {
-            return null;
+            return (null, null);
         }
 
         try
@@ -6866,18 +6885,23 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             if (!string.IsNullOrWhiteSpace(downloaded))
             {
                 DebuggerAdapterPath = downloaded;
-                return downloaded;
+                return (downloaded, null);
             }
 
             LogOutput("Info", UiStrings.NetcoredbgDownloadCanceled);
         }
+        catch (PlatformNotSupportedException ex)
+        {
+            LogOutput("Error", ex.Message);
+            return (null, ex.Message);
+        }
         catch (Exception ex)
         {
             LogOutput("Error", $"netcoredbg download failed: {ex.Message}");
-            SetPersistentStatus(string.Format(UiStrings.DebuggerDownloadFailed, ex.Message));
+            return (null, string.Format(UiStrings.DebuggerDownloadFailed, ex.Message));
         }
 
-        return null;
+        return (null, null);
     }
 
     private ProjectModel? ResolveActiveProject()
@@ -7088,21 +7112,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return match;
     }
 
-    private async System.Threading.Tasks.Task EnsureProjectBuiltAsync(ProjectModel project, bool suppressWarnings)
-    {
-        string? output = ResolveTargetAssemblyPath(project);
-        if (!string.IsNullOrWhiteSpace(output) && System.IO.File.Exists(output))
-        {
-            return;
-        }
-
-        if (!suppressWarnings)
-        {
-            LogOutput("Info", $"Building {project.Name}...");
-        }
-
-        await RunDotNetCommandAsync(project.ProjectPath, "build");
-    }
+    // An existing output can be older than the sources; the incremental build is what tells, and a failed build
+    // reports its errors and stops the start.
+    private System.Threading.Tasks.Task<bool> BuildProjectAsync(ProjectModel project) =>
+        RunBuildCommandAsync(project.ProjectPath, "build", null, CancellationToken.None);
 
     private async System.Threading.Tasks.Task StopDebuggingAsync()
     {
@@ -7148,7 +7161,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         LogOutput("Info", $"Run requested: {project.Name} ({project.ProjectPath})");
-        await EnsureProjectBuiltAsync(project, suppressWarnings: false);
+        if (!await BuildProjectAsync(project))
+        {
+            return;
+        }
 
         string? runAssemblyPath = ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(runAssemblyPath))
@@ -7171,7 +7187,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        string args = BuildRunArguments(project.ProjectPath, ProgramArguments);
+        string args = BuildRunArguments(project, ProgramArguments);
         System.Diagnostics.ProcessStartInfo startInfo = new()
         {
             FileName = "dotnet",
@@ -7250,14 +7266,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return System.Threading.Tasks.Task.CompletedTask;
     }
 
-    private static string BuildRunArguments(string projectPath, string? programArguments)
+    // The run starts after its own build, so dotnet run does not build again, and it starts the target framework
+    // whose output the run checked.
+    internal static string BuildRunArguments(ProjectModel project, string? programArguments)
     {
-        if (string.IsNullOrWhiteSpace(programArguments))
+        string arguments = $"run --no-build --project \"{project.ProjectPath}\"";
+        if (!string.IsNullOrWhiteSpace(project.TargetFramework))
         {
-            return $"run --project \"{projectPath}\"";
+            arguments += $" --framework {project.TargetFramework}";
         }
 
-        return $"run --project \"{projectPath}\" -- {programArguments}";
+        return string.IsNullOrWhiteSpace(programArguments) ? arguments : $"{arguments} -- {programArguments}";
     }
 
     internal static string? ResolveTargetAssemblyPath(ProjectModel project)
@@ -8896,15 +8915,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return null;
     }
 
+    // dotnet build writes compiler errors to standard output, so a failure shows both streams; standard error alone
+    // can hold only a notice, such as a fallback of the MSBuild server.
+    internal static string FormatFailureOutput(DotNetCliResult result) =>
+        string.Join(Environment.NewLine, new[] { result.StandardOutput, result.StandardError }
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text.Trim()));
+
     private async System.Threading.Tasks.Task<bool> RunDotNetCommandAsync(
         string workspacePath,
         string command,
         string? option = null,
         CancellationToken cancellationToken = default)
     {
+        string displayCommand = string.IsNullOrWhiteSpace(option) ? command : $"{command} {option}";
         string? workingDirectory = System.IO.Path.GetDirectoryName(workspacePath);
         if (string.IsNullOrEmpty(workingDirectory))
         {
+            SetPersistentStatus(string.Format(UiStrings.DotnetCommandFailed, displayCommand));
             return false;
         }
 
@@ -8918,20 +8946,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             arguments.Add(option);
         }
 
-        string displayCommand = string.IsNullOrWhiteSpace(option) ? command : $"{command} {option}";
         LogOutput("Info", $"dotnet {displayCommand} {workspacePath}");
         DotNetCliResult result = await _dotNetCli.RunAsync(arguments, workingDirectory, cancellationToken);
 
         if (!result.Success)
         {
-            string error = !string.IsNullOrWhiteSpace(result.StandardError)
-                ? result.StandardError
-                : result.StandardOutput;
+            string error = FormatFailureOutput(result);
             _logger.LogWarning("dotnet {Command} failed: {Error}", displayCommand, error);
             SetPersistentStatus(string.Format(UiStrings.DotnetCommandFailed, displayCommand));
             if (!string.IsNullOrWhiteSpace(error))
             {
-                LogOutput("Error", error.Trim());
+                LogOutput("Error", error);
             }
 
             return false;
@@ -9113,7 +9138,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             workspace,
             workspacePath,
             command => ReferenceEquals(_workspace, workspace)
-                ? RunWorkspaceCommandAsync(command) : System.Threading.Tasks.Task.CompletedTask,
+                ? BuildForPreviewerAsync(command) : System.Threading.Tasks.Task.CompletedTask,
             (level, message) => LogOutput(level, message),
             document.PreviewThemeRequest);
 
@@ -9226,7 +9251,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             GetPreviewerXaml(doc),
             _workspace,
             _workspacePath,
-            command => RunWorkspaceCommandAsync(command),
+            BuildForPreviewerAsync,
             (level, message) => LogOutput(level, message),
             doc.PreviewThemeRequest,
             // An unchanged document gives no new frame on an incremental update; the full render does.
@@ -9668,20 +9693,48 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     Task IWorkspaceCommands.NewTerminalAsync(CancellationToken cancellationToken) =>
         ExecuteReactiveCommandAsync(NewTerminalCommand, cancellationToken);
 
-    private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(
+    // The previewer starts only after a build that succeeded; the failure carries the status that names the reason,
+    // such as a document that could not be saved or the failed build.
+    internal async System.Threading.Tasks.Task BuildForPreviewerAsync(string command)
+    {
+        if (!await RunWorkspaceCommandAsync(command))
+        {
+            throw new InvalidOperationException(StatusText);
+        }
+    }
+
+    private System.Threading.Tasks.Task<bool> RunWorkspaceCommandAsync(
         string command,
         string? option = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(_workspacePath) || _workspace is null)
+        if (string.IsNullOrEmpty(_workspacePath))
         {
-            return;
+            StatusText = UiStrings.NoWorkspaceLoadedStatus;
+            return System.Threading.Tasks.Task.FromResult(false);
+        }
+
+        return RunBuildCommandAsync(_workspacePath, command, option, cancellationToken);
+    }
+
+    // Runs a dotnet command on the workspace or one of its projects as the only workspace command at a time, after
+    // saving the changed documents, and reloads the workspace outputs afterwards; false when it did not run or failed.
+    private async System.Threading.Tasks.Task<bool> RunBuildCommandAsync(
+        string targetPath,
+        string command,
+        string? option,
+        CancellationToken cancellationToken)
+    {
+        if (_workspace is null)
+        {
+            StatusText = UiStrings.NoWorkspaceLoadedStatus;
+            return false;
         }
 
         if (IsWorkspaceLoading || IsWorkspaceCommandRunning)
         {
             StatusText = UiStrings.WorkspaceBusy;
-            return;
+            return false;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -9691,14 +9744,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         try
         {
+            if (!await SaveBeforeBuildAsync())
+            {
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             bool success = await RunDotNetCommandAsync(
-                _workspacePath,
+                targetPath,
                 command,
                 option,
                 cancellationToken);
-            if (!success || _metadataService is null)
+            if (!success)
             {
-                return;
+                return false;
             }
 
             bool hasAnyProjectOutputs;
@@ -9708,12 +9767,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 out hasAnyProjectOutputs,
                 out hasMissingProjectOutputs);
 
-            if (assemblySet.All.Count > 0)
+            if (_metadataService is { } metadataService && assemblySet.All.Count > 0)
             {
                 ApplyAssemblyResolver(assemblySet);
                 await Task.Run(() =>
                 {
-                    _metadataService.LoadAssemblies(assemblySet.All);
+                    metadataService.LoadAssemblies(assemblySet.All);
                 }, cancellationToken);
                 UpdateWorkspaceDesignThemes(_workspace);
                 RefreshOpenDocumentsAfterMetadataLoad();
@@ -9721,6 +9780,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             RefreshControlCatalog();
             LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
             StatusText = string.Format(UiStrings.DotnetCommandCompleted, displayCommand);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = string.Format(UiStrings.DotnetCommandCanceled, displayCommand);
+            throw;
         }
         finally
         {

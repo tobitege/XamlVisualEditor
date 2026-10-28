@@ -4,22 +4,32 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.Debugging.Dap;
 
 internal sealed class DapDebugSession : IDebugSession
 {
-    private readonly DapDebugAdapterHost _host;
+    private readonly IAsyncDisposable _host;
     private readonly DapProtocolClient _client;
     private readonly string _adapterId;
     private readonly string _clientId;
     private DebugSessionState _state;
+    private readonly object _eventGate = new();
+    private readonly List<DebugEvent> _pendingEvents = new();
+    private Action<DebugEvent>? _eventReceived;
+    private bool _replaying;
 
     public DapDebugSession(DapDebugAdapterHost host, string adapterId, string clientId)
+        : this(host.Client, host, adapterId, clientId)
+    {
+    }
+
+    internal DapDebugSession(DapProtocolClient client, IAsyncDisposable host, string adapterId, string clientId)
     {
         _host = host;
-        _client = host.Client;
+        _client = client;
         _adapterId = adapterId;
         _clientId = clientId;
         _client.EventReceived += OnEventReceived;
@@ -29,7 +39,69 @@ internal sealed class DapDebugSession : IDebugSession
     public DebugSessionState State => _state;
 
     public event Action<DebugSessionState>? StateChanged;
-    public event Action<DebugEvent>? EventReceived;
+    // The session is handed out only after the launch, while the program may already stop at a breakpoint;
+    // events until the first subscriber are kept and given to it.
+    public event Action<DebugEvent>? EventReceived
+    {
+        add
+        {
+            lock (_eventGate)
+            {
+                _eventReceived += value;
+                if (_pendingEvents.Count == 0)
+                {
+                    return;
+                }
+
+                // Events that arrive during the replay join the queue, so they reach the subscriber after it.
+                _replaying = true;
+            }
+
+            while (true)
+            {
+                DebugEvent[] pending;
+                lock (_eventGate)
+                {
+                    if (_pendingEvents.Count == 0)
+                    {
+                        _replaying = false;
+                        return;
+                    }
+
+                    pending = _pendingEvents.ToArray();
+                    _pendingEvents.Clear();
+                }
+
+                foreach (DebugEvent debugEvent in pending)
+                {
+                    value?.Invoke(debugEvent);
+                }
+            }
+        }
+        remove
+        {
+            lock (_eventGate)
+            {
+                _eventReceived -= value;
+            }
+        }
+    }
+
+    private void RaiseEvent(DebugEvent debugEvent)
+    {
+        Action<DebugEvent>? handler;
+        lock (_eventGate)
+        {
+            handler = _eventReceived;
+            if (handler is null || _replaying)
+            {
+                _pendingEvents.Add(debugEvent);
+                return;
+            }
+        }
+
+        handler(debugEvent);
+    }
 
     public async Task InitializeAsync(CancellationToken ct)
     {
@@ -61,8 +133,17 @@ internal sealed class DapDebugSession : IDebugSession
         };
 
         await _client.SendRequestAsync("launch", args, ct).ConfigureAwait(false);
+        // The debuggee runs from configurationDone on, so breakpoints sent later can miss its first lines.
+        if (options.Breakpoints is not null)
+        {
+            foreach ((string filePath, IReadOnlyList<SourceBreakpoint> breakpoints) in options.Breakpoints)
+            {
+                await SetBreakpointsAsync(filePath, breakpoints, ct).ConfigureAwait(false);
+            }
+        }
+
         await _client.SendRequestAsync("configurationDone", null, ct).ConfigureAwait(false);
-        SetState(DebugSessionState.Running);
+        TrySetState(DebugSessionState.Running, DebugSessionState.Initializing);
     }
 
     public async Task AttachAsync(DebugAttachOptions options, CancellationToken ct)
@@ -74,7 +155,7 @@ internal sealed class DapDebugSession : IDebugSession
 
         await _client.SendRequestAsync("attach", args, ct).ConfigureAwait(false);
         await _client.SendRequestAsync("configurationDone", null, ct).ConfigureAwait(false);
-        SetState(DebugSessionState.Running);
+        TrySetState(DebugSessionState.Running, DebugSessionState.Initializing);
     }
 
     public async Task<IReadOnlyList<BreakpointInfo>> SetBreakpointsAsync(
@@ -243,29 +324,28 @@ internal sealed class DapDebugSession : IDebugSession
         };
     }
 
-    public Task ContinueAsync(int? threadId = null, CancellationToken ct = default)
-    {
-        return _client.SendRequestAsync("continue", new { threadId }, ct);
-    }
+    public Task ContinueAsync(int? threadId = null, CancellationToken ct = default) =>
+        SendThreadRequestAsync("continue", threadId, ct);
 
-    public Task StepInAsync(int? threadId = null, CancellationToken ct = default)
-    {
-        return _client.SendRequestAsync("stepIn", new { threadId }, ct);
-    }
+    public Task StepInAsync(int? threadId = null, CancellationToken ct = default) =>
+        SendThreadRequestAsync("stepIn", threadId, ct);
 
-    public Task StepOutAsync(int? threadId = null, CancellationToken ct = default)
-    {
-        return _client.SendRequestAsync("stepOut", new { threadId }, ct);
-    }
+    public Task StepOutAsync(int? threadId = null, CancellationToken ct = default) =>
+        SendThreadRequestAsync("stepOut", threadId, ct);
 
-    public Task StepOverAsync(int? threadId = null, CancellationToken ct = default)
-    {
-        return _client.SendRequestAsync("next", new { threadId }, ct);
-    }
+    public Task StepOverAsync(int? threadId = null, CancellationToken ct = default) =>
+        SendThreadRequestAsync("next", threadId, ct);
 
-    public Task PauseAsync(int? threadId = null, CancellationToken ct = default)
+    public Task PauseAsync(int? threadId = null, CancellationToken ct = default) =>
+        SendThreadRequestAsync("pause", threadId, ct);
+
+    // These requests require a thread; before the first stop the caller knows none, so the first thread of the
+    // debuggee stands in.
+    private async Task SendThreadRequestAsync(string command, int? threadId, CancellationToken ct)
     {
-        return _client.SendRequestAsync("pause", new { threadId }, ct);
+        int resolvedThreadId = threadId ?? (await GetThreadsAsync(ct).ConfigureAwait(false)).FirstOrDefault()?.Id
+            ?? throw new InvalidOperationException(string.Format(UiStrings.DebugNoThread, command));
+        await _client.SendRequestAsync(command, new { threadId = resolvedThreadId }, ct).ConfigureAwait(false);
     }
 
     public Task DisconnectAsync(bool terminateDebuggee, CancellationToken ct = default)
@@ -295,11 +375,11 @@ internal sealed class DapDebugSession : IDebugSession
                 break;
             case "terminated":
                 SetState(DebugSessionState.Terminated);
-                EventReceived?.Invoke(new DebugTerminatedEvent(false));
+                RaiseEvent(new DebugTerminatedEvent(false));
                 break;
             case "exited":
                 SetState(DebugSessionState.Terminated);
-                EventReceived?.Invoke(new DebugTerminatedEvent(false));
+                RaiseEvent(new DebugTerminatedEvent(false));
                 break;
         }
     }
@@ -327,7 +407,7 @@ internal sealed class DapDebugSession : IDebugSession
             return;
         }
 
-        EventReceived?.Invoke(new DebugOutputEvent(categoryValue, text));
+        RaiseEvent(new DebugOutputEvent(categoryValue, text));
     }
 
     private void HandleStopped(JsonElement body)
@@ -351,7 +431,7 @@ internal sealed class DapDebugSession : IDebugSession
             : null;
 
         SetState(DebugSessionState.Paused);
-        EventReceived?.Invoke(new DebugStoppedEvent(reasonValue, threadId, description));
+        RaiseEvent(new DebugStoppedEvent(reasonValue, threadId, description));
     }
 
     private void HandleContinued(JsonElement body)
@@ -361,7 +441,7 @@ internal sealed class DapDebugSession : IDebugSession
             : null;
 
         SetState(DebugSessionState.Running);
-        EventReceived?.Invoke(new DebugContinuedEvent(threadId));
+        RaiseEvent(new DebugContinuedEvent(threadId));
     }
 
     private void HandleThread(JsonElement body)
@@ -373,7 +453,7 @@ internal sealed class DapDebugSession : IDebugSession
             ? threadIdElement.GetInt32()
             : 0;
         bool started = string.Equals(reason, "started", StringComparison.OrdinalIgnoreCase);
-        EventReceived?.Invoke(new DebugThreadEvent(threadId, $"Thread {threadId}", started));
+        RaiseEvent(new DebugThreadEvent(threadId, $"Thread {threadId}", started));
     }
 
     private void HandleBreakpoint(JsonElement body)
@@ -402,7 +482,7 @@ internal sealed class DapDebugSession : IDebugSession
             _ => BreakpointChangeType.Added
         };
 
-        EventReceived?.Invoke(new DebugBreakpointEvent(breakpoint, changeType));
+        RaiseEvent(new DebugBreakpointEvent(breakpoint, changeType));
     }
 
     private static string[] SplitArguments(string args)
@@ -467,15 +547,23 @@ internal sealed class DapDebugSession : IDebugSession
         return results.ToArray();
     }
 
-    private void SetState(DebugSessionState state)
+    private void SetState(DebugSessionState state) => TrySetState(state, expected: null);
+
+    // With an expected state the change only happens from that one, so the end of the configuration does not take
+    // back a stop the program already reached.
+    private void TrySetState(DebugSessionState state, DebugSessionState? expected)
     {
-        if (_state == state)
+        lock (_eventGate)
         {
-            return;
+            if (_state == state || (expected is { } from && _state != from))
+            {
+                return;
+            }
+
+            _state = state;
         }
 
-        _state = state;
-        StateChanged?.Invoke(_state);
+        StateChanged?.Invoke(state);
     }
 
     public async ValueTask DisposeAsync()

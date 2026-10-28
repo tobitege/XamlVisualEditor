@@ -582,6 +582,7 @@
   <data name="WorkspaceFileNotFound" xml:space="preserve"><value>Datei des Arbeitsbereichs nicht gefunden: {0}</value></data>
   <data name="DotnetCommandRunning" xml:space="preserve"><value>dotnet {0} wird ausgeführt...</value></data>
   <data name="DotnetCommandCompleted" xml:space="preserve"><value>dotnet {0} abgeschlossen</value></data>
+  <data name="DotnetCommandCanceled" xml:space="preserve"><value>dotnet {0} abgebrochen</value></data>
   <data name="NavigationFindReferencesCommand" xml:space="preserve"><value>Navigation: Verweise suchen</value></data>
   <data name="NavigationFindFilesCommand" xml:space="preserve"><value>Navigation: In Dateien suchen</value></data>
   <data name="NavigationDefinitionCommand" xml:space="preserve"><value>Navigation: Zur Definition</value></data>
@@ -806,6 +807,7 @@
   <data name="DownloadingNetcoredbg" xml:space="preserve"><value>netcoredbg wird heruntergeladen...</value></data>
   <data name="NetcoredbgInstalled" xml:space="preserve"><value>netcoredbg installiert.</value></data>
   <data name="NetcoredbgDownloadCanceled" xml:space="preserve"><value>Download von netcoredbg abgebrochen.</value></data>
+  <data name="NetcoredbgNoBuild" xml:space="preserve"><value>Für {0} gibt es keinen netcoredbg-Build; lege den Debugger-Adapterpfad in den Debug-Einstellungen fest.</value></data>
   <data name="DownloadFailed" xml:space="preserve"><value>Download fehlgeschlagen: {0}</value></data>
   <data name="DesignSurfaceUnavailable" xml:space="preserve"><value>Die Designfläche ist nicht verfügbar.</value></data>
   <data name="SelectPreviewTarget" xml:space="preserve"><value>Wähle ein Zielelement für die Vorschau aus.</value></data>
@@ -850,6 +852,7 @@
   <data name="CloseXamlElement" xml:space="preserve"><value>Element &lt;{0}&gt; schließen</value></data>
   <data name="SelectTreeNodeFailed" xml:space="preserve"><value>{0} in {1} konnte nicht ausgewählt werden: {2}</value></data>
   <data name="DapRequestFailed" xml:space="preserve"><value>DAP-Anfrage fehlgeschlagen</value></data>
+  <data name="DebugNoThread" xml:space="preserve"><value>Das Programm hat keinen Thread für '{0}'.</value></data>
   <data name="SelectFolder" xml:space="preserve"><value>Ordner auswählen</value></data>
   <data name="Input" xml:space="preserve"><value>Eingabe</value></data>
   <data name="PreviewerTransportError" xml:space="preserve"><value>Transportfehler der Vorschau: {0}</value></data>

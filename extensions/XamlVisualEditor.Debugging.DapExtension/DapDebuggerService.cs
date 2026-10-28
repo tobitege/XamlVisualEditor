@@ -24,10 +24,8 @@ public sealed class DapDebuggerService : IDebuggerService
         }
 
         DapDebugAdapterHost host = await DapDebugAdapterHost.StartAsync(options.AdapterPath, ct).ConfigureAwait(false);
-        DapDebugSession session = new(host, _adapterId, _clientId);
-        await session.InitializeAsync(ct).ConfigureAwait(false);
-        await session.LaunchAsync(options, ct).ConfigureAwait(false);
-        return session;
+        return await StartSessionAsync(new DapDebugSession(host, _adapterId, _clientId),
+            session => session.LaunchAsync(options, ct), ct).ConfigureAwait(false);
     }
 
     public async Task<IDebugSession> AttachAsync(DebugAttachOptions options, CancellationToken ct = default)
@@ -38,9 +36,27 @@ public sealed class DapDebuggerService : IDebuggerService
         }
 
         DapDebugAdapterHost host = await DapDebugAdapterHost.StartAsync(options.AdapterPath, ct).ConfigureAwait(false);
-        DapDebugSession session = new(host, _adapterId, _clientId);
-        await session.InitializeAsync(ct).ConfigureAwait(false);
-        await session.AttachAsync(options, ct).ConfigureAwait(false);
-        return session;
+        return await StartSessionAsync(new DapDebugSession(host, _adapterId, _clientId),
+            session => session.AttachAsync(options, ct), ct).ConfigureAwait(false);
+    }
+
+    // Until it is returned nobody else owns the session, so a start the adapter refuses ends the adapter and the
+    // program it may already have launched.
+    internal static async Task<IDebugSession> StartSessionAsync(
+        DapDebugSession session,
+        Func<DapDebugSession, Task> start,
+        CancellationToken ct)
+    {
+        try
+        {
+            await session.InitializeAsync(ct).ConfigureAwait(false);
+            await start(session).ConfigureAwait(false);
+            return session;
+        }
+        catch
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 }

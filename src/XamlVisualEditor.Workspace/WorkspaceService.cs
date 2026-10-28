@@ -332,8 +332,15 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             IEnumerable<XElement> properties = document.Descendants();
             assemblyName = properties.FirstOrDefault(element => element.Name.LocalName == "AssemblyName")?.Value
                 ?.Trim() ?? projectName;
-            targetFramework = properties.FirstOrDefault(element => element.Name.LocalName == "TargetFramework")?.Value
+            // Without MSBuild neither a condition nor a property such as $(NetCurrent) is evaluated, so only an
+            // unconditional value that names a framework counts.
+            targetFramework = properties.FirstOrDefault(element => element.Name.LocalName == "TargetFramework"
+                    && element.AncestorsAndSelf().All(ancestor => ancestor.Attribute("Condition") is null))?.Value
                 ?.Trim();
+            if (!IsTargetFrameworkName(targetFramework))
+            {
+                targetFramework = null;
+            }
             string? outputType = properties.FirstOrDefault(element => element.Name.LocalName == "OutputType")?.Value
                 ?.Trim();
             isExecutable = string.Equals(outputType, "Exe", StringComparison.OrdinalIgnoreCase)
@@ -470,7 +477,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                || outputKind == OutputKind.WindowsRuntimeApplication;
     }
 
-    private static string? TryGetTargetFrameworkFromOutputPath(string? outputFilePath)
+    // The target framework is the folder below bin/<configuration> when it is named like one; an output directly in
+    // that folder, as with AppendTargetFrameworkToOutputPath=false, or below a platform folder such as x64 names none.
+    internal static string? TryGetTargetFrameworkFromOutputPath(string? outputFilePath)
     {
         if (string.IsNullOrWhiteSpace(outputFilePath))
         {
@@ -479,7 +488,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
         string normalized = outputFilePath.Replace('\\', '/');
         string[] parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < parts.Length - 2; i++)
+        for (int i = 0; i < parts.Length - 3; i++)
         {
             if (!string.Equals(parts[i], "bin", StringComparison.OrdinalIgnoreCase))
             {
@@ -493,11 +502,15 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             }
 
             string tfm = parts[i + 2];
-            return string.IsNullOrWhiteSpace(tfm) ? null : tfm;
+            return IsTargetFrameworkName(tfm) ? tfm : null;
         }
 
         return null;
     }
+
+    internal static bool IsTargetFrameworkName(string? value) =>
+        value is not null && Regex.IsMatch(
+            value, @"^net(coreapp|standard)?\d+(\.\d+)*(-[\w.]+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void AddXamlFile(
         Dictionary<string, XamlFileModel> xamlFiles,

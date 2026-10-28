@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -22,23 +23,22 @@ public sealed class FileExtensionStorage : IExtensionStorage
         _directory = Path.Combine(Path.GetFullPath(root), Hash(extensionId));
     }
 
+    // A write replaces the file in one step and the reader allows that replacement, so reading needs no lock and
+    // never waits for a write that waits for a scanner.
     public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken)
     {
         string path = GetPath(key);
-        lock (s_fileLocks.GetOrAdd(path, _ => new object()))
+        cancellationToken.ThrowIfCancellationRequested();
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using JsonDocument document = JsonDocument.Parse(stream);
-                T? value = document.RootElement.ValueKind == JsonValueKind.Null
-                    ? default : JsonSerializer.Deserialize<T>(document.RootElement.GetRawText());
-                return Task.FromResult(value);
-            }
-            catch (FileNotFoundException) { return Task.FromResult<T?>(default); }
-            catch (DirectoryNotFoundException) { return Task.FromResult<T?>(default); }
+            using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using JsonDocument document = JsonDocument.Parse(stream);
+            T? value = document.RootElement.ValueKind == JsonValueKind.Null
+                ? default : JsonSerializer.Deserialize<T>(document.RootElement.GetRawText());
+            return Task.FromResult(value);
         }
+        catch (FileNotFoundException) { return Task.FromResult<T?>(default); }
+        catch (DirectoryNotFoundException) { return Task.FromResult<T?>(default); }
     }
 
     public Task SetAsync<T>(string key, T value, CancellationToken cancellationToken)
@@ -56,8 +56,18 @@ public sealed class FileExtensionStorage : IExtensionStorage
                 stream.Write(content);
                 stream.Flush(flushToDisk: true);
             }
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporaryPath, path, overwrite: true);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                FileSystemMoves.MoveFile(temporaryPath, path, overwrite: true);
+            }
+            catch
+            {
+                // A scanner may still hold the temporary file; the failure of the move is the one to report.
+                try { File.Delete(temporaryPath); }
+                catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
+                throw;
+            }
         }
         return Task.CompletedTask;
     }

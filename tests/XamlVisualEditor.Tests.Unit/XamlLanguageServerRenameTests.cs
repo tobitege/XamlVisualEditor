@@ -13,7 +13,8 @@ namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class XamlLanguageServerRenameTests
 {
-    private const string Uri = "file:///C:/views/View.axaml";
+    // Built from a path of the running system, so the server's way back from the path gives the same URI.
+    private static readonly string DocumentUri = new Uri(Path.Combine(Path.GetTempPath(), "views", "View.axaml")).AbsoluteUri;
 
     private const string Xaml = """
         <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -31,9 +32,9 @@ public sealed class XamlLanguageServerRenameTests
         MemoryStream input = new();
         Write(input, new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { capabilities = new { } } });
         Write(input, new { jsonrpc = "2.0", method = "textDocument/didOpen",
-            @params = new { textDocument = new { uri = Uri, languageId = "xml", version = 1, text = Xaml } } });
+            @params = new { textDocument = new { uri = DocumentUri, languageId = "xml", version = 1, text = Xaml } } });
         Write(input, new { jsonrpc = "2.0", id = 2, method = "textDocument/rename",
-            @params = new { textDocument = new { uri = Uri }, position = new { line, character = 26 }, newName = "Other" } });
+            @params = new { textDocument = new { uri = DocumentUri }, position = new { line, character = 26 }, newName = "Other" } });
         Write(input, new { jsonrpc = "2.0", id = 3, method = "shutdown" });
         Write(input, new { jsonrpc = "2.0", method = "exit" });
         input.Position = 0;
@@ -46,6 +47,28 @@ public sealed class XamlLanguageServerRenameTests
         JsonElement error = rename.GetProperty("error");
         Assert.Equal(-32803, error.GetProperty("code").GetInt32());
         Assert.Equal(string.Format(UiStrings.DesignerNameInUse, "Other"), error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task A_Rename_Answers_With_The_File_Uri_Of_The_Document()
+    {
+        int line = Xaml.Split('\n').TakeWhile(text => !text.Contains("\"Title\"", StringComparison.Ordinal)).Count();
+        MemoryStream input = new();
+        Write(input, new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { capabilities = new { } } });
+        Write(input, new { jsonrpc = "2.0", method = "textDocument/didOpen",
+            @params = new { textDocument = new { uri = DocumentUri, languageId = "xml", version = 1, text = Xaml } } });
+        Write(input, new { jsonrpc = "2.0", id = 2, method = "textDocument/rename",
+            @params = new { textDocument = new { uri = DocumentUri }, position = new { line, character = 26 }, newName = "Header" } });
+        Write(input, new { jsonrpc = "2.0", id = 3, method = "shutdown" });
+        Write(input, new { jsonrpc = "2.0", method = "exit" });
+        input.Position = 0;
+        MemoryStream output = new();
+
+        await new XamlLanguageServer().RunAsync(input, output, TestContext.Current.CancellationToken);
+
+        JsonElement rename = Read(output).Single(message => message.TryGetProperty("id", out JsonElement id) && id.GetInt32() == 2);
+        JsonElement change = Assert.Single(rename.GetProperty("result").GetProperty("documentChanges").EnumerateArray());
+        Assert.Equal(DocumentUri, change.GetProperty("textDocument").GetProperty("uri").GetString());
     }
 
     private static void Write(Stream stream, object message)

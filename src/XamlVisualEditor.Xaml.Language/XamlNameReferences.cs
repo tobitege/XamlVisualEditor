@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using XamlVisualEditor.Xaml.Ast;
 
-namespace XamlVisualEditor.Shell.ViewModels;
+namespace XamlVisualEditor.Xaml.Language;
 
 /// <summary>Rewrites actual name references, not quoted format strings or escaped markup literals.</summary>
 internal static class XamlNameReferences
@@ -81,7 +81,7 @@ internal static class XamlNameReferences
             if (propertyName == "ElementName") ReplaceName(0, text.Length);
             else if (propertyName == "Path") ReplacePath(0, text.Length);
         }
-        else if (owner.XmlNamespace == DesignerNameEditor.XamlNamespace && owner.TypeName == "Reference"
+        else if (owner.XmlNamespace == XamlNames.XamlNamespace && owner.TypeName == "Reference"
                  && propertyName == "Name") ReplaceName(0, text.Length);
 
         if (edits.Count == 0) return (text, false);
@@ -118,7 +118,7 @@ internal static class XamlNameReferences
             string? xmlNamespace = colon < 0 ? "https://github.com/avaloniaui"
                 : namespaces.GetValueOrDefault(header[..colon]);
             bool binding = IsBinding(localName) && IsBindingNamespace(xmlNamespace);
-            bool reference = localName == "Reference" && xmlNamespace == DesignerNameEditor.XamlNamespace;
+            bool reference = localName == "Reference" && xmlNamespace == XamlNames.XamlNamespace;
             int argumentStart = headerEnd;
             char quote = '\0';
             for (int position = argumentStart; position < closing; position++)

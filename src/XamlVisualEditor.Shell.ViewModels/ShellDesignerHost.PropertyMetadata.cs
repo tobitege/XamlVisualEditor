@@ -6,6 +6,7 @@ using System.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Xaml.Language;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -14,7 +15,7 @@ public sealed partial class ShellDesignerHost
     private static MutableAstPropertyNode? FindLocalProperty(
         DesignerDocumentViewModel document, MutableAstObjectNode node, string name)
     {
-        if (name == "Name" && DesignerNameEditor.FindNameProperty(node, document.MetadataService) is { } declaration)
+        if (name == "Name" && XamlNames.FindNameProperty(node, document.MetadataService) is { } declaration)
             return declaration;
         MutableAstPropertyNode? exact = node.Properties.FirstOrDefault(property => property.PropertyName == name);
         if (exact is not null || name.Contains('.') || name.Contains(':')) return exact;

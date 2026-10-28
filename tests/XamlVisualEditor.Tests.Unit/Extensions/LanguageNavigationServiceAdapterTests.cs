@@ -72,10 +72,9 @@ public sealed class LanguageNavigationServiceAdapterTests
     }
 
     [Fact]
-    public async Task ApplyCodeActionAsync_AppliesEditToOpenDocument()
+    public async Task ApplyCodeActionAsync_AppliesTheEditThroughTheEditor()
     {
-        TestEditorDocument document = new("/repo/a.cs", "csharp");
-        TestEditorServices editor = new(document);
+        TestEditorServices editor = new();
         TestLanguageRegistry registry = new();
         LanguageNavigationServiceAdapter adapter = new(registry, editor);
         LanguageCodeAction action = new()
@@ -97,46 +96,13 @@ public sealed class LanguageNavigationServiceAdapterTests
             }
         };
 
-        bool applied = await adapter.ApplyCodeActionAsync(action, CancellationToken.None);
+        Assert.False(await adapter.ApplyCodeActionAsync(action, CancellationToken.None));
+        Assert.Same(action.Edit, Assert.Single(editor.AppliedEdits));
 
-        Assert.True(applied);
-        Assert.Equal(1, document.ApplyCalls);
-        Assert.Empty(editor.OpenWithBehaviorCalls);
-    }
-
-    [Fact]
-    public async Task ApplyCodeActionAsync_OpensMissingDocumentInDocumentOnlyMode()
-    {
-        TestEditorDocument openedDocument = new("/repo/missing.cs", "csharp");
-        TestEditorServices editor = new();
-        editor.OpenDocumentResult = openedDocument;
-        TestLanguageRegistry registry = new();
-        LanguageNavigationServiceAdapter adapter = new(registry, editor);
-        LanguageCodeAction action = new()
-        {
-            Title = "Fix",
-            Edit = new LanguageWorkspaceEdit
-            {
-                DocumentEdits = new[]
-                {
-                    new LanguageDocumentEdit
-                    {
-                        FilePath = "/repo/missing.cs",
-                        Edits = new[]
-                        {
-                            new TextEdit { Offset = 0, Length = 0, NewText = "namespace N;" }
-                        }
-                    }
-                }
-            }
-        };
-
-        bool applied = await adapter.ApplyCodeActionAsync(action, CancellationToken.None);
-
-        Assert.True(applied);
-        Assert.Single(editor.OpenWithBehaviorCalls);
-        Assert.Equal(EditorDocumentOpenBehavior.DocumentOnly, editor.OpenWithBehaviorCalls[0].Behavior);
-        Assert.Equal(1, openedDocument.ApplyCalls);
+        editor.ApplyResult = true;
+        Assert.True(await adapter.ApplyCodeActionAsync(action, CancellationToken.None));
+        Assert.False(await adapter.ApplyCodeActionAsync(new LanguageCodeAction { Title = "Nothing" }, CancellationToken.None));
+        Assert.Equal(2, editor.AppliedEdits.Count);
     }
 
     private static LanguageSymbol CreateSymbol(string filePath, string name, int line, int column)
@@ -247,9 +213,9 @@ public sealed class LanguageNavigationServiceAdapterTests
             _documents.AddRange(documents);
         }
 
-        public IEditorDocument? OpenDocumentResult { get; set; }
+        public bool ApplyResult { get; set; }
 
-        public List<(string FilePath, EditorDocumentOpenBehavior Behavior)> OpenWithBehaviorCalls { get; } = new();
+        public List<LanguageWorkspaceEdit> AppliedEdits { get; } = new();
 
         public IEditorDocument? ActiveDocument => _documents.FirstOrDefault();
 
@@ -257,18 +223,18 @@ public sealed class LanguageNavigationServiceAdapterTests
 
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct)
         {
-            return Task.FromResult(OpenDocumentResult);
+            return Task.FromResult<IEditorDocument?>(null);
         }
 
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
         {
-            OpenWithBehaviorCalls.Add((filePath, behavior));
-            if (OpenDocumentResult is not null && !_documents.Contains(OpenDocumentResult))
-            {
-                _documents.Add(OpenDocumentResult);
-            }
+            return Task.FromResult<IEditorDocument?>(null);
+        }
 
-            return Task.FromResult(OpenDocumentResult);
+        public Task<bool> ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit, CancellationToken ct)
+        {
+            AppliedEdits.Add(edit);
+            return Task.FromResult(ApplyResult);
         }
 
         public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
@@ -287,8 +253,6 @@ public sealed class LanguageNavigationServiceAdapterTests
             LanguageId = languageId;
         }
 
-        public int ApplyCalls { get; private set; }
-
         public string FilePath { get; }
 
         public string? LanguageId { get; }
@@ -301,11 +265,7 @@ public sealed class LanguageNavigationServiceAdapterTests
 
         public Task<string> GetTextAsync(CancellationToken ct) => Task.FromResult(string.Empty);
 
-        public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
-        {
-            ApplyCalls++;
-            return Task.CompletedTask;
-        }
+        public Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct) => Task.CompletedTask;
 
         public event EventHandler<EditorDocumentChangedEventArgs>? Changed;
 

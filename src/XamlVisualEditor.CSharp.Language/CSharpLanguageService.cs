@@ -60,15 +60,7 @@ public sealed partial class CSharpLanguageService : ILanguageIntellisenseService
     {
         Solution solution = await _workspaceManager.GetSolutionAsync(cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameProjectNotLoaded);
-        foreach (var openDocument in request.OpenDocumentTexts)
-            foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(openDocument.Key))
-                solution = solution.WithDocumentText(id, SourceText.From(openDocument.Value));
-        // A project with several target frameworks loads once per framework, all sharing the same sources.
-        Project project = solution.Projects.FirstOrDefault(candidate =>
-            FileSystemPathComparison.Equals(candidate.FilePath, request.ProjectPath))
-            ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameOwningProjectMissing);
-        return await DesignerCodeBehindRenamePlanner.CreateAsync(project, request.ClassName,
-            request.OldName, request.NewName, cancellationToken).ConfigureAwait(false);
+        return await DesignerCodeBehindRenamePlanner.CreateAsync(solution, request, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(

@@ -3,12 +3,15 @@
 All notable changes to XamlVisualEditor are documented in this file. The project
 uses Semantic Versioning.
 
-## [0.4.0] - 2026-10-27
+## [0.4.0] - 2026-10-28
 
 ### Added
 
 - `TerminalEnvironment.CaptureStartup()` records the environment the host process was started with, and both PTY providers start the shell from it with the overrides of `TerminalSessionOptions.Environment` applied. The editor captures it first thing at startup, so variables it sets for itself later, such as the MSBuild paths it registers for loading projects, no longer reach the shell, and `dotnet build` in a terminal uses the SDK the repository selects. A host that does not call `CaptureStartup()` keeps the current process environment.
 - Options › Terminal sets the font families and the font size of the terminal, on every platform. The families are a comma-separated list of which the terminal uses the first installed one; an empty list restores the default `Cascadia Mono, Menlo, Consolas, monospace`, and the size is limited to 6 to 72. Open terminals take a saved change at once. `ITerminalViewModel` has the members `FontFamilies` and `FontSize`, with these defaults for existing implementations, `TerminalFont` holds the defaults and limits, and `FontFamilyListConverter` turns such a list into a `FontFamily` for bindings. `TerminalControl` defaults to the same list instead of Cascadia Mono alone.
+- `IEditorServices.ApplyWorkspaceEditAsync` applies a workspace edit through the editor documents and returns whether a document changed, and `IEditorServices.OpenDocumentsChanged` reports opened and closed documents, also those that do not become the active document. Both have defaults for existing implementations: no workspace edits and no event.
+- `SyncEngine.ReplaceText` replaces the text of a designer document as one undo entry together with changes of related text documents, which the same undo restores; `SyncEngine.CanReplaceText` tells whether an unfinished edit prevents it.
+- A new `XamlLanguageService` constructor takes an `IDesignerCodeBehindRefactoringService` and the unsaved texts of open C# documents. `DesignerCodeBehindRenameRequest.Member` selects a control or an event handler, and a request without `ProjectPath` uses the project that lists `DesignerCodeBehindRenameRequest.XamlFilePath` among its additional files, as Avalonia projects do with their AXAML files. `DesignerCodeBehindRenamePlanner.CreateAsync` plans such a request in a solution.
 
 ### Changed
 
@@ -17,6 +20,7 @@ uses Semantic Versioning.
 - Terminals on Linux and macOS no longer inherit `TMUX`, `TMUX_PANE`, `STY`, `WINDOW`, `WINDOWID`, `TERMCAP`, `COLUMNS` and `LINES`, so `tmux` and `screen` also start in the terminal of an editor that was itself started inside one of them.
 - Closing a terminal on Linux or macOS hangs up its shell, and on macOS kills a shell that is still running after a short grace period; the shell is collected after it exits. The close runs on the thread pool and does not block the window. On Linux the kernel window size of the terminal no longer carries the pixel size; the emulator still answers pixel size queries.
 - `XamlVisualEditor.Terminal` depends on [Porta.Pty](https://github.com/tomlm/Porta.Pty) and, through it, on `Microsoft.Windows.Console.ConPTY`. Windows keeps the in-box ConPTY, and projects that reference the terminal do not get the `OpenConsole.exe` host copied to their output.
+- `XamlEditorDockFactory.AddDocument` and `AddTextDocument` take an optional `activate` parameter; without activation the document is added behind the active one. Compiled callers need to be rebuilt.
 
 ### Removed
 
@@ -27,6 +31,10 @@ uses Semantic Versioning.
 - The selection pipe of a compact tab, such as Staged and Unstaged in the Git Changes panel, is drawn below the header text instead of through it
 - Opening a terminal on Linux or macOS no longer crashes the editor at a later, random point. The terminal forked the editor process and ran .NET code in the child before it started the shell; with W^X, which .NET enables by default since .NET 7, the child shared the executable code memory of the editor and overwrote it. `UnixPtyProvider` now starts the shell through Porta.Pty, which forks and executes in native code and resizes on macOS without running `stty`. The PTY tests also run in CI.
 - The terminal uses the first installed font of its font list, such as `monospace` on Linux, instead of only trying the first one. Where Cascadia Mono was missing it fell back to a proportional font, sized its cells for the widest letter and drew the text with gaps between narrow letters.
+- A rename or a code action that changes an AXAML or XAML file changes it. The edit used to reach only plain text documents, so the change of a designer document was lost while the status reported it as applied. A designer document now gets the change in the code area and the document structure as one undo step; the changes of text documents in the same edit belong to the step of the first designer document, and each further designer document has its own step. A closed file opens without becoming the active document, an edit whose documents changed in the meantime changes none of them, the status reports a rename or a code action only when a document changed, and source control checks out a file opened this way on its first change. The extension API applies code actions the same way.
+- Renaming an `x:Name` or an event handler through the XAML language service changes the `#name` references in style selectors and bindings, every event attribute of that handler, and with code-behind the generated field, its uses, the `FindControl` lookups and the handler methods in C#. It used to change only the attributes of the AXAML file, which left the project unable to build, and treated any attribute that starts with a capital letter as an event. Names and handlers are renamed only in AXAML without errors. Without a C# workspace, as in the XAML language server, names and handlers of a document with `x:Class` are not renamed, and the language server answers a refused rename with an error that names the reason.
+- Renaming a control in the designer of a loaded project renames the generated field, its uses and the `FindControl` lookups in the code-behind. The designer compared the AXAML files of the projects with the document path in a way that never matched, so it never found the project of the document, renamed only the AXAML and left the code-behind unable to build. A closed code-behind opens without becoming the active document, and the rename waits for the C# workspace to load and is refused when it cannot be loaded. Assigning an event handler in the designer uses the project of the AXAML file too, and refuses a file that several projects list.
+- Binding path completion suggests the members of the nearest `x:DataType` around the caret, or of the `DataType` of a data template, instead of the first `x:DataType` in the document, and none inside a data template without a type. A `>` in an attribute value or a comment no longer ends the element for completion.
 
 ## [0.3.0] - 2026-10-18
 
@@ -102,6 +110,15 @@ uses Semantic Versioning.
 - The XAML code editor marks the element selected in the designer with an arrow at its first line and a bar along its lines in the gutter, and a selection in the designer scrolls the element start away from the viewport edge. The "Follow" toggle in the code editor toolbar turns this off.
 - An interceptor cancels the open by throwing `OperationCanceledException`. Extensions show a modal, cancellable progress dialog through `ProgressDialogRequest` while long work runs.
 - The Problems panel restates common XAML loader errors of the external previewer in plain words and points to their source position: an invalid value names its attribute and, for an enumeration, the allowed values; an unknown property or element names the misspelled name; text that a panel or a single-child element cannot hold is named and marked; a second child of a single-child element names the property that takes it.
+- Added design-surface theming from the workspace application's `App.axaml`; `XVE_DESIGN_APP_XAML` names the application for library workspaces without one.
+- Added the `IDesignPreviewHook` extension point: extensions can take over control instantiation for the design preview or post-process finished nodes.
+- Added activation of enabled installed extension packages: the archive is extracted, the manifest's main assembly is loaded, and its extension entry types are activated.
+- Added `--mcp` to start the local HTTP MCP server from the command line.
+- Added MCP command-line options for the transport, HTTP port, and HTTP path.
+- Added per-user persistence for the main-window size and designer/code splitter ratios.
+- Added automatic preview-host selection for library workspaces that use a separate application assembly.
+- Added preview frame export through the IDE bridge.
+- Added visible progress status for workspace loading and design-surface rebuilds.
 
 ### Changed
 
@@ -145,6 +162,14 @@ uses Semantic Versioning.
 - The CDP debug diagnostics are enabled with the MSBuild property `EnableCdpDiagnostics=true` instead of the Debug configuration and require the token written to the log at startup.
 - At most four external previewer hosts run at the same time: the active document and the three most recently active ones.
 - Extension SDK: registering menu, toolbar, Command Palette, view or property editor contributions again adds a registration instead of replacing the earlier one of the same extension, and disposing a registration removes only its own items. To replace contributions, dispose the previous registration before registering again. The lists keep the registrations of one extension in call order; the order of different extensions is unspecified. A theme provider ID that is already registered or appears twice in one registration throws `ArgumentException`, so a theme package whose provider ID another extension already registered is reported as a package problem instead of being listed twice.
+- The design preview now materializes property elements that carry control content and applies attributes outside its built-in list through registered Avalonia or writable CLR properties.
+- The design artboard now sizes to the document: an explicit size wins, otherwise the artboard follows the rendered document bounds above the declared minimum instead of clipping at the default size.
+- The C# language workspace now warms in the background after the initial workspace load.
+- XVE now reads assemblies from a shared build output instead of unrelated output trees.
+- Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
+- The dock layout now saves before view teardown and loads during the next start.
+- The bottom tool dock starts closed and opens only after a user action.
+- The designer now applies explicit `Grid.RowDefinitions` and `Grid.ColumnDefinitions` elements.
 
 ### Fixed
 
@@ -184,34 +209,6 @@ uses Semantic Versioning.
 - Fixed German messages that addressed the user formally; all German texts use the informal form.
 - Fixed disposing a replaced command handler, command metadata or view provider registration, which removed its replacement.
 - Fixed a theme package with an unreadable manifest or a taken provider ID breaking the extension list: the package is logged as a problem and stays unregistered, and its other provider kind is not registered either.
-
-## [0.2.0] - 2026-09-01
-
-### Added
-
-- Added design-surface theming from the workspace application's `App.axaml`; `XVE_DESIGN_APP_XAML` names the application for library workspaces without one.
-- Added the `IDesignPreviewHook` extension point: extensions can take over control instantiation for the design preview or post-process finished nodes.
-- Added activation of enabled installed extension packages: the archive is extracted, the manifest's main assembly is loaded, and its extension entry types are activated.
-- Added `--mcp` to start the local HTTP MCP server from the command line.
-- Added MCP command-line options for the transport, HTTP port, and HTTP path.
-- Added per-user persistence for the main-window size and designer/code splitter ratios.
-- Added automatic preview-host selection for library workspaces that use a separate application assembly.
-- Added preview frame export through the IDE bridge.
-- Added visible progress status for workspace loading and design-surface rebuilds.
-
-### Changed
-
-- The design preview now materializes property elements that carry control content and applies attributes outside its built-in list through registered Avalonia or writable CLR properties.
-- The design artboard now sizes to the document: an explicit size wins, otherwise the artboard follows the rendered document bounds above the declared minimum instead of clipping at the default size.
-- The C# language workspace now warms in the background after the initial workspace load.
-- XVE now reads assemblies from a shared build output instead of unrelated output trees.
-- Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
-- The dock layout now saves before view teardown and loads during the next start.
-- The bottom tool dock starts closed and opens only after a user action.
-- The designer now applies explicit `Grid.RowDefinitions` and `Grid.ColumnDefinitions` elements.
-
-### Fixed
-
 - Fixed the test suites reading and overwriting the user's persisted layout files: the dock factory settings root is now overridable, and every test bootstrap points it at an isolated temporary directory.
 - Fixed `diagnostics.get` on the IDE bridge returning nothing for designer documents: the diagnostics service now resolves any open document by path (not just the active text document) and maps designer XAML diagnostics into the language diagnostics it reports, publishes, and snapshots.
 - Fixed the collapsed bottom dock expanding on every start: loading treated the persisted zero proportion as damage and reset it, and extension views registering after startup added and activated their tool over the restored layout. Zero now stays collapsed, and late extension tools go to the pin strip instead of activating.

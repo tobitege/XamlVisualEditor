@@ -632,6 +632,15 @@ internal sealed class FakeEditorServices : IEditorServices
 
     public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
 
+    public event EventHandler? OpenDocumentsChanged;
+
+    /// <summary>Opens a document the way a workspace edit does, without making it the active document.</summary>
+    public void OpenWithoutActivation(IEditorDocument document)
+    {
+        _documents.Add(document);
+        OpenDocumentsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public void Activate(IEditorDocument document)
     {
         if (!_documents.Contains(document))

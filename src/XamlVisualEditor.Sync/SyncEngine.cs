@@ -141,6 +141,31 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
     {
         if (_isSyncing || _isDisposed) return;
         if (_editGroup is not null) RollbackEdit(_editGroup);
+        ReadText(newText, source, Array.Empty<DocumentCompanionChange>());
+    }
+
+    /// <summary>
+    /// Replaces the text and writes the related document changes as one undo entry, which restores all of them.
+    /// Pending changes of the document are committed as their own entry first; then the method throws without
+    /// changing anything when the current text is not <paramref name="expectedText"/> or a related document has
+    /// changed.
+    /// </summary>
+    public void ReplaceText(string expectedText, string newText,
+        IReadOnlyList<DocumentCompanionChange> companionChanges, SyncSource source)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        if (!CanReplaceText) throw new InvalidOperationException(UiStrings.DesignerEditInProgress);
+        CommitUndoBatch(UiStrings.Edit);
+        if (!string.Equals(_lastKnownText, expectedText, StringComparison.Ordinal))
+            throw new InvalidOperationException(UiStrings.DesignerTextChangedBeforeEdit);
+        ReadText(newText, source, companionChanges);
+    }
+
+    /// <summary>Gets whether <see cref="ReplaceText"/> can run, which it cannot during an unfinished edit.</summary>
+    public bool CanReplaceText => !_isDisposed && !_isSyncing && _editGroup is null;
+
+    private void ReadText(string newText, SyncSource source, IReadOnlyList<DocumentCompanionChange> companionChanges)
+    {
         _isSyncing = true;
 
         try
@@ -151,11 +176,12 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 UseTolerantParser = true
             });
 
+            DocumentCompanionChange.ApplyAll(companionChanges, forward: true);
             SetDocument(result.Document as MutableAstDocument);
             _lastKnownText = newText;
             _diagnostics = result.Diagnostics;
             _synchronizedAst = _document is null ? string.Empty : _serializer.Serialize(_document);
-            RecordSnapshot(UiStrings.TextEdit);
+            RecordSnapshot(UiStrings.TextEdit, companionChanges);
             Publish(source, Array.Empty<AstChange>());
         }
         finally
@@ -441,14 +467,14 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 : AstNodeIdentities.Capture(_document, _checkpoint?.NodeIdentities));
     }
 
-    private bool RecordSnapshot(string description)
+    private bool RecordSnapshot(string description, IReadOnlyList<DocumentCompanionChange>? companionChanges = null)
     {
         if (_editGroup is not null) return false;
         DocumentSnapshot after = CaptureSnapshot();
         DocumentSnapshot before = _checkpoint ?? new DocumentSnapshot(string.Empty, string.Empty,
             System.Collections.Immutable.ImmutableDictionary<string, Guid>.Empty);
         _checkpoint = after;
-        return _undoRedo.CommitSnapshot(description, before, after);
+        return _undoRedo.CommitSnapshot(description, before, after, companionChanges);
     }
 
     private void RestoreSnapshot(DocumentSnapshot snapshot, SyncSource source)

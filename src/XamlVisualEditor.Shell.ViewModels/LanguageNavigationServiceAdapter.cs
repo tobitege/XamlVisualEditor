@@ -135,8 +135,7 @@ public sealed class LanguageNavigationServiceAdapter : ILanguageNavigationServic
             return false;
         }
 
-        await ApplyWorkspaceEditAsync(action.Edit, ct).ConfigureAwait(false);
-        return true;
+        return await _editor.ApplyWorkspaceEditAsync(action.Edit, ct).ConfigureAwait(false);
     }
 
     private ILanguageIntellisenseService? ResolveService(string filePath)
@@ -152,35 +151,5 @@ public sealed class LanguageNavigationServiceAdapter : ILanguageNavigationServic
         }
 
         return _languageRegistry.GetService(filePath, languageId);
-    }
-
-    private async Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit, CancellationToken ct)
-    {
-        foreach (LanguageDocumentEdit docEdit in edit.DocumentEdits)
-        {
-            if (string.IsNullOrWhiteSpace(docEdit.FilePath) || docEdit.Edits.Count == 0)
-            {
-                continue;
-            }
-
-            ct.ThrowIfCancellationRequested();
-
-            IEditorDocument? document = _editor.GetOpenDocuments()
-                .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
-
-            if (document is null)
-            {
-                document = await _editor
-                    .OpenDocumentAsync(docEdit.FilePath, EditorDocumentOpenBehavior.DocumentOnly, ct)
-                    .ConfigureAwait(false);
-            }
-
-            if (document is null)
-            {
-                continue;
-            }
-
-            await document.ApplyEditsAsync(docEdit.Edits, ct).ConfigureAwait(false);
-        }
     }
 }

@@ -4485,13 +4485,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         LanguageWorkspaceEdit? edit = await ActiveTextDocument
             .RenameSymbolAsync(ActiveTextDocument.CaretOffset, newName);
-        if (edit is null || edit.DocumentEdits.Count == 0)
+        if (edit is null || !await ApplyWorkspaceEditAsync(edit))
         {
             StatusText = UiStrings.RenameNoChanges;
             return;
         }
 
-        await ApplyWorkspaceEditAsync(edit);
         StatusText = string.Format(UiStrings.SymbolRenamed, info.Name, newName);
     }
 
@@ -4544,8 +4543,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        await ApplyWorkspaceEditAsync(selection.Edit);
-        StatusText = string.Format(UiStrings.ActionApplied, selection.Title);
+        StatusText = await ApplyWorkspaceEditAsync(selection.Edit)
+            ? string.Format(UiStrings.ActionApplied, selection.Title)
+            : string.Format(UiStrings.ActionNoChanges, selection.Title);
     }
 
     private async System.Threading.Tasks.Task ShowDocumentSymbolsAsync()
@@ -4604,33 +4604,75 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         SetDockableVisibility("References", true);
     }
 
-    // Edits go through editor documents: a closed file opens with the change pending, so it is saved and checked
-    // out by source control extensions like any other edit instead of being written behind their back.
-    internal async System.Threading.Tasks.Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit)
+    // Edits go through editor documents: a closed file opens in the background with the change pending, so it is
+    // saved and checked out by source control extensions like any other edit instead of being written behind their
+    // back. Each designer document records its change as one undo step, and the changes of text documents join the
+    // step of the first designer document; returns false when no document changed.
+    internal async Task<bool> ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit, CancellationToken cancellationToken = default)
     {
-        foreach (LanguageDocumentEdit docEdit in edit.DocumentEdits)
+        // Opening a document waits for it to load, so every document opens first; the documents are then read,
+        // checked and changed without another pause, and a refused edit changes none of them.
+        List<(IEditorDocumentViewModel Document, LanguageDocumentEdit[] Edits)> targets = new();
+        foreach (IGrouping<string, LanguageDocumentEdit> fileEdits in edit.DocumentEdits
+                     .Where(docEdit => !string.IsNullOrWhiteSpace(docEdit.FilePath) && docEdit.Edits.Count > 0)
+                     .GroupBy(docEdit => NormalizeAcceptedDocumentPath(docEdit.FilePath), FileSystemPathComparison.Comparer))
         {
-            if (string.IsNullOrWhiteSpace(docEdit.FilePath))
+            cancellationToken.ThrowIfCancellationRequested();
+            IEditorDocumentViewModel? document = Documents.FirstOrDefault(doc =>
+                FileSystemPathComparison.Equals(doc.FilePath, fileEdits.Key));
+            if (document is null && System.IO.File.Exists(fileEdits.Key))
             {
-                continue;
+                document = await EnsureDocumentOpenAsync(fileEdits.Key, addRecent: false, updateStatus: false,
+                    allowWorkspaceLoad: false, activate: false);
             }
 
-            TextDocumentViewModel? textDocument = Documents
-                .OfType<TextDocumentViewModel>()
-                .FirstOrDefault(doc =>
-                    FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
-
-            if (textDocument is null && System.IO.File.Exists(docEdit.FilePath))
-            {
-                textDocument = await EnsureDocumentOpenAsync(
-                    docEdit.FilePath,
-                    addRecent: false,
-                    updateStatus: false,
-                    allowWorkspaceLoad: false) as TextDocumentViewModel;
-            }
-
-            textDocument?.ApplyTextEdits(docEdit.Edits);
+            if (document is not null) targets.Add((document, fileEdits.ToArray()));
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        List<(DesignerDocumentViewModel Document, string Before, string After)> designerChanges = new();
+        List<PreparedDesignerCodeEdit> textChanges = new();
+        foreach ((IEditorDocumentViewModel document, LanguageDocumentEdit[] fileEdits) in targets)
+        {
+            if (document is DesignerDocumentViewModel { SyncEngine.CanReplaceText: false })
+            {
+                throw new InvalidOperationException(UiStrings.DesignerEditInProgress);
+            }
+
+            // Typing and design surface changes that are still pending become part of the text that is checked.
+            if (document is DesignerDocumentViewModel designer)
+            {
+                designer.CodeEditor.FlushPendingTextChanges();
+                designer.SyncEngine.CommitUndoBatch(UiStrings.Edit);
+            }
+
+            if (!Documents.Contains(document) || GetDocumentText(document) is not { } before ||
+                fileEdits.Any(docEdit => docEdit.ExpectedText is { } expected && !string.Equals(expected, before, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(string.Format(UiStrings.CodeBehindRenameDocumentChanged, document.FilePath));
+            }
+
+            TextEdit[] edits = fileEdits.SelectMany(docEdit => docEdit.Edits).ToArray();
+            string after = ApplyDesignerCodeEdits(before, edits);
+            if (string.Equals(before, after, StringComparison.Ordinal)) continue;
+            if (document is DesignerDocumentViewModel changedDesigner) designerChanges.Add((changedDesigner, before, after));
+            else if (document is TextDocumentViewModel text) textChanges.Add(new PreparedDesignerCodeEdit(text, before, after, edits));
+        }
+
+        if (designerChanges.Count == 0)
+        {
+            foreach (PreparedDesignerCodeEdit change in textChanges) change.Document.ApplyTextEdits(change.Edits);
+        }
+
+        // Every designer document records one step; the text documents join the step of the first one.
+        for (int index = 0; index < designerChanges.Count; index++)
+        {
+            (DesignerDocumentViewModel designer, string before, string after) = designerChanges[index];
+            IReadOnlyList<DocumentCompanionChange> linked = index == 0 ? LinkToDesignerHistory(designer, textChanges) : [];
+            designer.SyncEngine.ReplaceText(before, after, linked, SyncSource.DesignSurface);
+        }
+
+        return designerChanges.Count + textChanges.Count > 0;
     }
 
     private async System.Threading.Tasks.Task NavigateToLocationAsync(
@@ -7375,7 +7417,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             || IsExtensionViewVisible("logicalTree.panel");
     }
 
-    private void AddDocumentToDock(IEditorDocumentViewModel document)
+    private void AddDocumentToDock(IEditorDocumentViewModel document, bool activate = true)
     {
         if (DockLayout is null)
         {
@@ -7384,8 +7426,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         IDockable? dockDoc = document switch
         {
-            DesignerDocumentViewModel designer => DockFactory.AddDocument(DockLayout, designer),
-            TextDocumentViewModel text => DockFactory.AddTextDocument(DockLayout, text),
+            DesignerDocumentViewModel designer => DockFactory.AddDocument(DockLayout, designer, activate),
+            TextDocumentViewModel text => DockFactory.AddTextDocument(DockLayout, text, activate),
             _ => null
         };
         if (dockDoc is DesignerDocument designerDock) designerDock.TabCommands = DocumentTabCommands;
@@ -8166,11 +8208,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         StatusText = string.Format(UiStrings.FilesOpened, paths.Count);
     }
 
+    // A document opened without activation leaves the active tab and the trees of the active document unchanged.
     private async System.Threading.Tasks.Task<IEditorDocumentViewModel?> EnsureDocumentOpenAsync(
         string filePath,
         bool addRecent,
         bool updateStatus,
-        bool allowWorkspaceLoad)
+        bool allowWorkspaceLoad,
+        bool activate = true)
     {
         if (RejectInvalidPath(filePath))
         {
@@ -8208,8 +8252,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IEditorDocumentViewModel? existing = Documents.FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
         if (existing is not null)
         {
-            ActiveDocument = existing;
-            SetActiveDockDocument(existing);
+            if (activate)
+            {
+                ActiveDocument = existing;
+                SetActiveDockDocument(existing);
+            }
             if (addRecent) AddRecentFile(filePath);
             return existing;
         }
@@ -8231,8 +8278,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             designer.CloseRequested += CloseDocument;
             ConfigureDesignerCommands(designer);
             Documents.Add(designer);
-            ActiveDocument = designer;
-            AddDocumentToDock(designer);
+            if (activate) ActiveDocument = designer;
+            AddDocumentToDock(designer, activate);
             AttachAutoSave(designer);
             try
             {
@@ -8244,7 +8291,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return null;
             }
             if (designer.IsDisposed || !Documents.Contains(designer)) return null;
-            UpdateTrees(designer);
+            if (activate) UpdateTrees(designer);
             doc = designer;
         }
         else
@@ -8252,8 +8299,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             TextDocumentViewModel textDoc = new(filePath, _languageRegistry);
             textDoc.Breakpoints = Breakpoints;
             Documents.Add(textDoc);
-            ActiveDocument = textDoc;
-            AddDocumentToDock(textDoc);
+            if (activate) ActiveDocument = textDoc;
+            AddDocumentToDock(textDoc, activate);
             AttachAutoSave(textDoc);
             try
             {
@@ -8264,7 +8311,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 DiscardUnreadableDocument(textDoc, ex);
                 return null;
             }
-            UpdateTrees(null);
+            if (activate) UpdateTrees(null);
             doc = textDoc;
         }
 

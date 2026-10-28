@@ -39,6 +39,7 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Language\XamlVisualEditor.Language.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.CSharp.Language\XamlVisualEditor.CSharp.Language.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Language\XamlVisualEditor.Xaml.Language.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.LanguageServer\XamlVisualEditor.Xaml.LanguageServer.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Serialization\XamlVisualEditor.Xaml.Serialization.csproj" />

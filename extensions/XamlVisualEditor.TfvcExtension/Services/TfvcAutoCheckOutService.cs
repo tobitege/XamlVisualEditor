@@ -100,6 +100,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
 
         _isStarted = true;
         _editor.ActiveDocumentChanged += OnActiveDocumentChanged;
+        _editor.OpenDocumentsChanged += OnOpenDocumentsChanged;
         _session.PendingChangesChanged += OnSessionChanged;
         _session.StateChanged += OnSessionStateChanged;
         SyncDocumentSubscriptions();
@@ -283,6 +284,7 @@ public sealed class TfvcAutoCheckOutService : IDisposable
         if (_isStarted)
         {
             _editor.ActiveDocumentChanged -= OnActiveDocumentChanged;
+            _editor.OpenDocumentsChanged -= OnOpenDocumentsChanged;
             _session.PendingChangesChanged -= OnSessionChanged;
             _session.StateChanged -= OnSessionStateChanged;
         }
@@ -516,6 +518,9 @@ public sealed class TfvcAutoCheckOutService : IDisposable
             return false;
         }
     }
+
+    // A document opened in the background, for example by a workspace edit, is checked out on its first change too.
+    private void OnOpenDocumentsChanged(object? sender, EventArgs e) => SyncDocumentSubscriptions();
 
     private void OnActiveDocumentChanged(object? sender, EditorActiveDocumentChangedEventArgs e)
     {

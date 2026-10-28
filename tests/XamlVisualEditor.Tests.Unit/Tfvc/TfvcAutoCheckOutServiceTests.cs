@@ -304,6 +304,36 @@ public sealed class TfvcAutoCheckOutServiceTests
     }
 
     [Fact]
+    public async Task DocumentOpenedWithoutActivation_IsCheckedOutOnFirstChange()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");
+        FakeTfvcClient client = new() { Workspaces = [TfvcTestData.CreateWorkspace()] };
+        TaskCompletionSource<IReadOnlyList<TfvcWorkspace>> connection = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WorkspacesGate = connection;
+        TaskCompletionSource<IReadOnlyList<string>> checkOutStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.CheckOutStarted += paths => checkOutStarted.TrySetResult(paths);
+        FakeTfvcServerClient server = new();
+        server.ExistingItems.Add(ServerPath);
+        using TfvcSession session = TfvcSessionTests.CreateSession(client, new InMemoryExtensionStorage(), new FakeWorkspaceInfo(), server);
+        FakeEditorServices editor = new();
+        editor.Activate(new FakeEditorDocument(@"C:\src\Product\src\Other.cs", "other"));
+        using TfvcAutoCheckOutService service = new(session, editor, new RecordingWindow(), new NullExtensionLogger(), _ => "original");
+        service.Start();
+        Task connecting = session.ApplySettingsAsync(new TfvcSettings(TfvcTestData.CollectionUrl, null), CancellationToken.None);
+
+        FakeEditorDocument document = new(FilePath, "original");
+        editor.OpenWithoutActivation(document);
+        document.Edit("changed");
+        Assert.Equal(1, service.DeferredChangeCount);
+
+        connection.SetResult(client.Workspaces);
+        await connecting;
+
+        Assert.Equal([FilePath], await checkOutStarted.Task.WaitAsync(TimeSpan.FromSeconds(30)));
+        Assert.Equal([FilePath], Assert.Single(client.CheckOuts));
+    }
+
+    [Fact]
     public async Task ChangeWhileConnecting_ChecksOutOnceStateIsKnown()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "TFVC workspaces map Windows paths, and tf.exe exists only on Windows.");

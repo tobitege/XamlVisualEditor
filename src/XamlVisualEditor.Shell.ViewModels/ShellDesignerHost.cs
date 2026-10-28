@@ -11,6 +11,7 @@ using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Xaml.Language;
 using ReactiveUI.Primitives.Signals;
 using ReactiveUI.Primitives.Concurrency;
 
@@ -275,7 +276,7 @@ public sealed partial class ShellDesignerHost : IDesignerHost, IDesignerDocument
         {
             TypeMetadata? type = document.MetadataService?.GetType(node.XmlNamespace, node.TypeName);
             if (propertyName == "x:Name" || propertyName == "Name" && type?.IsControl == true
-                || DesignerNameEditor.FindNameProperty(node, document.MetadataService)?.PropertyName == propertyName)
+                || XamlNames.FindNameProperty(node, document.MetadataService)?.PropertyName == propertyName)
             {
                 return await _mainViewModel.RenameDesignerControlAsync(document, node, value, cancellationToken);
             }

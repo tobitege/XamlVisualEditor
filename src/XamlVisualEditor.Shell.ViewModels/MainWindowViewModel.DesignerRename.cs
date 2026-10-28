@@ -4,11 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Xaml.Language;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -21,22 +23,20 @@ public sealed partial class MainWindowViewModel
         cancellationToken.ThrowIfCancellationRequested();
         MutableAstDocument? ast = document.SyncEngine.CurrentDocument;
         MutableAstObjectNode? root = ast?.Root;
-        MutableAstPropertyNode? nameProperty = DesignerNameEditor.FindNameProperty(node, document.MetadataService);
+        MutableAstPropertyNode? nameProperty = XamlNames.FindNameProperty(node, document.MetadataService);
         string? oldName = nameProperty is null ? null : node.GetPropertyValue(nameProperty.PropertyName);
         value = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-        ProjectModel[] owners = _workspace?.Projects
-            .Where(project => project.XamlFiles.Any(path => FileSystemPathComparison.Equals(path, document.FilePath)))
-            .ToArray() ?? [];
+        ProjectModel[] owners = FindXamlOwners(document.FilePath);
         if (root is null || string.IsNullOrEmpty(oldName) || owners.Length == 0 ||
-            !ReferenceEquals(DesignerNameEditor.ScopeRoot(node), root) ||
+            !ReferenceEquals(XamlNames.ScopeRoot(node), root) ||
             string.Equals(oldName, value, StringComparison.Ordinal))
         {
             DesignerNameEditor.Rename(document, node, value);
             return true;
         }
 
-        string? className = GetDesignerClassName(root, ast!);
+        string? className = XamlNames.FindClassName(root, ast!);
         if (string.IsNullOrWhiteSpace(className))
         {
             DesignerNameEditor.Rename(document, node, value);
@@ -55,10 +55,7 @@ public sealed partial class MainWindowViewModel
         string originalXaml = document.SyncEngine.CurrentText
             ?? throw new InvalidOperationException(UiStrings.CodeBehindRenameSynchronizing);
         StringComparer pathComparer = FileSystemPathComparison.Comparer;
-        Dictionary<string, string> openTexts = Documents.OfType<TextDocumentViewModel>()
-            .Where(item => !item.IsDisposed)
-            .ToDictionary(item => item.FilePath, item => item.Document.Text, pathComparer);
-        DesignerCodeBehindRenameRequest request = new(owners[0].ProjectPath, className, oldName, value, openTexts);
+        DesignerCodeBehindRenameRequest request = new(owners[0].ProjectPath, className, oldName, value, GetOpenTextDocumentTexts());
         LanguageWorkspaceEdit? plan = await service.PrepareControlRenameAsync(request, cancellationToken);
         EnsureDesignerEditContext(document, node, workspace, originalXaml, cancellationToken);
         if (plan is null || plan.DocumentEdits.Count == 0)
@@ -119,39 +116,14 @@ public sealed partial class MainWindowViewModel
                 }
             }
 
-            DocumentCompanionChange? transactionAnchor = null;
-            void ReplayTransaction(bool forward)
-            {
-                if (document.IsDisposed || transactionAnchor is null)
-                {
-                    throw new InvalidOperationException(UiStrings.CodeBehindRenameDesignerClosed);
-                }
-
-                if (forward)
-                {
-                    document.SyncEngine.Redo(transactionAnchor);
-                }
-                else
-                {
-                    document.SyncEngine.Undo(transactionAnchor);
-                }
-            }
-
-            List<DocumentCompanionChange> changes = new();
-            foreach (PreparedDesignerCodeEdit edit in prepared)
-            {
-                changes.Add(edit.Document.CreateLinkedChange(edit.Before, edit.After, edit.Edits, ReplayTransaction));
-            }
-
-            transactionAnchor = changes.FirstOrDefault();
+            List<DocumentCompanionChange> changes = LinkToDesignerHistory(document, prepared);
             foreach (TextDocumentViewModel codeDocument in createdDocuments)
             {
                 Documents.Add(codeDocument);
-                AddDocumentToDock(codeDocument);
+                AddDocumentToDock(codeDocument, activate: false);
                 AttachAutoSave(codeDocument);
             }
 
-            ActiveDocument = document;
             DesignerNameEditor.RenameWithCodeBehind(document, node, value, changes);
             StatusText = UiStrings.ControlReferencesRenamed;
             return true;
@@ -168,6 +140,53 @@ public sealed partial class MainWindowViewModel
         }
     }
 
+    /// <summary>Returns the current text of the open text documents by file path; callable from any thread.</summary>
+    internal IReadOnlyDictionary<string, string> GetOpenTextDocumentTexts()
+    {
+        Dictionary<string, string> Read() => Documents.OfType<TextDocumentViewModel>()
+            .Where(item => !item.IsDisposed)
+            .ToDictionary(item => item.FilePath, item => item.Document.Text, FileSystemPathComparison.Comparer);
+        return Dispatcher.UIThread.CheckAccess() ? Read() : Dispatcher.UIThread.Invoke(Read);
+    }
+
+    // The projects of the workspace that list the AXAML file.
+    private ProjectModel[] FindXamlOwners(string xamlPath) => _workspace?.Projects
+        .Where(project => project.XamlFiles.Any(file => FileSystemPathComparison.Equals(file.FilePath, xamlPath)))
+        .ToArray() ?? [];
+
+    // The text documents replay through the designer's history, so an undo or redo in any of them takes back or
+    // repeats the whole edit.
+    private static List<DocumentCompanionChange> LinkToDesignerHistory(
+        DesignerDocumentViewModel document, IReadOnlyList<PreparedDesignerCodeEdit> edits)
+    {
+        DocumentCompanionChange? transactionAnchor = null;
+        void ReplayTransaction(bool forward)
+        {
+            if (document.IsDisposed || transactionAnchor is null)
+            {
+                throw new InvalidOperationException(UiStrings.CodeBehindRenameDesignerClosed);
+            }
+
+            if (forward)
+            {
+                document.SyncEngine.Redo(transactionAnchor);
+            }
+            else
+            {
+                document.SyncEngine.Undo(transactionAnchor);
+            }
+        }
+
+        List<DocumentCompanionChange> changes = new();
+        foreach (PreparedDesignerCodeEdit edit in edits)
+        {
+            changes.Add(edit.Document.CreateLinkedChange(edit.Before, edit.After, edit.Edits, ReplayTransaction));
+        }
+
+        transactionAnchor = changes.FirstOrDefault();
+        return changes;
+    }
+
     private void EnsureDesignerEditContext(
         DesignerDocumentViewModel document, MutableAstObjectNode node, WorkspaceModel? workspace,
         string originalXaml, CancellationToken cancellationToken)
@@ -180,28 +199,6 @@ public sealed partial class MainWindowViewModel
         {
             throw new InvalidOperationException(UiStrings.CodeBehindRenameDesignerChanged);
         }
-    }
-
-    private static string? GetDesignerClassName(MutableAstObjectNode root, MutableAstDocument document)
-    {
-        IReadOnlyDictionary<string, string> aliases = DesignerNameEditor.Namespaces(root, document.NamespaceAliases);
-        foreach (MutableAstPropertyNode property in root.Properties)
-        {
-            int separator = property.PropertyName.IndexOf(':');
-            string localName = separator < 0 ? property.PropertyName : property.PropertyName[(separator + 1)..];
-            string? xmlNamespace = property.XmlNamespace;
-            if (separator >= 0 && aliases.TryGetValue(property.PropertyName[..separator], out string? mappedNamespace))
-            {
-                xmlNamespace = mappedNamespace;
-            }
-
-            if (localName == "Class" && xmlNamespace == DesignerNameEditor.XamlNamespace)
-            {
-                return root.GetPropertyValue(property.PropertyName);
-            }
-        }
-
-        return null;
     }
 
     private static string ApplyDesignerCodeEdits(string text, IReadOnlyList<TextEdit> edits)

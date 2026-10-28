@@ -521,6 +521,9 @@
   <data name="FormatApplied" xml:space="preserve"><value>Formatierung angewendet</value></data>
   <data name="NoCodeActions" xml:space="preserve"><value>Keine Codeaktionen</value></data>
   <data name="ActionApplied" xml:space="preserve"><value>Angewendet: {0}</value></data>
+  <data name="ActionNoChanges" xml:space="preserve"><value>{0}: keine Änderungen</value></data>
+  <data name="DesignerEditInProgress" xml:space="preserve"><value>Schließe die laufende Änderung im Designer ab, bevor du die Änderung anwendest.</value></data>
+  <data name="DesignerTextChangedBeforeEdit" xml:space="preserve"><value>Das Designer-Dokument hat sich geändert, bevor die Änderung angewendet wurde.</value></data>
   <data name="NoDocumentSymbols" xml:space="preserve"><value>Keine Dokumentsymbole</value></data>
   <data name="NoWorkspaceSymbols" xml:space="preserve"><value>Keine Symbole im Arbeitsbereich</value></data>
   <data name="NavigatedToFile" xml:space="preserve"><value>Zu {0} navigiert</value></data>
@@ -1434,10 +1437,10 @@
   <data name="CodeBehindRenameSynchronizing" xml:space="preserve"><value>Warte, bis das AXAML-Dokument fertig synchronisiert ist, bevor du ein Control umbenennst.</value></data>
   <data name="CodeBehindRenameInvalidEdit" xml:space="preserve"><value>Das C#-Refactoring hat eine ungültige Dokumentänderung geliefert.</value></data>
   <data name="CodeBehindRenameDocumentMissing" xml:space="preserve"><value>Ein Code-Behind-Dokument ist nicht mehr vorhanden.</value></data>
-  <data name="CodeBehindRenameDocumentChanged" xml:space="preserve"><value>Das Code-Dokument hat sich während der Vorbereitung des Refactorings geändert: {0}</value></data>
+  <data name="CodeBehindRenameDocumentChanged" xml:space="preserve"><value>Das Dokument hat sich während der Vorbereitung der Änderung geändert: {0}</value></data>
   <data name="CodeBehindRenameDesignerClosed" xml:space="preserve"><value>Das Designer-Dokument zu diesem Refactoring ist nicht mehr geöffnet.</value></data>
   <data name="CodeBehindRenameDesignerChanged" xml:space="preserve"><value>Der Designer hat sich während der Vorbereitung der Änderung geändert. Versuche es erneut.</value></data>
-  <data name="CodeBehindRenameOverlappingEdits" xml:space="preserve"><value>Das C#-Refactoring hat überlappende oder außerhalb des Texts liegende Änderungen geliefert.</value></data>
+  <data name="CodeBehindRenameOverlappingEdits" xml:space="preserve"><value>Das Refactoring hat überlappende oder außerhalb des Texts liegende Änderungen geliefert.</value></data>
   <data name="CodeBehindRenameUndoLaterChanges" xml:space="preserve"><value>Mache zuerst die späteren Änderungen rückgängig, bevor du dieses Refactoring erneut anwendest: {0}</value></data>
   <data name="CodeBehindRenameHistoryGone" xml:space="preserve"><value>Das Refactoring ist im Verlauf des Dokuments nicht mehr vorhanden: {0}</value></data>
   <data name="PreviewerInvalidThemeCatalog" xml:space="preserve"><value>Die Vorschau hat ungültige Theme-Katalogdaten geliefert.</value></data>

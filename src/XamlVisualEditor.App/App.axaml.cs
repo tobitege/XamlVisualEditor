@@ -278,8 +278,14 @@ public sealed class App : Application
         services.AddSingleton<ILanguageIntellisenseService, LspLanguageIntellisenseService>();
 
         // Language services
-        services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();
-        services.AddSingleton<ILanguageIntellisenseService, XamlLanguageService>();
+        services.AddSingleton<CSharpLanguageService>();
+        services.AddSingleton<ILanguageIntellisenseService>(sp => sp.GetRequiredService<CSharpLanguageService>());
+        services.AddSingleton<ILanguageIntellisenseService>(sp => new XamlLanguageService(
+            sp.GetRequiredService<CompletionProviderRegistry>(),
+            sp.GetRequiredService<IXamlParsingService>(),
+            sp.GetRequiredService<ITypeMetadataService>(),
+            sp.GetRequiredService<CSharpLanguageService>(),
+            () => sp.GetRequiredService<MainWindowViewModel>().GetOpenTextDocumentTexts()));
         services.AddSingleton<ExtensionLanguageServiceRegistry>();
         services.AddSingleton<ILanguageIntellisenseService, ExtensionLanguageIntellisenseService>();
         services.AddSingleton<ILanguageIntellisenseRegistry, LanguageServiceRegistry>();

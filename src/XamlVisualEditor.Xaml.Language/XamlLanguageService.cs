@@ -1,8 +1,10 @@
 using System.Linq;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Intellisense;
 using XamlVisualEditor.Xaml.Parsing;
+using XamlVisualEditor.Xaml.Serialization;
 
 namespace XamlVisualEditor.Xaml.Language;
 
@@ -14,15 +16,36 @@ public sealed class XamlLanguageService : ILanguageIntellisenseService
     private readonly CompletionProviderRegistry _completionRegistry;
     private readonly IXamlParsingService _parser;
     private readonly ITypeMetadataService _metadataService;
+    private readonly IDesignerCodeBehindRefactoringService? _codeBehindRefactoring;
+    private readonly Func<IReadOnlyDictionary<string, string>>? _openDocumentTexts;
+    private readonly XamlSerializationService _serializer = new();
 
+    /// <summary>Creates the service without C# refactoring.</summary>
     public XamlLanguageService(
         CompletionProviderRegistry completionRegistry,
         IXamlParsingService parser,
         ITypeMetadataService metadataService)
+        : this(completionRegistry, parser, metadataService, null, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates the service. Without <paramref name="codeBehindRefactoring"/> names and event handlers of a document
+    /// with code-behind are not renamed, because their C# declarations and references would stay behind.
+    /// <paramref name="openDocumentTexts"/> returns the unsaved text of open C# documents by file path.
+    /// </summary>
+    public XamlLanguageService(
+        CompletionProviderRegistry completionRegistry,
+        IXamlParsingService parser,
+        ITypeMetadataService metadataService,
+        IDesignerCodeBehindRefactoringService? codeBehindRefactoring,
+        Func<IReadOnlyDictionary<string, string>>? openDocumentTexts)
     {
         _completionRegistry = completionRegistry;
         _parser = parser;
         _metadataService = metadataService;
+        _codeBehindRefactoring = codeBehindRefactoring;
+        _openDocumentTexts = openDocumentTexts;
     }
 
     public string LanguageId => "xml";
@@ -161,7 +184,8 @@ public sealed class XamlLanguageService : ILanguageIntellisenseService
             return Task.FromResult<LanguageRenameInfo?>(null);
         }
 
-        if (!TryGetRenameTarget(context.Text, context.Offset, out RenameTarget target))
+        if (!TryGetRenameTarget(context.Text, context.Offset, out RenameTarget target) ||
+            target.Kind != RenameTargetKind.ResourceKey && FindRenamedElement(context.Text, target) is null)
         {
             return Task.FromResult<LanguageRenameInfo?>(null);
         }
@@ -175,60 +199,132 @@ public sealed class XamlLanguageService : ILanguageIntellisenseService
         });
     }
 
-    public Task<LanguageWorkspaceEdit?> RenameSymbolAsync(
+    public async Task<LanguageWorkspaceEdit?> RenameSymbolAsync(
         LanguageRenameContext context,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(context.Text) || string.IsNullOrWhiteSpace(context.NewName))
         {
-            return Task.FromResult<LanguageWorkspaceEdit?>(null);
+            return null;
         }
 
         if (!TryGetRenameTarget(context.Text, context.Offset, out RenameTarget target))
         {
-            return Task.FromResult<LanguageWorkspaceEdit?>(null);
+            return null;
+        }
+
+        if (target.Kind != RenameTargetKind.ResourceKey)
+        {
+            return await RenameDeclarationAsync(context, target, ct).ConfigureAwait(false);
         }
 
         List<TextEdit> edits = new();
         HashSet<(int Offset, int Length)> seen = new();
-
-        switch (target.Kind)
-        {
-            case RenameTargetKind.ElementName:
-                AddAttributeEdits(context.Text, "x:Name", target.Value, context.NewName, edits, seen);
-                AddAttributeEdits(context.Text, "Name", target.Value, context.NewName, edits, seen);
-                AddAttributeEdits(context.Text, "ElementName", target.Value, context.NewName, edits, seen);
-                AddAttributeEdits(context.Text, "TargetName", target.Value, context.NewName, edits, seen);
-                break;
-            case RenameTargetKind.ResourceKey:
-                AddAttributeEdits(context.Text, "x:Key", target.Value, context.NewName, edits, seen);
-                AddAttributeEdits(context.Text, "Key", target.Value, context.NewName, edits, seen);
-                AddMarkupExtensionEdits(context.Text, "StaticResource", target.Value, context.NewName, edits, seen);
-                AddMarkupExtensionEdits(context.Text, "DynamicResource", target.Value, context.NewName, edits, seen);
-                break;
-            case RenameTargetKind.EventHandler:
-                AddAttributeEdits(context.Text, target.AttributeName, target.Value, context.NewName, edits, seen);
-                break;
-            default:
-                break;
-        }
-
+        AddAttributeEdits(context.Text, "x:Key", target.Value, context.NewName, edits, seen);
+        AddAttributeEdits(context.Text, "Key", target.Value, context.NewName, edits, seen);
+        AddMarkupExtensionEdits(context.Text, "StaticResource", target.Value, context.NewName, edits, seen);
+        AddMarkupExtensionEdits(context.Text, "DynamicResource", target.Value, context.NewName, edits, seen);
         if (edits.Count == 0)
         {
-            return Task.FromResult<LanguageWorkspaceEdit?>(null);
+            return null;
         }
 
-        LanguageDocumentEdit docEdit = new()
+        return new LanguageWorkspaceEdit
         {
-            FilePath = context.FilePath,
-            Edits = edits
+            DocumentEdits = new[] { new LanguageDocumentEdit { FilePath = context.FilePath, Edits = edits } }
         };
-
-        return Task.FromResult<LanguageWorkspaceEdit?>(new LanguageWorkspaceEdit
-        {
-            DocumentEdits = new[] { docEdit }
-        });
     }
+
+    // Names and event handlers are renamed like the designer does: the name with the selectors and bindings in its
+    // scope, a handler in every event attribute, and with code-behind the C# declarations and references too.
+    private async Task<LanguageWorkspaceEdit?> RenameDeclarationAsync(
+        LanguageRenameContext context, RenameTarget target, CancellationToken ct)
+    {
+        if (!IsIdentifier(context.NewName) || FindRenamedElement(context.Text, target) is not { } found)
+        {
+            return null;
+        }
+
+        (MutableAstDocument document, MutableAstObjectNode element) = found;
+        MutableAstObjectNode root = document.Root!;
+        string? className = XamlNames.FindClassName(root, document);
+        bool renamesCodeBehind = className is not null;
+        DesignerCodeBehindMember member = DesignerCodeBehindMember.EventHandler;
+        if (target.Kind == RenameTargetKind.ElementName)
+        {
+            // Only names in the scope of the root element become fields of the code-behind class.
+            renamesCodeBehind &= ReferenceEquals(XamlNames.ScopeRoot(element), root);
+            member = DesignerCodeBehindMember.Control;
+            XamlNames.PlanRename(document, element, context.NewName, _metadataService)?.Invoke();
+        }
+        else
+        {
+            foreach (MutableAstTextNode handler in XamlNames.Objects(root)
+                         .SelectMany(owner => owner.Properties.Where(property => IsEvent(owner, property.PropertyName)))
+                         .Select(property => property.Value).OfType<MutableAstTextNode>()
+                         .Where(value => value.Text == target.Value).ToArray())
+            {
+                handler.Text = context.NewName;
+            }
+        }
+
+        List<LanguageDocumentEdit> documentEdits = new()
+        {
+            new LanguageDocumentEdit
+            {
+                FilePath = context.FilePath,
+                ExpectedText = context.Text,
+                Edits = XamlSerializationService.ComputeMinimalEdits(context.Text, _serializer.Serialize(document))
+            }
+        };
+        if (renamesCodeBehind)
+        {
+            DesignerCodeBehindRenameRequest request = new(null, className!, target.Value, context.NewName,
+                _openDocumentTexts?.Invoke() ?? new Dictionary<string, string>())
+            {
+                Member = member,
+                XamlFilePath = context.FilePath
+            };
+            LanguageWorkspaceEdit? plan = await _codeBehindRefactoring!.PrepareControlRenameAsync(request, ct).ConfigureAwait(false);
+            documentEdits.AddRange(plan?.DocumentEdits ?? []);
+        }
+
+        return new LanguageWorkspaceEdit { DocumentEdits = documentEdits };
+    }
+
+    // Returns the document and the element whose attribute at the target is renamed, or null when the text has
+    // errors, the attribute is neither the name of its element nor an event of its type, or the document has
+    // code-behind but no C# refactoring is available.
+    private (MutableAstDocument Document, MutableAstObjectNode Element)? FindRenamedElement(string text, RenameTarget target)
+    {
+        ParseResult result = _parser.Parse(text, new XamlParserOptions { UseTolerantParser = false });
+        if (result.Diagnostics.Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error) ||
+            result.Document is not MutableAstDocument { Root: { } root } document ||
+            _codeBehindRefactoring is null && XamlNames.FindClassName(root, document) is not null)
+        {
+            return null;
+        }
+
+        // The attribute of the target is the last one of its name that starts before its value.
+        LanguageTextPosition value = OffsetToPosition(text, target.ValueStart);
+        MutableAstPropertyNode? attribute = XamlNames.Objects(root).SelectMany(element => element.Properties)
+            .Where(property => property.PropertyName == target.AttributeName &&
+                               (property.Line, property.Column).CompareTo((value.Line, value.Column)) < 0)
+            .MaxBy(property => (property.Line, property.Column));
+        if (attribute?.Parent is not MutableAstObjectNode element)
+        {
+            return null;
+        }
+
+        bool renamed = target.Kind == RenameTargetKind.ElementName
+            ? ReferenceEquals(XamlNames.FindNameProperty(element, _metadataService), attribute)
+            : IsEvent(element, attribute.PropertyName);
+        return renamed ? (document, element) : null;
+    }
+
+    private bool IsEvent(MutableAstObjectNode element, string propertyName) =>
+        _metadataService.GetType(element.XmlNamespace, element.TypeName) is { } type &&
+        _metadataService.GetEvents(type).Any(item => item.Name == propertyName);
 
     public Task<LanguageSignatureHelp?> GetSignatureHelpAsync(
         LanguagePositionContext context,

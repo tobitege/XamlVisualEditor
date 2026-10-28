@@ -40,6 +40,9 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
 
     /// <inheritdoc />
+    public event EventHandler? OpenDocumentsChanged;
+
+    /// <inheritdoc />
     public IReadOnlyList<IEditorDocument> GetOpenDocuments()
     {
         if (Dispatcher.UIThread.CheckAccess())
@@ -131,6 +134,20 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         // return at the first await); await the task of the view model call explicitly instead.
         Task<PreviewExportResult> inner = await Dispatcher.UIThread.InvokeAsync<Task<PreviewExportResult>>(
             () => _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs),
+            DispatcherPriority.Background);
+        return await inner;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit, CancellationToken ct)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await _mainViewModel.ApplyWorkspaceEditAsync(edit, ct);
+        }
+
+        Task<bool> inner = await Dispatcher.UIThread.InvokeAsync<Task<bool>>(
+            () => _mainViewModel.ApplyWorkspaceEditAsync(edit, ct),
             DispatcherPriority.Background);
         return await inner;
     }
@@ -280,6 +297,7 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     private void OnDocumentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncDocuments();
+        OpenDocumentsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void SyncDocuments()

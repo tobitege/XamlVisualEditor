@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading;
@@ -52,11 +53,15 @@ public sealed partial class BreakpointEntryViewModel : ReactiveObject
 
     [Reactive]
     public partial string? Message { get; set; }
+
+    // The id the debug adapter gave this breakpoint, which its later breakpoint events name.
+    internal int? AdapterId { get; set; }
 }
 
 public sealed partial class BreakpointsViewModel : ReactiveObject
 {
     private readonly Dictionary<BreakpointEntryViewModel, IDisposable> _subscriptions = new();
+    private readonly Dictionary<int, BreakpointInfo> _laterChanges = new();
 
     public ObservableCollection<BreakpointEntryViewModel> Items { get; } = new();
 
@@ -104,50 +109,99 @@ public sealed partial class BreakpointsViewModel : ReactiveObject
         BreakpointsChanged?.Invoke();
     }
 
-    public IReadOnlyDictionary<string, IReadOnlyList<SourceBreakpoint>> BuildBreakpointMap()
+    public IReadOnlyDictionary<string, IReadOnlyList<SourceBreakpoint>> BuildBreakpointMap() =>
+        GetEnabledEntriesByFile().ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<SourceBreakpoint>)pair.Value.Select(ToSourceBreakpoint).ToList(),
+            StringComparer.OrdinalIgnoreCase);
+
+    // The enabled breakpoints of each file in the order they are sent to the debug adapter.
+    internal IReadOnlyDictionary<string, IReadOnlyList<BreakpointEntryViewModel>> GetEnabledEntriesByFile() =>
+        Items.Where(item => item.IsEnabled)
+            .GroupBy(item => item.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<BreakpointEntryViewModel>)group.ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+    internal static SourceBreakpoint ToSourceBreakpoint(BreakpointEntryViewModel entry) => new()
     {
-        Dictionary<string, List<SourceBreakpoint>> results = new(StringComparer.OrdinalIgnoreCase);
-        foreach (BreakpointEntryViewModel entry in Items.Where(item => item.IsEnabled))
+        Line = entry.Line,
+        Column = entry.Column,
+        Condition = entry.Condition,
+        HitCondition = entry.HitCondition,
+        LogMessage = entry.LogMessage
+    };
+
+    public void ApplyResults(string filePath, IReadOnlyList<BreakpointInfo> results) =>
+        ApplyResults(
+            filePath,
+            GetEnabledEntriesByFile().GetValueOrDefault(filePath) ?? Array.Empty<BreakpointEntryViewModel>(),
+            results);
+
+    // The debug adapter answers the breakpoints of a file in the order they were sent, also those it moved to
+    // another line.
+    internal void ApplyResults(string filePath, IReadOnlyList<BreakpointEntryViewModel> sent, IReadOnlyList<BreakpointInfo> results)
+    {
+        foreach (BreakpointEntryViewModel entry in Items.Where(item =>
+            string.Equals(item.FilePath, filePath, StringComparison.OrdinalIgnoreCase)))
         {
-            if (!results.TryGetValue(entry.FilePath, out List<SourceBreakpoint>? list))
+            int index = IndexOf(sent, entry);
+            BreakpointInfo? result = index >= 0 && index < results.Count ? results[index] : null;
+            entry.AdapterId = result?.Id;
+            if (result?.Id is int id && _laterChanges.Remove(id, out BreakpointInfo? laterChange))
             {
-                list = new List<SourceBreakpoint>();
-                results[entry.FilePath] = list;
+                result = laterChange;
             }
 
-            list.Add(new SourceBreakpoint
-            {
-                Line = entry.Line,
-                Column = entry.Column,
-                Condition = entry.Condition,
-                HitCondition = entry.HitCondition,
-                LogMessage = entry.LogMessage
-            });
+            entry.IsVerified = result?.IsVerified ?? false;
+            entry.Message = result?.Message;
         }
-
-        return results.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<SourceBreakpoint>)pair.Value);
     }
 
-    public void ApplyResults(string filePath, IReadOnlyList<BreakpointInfo> results)
+    // A debug adapter verifies a breakpoint later, for example once the module with its code loads, and reports
+    // that in a breakpoint event, which can arrive before the answer that names its id.
+    public void ApplyChange(BreakpointInfo breakpoint)
     {
+        if (breakpoint.Id is not int id)
+        {
+            return;
+        }
+
+        BreakpointEntryViewModel? entry = Items.FirstOrDefault(item => item.AdapterId == id);
+        if (entry is null)
+        {
+            _laterChanges[id] = breakpoint;
+            return;
+        }
+
+        entry.IsVerified = breakpoint.IsVerified;
+        entry.Message = breakpoint.Message;
+    }
+
+    // The ids belong to one adapter process; the next session numbers its breakpoints anew.
+    internal void ResetAdapterState()
+    {
+        _laterChanges.Clear();
         foreach (BreakpointEntryViewModel entry in Items)
         {
-            if (!string.Equals(entry.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            BreakpointInfo? match = results.FirstOrDefault(result => result.Line == entry.Line);
-            if (match is null)
-            {
-                entry.IsVerified = false;
-                entry.Message = null;
-                continue;
-            }
-
-            entry.IsVerified = match.IsVerified;
-            entry.Message = match.Message;
+            entry.AdapterId = null;
+            entry.IsVerified = false;
+            entry.Message = null;
         }
+    }
+
+    private static int IndexOf(IReadOnlyList<BreakpointEntryViewModel> entries, BreakpointEntryViewModel entry)
+    {
+        for (int index = 0; index < entries.Count; index++)
+        {
+            if (ReferenceEquals(entries[index], entry))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private void Clear()
@@ -422,6 +476,7 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
     private IDebugSession? _session;
     private int? _activeThreadId;
     private readonly HashSet<string> _lastBreakpointFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _breakpointSync = new(1, 1);
 
     public DebuggerViewModel(IDebuggerServiceRegistry debuggerRegistry)
     {
@@ -458,7 +513,8 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
     {
         await StopAsync(ct).ConfigureAwait(false);
         IDebuggerService service = ResolveService();
-        _session = await service.LaunchAsync(options, ct).ConfigureAwait(false);
+        _session = await service.LaunchAsync(options with { Breakpoints = Breakpoints.BuildBreakpointMap() }, ct)
+            .ConfigureAwait(false);
         _lastBreakpointFiles.Clear();
         WireSession(_session);
         await UpdateAllBreakpointsAsync(ct).ConfigureAwait(false);
@@ -520,6 +576,14 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
             .WitnessOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(state => State = state);
         _sessionDisposables.Add(stateSubscription);
+        // The session reached its first states during the launch, before this subscription.
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
+        {
+            if (ReferenceEquals(_session, session))
+            {
+                State = session.State;
+            }
+        });
 
         IDisposable eventSubscription = Observable.FromEvent<Action<DebugEvent>, DebugEvent>(
                 handler => ev => handler(ev),
@@ -543,6 +607,9 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
                 break;
             case DebugContinuedEvent continued:
                 DebugContinued?.Invoke(continued);
+                break;
+            case DebugBreakpointEvent { ChangeType: BreakpointChangeType.Changed } changed:
+                Breakpoints.ApplyChange(changed.Breakpoint);
                 break;
             case DebugTerminatedEvent:
                 _ = EndSessionAsync(sendDisconnect: false, terminateDebuggee: false, CancellationToken.None);
@@ -625,28 +692,74 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
         _ = UpdateAllBreakpointsAsync();
     }
 
+    // Breakpoint events are applied on the UI thread; the answer joins them there, in the order they arrive.
+    private void ApplyResultsOfSession(
+        IDebugSession session,
+        string filePath,
+        IReadOnlyList<BreakpointEntryViewModel> sent,
+        IReadOnlyList<BreakpointInfo> results) =>
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
+        {
+            if (ReferenceEquals(_session, session))
+            {
+                Breakpoints.ApplyResults(filePath, sent, results);
+            }
+        });
+
     private async Task UpdateAllBreakpointsAsync(CancellationToken ct = default)
     {
-        if (_session is null)
+        // The answers belong to this session; one that arrives after it ended or was replaced changes nothing.
+        IDebugSession? session = _session;
+        if (session is null)
         {
             return;
         }
 
-        IReadOnlyDictionary<string, IReadOnlyList<SourceBreakpoint>> map = Breakpoints.BuildBreakpointMap();
-        HashSet<string> currentFiles = new(map.Keys, StringComparer.OrdinalIgnoreCase);
-
-        foreach (string removed in _lastBreakpointFiles.Except(currentFiles))
+        // One run at a time, each from the breakpoints when it starts, so an earlier run never overwrites a later
+        // one at the adapter or in the list of files sent last.
+        await _breakpointSync.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await _session.SetBreakpointsAsync(removed, Array.Empty<SourceBreakpoint>(), ct)
+            await SendBreakpointsAsync(session, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _breakpointSync.Release();
+        }
+    }
+
+    private async Task SendBreakpointsAsync(IDebugSession session, CancellationToken ct)
+    {
+        // The breakpoints live on the UI thread, where the user changes them.
+        TaskCompletionSource<IReadOnlyDictionary<string, IReadOnlyList<BreakpointEntryViewModel>>> snapshot =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
+        {
+            try
+            {
+                snapshot.SetResult(Breakpoints.GetEnabledEntriesByFile());
+            }
+            catch (Exception ex)
+            {
+                snapshot.SetException(ex);
+            }
+        });
+        IReadOnlyDictionary<string, IReadOnlyList<BreakpointEntryViewModel>> entries = await snapshot.Task.ConfigureAwait(false);
+        HashSet<string> currentFiles = new(entries.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (string removed in _lastBreakpointFiles.Except(currentFiles).ToList())
+        {
+            await session.SetBreakpointsAsync(removed, Array.Empty<SourceBreakpoint>(), ct)
                 .ConfigureAwait(false);
+            ApplyResultsOfSession(session, removed, Array.Empty<BreakpointEntryViewModel>(), Array.Empty<BreakpointInfo>());
         }
 
-        foreach ((string filePath, IReadOnlyList<SourceBreakpoint> breakpoints) in map)
+        foreach ((string filePath, IReadOnlyList<BreakpointEntryViewModel> sent) in entries)
         {
-            IReadOnlyList<BreakpointInfo> results = await _session
-                .SetBreakpointsAsync(filePath, breakpoints, ct)
+            IReadOnlyList<BreakpointInfo> results = await session
+                .SetBreakpointsAsync(filePath, sent.Select(BreakpointsViewModel.ToSourceBreakpoint).ToList(), ct)
                 .ConfigureAwait(false);
-            Breakpoints.ApplyResults(filePath, results);
+            ApplyResultsOfSession(session, filePath, sent, results);
         }
 
         _lastBreakpointFiles.Clear();
@@ -708,6 +821,8 @@ public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
     private void ClearSessionState()
     {
         _activeThreadId = null;
+        // After the answers still queued there, so none of them brings back an id of the ended session.
+        RxSchedulers.MainThreadScheduler.Schedule(Breakpoints.ResetAdapterState);
         CallStack.Clear();
         Locals.Clear();
         Watches.ClearResults();

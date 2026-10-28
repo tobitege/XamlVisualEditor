@@ -82,6 +82,8 @@ public sealed class DotNetCliRunner : IDotNetCli
             try
             {
                 await process.WaitForExitAsync(ct).ConfigureAwait(false);
+                // The cancellation ends the process, so the wait above can also return normally.
+                ct.ThrowIfCancellationRequested();
                 await WaitForOutputAsync(outputTask, errorTask, outputCancellation).ConfigureAwait(false);
 
                 string standardOutput = await outputTask.ConfigureAwait(false);
@@ -94,7 +96,8 @@ public sealed class DotNetCliRunner : IDotNetCli
                 await ObserveOutputTasksAsync(outputTask, errorTask).ConfigureAwait(false);
             }
         }
-        catch (Exception ex)
+        // A canceled command stays canceled for the caller instead of turning into a failed one.
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new DotNetCliResult(-1, string.Empty, ex.Message);
         }

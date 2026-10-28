@@ -39,7 +39,7 @@ public enum BreakpointChangeType
     Removed
 }
 
-public sealed class DebugLaunchOptions
+public sealed record DebugLaunchOptions
 {
     public required string AdapterPath { get; init; }
     public required string ProgramPath { get; init; }
@@ -47,6 +47,9 @@ public sealed class DebugLaunchOptions
     public string? WorkingDirectory { get; init; }
     public IReadOnlyDictionary<string, string>? Environment { get; init; }
     public bool StopAtEntry { get; init; }
+
+    /// <summary>The breakpoints per source file that the debuggee has from its start on; the caller sets them before the launch.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<SourceBreakpoint>>? Breakpoints { get; init; }
 }
 
 public sealed class DebugAttachOptions

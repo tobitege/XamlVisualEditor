@@ -8,6 +8,7 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Xaml.Language;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -71,13 +72,11 @@ public sealed partial class MainWindowViewModel
             ?? throw new InvalidOperationException(UiStrings.DesignerDocumentNotSynchronized);
         MutableAstObjectNode root = ast.Root
             ?? throw new InvalidOperationException(UiStrings.DesignerDocumentNoRoot);
-        string className = GetDesignerClassName(root, ast)
+        string className = XamlNames.FindClassName(root, ast)
             ?? throw new InvalidOperationException(UiStrings.EventHandlerClassRequired);
         TypeMetadata controlType = document.MetadataService?.GetType(node.XmlNamespace, node.TypeName)
             ?? throw new InvalidOperationException(UiStrings.EventHandlerControlTypeUnresolved);
-        ProjectModel[] owners = _workspace?.Projects
-            .Where(project => project.XamlFiles.Any(path => FileSystemPathComparison.Equals(path, document.FilePath)))
-            .ToArray() ?? [];
+        ProjectModel[] owners = FindXamlOwners(document.FilePath);
         if (owners.Length > 1)
         {
             throw new InvalidOperationException(UiStrings.EventHandlerMultipleProjects);

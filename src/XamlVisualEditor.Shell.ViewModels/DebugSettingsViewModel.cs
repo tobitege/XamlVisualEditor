@@ -158,6 +158,10 @@ public sealed partial class DebugSettingsViewModel : ReactiveObject
                 StatusText = UiStrings.NetcoredbgDownloadCanceled;
             }
         }
+        catch (PlatformNotSupportedException ex)
+        {
+            StatusText = ex.Message;
+        }
         catch (Exception ex)
         {
             StatusText = string.Format(UiStrings.DownloadFailed, ex.Message);

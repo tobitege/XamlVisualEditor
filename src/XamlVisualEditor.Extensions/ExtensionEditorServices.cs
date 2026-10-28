@@ -49,8 +49,25 @@ public interface IEditorServices
         return Task.FromResult(new PreviewExportResult(false, "Preview export is not supported.", 0, 0, outputPath));
     }
 
+    /// <summary>
+    /// Applies a workspace edit through the editor documents. A closed file opens without becoming the active
+    /// document, so the change stays unsaved like any other edit. Returns false when no document changed; an editor
+    /// that does not support workspace edits returns false.
+    /// </summary>
+    Task<bool> ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit, CancellationToken ct)
+    {
+        return Task.FromResult(false);
+    }
+
     /// <summary>Raised when the active document changes.</summary>
     event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
+
+    /// <summary>Raised when documents open or close, also when they do not become the active document.</summary>
+    event EventHandler? OpenDocumentsChanged
+    {
+        add { }
+        remove { }
+    }
 }
 
 /// <summary>Result of a previewer frame export.</summary>

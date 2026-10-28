@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Formats.Tar;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.App.Services;
@@ -16,29 +18,55 @@ public sealed class DebugToolInstaller : IDebugToolInstaller
 {
     private const string ToolId = "netcoredbg";
     private const string ToolVersion = "3.1.3-1062";
-    private const string ToolFileName = "netcoredbg";
-    private static readonly string ToolFileNameMac = ToolFileName;
-    private static readonly string ToolArchiveName = "netcoredbg-osx-amd64.tar.gz";
-    private static readonly string ToolDownloadUrl =
-        "https://github.com/Samsung/netcoredbg/releases/download/3.1.3-1062/netcoredbg-osx-amd64.tar.gz";
+    private const string ToolDownloadRoot = "https://github.com/Samsung/netcoredbg/releases/download/" + ToolVersion + "/";
+    internal static readonly DebugToolPackage? Package = SelectPackage(
+        OperatingSystem.IsWindows(), OperatingSystem.IsLinux(), OperatingSystem.IsMacOS(), RuntimeInformation.OSArchitecture);
 
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient;
     private readonly string _toolsRoot;
     private readonly string _consentPath;
     private readonly HashSet<string> _consents = new(StringComparer.OrdinalIgnoreCase);
     private bool _consentLoaded;
 
     public DebugToolInstaller()
+        : this(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), new HttpClientHandler())
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    }
+
+    internal DebugToolInstaller(string appData, HttpMessageHandler httpHandler)
+    {
+        _httpClient = new HttpClient(httpHandler);
         _toolsRoot = Path.Combine(appData, "XamlVisualEditor", "tools");
         _consentPath = Path.Combine(appData, "XamlVisualEditor", "debug-tools-consent.json");
     }
 
+    internal sealed record DebugToolPackage(string ArchiveName, string BinaryName)
+    {
+        // Each archive installs into its own folder, so a build of another platform that an earlier version
+        // installed is never taken for this one.
+        public string FolderName => ArchiveName[..ArchiveName.IndexOf('.', StringComparison.Ordinal)];
+    }
+
+    // netcoredbg publishes one archive per platform below. Other platforms have none, also macOS on arm64, where the
+    // x64 build cannot debug arm64 processes; the debugger there needs the adapter path set in the debug settings.
+    internal static DebugToolPackage? SelectPackage(bool isWindows, bool isLinux, bool isMacOS, Architecture architecture) =>
+        (isWindows, isLinux, isMacOS, architecture) switch
+        {
+            (true, _, _, Architecture.X64) => new DebugToolPackage("netcoredbg-win64.zip", "netcoredbg.exe"),
+            (_, true, _, Architecture.X64) => new DebugToolPackage("netcoredbg-linux-amd64.tar.gz", "netcoredbg"),
+            (_, true, _, Architecture.Arm64) => new DebugToolPackage("netcoredbg-linux-arm64.tar.gz", "netcoredbg"),
+            (_, _, true, Architecture.X64) => new DebugToolPackage("netcoredbg-osx-amd64.tar.gz", "netcoredbg"),
+            _ => null
+        };
+
     public string? GetNetcoredbgPath()
     {
-        string installDir = GetInstallDir();
-        string binary = Path.Combine(installDir, "netcoredbg", ToolFileNameMac);
+        if (Package is null)
+        {
+            return null;
+        }
+
+        string binary = Path.Combine(GetInstallDir(Package), "netcoredbg", Package.BinaryName);
         return File.Exists(binary) ? binary : null;
     }
 
@@ -50,14 +78,22 @@ public sealed class DebugToolInstaller : IDebugToolInstaller
             return existing;
         }
 
+        if (Package is null)
+        {
+            throw new PlatformNotSupportedException(string.Format(
+                UiStrings.NetcoredbgNoBuild, $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})"));
+        }
+
+        string downloadUrl = ToolDownloadRoot + Package.ArchiveName;
+
         LoadConsent();
         if (!_consents.Contains(ToolId))
         {
             DebugToolConsentRequest request = new(
                 ToolId,
                 ToolVersion,
-                ToolDownloadUrl,
-                GetInstallDir(),
+                downloadUrl,
+                GetInstallDir(Package),
                 "The debugger requires netcoredbg to be downloaded (~3.5 MB). Allow download?");
             bool allowed = await confirmAsync(request).ConfigureAwait(false);
             if (!allowed)
@@ -70,23 +106,35 @@ public sealed class DebugToolInstaller : IDebugToolInstaller
         }
 
         Directory.CreateDirectory(_toolsRoot);
-        string tempArchive = Path.Combine(Path.GetTempPath(), ToolArchiveName);
-
-        using (HttpResponseMessage response = await _httpClient.GetAsync(ToolDownloadUrl, ct).ConfigureAwait(false))
+        // A name of its own inside the user's tools folder, which no other user can prepare beforehand.
+        string tempArchive = Path.Combine(_toolsRoot, Path.GetRandomFileName() + "-" + Package.ArchiveName);
+        string installDir = GetInstallDir(Package);
+        // The archive is extracted beside the install folder and takes its place only when it is complete, so a
+        // failed extraction never leaves a binary that looks installed.
+        string extractDir = installDir + "-" + Path.GetRandomFileName();
+        try
         {
-            response.EnsureSuccessStatusCode();
-            await using FileStream target = File.Create(tempArchive);
-            await response.Content.CopyToAsync(target, ct).ConfigureAwait(false);
-        }
+            using (HttpResponseMessage response = await _httpClient.GetAsync(downloadUrl, ct).ConfigureAwait(false))
+            {
+                response.EnsureSuccessStatusCode();
+                await using FileStream target = new(tempArchive, FileMode.CreateNew);
+                await response.Content.CopyToAsync(target, ct).ConfigureAwait(false);
+            }
 
-        string installDir = GetInstallDir();
-        if (Directory.Exists(installDir))
+            Directory.CreateDirectory(extractDir);
+            await ExtractAsync(tempArchive, extractDir, ct).ConfigureAwait(false);
+            if (Directory.Exists(installDir))
+            {
+                Directory.Delete(installDir, recursive: true);
+            }
+
+            Directory.Move(extractDir, installDir);
+        }
+        finally
         {
-            Directory.Delete(installDir, recursive: true);
+            TryDelete(tempArchive);
+            TryDelete(extractDir);
         }
-        Directory.CreateDirectory(installDir);
-
-        await ExtractTarGzAsync(tempArchive, installDir, ct).ConfigureAwait(false);
 
         string? binary = GetNetcoredbgPath();
         if (binary is not null)
@@ -97,9 +145,28 @@ public sealed class DebugToolInstaller : IDebugToolInstaller
         return binary;
     }
 
-    private string GetInstallDir()
+    // A leftover archive or extraction folder must not hide the outcome of the download or the installation.
+    private static void TryDelete(string path)
     {
-        return Path.Combine(_toolsRoot, ToolId, ToolVersion);
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            else
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private string GetInstallDir(DebugToolPackage package)
+    {
+        return Path.Combine(_toolsRoot, ToolId, ToolVersion, package.FolderName);
     }
 
     private void LoadConsent()
@@ -147,37 +214,18 @@ public sealed class DebugToolInstaller : IDebugToolInstaller
         }
     }
 
-    private static async Task ExtractTarGzAsync(string archivePath, string outputDir, CancellationToken ct)
+    // Both extractors refuse entries that would land outside the output directory.
+    internal static async Task ExtractAsync(string archivePath, string outputDir, CancellationToken ct)
     {
+        if (archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            await ZipFile.ExtractToDirectoryAsync(archivePath, outputDir, overwriteFiles: true, ct).ConfigureAwait(false);
+            return;
+        }
+
         await using FileStream fileStream = File.OpenRead(archivePath);
         await using GZipStream gzip = new(fileStream, CompressionMode.Decompress);
-        TarReader reader = new(gzip);
-        TarEntry? entry;
-        while ((entry = reader.GetNextEntry()) is not null)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (entry.EntryType is TarEntryType.Directory)
-            {
-                string dirPath = Path.Combine(outputDir, entry.Name);
-                Directory.CreateDirectory(dirPath);
-                continue;
-            }
-
-            if (entry.DataStream is null)
-            {
-                continue;
-            }
-
-            string path = Path.Combine(outputDir, entry.Name);
-            string? dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            await using FileStream outStream = File.Create(path);
-            await entry.DataStream.CopyToAsync(outStream, ct).ConfigureAwait(false);
-        }
+        await TarFile.ExtractToDirectoryAsync(gzip, outputDir, overwriteFiles: true, ct).ConfigureAwait(false);
     }
 
     private static void TryMakeExecutable(string path)

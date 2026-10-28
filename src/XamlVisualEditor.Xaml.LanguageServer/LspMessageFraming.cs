@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using XamlVisualEditor.Core.Lsp;
 
 namespace XamlVisualEditor.Xaml.LanguageServer;
 
@@ -10,7 +11,8 @@ internal static class LspMessageFraming
     internal static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new LspUriJsonConverter() }
     };
 
     internal static async Task WriteMessageAsync(Stream output, object payload, CancellationToken ct)

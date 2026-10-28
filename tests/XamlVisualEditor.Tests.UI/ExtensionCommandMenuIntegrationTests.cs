@@ -607,9 +607,10 @@ public sealed class ExtensionCommandMenuIntegrationTests
             IExtensionStateStore? stateStore = null, BackgroundActivityTracker? backgroundActivities = null,
             IXveExtension? additionalExtension = null, IDocumentOpenInterceptors? documentOpenInterceptors = null,
             IXveExtension? secondExtension = null,
-            Func<ExtensionMenuTestHost, IXveExtension[]>? builtInExtensions = null)
+            Func<ExtensionMenuTestHost, IXveExtension[]>? builtInExtensions = null,
+            IEnumerable<ILanguageIntellisenseService>? languageServices = null)
         {
-            _languageRegistry = new LanguageServiceRegistry(Array.Empty<ILanguageIntellisenseService>());
+            _languageRegistry = new LanguageServiceRegistry(languageServices ?? Array.Empty<ILanguageIntellisenseService>());
             ViewModel = new MainWindowViewModel(
                 workspaceService: _workspaceService,
                 workspaceInfoUpdater: _workspaceInfo,

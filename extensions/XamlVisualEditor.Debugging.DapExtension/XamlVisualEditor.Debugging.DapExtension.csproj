@@ -7,4 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Integration" />
+  </ItemGroup>
 </Project>

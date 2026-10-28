@@ -304,7 +304,7 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
         if (!string.IsNullOrWhiteSpace(markup))
         {
             AddBindingKeywords(items, markup);
-            AddBindingValueCompletions(items, propertyName, markup, context.DocumentText, context.Metadata);
+            AddBindingValueCompletions(items, propertyName, markup, context.TextBefore, context.DocumentText, context.Metadata);
             AddResourceKeys(items, context.DocumentText);
         }
 
@@ -394,6 +394,7 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
         List<CompletionItem> items,
         string propertyName,
         string markup,
+        string textBefore,
         string? documentText,
         ITypeMetadataService? metadata)
     {
@@ -421,7 +422,7 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
 
         if (propertyName.Equals("Path", StringComparison.OrdinalIgnoreCase))
         {
-            AddDataTypePropertyPaths(items, documentText, metadata);
+            AddDataTypePropertyPaths(items, textBefore, documentText, metadata);
             foreach (string path in ExtractBindingPaths(documentText))
             {
                 items.Add(new CompletionItem
@@ -549,6 +550,7 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
 
     private static void AddDataTypePropertyPaths(
         List<CompletionItem> items,
+        string textBefore,
         string? documentText,
         ITypeMetadataService? metadata)
     {
@@ -557,7 +559,7 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
             return;
         }
 
-        string? dataType = ExtractDataType(documentText);
+        string? dataType = FindDataType(textBefore);
         if (string.IsNullOrWhiteSpace(dataType))
         {
             return;
@@ -593,9 +595,31 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
         }
     }
 
-    private static string? ExtractDataType(string text)
+    // Compiled bindings use the x:DataType of the nearest enclosing element. A data template without x:DataType or
+    // DataType starts a data context whose type the text does not tell, so the types outside it do not apply.
+    private static string? FindDataType(string textBefore)
     {
-        return ExtractQuotedAttribute(text, "x:DataType");
+        IReadOnlyList<(string Name, string StartTag)> openElements = XamlOpenElements.Find(textBefore);
+        for (int index = openElements.Count - 1; index >= 0; index--)
+        {
+            if (ExtractQuotedAttribute(openElements[index].StartTag, "x:DataType") is { } dataType)
+            {
+                return dataType;
+            }
+
+            // The DataType of a data template gives the bindings in it their type too, written as a type name or
+            // as {x:Type}.
+            string localName = openElements[index].Name[(openElements[index].Name.IndexOf(':') + 1)..];
+            if (localName is "DataTemplate" or "TreeDataTemplate")
+            {
+                string? templateType = ExtractQuotedAttribute(openElements[index].StartTag, "DataType")?.Trim();
+                return templateType?.StartsWith("{x:Type ", StringComparison.Ordinal) == true
+                    ? templateType["{x:Type ".Length..].TrimEnd('}').Trim()
+                    : templateType;
+            }
+        }
+
+        return null;
     }
 
     private static string? ResolveXmlNamespace(string text, string dataType, out string typeName)
@@ -860,8 +884,8 @@ public sealed class ClosingTagCompletionProvider : ICompletionProvider
         List<CompletionItem> items = new();
 
         // Find the most recent unclosed tag
-        string? tagName = FindUnclosedTag(context.TextBefore);
-        if (tagName is not null)
+        IReadOnlyList<(string Name, string StartTag)> openElements = XamlOpenElements.Find(context.TextBefore);
+        if (openElements.Count > 0 && openElements[^1].Name is { } tagName)
         {
             items.Add(new CompletionItem
             {
@@ -875,70 +899,77 @@ public sealed class ClosingTagCompletionProvider : ICompletionProvider
 
         return items;
     }
+}
 
-    private static string? FindUnclosedTag(string text)
+/// <summary>Finds the elements that enclose the end of a XAML text.</summary>
+internal static class XamlOpenElements
+{
+    /// <summary>
+    /// Returns the name and start tag of each enclosing element, the innermost last. A start tag the text ends in
+    /// counts as enclosing; comments and processing instructions do not.
+    /// </summary>
+    public static IReadOnlyList<(string Name, string StartTag)> Find(string text)
     {
-        // Simple stack-based approach to find unclosed tags
-        Stack<string> openTags = new();
-        int i = 0;
-
-        while (i < text.Length)
+        List<(string Name, string StartTag)> open = new();
+        int i = text.IndexOf('<');
+        while (i >= 0)
         {
-            if (text[i] == '<')
+            int gt = FindTagEnd(text, i);
+            if (i + 1 < text.Length && text[i + 1] == '/')
             {
-                if (i + 1 < text.Length && text[i + 1] == '/')
+                if (gt > i + 2 && open.Count > 0 && open[^1].Name == text[(i + 2)..gt].Trim())
                 {
-                    // Closing tag
-                    int nameStart = i + 2;
-                    int nameEnd = text.IndexOf('>', nameStart);
-                    if (nameEnd > nameStart)
-                    {
-                        string closingName = text.Substring(nameStart, nameEnd - nameStart).Trim();
-                        if (openTags.Count > 0 && openTags.Peek() == closingName)
-                        {
-                            openTags.Pop();
-                        }
-                    }
-                    i = nameEnd > 0 ? nameEnd + 1 : i + 1;
-                }
-                else
-                {
-                    // Opening tag
-                    int nameStart = i + 1;
-                    int spaceOrClose = nameStart;
-                    while (spaceOrClose < text.Length &&
-                           text[spaceOrClose] != ' ' &&
-                           text[spaceOrClose] != '>' &&
-                           text[spaceOrClose] != '/' &&
-                           text[spaceOrClose] != '\r' &&
-                           text[spaceOrClose] != '\n')
-                    {
-                        spaceOrClose++;
-                    }
-
-                    if (spaceOrClose > nameStart)
-                    {
-                        string tagName = text.Substring(nameStart, spaceOrClose - nameStart);
-
-                        // Check if self-closing
-                        int closeIndex = text.IndexOf('>', spaceOrClose);
-                        if (closeIndex > 0 && text[closeIndex - 1] != '/')
-                        {
-                            openTags.Push(tagName);
-                        }
-                    }
-
-                    int gt = text.IndexOf('>', i);
-                    i = gt > 0 ? gt + 1 : i + 1;
+                    open.RemoveAt(open.Count - 1);
                 }
             }
-            else
+            else if (i + 1 < text.Length && text[i + 1] is not ('!' or '?') && (gt < 0 || text[gt - 1] != '/'))
             {
-                i++;
+                int nameEnd = i + 1;
+                while (nameEnd < text.Length && text[nameEnd] is not (' ' or '>' or '/' or '\t' or '\r' or '\n'))
+                {
+                    nameEnd++;
+                }
+
+                if (nameEnd > i + 1)
+                {
+                    open.Add((text[(i + 1)..nameEnd], gt < 0 ? text[i..] : text[i..(gt + 1)]));
+                }
+            }
+
+            i = gt < 0 ? -1 : text.IndexOf('<', gt + 1);
+        }
+
+        return open;
+    }
+
+    // Returns the '>' that ends the tag at start, skipping quoted attribute values; a comment ends at "-->".
+    private static int FindTagEnd(string text, int start)
+    {
+        if (string.CompareOrdinal(text, start, "<!--", 0, 4) == 0)
+        {
+            int end = text.IndexOf("-->", start + 4, StringComparison.Ordinal);
+            return end < 0 ? -1 : end + 2;
+        }
+
+        char quote = '\0';
+        for (int index = start + 1; index < text.Length; index++)
+        {
+            char character = text[index];
+            if (quote != '\0')
+            {
+                if (character == quote) quote = '\0';
+            }
+            else if (character is '"' or '\'')
+            {
+                quote = character;
+            }
+            else if (character == '>')
+            {
+                return index;
             }
         }
 
-        return openTags.Count > 0 ? openTags.Peek() : null;
+        return -1;
     }
 }
 

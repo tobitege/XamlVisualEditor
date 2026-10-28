@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core.Localization;
@@ -9,6 +10,13 @@ namespace XamlVisualEditor.Debugging.Dap;
 
 public sealed class DapProtocolClient : IAsyncDisposable
 {
+    // Optional protocol fields are left out rather than sent as null; netcoredbg refuses a breakpoint whose
+    // condition is null.
+    private static readonly JsonSerializerOptions RequestJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly DapMessageReader _reader;
     private readonly DapMessageWriter _writer;
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
@@ -45,7 +53,7 @@ public sealed class DapProtocolClient : IAsyncDisposable
             arguments
         };
 
-        string json = JsonSerializer.Serialize(payload);
+        string json = JsonSerializer.Serialize(payload, RequestJsonOptions);
         await _sendLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {

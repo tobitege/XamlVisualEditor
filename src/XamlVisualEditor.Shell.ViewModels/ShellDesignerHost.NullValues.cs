@@ -10,6 +10,7 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Xaml.Language;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -41,8 +42,8 @@ public sealed partial class ShellDesignerHost : IDesignerPropertyValueHost
 
         MutableAstDocument ast = document.SyncEngine.CurrentDocument
             ?? throw new InvalidOperationException(UiStrings.DesignerDocumentNotSynchronized);
-        var aliases = DesignerNameEditor.Namespaces(node, ast.NamespaceAliases);
-        string? prefix = aliases.Where(pair => pair.Key.Length > 0 && pair.Value == DesignerNameEditor.XamlNamespace)
+        var aliases = XamlNames.Namespaces(node, ast.NamespaceAliases);
+        string? prefix = aliases.Where(pair => pair.Key.Length > 0 && pair.Value == XamlNames.XamlNamespace)
             .OrderBy(pair => pair.Key == "x" ? 0 : 1)
             .ThenBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Key).FirstOrDefault();
@@ -75,7 +76,7 @@ public sealed partial class ShellDesignerHost : IDesignerPropertyValueHost
         string localName = FindLocalProperty(document, node, propertyName)?.PropertyName ?? propertyName;
         cancellationToken.ThrowIfCancellationRequested();
         using var transaction = document.SyncEngine.BeginEditTransaction($"Set {propertyName} to null");
-        if (declarePrefix) node.NamespaceAliases[prefix!] = DesignerNameEditor.XamlNamespace;
+        if (declarePrefix) node.NamespaceAliases[prefix!] = XamlNames.XamlNamespace;
         if (clearImplicitContent) node.Children.Clear();
         node.SetPropertyValue(localName, expression);
         transaction.Commit();

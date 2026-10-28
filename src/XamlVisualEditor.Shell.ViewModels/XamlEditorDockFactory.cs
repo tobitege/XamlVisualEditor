@@ -563,41 +563,19 @@ public sealed partial class XamlEditorDockFactory : Factory
     }
 
     /// <summary>
-    /// Adds a document to the document dock.
+    /// Adds a document to the document dock and activates it unless <paramref name="activate"/> is false.
     /// </summary>
-    public DesignerDocument? AddDocument(IRootDock rootDock, DesignerDocumentViewModel documentVm)
+    public DesignerDocument? AddDocument(IRootDock rootDock, DesignerDocumentViewModel documentVm, bool activate = true)
     {
-        DesignerDocument doc = new(documentVm);
-
-        // Find the document dock
-        DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
-        if (docDock is not null)
-        {
-            AddDockable(docDock, doc);
-            SetOwnerRecursive(doc, docDock);
-            SetActiveDockable(doc);
-            SetFocusedDockable(docDock, doc);
-            return doc;
-        }
-
-        return null;
+        return AddDocument(rootDock, new DesignerDocument(documentVm), activate);
     }
 
-    public TextDocument? AddTextDocument(IRootDock rootDock, TextDocumentViewModel documentVm)
+    /// <summary>
+    /// Adds a text document to the document dock and activates it unless <paramref name="activate"/> is false.
+    /// </summary>
+    public TextDocument? AddTextDocument(IRootDock rootDock, TextDocumentViewModel documentVm, bool activate = true)
     {
-        TextDocument doc = new(documentVm);
-
-        DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
-        if (docDock is not null)
-        {
-            AddDockable(docDock, doc);
-            SetOwnerRecursive(doc, docDock);
-            SetActiveDockable(doc);
-            SetFocusedDockable(docDock, doc);
-            return doc;
-        }
-
-        return null;
+        return AddDocument(rootDock, new TextDocument(documentVm), activate);
     }
 
     public InfiniteCanvasDocument? AddCanvasDocument(IRootDock rootDock, InfiniteCanvasViewModel canvasViewModel)
@@ -605,8 +583,11 @@ public sealed partial class XamlEditorDockFactory : Factory
         return AddDocument(rootDock, new InfiniteCanvasDocument(canvasViewModel));
     }
 
-    /// <summary>Adds a document to the document dock and activates it; null when the layout has no document dock.</summary>
-    public T? AddDocument<T>(IRootDock rootDock, T doc)
+    /// <summary>
+    /// Adds a document to the document dock and activates it unless <paramref name="activate"/> is false;
+    /// null when the layout has no document dock.
+    /// </summary>
+    public T? AddDocument<T>(IRootDock rootDock, T doc, bool activate = true)
         where T : Document
     {
         DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
@@ -614,8 +595,11 @@ public sealed partial class XamlEditorDockFactory : Factory
         {
             AddDockable(docDock, doc);
             SetOwnerRecursive(doc, docDock);
-            SetActiveDockable(doc);
-            SetFocusedDockable(docDock, doc);
+            if (activate)
+            {
+                SetActiveDockable(doc);
+                SetFocusedDockable(docDock, doc);
+            }
             return doc;
         }
 

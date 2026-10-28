@@ -521,6 +521,9 @@
   <data name="FormatApplied" xml:space="preserve"><value>Format applied</value></data>
   <data name="NoCodeActions" xml:space="preserve"><value>No code actions</value></data>
   <data name="ActionApplied" xml:space="preserve"><value>Applied: {0}</value></data>
+  <data name="ActionNoChanges" xml:space="preserve"><value>{0}: no edits</value></data>
+  <data name="DesignerEditInProgress" xml:space="preserve"><value>Finish the current designer edit before applying the change.</value></data>
+  <data name="DesignerTextChangedBeforeEdit" xml:space="preserve"><value>The designer document changed before the edit was applied.</value></data>
   <data name="NoDocumentSymbols" xml:space="preserve"><value>No document symbols</value></data>
   <data name="NoWorkspaceSymbols" xml:space="preserve"><value>No workspace symbols</value></data>
   <data name="NavigatedToFile" xml:space="preserve"><value>Navigated to {0}</value></data>
@@ -579,6 +582,7 @@
   <data name="WorkspaceFileNotFound" xml:space="preserve"><value>Workspace file not found: {0}</value></data>
   <data name="DotnetCommandRunning" xml:space="preserve"><value>Running dotnet {0}...</value></data>
   <data name="DotnetCommandCompleted" xml:space="preserve"><value>dotnet {0} completed</value></data>
+  <data name="DotnetCommandCanceled" xml:space="preserve"><value>dotnet {0} canceled</value></data>
   <data name="NavigationFindReferencesCommand" xml:space="preserve"><value>Navigation: Find References</value></data>
   <data name="NavigationFindFilesCommand" xml:space="preserve"><value>Navigation: Find In Files</value></data>
   <data name="NavigationDefinitionCommand" xml:space="preserve"><value>Navigation: Go To Definition</value></data>
@@ -803,6 +807,7 @@
   <data name="DownloadingNetcoredbg" xml:space="preserve"><value>Downloading netcoredbg...</value></data>
   <data name="NetcoredbgInstalled" xml:space="preserve"><value>netcoredbg installed.</value></data>
   <data name="NetcoredbgDownloadCanceled" xml:space="preserve"><value>netcoredbg download cancelled.</value></data>
+  <data name="NetcoredbgNoBuild" xml:space="preserve"><value>netcoredbg has no build for {0}; set the debug adapter path in the debug settings.</value></data>
   <data name="DownloadFailed" xml:space="preserve"><value>Download failed: {0}</value></data>
   <data name="DesignSurfaceUnavailable" xml:space="preserve"><value>Design surface is not available.</value></data>
   <data name="SelectPreviewTarget" xml:space="preserve"><value>Select a target element to preview.</value></data>
@@ -847,6 +852,7 @@
   <data name="CloseXamlElement" xml:space="preserve"><value>Close &lt;{0}&gt; element</value></data>
   <data name="SelectTreeNodeFailed" xml:space="preserve"><value>Could not select {0} in {1}: {2}</value></data>
   <data name="DapRequestFailed" xml:space="preserve"><value>DAP request failed</value></data>
+  <data name="DebugNoThread" xml:space="preserve"><value>The program has no thread for '{0}'.</value></data>
   <data name="SelectFolder" xml:space="preserve"><value>Select Folder</value></data>
   <data name="Input" xml:space="preserve"><value>Input</value></data>
   <data name="PreviewerTransportError" xml:space="preserve"><value>Previewer transport error: {0}</value></data>
@@ -1434,10 +1440,10 @@
   <data name="CodeBehindRenameSynchronizing" xml:space="preserve"><value>Wait for the AXAML document to finish synchronizing before renaming a control.</value></data>
   <data name="CodeBehindRenameInvalidEdit" xml:space="preserve"><value>The C# refactoring returned an invalid document edit.</value></data>
   <data name="CodeBehindRenameDocumentMissing" xml:space="preserve"><value>A code-behind document is no longer available.</value></data>
-  <data name="CodeBehindRenameDocumentChanged" xml:space="preserve"><value>The code document changed while preparing the refactoring: {0}</value></data>
+  <data name="CodeBehindRenameDocumentChanged" xml:space="preserve"><value>The document changed while preparing the edit: {0}</value></data>
   <data name="CodeBehindRenameDesignerClosed" xml:space="preserve"><value>The designer document for this refactoring is no longer open.</value></data>
   <data name="CodeBehindRenameDesignerChanged" xml:space="preserve"><value>The designer changed while preparing the edit. Retry the change.</value></data>
-  <data name="CodeBehindRenameOverlappingEdits" xml:space="preserve"><value>The C# refactoring returned overlapping or out-of-range edits.</value></data>
+  <data name="CodeBehindRenameOverlappingEdits" xml:space="preserve"><value>The refactoring returned overlapping or out-of-range edits.</value></data>
   <data name="CodeBehindRenameUndoLaterChanges" xml:space="preserve"><value>Undo later changes before replaying this refactoring: {0}</value></data>
   <data name="CodeBehindRenameHistoryGone" xml:space="preserve"><value>The refactoring is no longer available in the document history: {0}</value></data>
   <data name="PreviewerInvalidThemeCatalog" xml:space="preserve"><value>The previewer returned invalid theme-catalog data.</value></data>

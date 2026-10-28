@@ -541,7 +541,18 @@ public sealed class XamlLanguageServer
             NewName = parameters.NewName
         };
 
-        LanguageWorkspaceEdit? edit = await _languageService.RenameSymbolAsync(context, ct).ConfigureAwait(false);
+        LanguageWorkspaceEdit? edit;
+        try
+        {
+            edit = await _languageService.RenameSymbolAsync(context, ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A refused rename, for example to a name that is already taken, leaves the document unchanged.
+            await SendRequestFailedAsync(id, ex.Message, output, ct).ConfigureAwait(false);
+            return;
+        }
+
         LspWorkspaceEdit? mapped = edit is null ? null : MapWorkspaceEdit(edit, text);
         await SendResponseAsync(id, mapped, output, ct).ConfigureAwait(false);
     }
@@ -1144,22 +1155,39 @@ public sealed class XamlLanguageServer
         Stream output,
         CancellationToken ct)
     {
-        object? responseId = id.ValueKind switch
-        {
-            JsonValueKind.String => id.GetString(),
-            JsonValueKind.Number => id.TryGetInt64(out long value) ? value : null,
-            _ => null
-        };
-
         object payload = new
         {
             jsonrpc = "2.0",
-            id = responseId,
+            id = GetResponseId(id),
             result
         };
 
         await LspMessageFraming.WriteMessageAsync(output, payload, ct).ConfigureAwait(false);
     }
+
+    // Answers with RequestFailed, which tells the client that a valid request could not be carried out and why.
+    private static async Task SendRequestFailedAsync(
+        JsonElement id,
+        string message,
+        Stream output,
+        CancellationToken ct)
+    {
+        object payload = new
+        {
+            jsonrpc = "2.0",
+            id = GetResponseId(id),
+            error = new { code = -32803, message }
+        };
+
+        await LspMessageFraming.WriteMessageAsync(output, payload, ct).ConfigureAwait(false);
+    }
+
+    private static object? GetResponseId(JsonElement id) => id.ValueKind switch
+    {
+        JsonValueKind.String => id.GetString(),
+        JsonValueKind.Number => id.TryGetInt64(out long value) ? value : null,
+        _ => null
+    };
 
     private sealed class DidOpenParams
     {

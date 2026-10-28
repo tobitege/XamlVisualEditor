@@ -4,6 +4,7 @@ using XamlVisualEditor.Core.Localization;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
+using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 
@@ -152,15 +153,15 @@ public sealed class DesignerSelectionEditor
 
     private void MakeNamesUnique(IReadOnlyList<MutableAstObjectNode> roots, MutableAstObjectNode destination)
     {
-        HashSet<string> used = DesignerNameEditor.ScopeObjects(DesignerNameEditor.ScopeRoot(destination))
-            .Select(node => DesignerNameEditor.FindNameProperty(node, _metadata))
+        HashSet<string> used = XamlNames.ScopeObjects(XamlNames.ScopeRoot(destination))
+            .Select(node => XamlNames.FindNameProperty(node, _metadata))
             .Where(property => property?.Value is MutableAstTextNode)
             .Select(property => ((MutableAstTextNode)property!.Value!).Text).ToHashSet(StringComparer.Ordinal);
         Dictionary<string, string> renamed = new(StringComparer.Ordinal);
         MutableAstObjectNode[] elements = roots.SelectMany(root => Objects(root, stopAtTemplates: true)).ToArray();
         foreach (MutableAstObjectNode node in elements)
         {
-            if (DesignerNameEditor.FindNameProperty(node, _metadata)?.Value is not MutableAstTextNode name || string.IsNullOrEmpty(name.Text)) continue;
+            if (XamlNames.FindNameProperty(node, _metadata)?.Value is not MutableAstTextNode name || string.IsNullOrEmpty(name.Text)) continue;
             string original = name.Text;
             string candidate = original;
             for (int suffix = 1; used.Contains(candidate); suffix++) candidate = original + "Copy" + (suffix == 1 ? string.Empty : suffix);
@@ -175,7 +176,7 @@ public sealed class DesignerSelectionEditor
             {
                 if (property.Value is not MutableAstTextNode text) continue;
                 text.Text = XamlNameReferences.Rewrite(node, property, renamed,
-                    DesignerNameEditor.Namespaces(property, _engine.CurrentDocument!.NamespaceAliases)).Text;
+                    XamlNames.Namespaces(property, _engine.CurrentDocument!.NamespaceAliases)).Text;
             }
         }
     }

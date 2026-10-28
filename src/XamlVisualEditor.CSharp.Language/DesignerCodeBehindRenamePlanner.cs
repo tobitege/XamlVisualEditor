@@ -4,19 +4,51 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Core.Localization;
 
 namespace XamlVisualEditor.CSharp.Language;
 
-/// <summary>Plans semantic control-member and typed Avalonia lookup edits without changing source documents.</summary>
+/// <summary>
+/// Plans semantic edits of control members with their typed Avalonia lookups, or of event handler methods, without
+/// changing source documents.
+/// </summary>
 public static class DesignerCodeBehindRenamePlanner
 {
     /// <summary>
-    /// Finds references in editable documents, excluding generated source trees and unrelated symbols or literals.
-    /// A null new name checks whether removing a declaration would leave C# references behind.
+    /// Finds references to a control member in editable documents, excluding generated source trees and unrelated
+    /// symbols or literals. A null new name checks whether removing a declaration would leave C# references behind.
     /// </summary>
-    public static async Task<LanguageWorkspaceEdit?> CreateAsync(Project project, string className, string oldName,
-        string? newName, CancellationToken cancellationToken = default)
+    public static Task<LanguageWorkspaceEdit?> CreateAsync(Project project, string className, string oldName,
+        string? newName, CancellationToken cancellationToken = default) =>
+        CreateAsync(project, className, oldName, newName, DesignerCodeBehindMember.Control, cancellationToken);
+
+    /// <summary>
+    /// Plans the rename of a request in the solution with the unsaved texts of the request. The project of the
+    /// request owns the class, or else the one project that lists its AXAML file among its additional files.
+    /// </summary>
+    public static async Task<LanguageWorkspaceEdit?> CreateAsync(Solution solution, DesignerCodeBehindRenameRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (KeyValuePair<string, string> openDocument in request.OpenDocumentTexts)
+            foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(openDocument.Key))
+                solution = solution.WithDocumentText(id, SourceText.From(openDocument.Value));
+        // A project with several target frameworks loads once per framework, all sharing the same sources.
+        Project[] owners = solution.Projects
+            .Where(project => request.ProjectPath is not null
+                ? FileSystemPathComparison.Equals(project.FilePath, request.ProjectPath)
+                : project.AdditionalDocuments.Any(document => FileSystemPathComparison.Equals(document.FilePath, request.XamlFilePath)))
+            .DistinctBy(project => project.FilePath, FileSystemPathComparison.Comparer)
+            .ToArray();
+        if (owners.Length > 1) throw new InvalidOperationException(UiStrings.CodeBehindRenameMultipleProjects);
+        Project owner = owners.Length == 1 ? owners[0]
+            : throw new InvalidOperationException(UiStrings.CodeBehindRenameOwningProjectMissing);
+        return await CreateAsync(owner, request.ClassName, request.OldName, request.NewName, request.Member,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<LanguageWorkspaceEdit?> CreateAsync(Project project, string className, string oldName,
+        string? newName, DesignerCodeBehindMember member, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (newName == oldName) return null;
@@ -36,17 +68,19 @@ public static class DesignerCodeBehindRenamePlanner
         Dictionary<DocumentId, Document> documents = solution.Projects.SelectMany(candidate => candidate.Documents)
             .Where(document => !string.IsNullOrWhiteSpace(document.FilePath)).ToDictionary(document => document.Id);
         Dictionary<string, PendingDocument> pending = new(FileSystemPathComparison.Comparer);
-        foreach (ISymbol member in owner.GetMembers(oldName).Where(IsControlMember))
+        Func<ISymbol, bool> isRenamed = member == DesignerCodeBehindMember.Control ? IsControlMember : symbol => symbol is IMethodSymbol;
+        foreach (ISymbol symbol in owner.GetMembers(oldName).Where(isRenamed))
         {
-            foreach (Location location in member.Locations) await AddLocationAsync(location).ConfigureAwait(false);
-            IEnumerable<ReferencedSymbol> references = await SymbolFinder.FindReferencesAsync(member, solution,
+            foreach (Location location in symbol.Locations) await AddLocationAsync(location).ConfigureAwait(false);
+            IEnumerable<ReferencedSymbol> references = await SymbolFinder.FindReferencesAsync(symbol, solution,
                 cancellationToken).ConfigureAwait(false);
             foreach (ReferencedSymbol reference in references)
                 foreach (ReferenceLocation location in reference.Locations)
                     await AddLocationAsync(location.Location).ConfigureAwait(false);
         }
 
-        foreach (Document document in documents.Values)
+        // Controls are also looked up by name; handlers are only referenced as methods.
+        foreach (Document document in member == DesignerCodeBehindMember.Control ? documents.Values : Enumerable.Empty<Document>())
         {
             cancellationToken.ThrowIfCancellationRequested();
             SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);

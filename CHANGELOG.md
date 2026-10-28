@@ -3,7 +3,7 @@
 All notable changes to XamlVisualEditor are documented in this file. The project
 uses Semantic Versioning.
 
-## [0.4.0] - 2026-10-27
+## [0.4.0] - 2026-10-28
 
 ### Added
 
@@ -24,6 +24,7 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- On Windows, saving the dock layout and extension settings, renaming a saved layout, renaming in the file explorer and installing an extension wait until a virus scanner, the search indexer or a sync client releases the file, instead of failing because the file is briefly held open; renaming in the file explorer or renaming a saved layout waits up to 2 seconds, saving and installing up to 10 seconds. Reading extension settings no longer waits for a write in progress. `FileSystemMoves` moves files and directories this way, synchronously or asynchronously with cancellation, and fails at once for every failure that waiting does not end, such as an invalid name, an existing target or a read-only target.
 - The selection pipe of a compact tab, such as Staged and Unstaged in the Git Changes panel, is drawn below the header text instead of through it
 - Opening a terminal on Linux or macOS no longer crashes the editor at a later, random point. The terminal forked the editor process and ran .NET code in the child before it started the shell; with W^X, which .NET enables by default since .NET 7, the child shared the executable code memory of the editor and overwrote it. `UnixPtyProvider` now starts the shell through Porta.Pty, which forks and executes in native code and resizes on macOS without running `stty`. The PTY tests also run in CI.
 - The terminal uses the first installed font of its font list, such as `monospace` on Linux, instead of only trying the first one. Where Cascadia Mono was missing it fell back to a proportional font, sized its cells for the widest letter and drew the text with gaps between narrow letters.

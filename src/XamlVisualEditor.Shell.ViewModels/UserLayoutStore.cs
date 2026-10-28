@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -124,7 +125,8 @@ public sealed class UserLayoutStore : IUserLayoutStore
             return false;
         }
 
-        File.Move(Path.Combine(_directory, name + FileExtension), Path.Combine(_directory, newName + FileExtension));
+        FileSystemMoves.MoveFile(Path.Combine(_directory, name + FileExtension), Path.Combine(_directory, newName + FileExtension),
+            timeout: FileSystemMoves.InteractiveTimeout);
         return true;
     }
 }

@@ -47,11 +47,14 @@ public static class FileSystemErrorMessages
         return error switch
         {
             UnauthorizedAccessException => string.Format(UiStrings.FileAccessDenied, name),
-            IOException io when io.HResult is ErrorSharingViolation or ErrorLockViolation =>
-                string.Format(UiStrings.FileInUse, name),
+            _ when IsInUse(error) => string.Format(UiStrings.FileInUse, name),
             _ => error.Message
         };
     }
+
+    /// <summary>Tells whether another process holds the file open in a way that refused the operation.</summary>
+    internal static bool IsInUse(Exception error) =>
+        error is IOException { HResult: ErrorSharingViolation or ErrorLockViolation };
 
     private static string? FindReadOnlyEntry(string path)
     {

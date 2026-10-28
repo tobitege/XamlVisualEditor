@@ -901,7 +901,7 @@ public sealed partial class XamlEditorDockFactory : Factory
 
             // The move replaces the file in one step, so an interrupted write never leaves a truncated layout.
             File.WriteAllText(tempPath, snapshot.ToJsonString());
-            File.Move(tempPath, filePath, overwrite: true);
+            FileSystemMoves.MoveFile(tempPath, filePath, overwrite: true);
             return true;
         }
         catch (Exception ex)

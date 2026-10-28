@@ -108,11 +108,12 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         {
             if (IsDirectory)
             {
-                Directory.Move(FullPath, newPath);
+                await FileSystemMoves.MoveDirectoryAsync(FullPath, newPath, FileSystemMoves.InteractiveTimeout, cancellationToken);
             }
             else
             {
-                File.Move(FullPath, newPath);
+                await FileSystemMoves.MoveFileAsync(FullPath, newPath, overwrite: false, FileSystemMoves.InteractiveTimeout,
+                    cancellationToken);
             }
 
             _refresh();
